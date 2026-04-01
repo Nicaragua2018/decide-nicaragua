@@ -1,0 +1,64 @@
+# Traefik v3 — Configuración estática
+# Usado en producción con docker-compose.yml (a crear en Fase 0 producción)
+
+# API y dashboard de Traefik
+api:
+  dashboard: true
+  # El dashboard solo es accesible via router con autenticación (ver docker-compose.yml)
+  insecure: false
+
+# Puntos de entrada
+entryPoints:
+  web:
+    address: ":80"
+    # Redirigir todo HTTP a HTTPS
+    http:
+      redirections:
+        entryPoint:
+          to: websecure
+          scheme: https
+          permanent: true
+
+  websecure:
+    address: ":443"
+    http:
+      tls:
+        certResolver: letsencrypt
+
+# Proveedores de configuración
+providers:
+  # Descubrimiento automático via labels en Docker
+  docker:
+    exposedByDefault: false
+    network: decide_network
+
+  # Configuración dinámica en archivos (middlewares, etc.)
+  file:
+    directory: /etc/traefik/dynamic
+    watch: true
+
+# Certificados TLS automáticos con Let's Encrypt
+certificatesResolvers:
+  letsencrypt:
+    acme:
+      # Email configurado via variable de entorno en docker-compose.yml
+      email: "${TRAEFIK_ACME_EMAIL}"
+      storage: /etc/traefik/acme.json
+      # Cambiar a httpChallenge si no se puede usar tlsChallenge
+      tlsChallenge: {}
+
+# Logging
+log:
+  level: WARN
+  format: json
+
+# Access logs (sin datos de usuario)
+accessLog:
+  format: json
+  fields:
+    headers:
+      defaultMode: drop
+      names:
+        # Retener solo headers no sensibles
+        User-Agent: keep
+        X-Forwarded-For: keep

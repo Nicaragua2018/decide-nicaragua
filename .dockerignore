@@ -1,0 +1,42 @@
+# Control de versiones
+.git
+.gitignore
+
+# Dependencias locales (se instalan dentro del contenedor)
+node_modules
+**/node_modules
+
+# Outputs de build locales
+**/dist
+**/.next
+**/out
+
+# Archivos de entorno (nunca incluir en imagen)
+.env
+.env.local
+.env*.local
+
+# Logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
+
+# Editores y SO
+.DS_Store
+.vscode
+*.swp
+*.swo
+Thumbs.db
+
+# Turbo cache
+.turbo
+
+# Tests
+**/*.spec.ts
+**/*.test.ts
+**/coverage
+
+# Docker
+**/Dockerfile
+**/.dockerignore
+docker-compose*.yml

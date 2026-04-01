@@ -1,0 +1,159 @@
+# =============================================================
+# Decide Nicaragua — Docker Compose de Producción
+#
+# Uso:
+#   cp .env.example .env  # y completar con valores reales
+#   docker compose up -d --build
+#
+# Variables requeridas en .env:
+#   APP_DOMAIN, DATABASE_URL, REDIS_URL, JWT_SECRET,
+#   APP_URL, API_URL, COOKIE_DOMAIN,
+#   RESEND_API_KEY, EMAIL_FROM, IP_HASH_SALT,
+#   TRAEFIK_ACME_EMAIL, TRAEFIK_DASHBOARD_PASSWORD
+# =============================================================
+
+services:
+
+  # ── Traefik (reverse proxy + TLS) ─────────────────────────
+  traefik:
+    image: traefik:v3.3
+    container_name: traefik
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      - TRAEFIK_ACME_EMAIL=${TRAEFIK_ACME_EMAIL}
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./infra/traefik/traefik.yml:/etc/traefik/traefik.yml:ro
+      - ./infra/traefik/dynamic:/etc/traefik/dynamic:ro
+      - traefik_acme:/etc/traefik
+    networks:
+      - decide_network
+    labels:
+      - "traefik.enable=true"
+      # Dashboard — acceso con autenticación básica
+      - "traefik.http.routers.traefik-dashboard.rule=Host(`traefik.${APP_DOMAIN}`)"
+      - "traefik.http.routers.traefik-dashboard.entrypoints=websecure"
+      - "traefik.http.routers.traefik-dashboard.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.traefik-dashboard.service=api@internal"
+      - "traefik.http.routers.traefik-dashboard.middlewares=traefik-auth"
+      - "traefik.http.middlewares.traefik-auth.basicauth.users=${TRAEFIK_DASHBOARD_PASSWORD}"
+
+  # ── PostgreSQL ─────────────────────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    container_name: decide_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-decide}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB:-decide}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - decide_network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-decide}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ── Redis ──────────────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    container_name: decide_redis
+    restart: unless-stopped
+    command: redis-server --save 60 1 --loglevel warning
+    volumes:
+      - redis_data:/data
+    networks:
+      - decide_network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ── API (NestJS) ───────────────────────────────────────────
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    container_name: decide_api
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: ${DATABASE_URL}
+      REDIS_URL: ${REDIS_URL}
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_EXPIRY: ${JWT_EXPIRY:-15m}
+      REFRESH_TOKEN_EXPIRY: ${REFRESH_TOKEN_EXPIRY:-30d}
+      APP_URL: ${APP_URL}
+      API_URL: ${API_URL}
+      COOKIE_DOMAIN: ${COOKIE_DOMAIN}
+      RESEND_API_KEY: ${RESEND_API_KEY}
+      EMAIL_FROM: ${EMAIL_FROM}
+      EMAIL_FROM_NAME: ${EMAIL_FROM_NAME:-Decide Nicaragua}
+      API_PORT: ${API_PORT:-4000}
+      IP_HASH_SALT: ${IP_HASH_SALT}
+      INTERNAL_API_KEY: ${INTERNAL_API_KEY}
+    networks:
+      - decide_network
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.api.rule=Host(`api.${APP_DOMAIN}`)"
+      - "traefik.http.routers.api.entrypoints=websecure"
+      - "traefik.http.routers.api.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.api.middlewares=security-headers@file"
+      - "traefik.http.services.api.loadbalancer.server.port=4000"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:4000/api/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+  # ── Web (Next.js) ──────────────────────────────────────────
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+      args:
+        NEXT_PUBLIC_APP_URL: ${APP_URL}
+        NEXT_PUBLIC_API_URL: ${API_URL}
+    container_name: decide_web
+    restart: unless-stopped
+    depends_on:
+      - api
+    environment:
+      NODE_ENV: production
+      API_URL: http://api:4000
+      NEXT_PUBLIC_APP_URL: ${APP_URL}
+      NEXT_PUBLIC_API_URL: ${API_URL}
+    networks:
+      - decide_network
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.web.rule=Host(`${APP_DOMAIN}`)"
+      - "traefik.http.routers.web.entrypoints=websecure"
+      - "traefik.http.routers.web.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.web.middlewares=security-headers@file"
+      - "traefik.http.services.web.loadbalancer.server.port=3000"
+
+# ── Volúmenes persistentes ─────────────────────────────────────
+volumes:
+  postgres_data:
+  redis_data:
+  traefik_acme:
+
+# ── Red interna ────────────────────────────────────────────────
+networks:
+  decide_network:
+    driver: bridge

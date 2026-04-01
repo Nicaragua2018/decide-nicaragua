@@ -1,0 +1,52 @@
+# Docker Compose — Entorno de desarrollo local
+#
+# Levanta solo las dependencias (PostgreSQL y Redis).
+# Las apps (api y web) corren localmente con hot reload: pnpm dev
+#
+# Uso:
+#   docker compose -f docker-compose.dev.yml up -d
+#   docker compose -f docker-compose.dev.yml down
+
+name: decide-dev
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: decide_postgres_dev
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: decide_dev
+      POSTGRES_USER: decide
+      POSTGRES_PASSWORD: decide_dev_password
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_dev_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U decide -d decide_dev"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+  redis:
+    image: redis:7-alpine
+    container_name: decide_redis_dev
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_dev_data:/data
+    # Persistencia básica: snapshot cada 60s si hubo al menos 1 cambio
+    command: redis-server --save 60 1 --loglevel warning
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+volumes:
+  postgres_dev_data:
+    name: decide_postgres_dev_data
+  redis_dev_data:
+    name: decide_redis_dev_data

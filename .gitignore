@@ -1,0 +1,49 @@
+# Dependencies
+node_modules/
+.pnpm-store/
+
+# Build outputs
+dist/
+.next/
+out/
+build/
+
+# Environment — NEVER committed
+.env
+.env.local
+.env.*.local
+.env.production
+
+# Prisma
+apps/api/prisma/migrations/dev.db
+apps/api/prisma/*.db
+
+# Turbo
+.turbo/
+
+# Editor
+.vscode/settings.json
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
+
+# Test coverage
+coverage/
+.nyc_output/
+
+# Traefik TLS (contiene certificados reales)
+infra/traefik/acme.json
+
+# Secrets
+*.pem
+*.key
+*.cert

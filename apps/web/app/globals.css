@@ -1,0 +1,197 @@
+/* ============================================================
+   Decide Nicaragua — Estilos globales
+   Design tokens + Reset + Utilidades + Componentes base
+   ============================================================ */
+
+/* ── Tokens ─────────────────────────────────────────────────── */
+:root {
+  --primary:        #1D4ED8;
+  --primary-hover:  #1E40AF;
+  --primary-light:  #DBEAFE;
+  --success:        #065F46;
+  --success-light:  #D1FAE5;
+  --danger:         #B91C1C;
+  --danger-light:   #FEE2E2;
+  --warning:        #92400E;
+  --warning-light:  #FEF3C7;
+  --text:           #111827;
+  --text-muted:     #6B7280;
+  --border:         #E5E7EB;
+  --bg:             #F3F4F6;
+  --bg-white:       #FFFFFF;
+  --radius:         6px;
+  --shadow:         0 1px 3px rgba(0,0,0,0.1), 0 1px 2px rgba(0,0,0,0.06);
+  --font:           -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+/* ── Reset ──────────────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html { font-size: 16px; }
+body { font-family: var(--font); color: var(--text); background: var(--bg); line-height: 1.5; }
+img, svg { display: block; max-width: 100%; }
+a { color: var(--primary); text-decoration: none; }
+a:hover { text-decoration: underline; }
+button { cursor: pointer; font-family: inherit; }
+input, textarea, select { font-family: inherit; font-size: 1rem; }
+
+/* ── Layout ─────────────────────────────────────────────────── */
+.container   { max-width: 960px; margin: 0 auto; padding: 0 1rem; }
+.page        { padding: 2rem 0; }
+.page-header { margin-bottom: 1.5rem; }
+.page-title  { font-size: 1.5rem; font-weight: 700; color: var(--text); }
+.page-sub    { color: var(--text-muted); margin-top: 0.25rem; }
+
+/* ── Navegación ─────────────────────────────────────────────── */
+.navbar { background: var(--bg-white); border-bottom: 1px solid var(--border); }
+.navbar-inner { display: flex; align-items: center; justify-content: space-between;
+                height: 56px; max-width: 960px; margin: 0 auto; padding: 0 1rem; }
+.navbar-brand { font-weight: 700; font-size: 1.1rem; color: var(--text); }
+.navbar-brand span { color: var(--primary); }
+.navbar-links { display: flex; gap: 1.5rem; align-items: center; }
+.navbar-link  { color: var(--text-muted); font-size: 0.9rem; }
+.navbar-link:hover { color: var(--text); text-decoration: none; }
+.navbar-user  { font-size: 0.85rem; color: var(--text-muted); }
+
+/* ── Botones ────────────────────────────────────────────────── */
+.btn {
+  display: inline-flex; align-items: center; gap: 0.4rem;
+  padding: 0.5rem 1rem; border-radius: var(--radius);
+  font-size: 0.875rem; font-weight: 500; border: 1px solid transparent;
+  transition: background 0.15s, color 0.15s;
+  white-space: nowrap;
+}
+.btn:disabled { opacity: 0.6; cursor: not-allowed; }
+.btn-primary  { background: var(--primary); color: #fff; border-color: var(--primary); }
+.btn-primary:hover:not(:disabled) { background: var(--primary-hover); }
+.btn-danger   { background: var(--danger); color: #fff; border-color: var(--danger); }
+.btn-ghost    { background: transparent; color: var(--text-muted); border-color: var(--border); }
+.btn-ghost:hover:not(:disabled) { background: var(--bg); color: var(--text); }
+.btn-sm       { padding: 0.3rem 0.7rem; font-size: 0.8rem; }
+
+/* ── Tarjetas ───────────────────────────────────────────────── */
+.card { background: var(--bg-white); border: 1px solid var(--border);
+        border-radius: var(--radius); padding: 1.25rem; box-shadow: var(--shadow); }
+.card + .card { margin-top: 1rem; }
+.card-title   { font-size: 1rem; font-weight: 600; margin-bottom: 0.5rem; }
+.card-meta    { font-size: 0.8rem; color: var(--text-muted); }
+
+/* ── Formularios ────────────────────────────────────────────── */
+.form { display: flex; flex-direction: column; gap: 1rem; }
+.form-field { display: flex; flex-direction: column; gap: 0.3rem; }
+.form-label { font-size: 0.875rem; font-weight: 500; }
+.form-input, .form-textarea, .form-select {
+  padding: 0.5rem 0.75rem; border: 1px solid var(--border);
+  border-radius: var(--radius); font-size: 0.95rem;
+  background: var(--bg-white); color: var(--text);
+  width: 100%;
+}
+.form-input:focus, .form-textarea:focus, .form-select:focus {
+  outline: 2px solid var(--primary); outline-offset: -1px; border-color: var(--primary);
+}
+.form-textarea { resize: vertical; min-height: 100px; }
+.form-hint  { font-size: 0.78rem; color: var(--text-muted); }
+.form-error { font-size: 0.85rem; color: var(--danger); }
+
+/* ── Badges de estado ───────────────────────────────────────── */
+.badge { display: inline-flex; align-items: center; padding: 0.15rem 0.5rem;
+         border-radius: 999px; font-size: 0.75rem; font-weight: 600; }
+.badge-open      { background: var(--success-light); color: var(--success); }
+.badge-draft     { background: var(--bg); color: var(--text-muted); border: 1px solid var(--border); }
+.badge-closed    { background: var(--warning-light); color: var(--warning); }
+.badge-archived  { background: var(--bg); color: var(--text-muted); }
+.badge-tallied   { background: var(--success-light); color: var(--success); }
+.badge-cancelled { background: var(--danger-light); color: var(--danger); }
+.badge-pending   { background: var(--warning-light); color: var(--warning); }
+.badge-completed { background: var(--success-light); color: var(--success); }
+.badge-verified  { background: var(--success-light); color: var(--success); }
+.badge-tampered  { background: var(--danger-light); color: var(--danger); }
+
+/* ── Tabs ───────────────────────────────────────────────────── */
+.tab-nav  { display: flex; gap: 0; border-bottom: 2px solid var(--border); margin-bottom: 1.5rem; }
+.tab-link { padding: 0.6rem 1rem; font-size: 0.875rem; color: var(--text-muted);
+            border-bottom: 2px solid transparent; margin-bottom: -2px;
+            transition: color 0.15s, border-color 0.15s; }
+.tab-link:hover  { color: var(--text); text-decoration: none; }
+.tab-link-active { color: var(--primary); border-bottom-color: var(--primary); font-weight: 600; }
+
+/* ── Tabla ──────────────────────────────────────────────────── */
+.table-wrap { overflow-x: auto; }
+table  { width: 100%; border-collapse: collapse; font-size: 0.875rem; }
+th, td { padding: 0.6rem 0.75rem; text-align: left; border-bottom: 1px solid var(--border); }
+th     { font-weight: 600; color: var(--text-muted); background: var(--bg); }
+tr:last-child td { border-bottom: none; }
+tr:hover td { background: #F9FAFB; }
+
+/* ── Señales de consenso ────────────────────────────────────── */
+.signal-bar { display: flex; gap: 0.5rem; align-items: center; margin: 0.75rem 0; }
+.signal-count { font-size: 0.85rem; color: var(--text-muted); }
+.signal-btn { padding: 0.4rem 0.9rem; border-radius: 999px; font-size: 0.85rem;
+              font-weight: 500; border: 1px solid var(--border); background: var(--bg-white);
+              transition: background 0.15s; }
+.signal-btn-active-support  { background: var(--success-light); border-color: var(--success); color: var(--success); }
+.signal-btn-active-neutral  { background: #F0F9FF; border-color: #0EA5E9; color: #0369A1; }
+.signal-btn-active-object   { background: var(--danger-light); border-color: var(--danger); color: var(--danger); }
+
+/* ── Alertas ────────────────────────────────────────────────── */
+.alert { padding: 0.75rem 1rem; border-radius: var(--radius); font-size: 0.875rem; margin-bottom: 1rem; }
+.alert-error   { background: var(--danger-light); color: var(--danger); border: 1px solid #FECACA; }
+.alert-success { background: var(--success-light); color: var(--success); border: 1px solid #A7F3D0; }
+.alert-info    { background: var(--primary-light); color: var(--primary); border: 1px solid #BFDBFE; }
+.alert-warning { background: var(--warning-light); color: var(--warning); border: 1px solid #FDE68A; }
+
+/* ── Auth pages ─────────────────────────────────────────────── */
+.auth-page { min-height: 100vh; display: flex; align-items: center; justify-content: center; }
+.auth-card { background: var(--bg-white); border: 1px solid var(--border);
+             border-radius: var(--radius); padding: 2rem; width: 100%; max-width: 400px;
+             box-shadow: var(--shadow); }
+.auth-title { font-size: 1.3rem; font-weight: 700; margin-bottom: 0.3rem; }
+.auth-sub   { font-size: 0.875rem; color: var(--text-muted); margin-bottom: 1.5rem; }
+
+/* ── Utilidades ─────────────────────────────────────────────── */
+.flex        { display: flex; }
+.flex-col    { flex-direction: column; }
+.items-center{ align-items: center; }
+.justify-between { justify-content: space-between; }
+.gap-1 { gap: 0.25rem; }
+.gap-2 { gap: 0.5rem; }
+.gap-4 { gap: 1rem; }
+.mt-1  { margin-top: 0.25rem; }
+.mt-2  { margin-top: 0.5rem; }
+.mt-4  { margin-top: 1rem; }
+.mt-6  { margin-top: 1.5rem; }
+.mb-2  { margin-bottom: 0.5rem; }
+.mb-4  { margin-bottom: 1rem; }
+.text-sm   { font-size: 0.875rem; }
+.text-xs   { font-size: 0.75rem; }
+.text-muted { color: var(--text-muted); }
+.text-right { text-align: right; }
+.font-bold  { font-weight: 700; }
+.font-medium{ font-weight: 500; }
+.w-full     { width: 100%; }
+.empty-state { text-align: center; color: var(--text-muted); padding: 3rem 1rem; }
+
+/* ── Votación ───────────────────────────────────────────────── */
+.vote-candidate  { display: flex; align-items: center; gap: 1rem; padding: 0.75rem;
+                   border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg-white); }
+.vote-candidate + .vote-candidate { margin-top: 0.5rem; }
+.vote-rank-input { width: 64px; text-align: center; }
+
+/* ── Matrices de auditoría ──────────────────────────────────── */
+.matrix-wrap { overflow-x: auto; }
+.matrix      { border-collapse: collapse; font-size: 0.8rem; }
+.matrix th, .matrix td { padding: 0.3rem 0.5rem; border: 1px solid var(--border); text-align: center; }
+.matrix th   { background: var(--bg); }
+
+/* ── Sortition ──────────────────────────────────────────────── */
+.member-list { list-style: none; }
+.member-item { display: flex; align-items: center; gap: 0.75rem; padding: 0.6rem 0;
+               border-bottom: 1px solid var(--border); }
+.member-item:last-child { border-bottom: none; }
+.member-order { width: 28px; height: 28px; background: var(--primary-light);
+                color: var(--primary); border-radius: 50%; display: flex;
+                align-items: center; justify-content: center; font-size: 0.8rem; font-weight: 700; }
+
+/* ── Verificación ───────────────────────────────────────────── */
+.verify-box { font-family: monospace; font-size: 0.78rem; word-break: break-all;
+              background: var(--bg); padding: 0.75rem; border-radius: var(--radius);
+              border: 1px solid var(--border); }

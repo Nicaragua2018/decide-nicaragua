@@ -1,0 +1,23 @@
+{
+  "name": "decide-nicaragua",
+  "private": true,
+  "scripts": {
+    "dev": "turbo run dev",
+    "build": "turbo run build",
+    "typecheck": "turbo run typecheck",
+    "lint": "turbo run lint",
+    "test": "turbo run test",
+    "db:generate": "turbo run db:generate --filter=@decide/api",
+    "db:migrate": "turbo run db:migrate --filter=@decide/api",
+    "db:studio": "turbo run db:studio --filter=@decide/api"
+  },
+  "devDependencies": {
+    "@decide/tsconfig": "workspace:*",
+    "turbo": "^2.3.3"
+  },
+  "engines": {
+    "node": ">=20",
+    "pnpm": ">=9"
+  },
+  "packageManager": "pnpm@9.15.4"
+}

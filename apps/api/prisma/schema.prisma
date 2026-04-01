@@ -1,0 +1,488 @@
+// Decide Nicaragua — Schema de Prisma
+// Fuente de verdad de la base de datos.
+// Cambios requieren migración explícita: pnpm db:migrate
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─── Enums ────────────────────────────────────────────────────────────────────
+
+/**
+ * AccountStatus — ciclo de vida de una cuenta de usuario.
+ *
+ * Flujo:
+ *   invited → pending_verification → verified_citizen | observer | external_collaborator
+ *                                  → rejected
+ *   (estado activo) → suspended
+ *
+ * Nota: combina estado del ciclo de vida y nivel de acceso para MVP.
+ * Ver docs/DECISIONS.md ADR-009.
+ */
+enum GroupType {
+  territorial_origin    // Agrupado por departamento de Nicaragua de nacimiento
+  territorial_residence // Agrupado por país de residencia
+  custom                // Creado manualmente por un administrador
+}
+
+enum SortitionStatus {
+  pending    // Creado, pendiente de ejecución
+  completed  // Ejecutado — resultado y semilla disponibles
+  cancelled  // Cancelado por el creador
+}
+
+enum ElectionStatus {
+  draft     // Borrador — no acepta votos
+  open      // Abierta — acepta votos hasta endsAt
+  tallied   // Contada — resultado disponible
+  cancelled // Cancelada por el creador
+}
+
+enum ProposalStatus {
+  draft    // Borrador visible solo para el autor
+  open     // Abierta a comentarios y señales
+  closed   // Cerrada por el autor; no acepta nuevas señales ni comentarios
+  archived // Archivada; solo lectura
+}
+
+enum SignalType {
+  support  // Apoya la propuesta
+  neutral  // Neutral / necesita más información
+  object   // Objeta la propuesta
+}
+
+enum AccountStatus {
+  invited
+  pending_verification
+  verified_citizen
+  observer
+  external_collaborator
+  rejected
+  suspended
+}
+
+// ─── Tablas principales ───────────────────────────────────────────────────────
+
+/**
+ * User — identidad privada del usuario.
+ *
+ * Esta tabla contiene PII (email, hash de contraseña).
+ * Los módulos de negocio deben operar con Profile, no con User directamente.
+ * Solo AuthModule y UsersModule acceden a esta tabla.
+ */
+model User {
+  id              String        @id @default(uuid()) @db.Uuid
+  email           String        @unique
+  passwordHash    String?       // Null mientras la invitación no ha sido aceptada
+
+  status          AccountStatus @default(invited)
+
+  // Trazabilidad de invitación
+  invitedById     String?       @db.Uuid
+  invitedBy       User?         @relation("UserInvitations", fields: [invitedById], references: [id])
+  invitations     User[]        @relation("UserInvitations")
+
+  // Token de invitación (one-time, expira en 72h)
+  inviteToken     String?       @unique
+  inviteExpiresAt DateTime?     @db.Timestamptz
+
+  createdAt       DateTime      @default(now()) @db.Timestamptz
+  updatedAt       DateTime      @updatedAt @db.Timestamptz
+  lastLoginAt     DateTime?     @db.Timestamptz
+
+  // Relaciones
+  profile         Profile?
+  auditEvents     AuditEvent[]  @relation("AuditEventActor")
+
+  @@index([email])
+  @@index([inviteToken])
+  @@index([status])
+  @@map("users")
+}
+
+/**
+ * Profile — perfil operativo público/semi-público.
+ *
+ * Separado de User para permitir anonimización parcial.
+ * Los módulos de deliberación, votación y grupos usan profile_id.
+ */
+model Profile {
+  id               String   @id @default(uuid()) @db.Uuid
+  userId           String   @unique @db.Uuid
+  user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  displayName      String
+  birthDepartment  String?  // Departamento de Nicaragua de origen
+  currentCountry   String?  // País de residencia actual (ISO 3166-1 alpha-2)
+
+  // Si el perfil es visible para otros usuarios de la plataforma
+  isPublic         Boolean  @default(false)
+
+  createdAt        DateTime          @default(now()) @db.Timestamptz
+  updatedAt        DateTime          @updatedAt @db.Timestamptz
+
+  memberships      GroupMembership[]
+  proposals        Proposal[]
+  comments         ProposalComment[]
+  signals          ConsensusSignal[]
+  electionsCreated      Election[]        @relation("ElectionCreator")
+  ballots               Ballot[]
+  sortitionDrawsCreated SortitionDraw[]   @relation("SortitionCreator")
+  sortitionSelections   SortitionMember[]
+
+  @@map("profiles")
+}
+
+/**
+ * Group — grupo de participación (territorial o personalizado).
+ * Los grupos territoriales se crean automáticamente al registrarse.
+ */
+model Group {
+  id          String    @id @default(uuid()) @db.Uuid
+  name        String
+  slug        String    @unique  // ej: "managua", "country-cr"
+  type        GroupType
+  description String?
+  isActive    Boolean   @default(true)
+
+  createdAt   DateTime  @default(now()) @db.Timestamptz
+  updatedAt   DateTime  @updatedAt @db.Timestamptz
+
+  memberships    GroupMembership[]
+  proposals      Proposal[]
+  elections      Election[]
+  sortitionDraws SortitionDraw[]
+
+  @@index([type])
+  @@index([isActive])
+  @@map("groups")
+}
+
+/**
+ * GroupMembership — relación many-to-many entre perfiles y grupos.
+ * Única por (groupId, profileId). Creada automáticamente al registrarse.
+ */
+model GroupMembership {
+  id        String   @id @default(uuid()) @db.Uuid
+  groupId   String   @db.Uuid
+  group     Group    @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  profileId String   @db.Uuid
+  profile   Profile  @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  joinedAt  DateTime @default(now()) @db.Timestamptz
+
+  @@unique([groupId, profileId])
+  @@index([profileId])
+  @@index([groupId])
+  @@map("group_memberships")
+}
+
+/**
+ * Proposal — propuesta de deliberación dentro de un grupo.
+ *
+ * Solo los miembros del grupo pueden crear propuestas.
+ * El autor puede cerrar o archivar su propia propuesta.
+ * Los borradores (draft) son visibles para todos los miembros pero
+ * no aceptan señales hasta que pasan a estado open.
+ */
+model Proposal {
+  id              String         @id @default(uuid()) @db.Uuid
+  groupId         String         @db.Uuid
+  group           Group          @relation(fields: [groupId], references: [id], onDelete: Cascade)
+
+  authorProfileId String         @db.Uuid
+  author          Profile        @relation(fields: [authorProfileId], references: [id])
+
+  title           String         @db.VarChar(200)
+  body            String
+  status          ProposalStatus @default(open)
+
+  createdAt       DateTime       @default(now()) @db.Timestamptz
+  updatedAt       DateTime       @updatedAt @db.Timestamptz
+  closedAt        DateTime?      @db.Timestamptz
+
+  comments        ProposalComment[]
+  signals         ConsensusSignal[]
+
+  @@index([groupId, status])
+  @@index([authorProfileId])
+  @@map("proposals")
+}
+
+/**
+ * ProposalComment — comentario sobre una propuesta.
+ *
+ * Soporta threading de un nivel (parentId apunta a otro comentario raíz).
+ * Solo los miembros del grupo pueden comentar.
+ * No se permiten nuevos comentarios en propuestas closed/archived.
+ */
+model ProposalComment {
+  id              String    @id @default(uuid()) @db.Uuid
+  proposalId      String    @db.Uuid
+  proposal        Proposal  @relation(fields: [proposalId], references: [id], onDelete: Cascade)
+
+  authorProfileId String    @db.Uuid
+  author          Profile   @relation(fields: [authorProfileId], references: [id])
+
+  body            String    @db.VarChar(2000)
+  parentId        String?   @db.Uuid
+  parent          ProposalComment?  @relation("CommentReplies", fields: [parentId], references: [id])
+  replies         ProposalComment[] @relation("CommentReplies")
+
+  createdAt       DateTime  @default(now()) @db.Timestamptz
+  updatedAt       DateTime  @updatedAt @db.Timestamptz
+
+  @@index([proposalId])
+  @@index([parentId])
+  @@map("proposal_comments")
+}
+
+/**
+ * ConsensusSignal — señal de posición de un miembro sobre una propuesta.
+ *
+ * Única por (proposalId, profileId) — un miembro, una señal.
+ * Se puede actualizar (upsert). Solo en propuestas en estado open.
+ */
+model ConsensusSignal {
+  id         String     @id @default(uuid()) @db.Uuid
+  proposalId String     @db.Uuid
+  proposal   Proposal   @relation(fields: [proposalId], references: [id], onDelete: Cascade)
+
+  profileId  String     @db.Uuid
+  profile    Profile    @relation(fields: [profileId], references: [id])
+
+  signal     SignalType
+
+  createdAt  DateTime   @default(now()) @db.Timestamptz
+  updatedAt  DateTime   @updatedAt @db.Timestamptz
+
+  @@unique([proposalId, profileId])
+  @@index([proposalId])
+  @@map("consensus_signals")
+}
+
+/**
+ * Election — elección con método Condorcet-Schulze.
+ *
+ * Solo los miembros del grupo pueden crear y votar en elecciones.
+ * Las papeletas se cuentan al llamar a POST /tally una vez cerrada.
+ * El resultado completo (matrices) se almacena en ElectionResult para
+ * verificación independiente.
+ */
+model Election {
+  id                 String         @id @default(uuid()) @db.Uuid
+  groupId            String         @db.Uuid
+  group              Group          @relation(fields: [groupId], references: [id])
+
+  createdByProfileId String         @db.Uuid
+  createdBy          Profile        @relation("ElectionCreator", fields: [createdByProfileId], references: [id])
+
+  title              String         @db.VarChar(200)
+  description        String?
+  status             ElectionStatus @default(draft)
+
+  startsAt           DateTime       @db.Timestamptz
+  endsAt             DateTime       @db.Timestamptz
+
+  createdAt          DateTime       @default(now()) @db.Timestamptz
+  updatedAt          DateTime       @updatedAt @db.Timestamptz
+
+  candidates         ElectionCandidate[]
+  ballots            Ballot[]
+  result             ElectionResult?
+
+  @@index([groupId, status])
+  @@index([createdByProfileId])
+  @@map("elections")
+}
+
+/**
+ * ElectionCandidate — opción votable dentro de una elección.
+ * `position` determina el orden de visualización y el orden de las matrices.
+ */
+model ElectionCandidate {
+  id          String    @id @default(uuid()) @db.Uuid
+  electionId  String    @db.Uuid
+  election    Election  @relation(fields: [electionId], references: [id], onDelete: Cascade)
+
+  title       String    @db.VarChar(200)
+  description String?
+  position    Int       // Orden de presentación (1-based, ascendente)
+
+  rankings    BallotRanking[]
+
+  @@index([electionId])
+  @@map("election_candidates")
+}
+
+/**
+ * Ballot — papeleta de un votante.
+ * Un votante puede actualizar su papeleta mientras la elección esté abierta.
+ * El voto final es el registrado cuando se ejecuta el conteo.
+ */
+model Ballot {
+  id          String    @id @default(uuid()) @db.Uuid
+  electionId  String    @db.Uuid
+  election    Election  @relation(fields: [electionId], references: [id], onDelete: Cascade)
+
+  profileId   String    @db.Uuid
+  profile     Profile   @relation(fields: [profileId], references: [id])
+
+  submittedAt DateTime  @default(now()) @db.Timestamptz
+
+  rankings    BallotRanking[]
+
+  @@unique([electionId, profileId])
+  @@index([electionId])
+  @@map("ballots")
+}
+
+/**
+ * BallotRanking — ranking de un candidato en una papeleta.
+ * rank=1 significa más preferido. Los candidatos no incluidos en la papeleta
+ * se consideran en último lugar (empatados) durante el conteo.
+ */
+model BallotRanking {
+  id          String            @id @default(uuid()) @db.Uuid
+  ballotId    String            @db.Uuid
+  ballot      Ballot            @relation(fields: [ballotId], references: [id], onDelete: Cascade)
+
+  candidateId String            @db.Uuid
+  candidate   ElectionCandidate @relation(fields: [candidateId], references: [id], onDelete: Cascade)
+
+  rank        Int               // 1 = más preferido
+
+  @@unique([ballotId, candidateId])
+  @@index([ballotId])
+  @@map("ballot_rankings")
+}
+
+/**
+ * ElectionResult — resultado computado de una elección.
+ *
+ * Almacena las matrices completas para verificación independiente.
+ * Una vez creado, no debe modificarse (append-only semántico, aunque no
+ * hay trigger en esta tabla — el status 'tallied' de Election lo protege).
+ */
+model ElectionResult {
+  id             String   @id @default(uuid()) @db.Uuid
+  electionId     String   @unique @db.Uuid
+  election       Election @relation(fields: [electionId], references: [id])
+
+  /** IDs de los candidatos ganadores (puede ser más de uno en empate exacto). */
+  winners        Json
+  /** IDs de los candidatos en el orden de las matrices (por position ASC). */
+  candidateOrder Json
+  /** Matriz de preferencias pairwise: d[i][j] = votos que prefieren i sobre j. */
+  pairwiseMatrix Json
+  /** Matriz de rutas más fuertes (Schulze): p[i][j] = fuerza de ruta i→j. */
+  schulzeMatrix  Json
+
+  totalBallots   Int
+  computedAt     DateTime @db.Timestamptz
+
+  @@map("election_results")
+}
+
+/**
+ * SortitionDraw — sorteo de selección aleatoria verificable.
+ *
+ * Flujo:
+ *   1. Crear (pending) — define grupo, título y tamaño de selección.
+ *   2. Ejecutar (completed) — captura el snapshot del pool, genera seed,
+ *      aplica Fisher-Yates con SHA-256 y guarda los seleccionados.
+ *   3. Verificar — cualquier miembro puede recomputar con la seed almacenada.
+ *
+ * Limitación MVP: la seed es generada por el servidor.
+ * Para mayor confianza ver docs/DECISIONS.md ADR-011.
+ */
+model SortitionDraw {
+  id                 String          @id @default(uuid()) @db.Uuid
+  groupId            String          @db.Uuid
+  group              Group           @relation(fields: [groupId], references: [id])
+
+  createdByProfileId String          @db.Uuid
+  createdBy          Profile         @relation("SortitionCreator", fields: [createdByProfileId], references: [id])
+
+  title              String          @db.VarChar(200)
+  description        String?
+  selectionSize      Int
+
+  status             SortitionStatus @default(pending)
+
+  // Establecidos al ejecutar el sorteo
+  seed               String?         // 32 bytes en hex — pública para verificación independiente
+  algorithm          String?         // e.g. "fisher-yates-sha256-v1"
+  poolSnapshot       Json?           // String[] — profileIds ordenados lexicográficamente
+
+  executedAt         DateTime?       @db.Timestamptz
+  createdAt          DateTime        @default(now()) @db.Timestamptz
+  updatedAt          DateTime        @updatedAt @db.Timestamptz
+
+  selectedMembers    SortitionMember[]
+
+  @@index([groupId, status])
+  @@index([createdByProfileId])
+  @@map("sortition_draws")
+}
+
+/**
+ * SortitionMember — miembro seleccionado en un sorteo.
+ * selectionOrder indica la posición en la selección (1-based).
+ */
+model SortitionMember {
+  id             String        @id @default(uuid()) @db.Uuid
+  drawId         String        @db.Uuid
+  draw           SortitionDraw @relation(fields: [drawId], references: [id], onDelete: Cascade)
+
+  profileId      String        @db.Uuid
+  profile        Profile       @relation(fields: [profileId], references: [id])
+
+  selectionOrder Int
+
+  @@unique([drawId, profileId])
+  @@index([drawId])
+  @@map("sortition_members")
+}
+
+/**
+ * AuditEvent — log append-only de eventos críticos.
+ *
+ * IMPORTANTE: Esta tabla nunca debe recibir UPDATE ni DELETE.
+ * Un trigger de PostgreSQL lo enforza a nivel de base de datos.
+ * Ver: prisma/sql/01_audit_append_only.sql
+ *
+ * Los campos de PII (IP) se almacenan como hash, no en texto plano.
+ */
+model AuditEvent {
+  id          String   @id @default(uuid()) @db.Uuid
+  createdAt   DateTime @default(now()) @db.Timestamptz
+
+  // Actor del evento (null para eventos de sistema)
+  actorId     String?  @db.Uuid
+  actor       User?    @relation("AuditEventActor", fields: [actorId], references: [id])
+
+  // Tipo de evento (ej: "user.invited", "user.login", "vote.cast")
+  action      String
+
+  // Recurso afectado (ej: "user:uuid", "proposal:uuid")
+  resource    String?
+
+  // Hash de la IP del cliente (SHA-256 + salt; no la IP directa)
+  ipHash      String?
+
+  // Hash del payload completo para verificación de integridad
+  payloadHash String?
+
+  // Metadatos no sensibles del contexto
+  metadata    Json?
+
+  @@index([action])
+  @@index([actorId])
+  @@index([createdAt])
+  @@map("audit_events")
+}

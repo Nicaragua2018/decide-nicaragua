@@ -1,0 +1,57 @@
+# Traefik v3 — Configuración dinámica: middlewares de seguridad
+# Cargado automáticamente desde /etc/traefik/dynamic (file provider)
+
+http:
+  middlewares:
+
+    # ── Cabeceras de seguridad HTTP ──────────────────────────
+    security-headers:
+      headers:
+        # Fuerza HTTPS durante 1 año (incluye subdominios)
+        stsSeconds: 31536000
+        stsIncludeSubdomains: true
+        stsPreload: true
+        forceSTSHeader: true
+
+        # Previene clickjacking
+        frameDeny: true
+
+        # Previene MIME sniffing
+        contentTypeNosniff: true
+
+        # Controla referrer
+        referrerPolicy: "strict-origin-when-cross-origin"
+
+        # Deshabilita características del navegador no necesarias
+        permissionsPolicy: "camera=(), microphone=(), geolocation=(), payment=()"
+
+        # Content Security Policy
+        # Nota: 'unsafe-inline' en script-src es necesario para Next.js 15 App Router
+        # (scripts de hidratación inline). Para eliminarla en Fase 2, implementar
+        # nonce via middleware.ts y pasar nonce a headers de respuesta.
+        contentSecurityPolicy: >-
+          default-src 'self';
+          script-src 'self' 'unsafe-inline';
+          style-src 'self' 'unsafe-inline';
+          img-src 'self' data: blob:;
+          font-src 'self';
+          connect-src 'self';
+          frame-ancestors 'none';
+          base-uri 'self';
+          form-action 'self';
+          object-src 'none';
+          worker-src 'none';
+          upgrade-insecure-requests
+
+        # Cabeceras personalizadas
+        customResponseHeaders:
+          X-Powered-By: ""
+          Server: ""
+
+    # ── Rate limiting estricto para auth ────────────────────
+    # Aplicar con label: "traefik.http.routers.X.middlewares=rate-limit-auth"
+    rate-limit-auth:
+      rateLimit:
+        average: 10
+        burst: 5
+        period: 1m
