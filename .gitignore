@@ -21,11 +21,17 @@ apps/api/prisma/*.db
 # Turbo
 .turbo/
 
+# Claude Code (herramienta de desarrollo local — no pertenece al repo)
+.claude/
+
 # Editor
 .vscode/settings.json
 .idea/
 *.swp
 *.swo
+
+# TypeScript build info
+*.tsbuildinfo
 
 # OS
 .DS_Store

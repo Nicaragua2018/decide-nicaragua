@@ -257,11 +257,96 @@ Flujo: admin crea invitación → email con token → usuario completa registro 
 
 ---
 
+---
+
+## ADR-010: Algoritmo Condorcet — Schulze
+
+**Fecha:** 2026-03-22
+**Estado:** Aceptado
+
+### Decisión
+Implementar el método **Schulze** (también llamado Beatpath o Schwartz Sequential Dropping).
+
+### Justificación
+- Cumple el criterio de Condorcet, Smith y Schwartz.
+- Siempre produce un ganador único o un conjunto de ganadores empatados.
+- Algoritmo publicado, revisado por pares y ampliamente implementado.
+- Implementable con Floyd-Warshall (O(n³)) — suficiente para hasta cientos de candidatos.
+- Ranked Pairs y minimax cumplen menos criterios teóricos o producen empates con más frecuencia.
+
+### Implementación
+`apps/api/src/voting/schulze.ts` — algoritmo puro (sin efectos secundarios), 13 tests en `schulze.spec.ts`.
+Los resultados almacenan `pairwiseMatrix` y `schulzeMatrix` completos para verificación independiente.
+
+---
+
+## ADR-011: Generación de seed para sortition — Fisher-Yates + SHA-256
+
+**Fecha:** 2026-03-22
+**Estado:** Aceptado
+
+### Decisión
+Usar **Fisher-Yates parcial** con **SHA-256 como PRNG determinista** (v1).
+
+Proceso:
+1. Al crear el sorteo, se genera un seed (UUID v4 + timestamp) y se almacena públicamente.
+2. El poolSnapshot (lista de elegibles en ese momento) se guarda en la BD.
+3. La selección se reproduce determinísticamente con `SHA-256(seed + index)` como función de mezcla.
+4. El endpoint `/verify` permite a cualquier usuario recomputar el resultado.
+
+### Justificación
+- Verificable sin acceso al servidor: solo se necesita seed + pool.
+- Sin dependencia de fuentes externas (blockchain) que podrían no estar disponibles.
+- SHA-256 es estándar, auditado y disponible en cualquier lenguaje para verificación independiente.
+- El commit-reveal completo (ADR-011v2) se implementará en Iteración 9 si el modelo de amenazas lo requiere.
+
+### Limitación documentada
+El seed lo genera el servidor. Un servidor comprometido podría elegir un seed favorable. Mitigación futura: protocolo commit-reveal donde los participantes contribuyen entropía antes del sorteo.
+
+---
+
+## ADR-012: Cifrado en reposo de PII — diferido a Fase 2
+
+**Fecha:** 2026-03-22
+**Estado:** Diferido (aceptado diferimiento)
+
+### Decisión
+No implementar cifrado en reposo de PII en el MVP. Diferido a Iteración 9.
+
+### Justificación
+- El MVP opera con ~1000 usuarios en círculo cerrado.
+- La complejidad operativa de gestionar claves de cifrado (pgcrypto o capa de aplicación) es significativa.
+- La mitigación actual (acceso restringido al servidor, sin exposición pública de DB) es suficiente para MVP.
+- La tabla `users` tiene acceso restringido: solo el módulo `auth` la consulta directamente.
+
+### Plan Fase 2
+Implementar cifrado de campos `email` y `displayName` con pgcrypto o cifrado simétrico a nivel aplicación antes de apertura pública con datos sensibles reales.
+
+---
+
+## ADR-013: Proveedor de email — Resend
+
+**Fecha:** 2026-03-22
+**Estado:** Aceptado
+
+### Decisión
+Usar **Resend** como proveedor de email transaccional.
+
+### Justificación
+- API REST simple, SDK TypeScript oficial.
+- Reputación de entregabilidad alta sin configuración de SPF/DKIM compleja.
+- Plan gratuito suficiente para MVP (~1000 usuarios, pocos emails por mes).
+- `EmailService` está abstraído: cambiar de proveedor requiere modificar solo `email.service.ts`.
+
+### Consecuencias
+- `RESEND_API_KEY` requerida en variables de entorno.
+- Si Resend falla, los emails de invitación fallan silenciosamente (Fase 2: reintentos con BullMQ).
+
+---
+
 ## Decisiones pendientes
 
 | ID | Pregunta | Prioridad |
 |---|---|---|
-| ADR-010 | ¿Qué algoritmo exacto de Condorcet implementar? ¿Schulze, Ranked Pairs, o minimax? | Media |
-| ADR-011 | ¿Cómo generar y verificar el seed aleatorio para sortition? ¿Hash de bloque de blockchain pública o VRF interno? | Media |
-| ADR-012 | ¿Cifrado en reposo de PII desde MVP o diferido a fase 2? | Alta |
-| ADR-013 | ¿Proveedor de email para notificaciones? ¿SMTP propio o servicio externo? | Baja |
+| ADR-014 | ¿Implementar commit-reveal para sortition (participantes aportan entropía)? | Media — Iteración 9 |
+| ADR-015 | ¿Dominio de producción definitivo? Requerido para configurar TLS, CORS y COOKIE_DOMAIN | Alta — antes del primer deploy |

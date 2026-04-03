@@ -1,30 +1,46 @@
 # Decide Nicaragua
 
-Plataforma de participación democrática verificable para ciudadanos nicaragüenses. Diseñada para toma de decisiones auditable, debate estructurado y votación con métodos verificables.
+**Plataforma de participación democrática verificable para ciudadanos nicaragüenses.**
+
+Decide Nicaragua es una infraestructura digital de código abierto para toma de decisiones auditable, debate estructurado y votación con métodos verificables. Está diseñada para organizaciones políticas y civiles que operan en condiciones adversas — en particular para comunidades en el exilio que necesitan deliberar y decidir de forma legítima, transparente y resistente a interferencias.
+
+El proyecto nace de la necesidad de los nicaragüenses en el exilio de contar con herramientas propias para organizarse democráticamente, sin depender de plataformas comerciales que no garantizan ni la integridad de los resultados ni la protección de la identidad de sus participantes.
+
+---
 
 ## Estado del proyecto
 
-MVP en desarrollo activo — Fases 0–7 completadas.
+MVP completo — Fases 0–7 implementadas y con tests.
 
-| Módulo | Estado |
-|--------|--------|
-| Autenticación (invitación, login, JWT + refresh) | Completo |
-| Perfiles de usuario | Completo |
-| Grupos territoriales | Completo |
-| Deliberación (propuestas, comentarios, señales) | Completo |
-| Votación Condorcet-Schulze | Completo |
-| Auditoría append-only | Completo |
-| Panel de administración | Completo |
+| Módulo | Estado | Tests |
+|--------|--------|-------|
+| Autenticación por invitación (JWT HttpOnly + refresh rotation) | Completo | 25 |
+| Gestión de usuarios y panel de administración | Completo | 12 |
+| Grupos territoriales (17 departamentos de Nicaragua) | Completo | 12 |
+| Deliberación (propuestas, comentarios, señales de consenso) | Completo | 21 |
+| Votación Condorcet-Schulze verificable | Completo | 34 |
+| Sortition verificable (selección aleatoria auditable) | Completo | 39 |
+| Auditoría append-only pública | Completo | 12 |
+| Frontend Next.js (App Router, Server Components) | Completo | — |
 
-## Stack
+**155 tests pasan** en el backend. El frontend está funcional para todos los módulos.
 
-- **Frontend**: Next.js 15 (App Router, Server Components)
-- **Backend**: NestJS 10
-- **Base de datos**: PostgreSQL 16 + Prisma ORM
-- **Caché / sesiones**: Redis 7
-- **Reverse proxy**: Traefik v3 (TLS automático, CSP, HSTS)
-- **Monorepo**: pnpm + Turborepo
-- **Despliegue**: Docker Compose en VPS Ubuntu (Hostinger)
+---
+
+## Stack tecnológico
+
+| Capa | Tecnología |
+|------|-----------|
+| Frontend | Next.js 15 (App Router, Server Components) |
+| Backend | NestJS 10 |
+| Base de datos | PostgreSQL 16 + Prisma ORM |
+| Caché / sesiones | Redis 7 + BullMQ |
+| Reverse proxy | Traefik v3 (TLS automático, CSP, HSTS) |
+| Monorepo | pnpm + Turborepo |
+| Tipos compartidos | TypeScript end-to-end (`@decide/shared`) |
+| Despliegue | Docker Compose en VPS Ubuntu |
+
+---
 
 ## Estructura del repositorio
 
@@ -34,69 +50,99 @@ MVP en desarrollo activo — Fases 0–7 completadas.
 │   ├── api/          # NestJS — lógica de negocio, REST API
 │   └── web/          # Next.js — interfaz de usuario
 ├── packages/
-│   └── shared/       # Tipos TypeScript compartidos
+│   ├── shared/       # Tipos y constantes TypeScript compartidos (@decide/shared)
+│   └── tsconfig/     # Configuraciones TypeScript base
 ├── infra/
-│   └── traefik/      # Configuración de reverse proxy y seguridad
-├── scripts/          # Herramientas de desarrollo (generate-migration.sh)
+│   └── traefik/      # Configuración de reverse proxy y seguridad HTTP
+├── scripts/          # Herramientas de desarrollo
 ├── docs/             # Documentación técnica
-│   ├── ARCHITECTURE.md
-│   ├── DECISIONS.md
-│   ├── SECURITY.md
-│   └── ROADMAP.md
-├── docker-compose.yml
-└── deploy.sh
+│   ├── ARCHITECTURE.md  # Diagrama de componentes y decisiones de diseño
+│   ├── DECISIONS.md     # ADRs — por qué se eligió cada tecnología
+│   ├── SECURITY.md      # Modelo de amenazas y controles implementados
+│   └── ROADMAP.md       # Fases completadas y próximas
+├── docker-compose.yml          # Producción (con Traefik)
+├── docker-compose.dev.yml      # Desarrollo local (solo PostgreSQL + Redis)
+├── deploy.sh                   # Script de despliegue en VPS
+└── .env.example                # Variables de entorno requeridas (sin valores reales)
 ```
+
+---
 
 ## Desarrollo local
 
 ### Requisitos
 
-- Node.js 20+
-- pnpm 9+
-- Docker y Docker Compose
+- [Node.js 20+](https://nodejs.org/)
+- [pnpm 9+](https://pnpm.io/installation)
+- [Docker y Docker Compose](https://docs.docker.com/get-docker/)
 
-### Configuración inicial
+### Instalación
 
 ```bash
-# 1. Instalar dependencias
+# 1. Clonar el repositorio
+git clone https://github.com/carlosrobleto/decide-nicaragua.git
+cd decide-nicaragua
+
+# 2. Instalar dependencias
 pnpm install
 
-# 2. Crear variables de entorno
-cp apps/api/.env.example apps/api/.env
-cp apps/web/.env.example apps/web/.env.local
-# Editar ambos archivos con los valores correctos
+# 3. Crear variables de entorno
+cp .env.example .env
+# Editar .env con los valores correctos para desarrollo local
 
-# 3. Levantar servicios de base de datos
-docker compose up -d postgres redis
+# 4. Levantar PostgreSQL y Redis
+docker compose -f docker-compose.dev.yml up -d
 
-# 4. Aplicar migraciones y seed
+# 5. Aplicar migraciones y crear datos iniciales
 pnpm --filter @decide/api exec prisma migrate dev
-pnpm --filter @decide/api exec prisma db seed
+pnpm db:seed
 
-# 5. Iniciar en modo desarrollo
+# 6. Iniciar en modo desarrollo (hot reload)
 pnpm dev
 ```
 
-El frontend estará disponible en `http://localhost:3000` y la API en `http://localhost:4000`.
+El frontend estará en `http://localhost:3000` y la API en `http://localhost:4000`.
+
+### Variables de entorno principales (`.env`)
+
+Ver `.env.example` para la lista completa con instrucciones. Las más importantes:
+
+```bash
+DATABASE_URL=postgresql://decide:decide_dev_password@localhost:5432/decide_dev
+REDIS_URL=redis://localhost:6379
+JWT_SECRET=<mínimo 32 caracteres aleatorios — openssl rand -hex 32>
+JWT_EXPIRY=15m
+REFRESH_TOKEN_EXPIRY=30d
+COOKIE_DOMAIN=localhost
+APP_URL=http://localhost:3000
+API_URL=http://localhost:4000
+RESEND_API_KEY=re_xxxx          # https://resend.com — para emails de invitación
+IP_HASH_SALT=<salt aleatorio>   # openssl rand -hex 32
+ADMIN_SEED_EMAIL=admin@example.com
+ADMIN_SEED_PASSWORD=<mínimo 12 caracteres>
+```
 
 ### Tests
 
 ```bash
-pnpm test                    # Todos los tests
-pnpm --filter @decide/api test   # Solo backend
+pnpm test                          # Todos los tests (155 en backend)
+pnpm --filter @decide/api test     # Solo backend
+pnpm --filter @decide/api typecheck  # Verificación de tipos
 ```
+
+---
 
 ## Despliegue en VPS
 
-### Primera vez (con migraciones vacías)
+### Primera vez
 
 ```bash
-# 1. Generar migraciones iniciales (solo una vez)
+# 1. Generar migración inicial
 ./scripts/generate-migration.sh
 git add apps/api/prisma/migrations/
 git commit -m "feat: initial database migration"
 
-# 2. Desplegar
+# 2. Desplegar (valida requisitos, construye imágenes, migra y reinicia)
 ./deploy.sh
 ```
 
@@ -106,45 +152,51 @@ git commit -m "feat: initial database migration"
 ./deploy.sh
 ```
 
-El script valida requisitos, construye imágenes, ejecuta migraciones y reinicia servicios.
+El script valida que estén presentes las variables de entorno requeridas, construye las imágenes Docker, ejecuta `prisma migrate deploy` y reinicia los servicios con health checks.
 
-## Variables de entorno requeridas
+**Requisitos del servidor:**
+- Ubuntu 20.04+
+- Docker + Docker Compose v2
+- Puertos 80 y 443 abiertos
+- Dominio apuntando al servidor (para TLS automático con Let's Encrypt)
 
-### API (`apps/api/.env`)
-
-```
-DATABASE_URL=postgresql://...
-REDIS_URL=redis://...
-JWT_SECRET=...
-JWT_EXPIRES_IN=15m
-REFRESH_TOKEN_TTL_SECONDS=2592000
-COOKIE_DOMAIN=tudominio.com
-NODE_ENV=production
-PORT=4000
-```
-
-### Web (`apps/web/.env.local`)
-
-```
-API_URL=http://api:4000          # URL interna (Docker network)
-NEXT_PUBLIC_APP_URL=https://tudominio.com
-NEXT_PUBLIC_API_URL=https://tudominio.com
-```
+---
 
 ## Documentación técnica
 
-- [Arquitectura](docs/ARCHITECTURE.md) — Diagrama de componentes, decisiones de diseño
-- [Decisiones técnicas](docs/DECISIONS.md) — ADRs (Architecture Decision Records)
-- [Seguridad](docs/SECURITY.md) — Modelo de amenazas, controles implementados
-- [Roadmap](docs/ROADMAP.md) — Fases completadas y pendientes
+- [Arquitectura](docs/ARCHITECTURE.md) — Diagrama de componentes, separación de identidad, modelo de datos
+- [Decisiones técnicas](docs/DECISIONS.md) — ADRs explicando por qué se eligió cada tecnología
+- [Seguridad](docs/SECURITY.md) — Modelo de amenazas, controles implementados, auditoría interna
+- [Roadmap](docs/ROADMAP.md) — Fases completadas y próximas iteraciones
+
+---
 
 ## Principios de diseño
 
-- **Legitimidad primero**: todo resultado importante es verificable de forma independiente.
-- **Seguridad seria**: JWT HttpOnly, refresh token rotation, rate limiting, CSP, HSTS.
-- **Auditoría append-only**: todos los eventos críticos quedan registrados.
-- **Mínima complejidad**: suficiente para el MVP, preparado para escalar.
+- **Legitimidad primero**: los resultados de votaciones y sortitions son verificables de forma independiente, sin confiar en el servidor.
+- **Seguridad seria**: JWT HttpOnly, refresh token rotation en Redis, rate limiting, CSP, HSTS, auditoría append-only.
+- **Protección de identidad**: separación de tabla de identidad (PII) y perfil operativo; IPs almacenadas como hash.
+- **Mínima complejidad**: suficiente para operar con confianza, preparado para escalar.
+- **Código auditable**: algoritmos críticos (Schulze, Fisher-Yates con SHA-256) tienen tests exhaustivos y están documentados.
+
+---
+
+## Contribuir
+
+Las contribuciones son bienvenidas. Por favor:
+
+1. Abre un issue antes de empezar trabajo significativo.
+2. Lee [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) y [`docs/DECISIONS.md`](docs/DECISIONS.md) para entender las decisiones existentes.
+3. Los módulos críticos requieren tests. Ejecuta `pnpm test` antes de enviar un PR.
+4. No incluyas credenciales, API keys ni datos personales en commits.
+5. Sigue el estilo TypeScript del proyecto (strict, sin `any`, nombres explícitos).
+
+Para vulnerabilidades de seguridad, abre un issue privado o contacta directamente al mantenedor.
+
+---
 
 ## Licencia
 
-Por definir.
+[MIT](LICENSE) — Carlos Robleto, 2026.
+
+Este software es libre. Puedes usarlo, modificarlo y distribuirlo bajo los términos de la licencia MIT.
