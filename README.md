@@ -80,7 +80,7 @@ MVP completo — Fases 0–7 implementadas y con tests.
 
 ```bash
 # 1. Clonar el repositorio
-git clone https://github.com/carlosrobleto/decide-nicaragua.git
+git clone https://github.com/Nicaragua2018/decide-nicaragua.git
 cd decide-nicaragua
 
 # 2. Instalar dependencias
