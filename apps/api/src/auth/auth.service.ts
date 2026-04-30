@@ -61,8 +61,15 @@ export class AuthService {
   /**
    * Crea un usuario en estado 'invited' y envía el email de invitación.
    * Solo los ciudadanos verificados pueden invitar (enforzado en el controller).
+   *
+   * En entornos que no sean producción, si el email falla el proceso no se
+   * interrumpe: se registra el error y se devuelve la URL para uso manual.
    */
-  async inviteUser(dto: InviteUserDto, actorId: string, ip: string): Promise<void> {
+  async inviteUser(
+    dto: InviteUserDto,
+    actorId: string,
+    ip: string,
+  ): Promise<{ inviteUrl: string }> {
     const existing = await this.prisma.user.findUnique({
       where: { email: dto.email },
     });
@@ -88,9 +95,18 @@ export class AuthService {
     });
 
     const appUrl = this.config.getOrThrow<string>('APP_URL');
-    const inviteUrl = `${appUrl}/auth/accept-invite?token=${inviteToken}`;
+    const inviteUrl = `${appUrl}/invite/${inviteToken}`;
+    const isProduction = this.config.get<string>('NODE_ENV') === 'production';
 
-    await this.email.sendInvite({ to: dto.email, inviteUrl });
+    try {
+      await this.email.sendInvite({ to: dto.email, inviteUrl });
+    } catch (err: unknown) {
+      if (isProduction) throw err;
+      // En desarrollo: loguear prominentemente para uso manual
+      this.logger.warn(
+        `[DEV] Email no enviado. Link de invitación manual:\n  ${inviteUrl}`,
+      );
+    }
 
     void this.audit
       .log({
@@ -101,6 +117,8 @@ export class AuthService {
         metadata: { invitedEmail: dto.email },
       })
       .catch((err: unknown) => this.logger.error('Audit log failed', err));
+
+    return { inviteUrl };
   }
 
   // ─── Aceptar invitación ─────────────────────────────────────────────────────

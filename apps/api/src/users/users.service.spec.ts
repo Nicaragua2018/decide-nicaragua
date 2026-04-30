@@ -122,7 +122,7 @@ describe('UsersService', () => {
       await service.listUsers();
 
       expect(prisma.user.findMany).toHaveBeenCalledWith(
-        expect.objectContaining({ where: undefined }),
+        expect.not.objectContaining({ where: expect.anything() }),
       );
     });
   });

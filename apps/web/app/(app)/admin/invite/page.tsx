@@ -27,7 +27,19 @@ export default function AdminInvitePage() {
       <div className="card" style={{ maxWidth: 480 }}>
         {state && 'success' in state && (
           <div className="alert alert-success mb-4">
-            Invitación enviada. El usuario recibirá un correo para activar su cuenta.
+            Invitación creada.{' '}
+            {state.devInviteUrl
+              ? 'Email no enviado (modo demo). Comparte este enlace manualmente:'
+              : 'El usuario recibirá un correo para activar su cuenta.'}
+          </div>
+        )}
+
+        {state && 'success' in state && state.devInviteUrl && (
+          <div className="mb-4" style={{ background: 'var(--color-surface-2)', borderRadius: 6, padding: '10px 14px' }}>
+            <p className="form-hint mb-1">Enlace de activación:</p>
+            <code style={{ fontSize: 12, wordBreak: 'break-all', display: 'block', color: 'var(--color-accent)' }}>
+              {state.devInviteUrl}
+            </code>
           </div>
         )}
 

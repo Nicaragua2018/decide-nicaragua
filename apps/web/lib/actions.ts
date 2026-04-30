@@ -6,7 +6,7 @@ import { redirect } from 'next/navigation';
 
 const API_URL = process.env.API_URL ?? 'http://localhost:4000';
 
-export type ActionResult = { error: string } | { success: true };
+export type ActionResult = { error: string } | { success: true; devInviteUrl?: string };
 
 async function actionFetch(path: string, init?: RequestInit): Promise<Response> {
   const cookieStore = await cookies();
@@ -212,6 +212,22 @@ export async function cancelDraw(drawId: string): Promise<void> {
   revalidatePath(`/sortition/${drawId}`);
 }
 
+// ─── Form wrappers (para form.action directo, sin useActionState) ─────────────
+// Next.js espera (formData: FormData) => void | Promise<void> en form.action.
+// Los wrappers descartan el valor de retorno para cumplir esa firma.
+
+export async function updateProposalStatusDirect(formData: FormData): Promise<void> {
+  await updateProposalStatus(null, formData);
+}
+
+export async function createCommentDirect(formData: FormData): Promise<void> {
+  await createComment(null, formData);
+}
+
+export async function updateElectionStatusDirect(formData: FormData): Promise<void> {
+  await updateElectionStatus(null, formData);
+}
+
 // ─── Admin ────────────────────────────────────────────────────────────────────
 
 export async function inviteUser(
@@ -224,7 +240,8 @@ export async function inviteUser(
   });
 
   if (!res.ok) return { error: await parseError(res) };
-  return { success: true };
+  const data = await res.json() as { devInviteUrl?: string };
+  return { success: true, ...(data.devInviteUrl ? { devInviteUrl: data.devInviteUrl } : {}) };
 }
 
 export async function updateUserStatus(

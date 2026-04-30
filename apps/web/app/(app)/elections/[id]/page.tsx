@@ -2,7 +2,7 @@ import Link from 'next/link';
 import type { Metadata } from 'next';
 import { serverFetch } from '@/lib/api';
 import VoteForm from '@/components/VoteForm';
-import { updateElectionStatus, tallyElection } from '@/lib/actions';
+import { updateElectionStatusDirect, tallyElection } from '@/lib/actions';
 import type { ElectionDetail, ElectionResultResponse, ElectionStatus } from '@decide/shared';
 
 const STATUS_LABEL: Record<ElectionStatus, string> = {
@@ -93,7 +93,7 @@ export default async function ElectionPage({
           <p className="card-title mb-2">Administración</p>
           <div className="flex gap-2">
             {isDraft && (
-              <form action={updateElectionStatus}>
+              <form action={updateElectionStatusDirect}>
                 <input type="hidden" name="electionId" value={id} />
                 <input type="hidden" name="status" value="open" />
                 <button className="btn btn-primary btn-sm">Abrir votación</button>
@@ -101,7 +101,7 @@ export default async function ElectionPage({
             )}
             {isOpen && (
               <>
-                <form action={updateElectionStatus}>
+                <form action={updateElectionStatusDirect}>
                   <input type="hidden" name="electionId" value={id} />
                   <input type="hidden" name="status" value="cancelled" />
                   <button className="btn btn-danger btn-sm">Cancelar</button>

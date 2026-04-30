@@ -1,14 +1,15 @@
 'use client';
 
-import { useState } from 'react';
+import { use, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { NICARAGUA_DEPARTMENTS, MIN_PASSWORD_LENGTH } from '@decide/shared';
 
 export default function AcceptInvitePage({
   params,
 }: {
-  params: { token: string };
+  params: Promise<{ token: string }>;
 }) {
+  const { token } = use(params);
   const router = useRouter();
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -38,7 +39,7 @@ export default function AcceptInvitePage({
 
     try {
       const body: Record<string, string> = {
-        token: params.token,
+        token,
         password,
         displayName,
       };

@@ -80,9 +80,14 @@ export class AuthController {
     @Body() dto: InviteUserDto,
     @CurrentUser() actor: JwtPayload,
     @Req() req: Request,
-  ): Promise<{ message: string }> {
-    await this.authService.inviteUser(dto, actor.sub, extractIp(req));
-    return { message: 'Invitation sent successfully' };
+  ): Promise<{ message: string; devInviteUrl?: string }> {
+    const { inviteUrl } = await this.authService.inviteUser(dto, actor.sub, extractIp(req));
+    const isProduction = this.config.get<string>('NODE_ENV') === 'production';
+    return {
+      message: 'Invitation sent successfully',
+      // Solo exponer la URL fuera de producción (para demos y desarrollo)
+      ...(!isProduction && { devInviteUrl: inviteUrl }),
+    };
   }
 
   /**

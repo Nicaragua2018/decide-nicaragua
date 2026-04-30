@@ -2,16 +2,20 @@ import Link from 'next/link';
 import type { Metadata } from 'next';
 import { serverFetch } from '@/lib/api';
 import SignalForm from '@/components/SignalForm';
-import { createComment, updateProposalStatus } from '@/lib/actions';
-import type { ProposalDetail, ProposalStatus } from '@decide/shared';
+import { updateProposalStatusDirect, createCommentDirect } from '@/lib/actions';
+import { ProposalStatus } from '@decide/shared';
+import type { ProposalDetail } from '@decide/shared';
 
 const STATUS_LABEL: Record<ProposalStatus, string> = {
-  draft: 'Borrador', open: 'Abierta', closed: 'Cerrada', archived: 'Archivada',
+  [ProposalStatus.draft]: 'Borrador',
+  [ProposalStatus.open]: 'Abierta',
+  [ProposalStatus.closed]: 'Cerrada',
+  [ProposalStatus.archived]: 'Archivada',
 };
 const NEXT_STATUS: Partial<Record<ProposalStatus, ProposalStatus[]>> = {
-  draft:  ['open'],
-  open:   ['closed'],
-  closed: ['archived'],
+  [ProposalStatus.draft]: [ProposalStatus.open],
+  [ProposalStatus.open]:  [ProposalStatus.closed],
+  [ProposalStatus.closed]: [ProposalStatus.archived],
 };
 
 export async function generateMetadata({
@@ -94,7 +98,7 @@ export default async function ProposalPage({
           <p className="card-title">Gestión del autor</p>
           <div className="flex gap-2 mt-2">
             {nextStatuses.map((s) => (
-              <form key={s} action={updateProposalStatus}>
+              <form key={s} action={updateProposalStatusDirect}>
                 <input type="hidden" name="proposalId" value={id} />
                 <input type="hidden" name="status" value={s} />
                 <button type="submit" className="btn btn-ghost btn-sm">
@@ -132,7 +136,7 @@ export default async function ProposalPage({
 
         {/* Nuevo comentario */}
         {isOpen && (
-          <form action={createComment} className="form mt-4"
+          <form action={createCommentDirect} className="form mt-4"
                 style={{ borderTop: '1px solid var(--border)', paddingTop: '1rem' }}>
             <input type="hidden" name="proposalId" value={id} />
             <div className="form-field">

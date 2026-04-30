@@ -194,15 +194,17 @@ describe('AuthService', () => {
       );
     });
 
-    it('la URL de invitación apunta al endpoint de accept-invite', async () => {
+    it('la URL de invitación apunta a /invite/:token', async () => {
       prismaMock.user.findUnique.mockResolvedValue(null);
       prismaMock.user.create.mockResolvedValue({ ...baseUser, email: dto.email, inviteToken: INVITE_TOKEN });
 
-      await service.inviteUser(dto, USER_ID, ip);
+      const result = await service.inviteUser(dto, USER_ID, ip);
 
+      const UUID_RE = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/;
       const arg = emailMock.sendInvite.mock.calls[0]?.[0] as { inviteUrl: string };
       expect(arg.inviteUrl).toContain('http://localhost:3000');
-      expect(arg.inviteUrl).toContain('accept-invite?token=');
+      expect(arg.inviteUrl).toMatch(new RegExp(`/invite/${UUID_RE.source}`));
+      expect(result.inviteUrl).toMatch(new RegExp(`http://localhost:3000/invite/${UUID_RE.source}`));
     });
 
     it('lanza ConflictException si el email ya está registrado', async () => {
