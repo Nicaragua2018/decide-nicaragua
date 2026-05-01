@@ -56,15 +56,15 @@ export class UsersService {
    * Filtrables por status. Ordenados por fecha de creación descendente.
    */
   async listUsers(statusFilter?: AccountStatus): Promise<UserListResponse> {
-    const whereClause = statusFilter ? { where: { status: statusFilter } } : {};
+    const where = statusFilter ? { status: statusFilter } : undefined;
 
     const [users, total] = await Promise.all([
       this.prisma.user.findMany({
-        ...whereClause,
+        where,
         orderBy: { createdAt: 'desc' },
         include: { profile: true },
       }),
-      this.prisma.user.count(whereClause),
+      this.prisma.user.count({ where }),
     ]);
 
     return {
