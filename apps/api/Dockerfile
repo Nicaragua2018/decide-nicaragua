@@ -43,6 +43,10 @@ RUN pnpm --filter @decide/api run build:seed
 #    — solo dependencias de producción, workspace deps copiados como directorios reales
 RUN pnpm --filter @decide/api --prod deploy /app/prod
 
+# 4b. Regenerar Prisma Client en el contexto de producción (crea .prisma dentro de /app/prod)
+COPY apps/api/prisma /app/prod/prisma
+RUN cd /app/prod && node_modules/.bin/prisma generate
+
 # ── Stage 4: imagen de producción ─────────────────────────────
 FROM node:22-alpine AS production
 WORKDIR /app
@@ -50,11 +54,10 @@ WORKDIR /app
 # Usuario sin privilegios
 RUN addgroup -S appgroup && adduser -S appuser -G appgroup
 
-# node_modules de producción (de pnpm deploy)
+# node_modules de producción (de pnpm deploy, incluye .prisma generado)
 COPY --from=builder /app/prod/node_modules ./node_modules
 
 # Garantizar que @decide/shared tiene su dist/ compilada
-# (pnpm deploy copia el directorio workspace; esto lo hace explícito)
 COPY --from=builder /monorepo/packages/shared/dist ./node_modules/@decide/shared/dist
 COPY --from=builder /monorepo/packages/shared/package.json ./node_modules/@decide/shared/package.json
 
@@ -63,9 +66,6 @@ COPY --from=builder /monorepo/apps/api/dist ./dist
 
 # Seed compilado (para primer despliegue)
 COPY --from=builder /monorepo/apps/api/dist-seed ./dist-seed
-
-# Prisma Client generado
-COPY --from=builder /monorepo/node_modules/.prisma ./node_modules/.prisma
 
 # Schema de Prisma (necesario para prisma migrate deploy en entrypoint)
 COPY apps/api/prisma ./prisma
