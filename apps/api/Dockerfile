@@ -37,7 +37,7 @@ RUN pnpm --filter @decide/api build
 
 # 3b. Compilar seed.ts a JS (para poder ejecutarlo en producción sin tsx)
 # --rootDir apps/api/prisma → produce dist-seed/seed.js (sin subdirectorios extra)
-RUN npx tsc --module commonjs --target es2020 --esModuleInterop --skipLibCheck \
+RUN pnpm exec tsc --module commonjs --target es2020 --esModuleInterop --skipLibCheck \
     --rootDir apps/api/prisma \
     --outDir apps/api/dist-seed \
     apps/api/prisma/seed.ts
