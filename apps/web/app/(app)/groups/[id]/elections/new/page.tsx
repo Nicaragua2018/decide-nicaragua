@@ -1,21 +1,22 @@
 'use client';
 
 import Link from 'next/link';
-import { useActionState, useState } from 'react';
+import { use, useActionState, useState } from 'react';
 import { createElection } from '@/lib/actions';
 
 export default function NewElectionPage({
   params,
 }: {
-  params: { id: string };
+  params: Promise<{ id: string }>;
 }) {
+  const { id } = use(params);
   const [state, action, isPending] = useActionState(createElection, null);
   const [numCandidates, setNumCandidates] = useState(3);
 
   return (
     <>
       <div className="page-header">
-        <Link href={`/groups/${params.id}?tab=elections`} className="text-sm text-muted">
+        <Link href={`/groups/${id}?tab=elections`} className="text-sm text-muted">
           ← Volver al grupo
         </Link>
         <h1 className="page-title mt-2">Nueva elección Condorcet</h1>
@@ -23,7 +24,7 @@ export default function NewElectionPage({
 
       <div className="card" style={{ maxWidth: 640 }}>
         <form action={action} className="form">
-          <input type="hidden" name="groupId" value={params.id} />
+          <input type="hidden" name="groupId" value={id} />
 
           <div className="form-field">
             <label className="form-label" htmlFor="title">Título</label>
@@ -84,7 +85,7 @@ export default function NewElectionPage({
             <button type="submit" className="btn btn-primary" disabled={isPending}>
               {isPending ? 'Creando…' : 'Crear elección'}
             </button>
-            <Link href={`/groups/${params.id}?tab=elections`} className="btn btn-ghost">
+            <Link href={`/groups/${id}?tab=elections`} className="btn btn-ghost">
               Cancelar
             </Link>
           </div>

@@ -1,20 +1,21 @@
 'use client';
 
 import Link from 'next/link';
-import { useActionState } from 'react';
+import { use, useActionState } from 'react';
 import { createProposal } from '@/lib/actions';
 
 export default function NewProposalPage({
   params,
 }: {
-  params: { id: string };
+  params: Promise<{ id: string }>;
 }) {
+  const { id } = use(params);
   const [state, action, isPending] = useActionState(createProposal, null);
 
   return (
     <>
       <div className="page-header">
-        <Link href={`/groups/${params.id}?tab=proposals`} className="text-sm text-muted">
+        <Link href={`/groups/${id}?tab=proposals`} className="text-sm text-muted">
           ← Volver al grupo
         </Link>
         <h1 className="page-title mt-2">Nueva propuesta</h1>
@@ -22,7 +23,7 @@ export default function NewProposalPage({
 
       <div className="card" style={{ maxWidth: 640 }}>
         <form action={action} className="form">
-          <input type="hidden" name="groupId" value={params.id} />
+          <input type="hidden" name="groupId" value={id} />
 
           <div className="form-field">
             <label className="form-label" htmlFor="title">Título</label>
@@ -52,7 +53,7 @@ export default function NewProposalPage({
             <button type="submit" className="btn btn-primary" disabled={isPending}>
               {isPending ? 'Creando…' : 'Crear propuesta'}
             </button>
-            <Link href={`/groups/${params.id}?tab=proposals`} className="btn btn-ghost">
+            <Link href={`/groups/${id}?tab=proposals`} className="btn btn-ghost">
               Cancelar
             </Link>
           </div>

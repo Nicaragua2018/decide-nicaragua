@@ -1,20 +1,21 @@
 'use client';
 
 import Link from 'next/link';
-import { useActionState } from 'react';
+import { use, useActionState } from 'react';
 import { createDraw } from '@/lib/actions';
 
 export default function NewSortitionPage({
   params,
 }: {
-  params: { id: string };
+  params: Promise<{ id: string }>;
 }) {
+  const { id } = use(params);
   const [state, action, isPending] = useActionState(createDraw, null);
 
   return (
     <>
       <div className="page-header">
-        <Link href={`/groups/${params.id}?tab=sortition`} className="text-sm text-muted">
+        <Link href={`/groups/${id}?tab=sortition`} className="text-sm text-muted">
           ← Volver al grupo
         </Link>
         <h1 className="page-title mt-2">Nuevo sorteo verificable</h1>
@@ -27,7 +28,7 @@ export default function NewSortitionPage({
         </p>
 
         <form action={action} className="form">
-          <input type="hidden" name="groupId" value={params.id} />
+          <input type="hidden" name="groupId" value={id} />
 
           <div className="form-field">
             <label className="form-label" htmlFor="title">Título</label>
@@ -57,7 +58,7 @@ export default function NewSortitionPage({
             <button type="submit" className="btn btn-primary" disabled={isPending}>
               {isPending ? 'Creando…' : 'Crear sorteo'}
             </button>
-            <Link href={`/groups/${params.id}?tab=sortition`} className="btn btn-ghost">
+            <Link href={`/groups/${id}?tab=sortition`} className="btn btn-ghost">
               Cancelar
             </Link>
           </div>
