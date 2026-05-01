@@ -4,6 +4,7 @@
   "private": true,
   "scripts": {
     "build": "nest build",
+    "build:seed": "tsc --module commonjs --target es2020 --esModuleInterop --skipLibCheck --rootDir prisma --outDir dist-seed prisma/seed.ts",
     "dev": "nest start --watch",
     "start": "node dist/main",
     "typecheck": "tsc --noEmit -p tsconfig.json",
