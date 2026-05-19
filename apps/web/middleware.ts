@@ -3,7 +3,7 @@ import type { NextRequest } from 'next/server';
 
 /** Rutas que NO requieren autenticación (exactas o por prefijo) */
 const PUBLIC_EXACT = new Set(['/', '/explore']);
-const PUBLIC_PREFIXES = ['/login', '/invite', '/explore/'];
+const PUBLIC_PREFIXES = ['/login', '/invite', '/explore/', '/api/'];
 
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
