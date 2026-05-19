@@ -7,7 +7,7 @@ import type { AuthResponse } from '@decide/shared';
 export default async function AppLayout({ children }: { children: ReactNode }) {
   const res = await serverFetch('/api/auth/me');
 
-  if (res.status === 401) {
+  if (!res.ok) {
     redirect('/login');
   }
 

@@ -16,13 +16,13 @@ import type { AuthResponse } from '@decide/shared';
 export default async function AdminLayout({ children }: { children: ReactNode }) {
   const res = await serverFetch('/api/auth/me');
 
-  if (res.status === 401) {
+  if (!res.ok) {
     redirect('/login');
   }
 
   const { user } = (await res.json()) as AuthResponse;
 
-  if (user.status !== 'verified_citizen') {
+  if (!user || user.status !== 'verified_citizen') {
     redirect('/dashboard');
   }
 
