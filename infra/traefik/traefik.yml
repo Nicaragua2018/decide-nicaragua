@@ -42,7 +42,7 @@ certificatesResolvers:
   letsencrypt:
     acme:
       # Email configurado via variable de entorno en docker-compose.yml
-      email: "${TRAEFIK_ACME_EMAIL}"
+      email: carlosrobletonic2016@gmail.com
       storage: /etc/traefik/acme.json
       # Cambiar a httpChallenge si no se puede usar tlsChallenge
       tlsChallenge: {}
