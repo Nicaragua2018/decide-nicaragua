@@ -29,11 +29,13 @@ COPY apps/web/  ./apps/web/
 # Compilar @decide/shared (produce dist/ para que Next.js lo importe como JS)
 RUN pnpm --filter @decide/shared build
 
-# Variables de entorno de build (solo NEXT_PUBLIC_* son necesarias en build time)
+# Variables de entorno de build
 ARG NEXT_PUBLIC_APP_URL
 ARG NEXT_PUBLIC_API_URL
+ARG API_URL=http://api:4000
 ENV NEXT_PUBLIC_APP_URL=${NEXT_PUBLIC_APP_URL}
 ENV NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL}
+ENV API_URL=${API_URL}
 
 # Build Next.js (produce apps/web/.next/standalone/)
 RUN pnpm --filter @decide/web build
