@@ -12,7 +12,7 @@ const GROUP_TYPE_LABEL: Record<GroupType, string> = {
 };
 
 export default async function DashboardPage() {
-  const res = await serverFetch('/api/groups/my');
+  const res = await serverFetch('/api/groups');
 
   if (!res.ok) {
     return <p className="empty-state">No se pudieron cargar los grupos. Intenta de nuevo.</p>;
