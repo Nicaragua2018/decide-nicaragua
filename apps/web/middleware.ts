@@ -1,13 +1,16 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 
-/** Rutas que NO requieren autenticación */
-const PUBLIC_PATHS = ['/login', '/invite'];
+/** Rutas que NO requieren autenticación (exactas o por prefijo) */
+const PUBLIC_EXACT = new Set(['/', '/explore']);
+const PUBLIC_PREFIXES = ['/login', '/invite', '/explore/'];
 
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
-  const isPublic = PUBLIC_PATHS.some((p) => pathname.startsWith(p));
+  const isPublic =
+    PUBLIC_EXACT.has(pathname) ||
+    PUBLIC_PREFIXES.some((p) => pathname.startsWith(p));
   if (isPublic) return NextResponse.next();
 
   // Comprobar presencia del access_token (validación real en el layout via /api/auth/me)
