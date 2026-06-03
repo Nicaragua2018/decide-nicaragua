@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import { serverFetch } from '@/lib/api';
 import type { AuthResponse } from '@decide/shared';
+import EditProfileForm from './EditProfileForm';
 
 export const metadata: Metadata = { title: 'Mi perfil' };
 
@@ -36,7 +37,7 @@ export default async function MePage() {
         <table>
           <tbody>
             <tr>
-              <th style={{ width: 140 }}>Nombre público</th>
+              <th style={{ width: 160 }}>Nombre público</th>
               <td>{user.displayName ?? '—'}</td>
             </tr>
             <tr>
@@ -51,6 +52,14 @@ export default async function MePage() {
                 </span>
               </td>
             </tr>
+            <tr>
+              <th>Departamento de origen</th>
+              <td>{user.birthDepartment ?? <span style={{ opacity: 0.5 }}>No especificado</span>}</td>
+            </tr>
+            <tr>
+              <th>País de residencia</th>
+              <td>{user.currentCountry ?? <span style={{ opacity: 0.5 }}>No especificado</span>}</td>
+            </tr>
           </tbody>
         </table>
 
@@ -61,6 +70,8 @@ export default async function MePage() {
           </div>
         )}
       </div>
+
+      <EditProfileForm current={user} />
     </>
   );
 }

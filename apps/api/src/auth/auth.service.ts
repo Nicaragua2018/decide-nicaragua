@@ -19,6 +19,7 @@ import { GroupsService } from '../groups/groups.service';
 import { InviteUserDto } from './dto/invite-user.dto';
 import { AcceptInviteDto } from './dto/accept-invite.dto';
 import { LoginDto } from './dto/login.dto';
+import { UpdateProfileDto } from './dto/update-profile.dto';
 import {
   AccountStatus,
   ACTIVE_STATUSES,
@@ -244,6 +245,8 @@ export class AuthService {
         email: user.email,
         status,
         displayName: user.profile?.displayName ?? null,
+        birthDepartment: user.profile?.birthDepartment ?? null,
+        currentCountry: user.profile?.currentCountry ?? null,
       },
       accessToken,
       refreshTokenId,
@@ -303,9 +306,68 @@ export class AuthService {
         email: user.email,
         status,
         displayName: user.profile?.displayName ?? null,
+        birthDepartment: user.profile?.birthDepartment ?? null,
+        currentCountry: user.profile?.currentCountry ?? null,
       },
       accessToken,
       refreshTokenId: newRefreshTokenId,
+    };
+  }
+
+  // ─── Actualizar perfil propio ──────────────────────────────────────────────
+
+  /**
+   * Permite a cualquier usuario activo editar su propio perfil.
+   * Re-sincroniza grupos territoriales si cambia birthDepartment o currentCountry.
+   */
+  async updateProfile(
+    userId: string,
+    dto: UpdateProfileDto,
+    ip: string,
+  ): Promise<AuthResponse['user']> {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      include: { profile: true },
+    });
+
+    if (!user || !user.profile) {
+      throw new BadRequestException('Profile not found');
+    }
+
+    const updated = await this.prisma.profile.update({
+      where: { userId },
+      data: {
+        ...(dto.displayName !== undefined && { displayName: dto.displayName }),
+        ...(dto.birthDepartment !== undefined && { birthDepartment: dto.birthDepartment }),
+        ...(dto.currentCountry !== undefined && { currentCountry: dto.currentCountry }),
+        ...(dto.isPublic !== undefined && { isPublic: dto.isPublic }),
+      },
+    });
+
+    const newBirthDept = dto.birthDepartment !== undefined ? dto.birthDepartment : user.profile.birthDepartment;
+    const newCountry = dto.currentCountry !== undefined ? dto.currentCountry : user.profile.currentCountry;
+
+    void this.groups
+      .syncMemberships(userId, newBirthDept, newCountry)
+      .catch((err: unknown) => this.logger.error('Group sync failed after profile update', err));
+
+    void this.audit
+      .log({
+        actorId: userId,
+        action: 'user.profile_updated',
+        resource: `user:${userId}`,
+        ip,
+        metadata: { fields: Object.keys(dto) },
+      })
+      .catch((err: unknown) => this.logger.error('Audit log failed', err));
+
+    return {
+      id: user.id,
+      email: user.email,
+      status: user.status as unknown as AccountStatus,
+      displayName: updated.displayName,
+      birthDepartment: updated.birthDepartment,
+      currentCountry: updated.currentCountry,
     };
   }
 

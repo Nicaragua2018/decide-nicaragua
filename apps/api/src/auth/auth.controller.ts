@@ -2,6 +2,7 @@ import {
   Controller,
   Get,
   Post,
+  Patch,
   Body,
   Req,
   Res,
@@ -23,6 +24,7 @@ import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { InviteUserDto } from './dto/invite-user.dto';
 import { AcceptInviteDto } from './dto/accept-invite.dto';
 import { LoginDto } from './dto/login.dto';
+import { UpdateProfileDto } from './dto/update-profile.dto';
 import { AccountStatus, type JwtPayload, type AuthResponse } from '@decide/shared';
 
 /** Duración del access token en ms (15 min) */
@@ -63,8 +65,26 @@ export class AuthController {
         email: user.email,
         status: user.status as unknown as AccountStatus,
         displayName: user.profile?.displayName ?? null,
+        birthDepartment: user.profile?.birthDepartment ?? null,
+        currentCountry: user.profile?.currentCountry ?? null,
       },
     };
+  }
+
+  /**
+   * PATCH /api/auth/profile
+   * Edición del perfil propio. Accesible a cualquier usuario autenticado activo.
+   */
+  @Patch('profile')
+  @UseGuards(JwtAuthGuard)
+  @HttpCode(HttpStatus.OK)
+  async updateProfile(
+    @Body() dto: UpdateProfileDto,
+    @CurrentUser() actor: JwtPayload,
+    @Req() req: Request,
+  ): Promise<AuthResponse> {
+    const user = await this.authService.updateProfile(actor.sub, dto, extractIp(req));
+    return { user };
   }
 
   /**

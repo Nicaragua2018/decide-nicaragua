@@ -17,6 +17,8 @@ export interface AuthResponse {
     email: string;
     status: AccountStatus;
     displayName: string | null;
+    birthDepartment: string | null;
+    currentCountry: string | null;
   };
 }
 
