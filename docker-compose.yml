@@ -22,13 +22,14 @@ services:
     ports:
       - "80:80"
       - "443:443"
-    environment:
-      - TRAEFIK_ACME_EMAIL=${TRAEFIK_ACME_EMAIL}
+    # El email ACME se pasa como CLI flag porque traefik.yml no expande variables de entorno
+    command:
+      - "--certificatesresolvers.letsencrypt.acme.email=${TRAEFIK_ACME_EMAIL}"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
       - ./infra/traefik/traefik.yml:/etc/traefik/traefik.yml:ro
       - ./infra/traefik/dynamic:/etc/traefik/dynamic:ro
-      - traefik_acme:/etc/traefik
+      - traefik_acme:/letsencrypt
     networks:
       - decide_network
     labels:
@@ -156,4 +157,5 @@ volumes:
 # ── Red interna ────────────────────────────────────────────────
 networks:
   decide_network:
+    name: decide_network
     driver: bridge

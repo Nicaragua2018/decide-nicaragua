@@ -13,6 +13,7 @@ build/
 .env.local
 .env.*.local
 .env.production
+env.production
 
 # Prisma
 apps/api/prisma/migrations/dev.db

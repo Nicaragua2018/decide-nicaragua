@@ -45,7 +45,7 @@ Usar NestJS 10 con arquitectura de módulos por dominio.
 
 ### Justificación
 - Inyección de dependencias integrada: facilita testing con mocks.
-- Ecosystem maduro: Passport, BullMQ, Prisma, Swagger, todos tienen integración oficial.
+- Ecosystem maduro: Passport, Prisma, Swagger y una cola de trabajo planificada con BullMQ.
 - Decoradores de validación con `class-validator`: validación declarativa sin boilerplate.
 - Guards y Interceptors: implementación limpia de RBAC y auditoría transversal.
 
@@ -174,7 +174,7 @@ audit_events {
 
 ### Consecuencias
 - Ningún código de la aplicación puede modificar o eliminar audit_events.
-- Los eventos se emiten de forma asíncrona via BullMQ para no bloquear el request.
+- Los eventos se registran en la base de datos sin bloquear el request; se prevé una futura cola de trabajo con BullMQ para mayor durabilidad.
 - Los hashes de IPs protegen la privacidad mientras mantienen trazabilidad.
 
 ---

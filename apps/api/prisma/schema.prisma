@@ -450,6 +450,22 @@ model SortitionMember {
 }
 
 /**
+ * NewsletterSubscription — suscripción al boletín informativo.
+ *
+ * Endpoint público: no requiere cuenta. Almacena email y datos opcionales.
+ * Rate limiting estricto en el controlador (5 req / hora por IP).
+ */
+model NewsletterSubscription {
+  id          String    @id @default(uuid()) @db.Uuid
+  email       String    @unique
+  name        String?
+  country     String?   // ISO 3166-1 alpha-2 (país de residencia)
+  createdAt   DateTime  @default(now()) @db.Timestamptz
+
+  @@map("newsletter_subscriptions")
+}
+
+/**
  * AuditEvent — log append-only de eventos críticos.
  *
  * IMPORTANTE: Esta tabla nunca debe recibir UPDATE ni DELETE.

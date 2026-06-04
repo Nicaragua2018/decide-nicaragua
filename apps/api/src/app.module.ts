@@ -13,6 +13,7 @@ import { DeliberationModule } from './deliberation/deliberation.module';
 import { VotingModule } from './voting/voting.module';
 import { SortitionModule } from './sortition/sortition.module';
 import { UsersModule } from './users/users.module';
+import { NewsletterModule } from './newsletter/newsletter.module';
 
 @Module({
   imports: [
@@ -45,6 +46,7 @@ import { UsersModule } from './users/users.module';
     VotingModule,
     SortitionModule,
     UsersModule,
+    NewsletterModule,
   ],
   providers: [
     // ThrottlerGuard aplicado globalmente a todos los endpoints

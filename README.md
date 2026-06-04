@@ -1,10 +1,8 @@
 # Decide Nicaragua
 
-**Plataforma de participación democrática verificable para ciudadanos nicaragüenses.**
+**Plataforma de participación democrática verificable para ciudadanos nicaragüenses en el exilio.**
 
-Decide Nicaragua es una infraestructura digital de código abierto para toma de decisiones auditable, debate estructurado y votación con métodos verificables. Está diseñada para organizaciones políticas y civiles que operan en condiciones adversas — en particular para comunidades en el exilio que necesitan deliberar y decidir de forma legítima, transparente y resistente a interferencias.
-
-El proyecto nace de la necesidad de los nicaragüenses en el exilio de contar con herramientas propias para organizarse democráticamente, sin depender de plataformas comerciales que no garantizan ni la integridad de los resultados ni la protección de la identidad de sus participantes.
+Decide Nicaragua es un MVP de infraestructura digital para debate estructurado, votación verificable y sortition auditable. Está diseñado para organizaciones civiles que requieren confianza, transparencia y protección de datos personales en entornos políticos adversos.
 
 ---
 
@@ -23,7 +21,7 @@ MVP completo — Fases 0–7 implementadas y con tests.
 | Auditoría append-only pública | Completo | 12 |
 | Frontend Next.js (App Router, Server Components) | Completo | — |
 
-**155 tests pasan** en el backend. El frontend está funcional para todos los módulos.
+**155 tests pasan** en el backend. El frontend está funcional para los flujos de usuario principales.
 
 ---
 
@@ -34,11 +32,13 @@ MVP completo — Fases 0–7 implementadas y con tests.
 | Frontend | Next.js 15 (App Router, Server Components) |
 | Backend | NestJS 10 |
 | Base de datos | PostgreSQL 16 + Prisma ORM |
-| Caché / sesiones | Redis 7 + BullMQ |
+| Caché / sesiones | Redis 7 |
 | Reverse proxy | Traefik v3 (TLS automático, CSP, HSTS) |
 | Monorepo | pnpm + Turborepo |
 | Tipos compartidos | TypeScript end-to-end (`@decide/shared`) |
 | Despliegue | Docker Compose en VPS Ubuntu |
+
+> Nota: la cola de trabajo con BullMQ está planificada como mejora de Fase 2 para mayor durabilidad en auditoría y reintentos de email.
 
 ---
 
@@ -56,10 +56,10 @@ MVP completo — Fases 0–7 implementadas y con tests.
 │   └── traefik/      # Configuración de reverse proxy y seguridad HTTP
 ├── scripts/          # Herramientas de desarrollo
 ├── docs/             # Documentación técnica
-│   ├── ARCHITECTURE.md  # Diagrama de componentes y decisiones de diseño
-│   ├── DECISIONS.md     # ADRs — por qué se eligió cada tecnología
-│   ├── SECURITY.md      # Modelo de amenazas y controles implementados
-│   └── ROADMAP.md       # Fases completadas y próximas
+│   ├── ARCHITECTURE.md  # Arquitectura y modelo de datos
+│   ├── DECISIONS.md     # ADRs y decisiones técnicas
+│   ├── SECURITY.md      # Modelo de amenazas y controles
+│   └── ROADMAP.md       # Estado del desarrollo y prioridades
 ├── docker-compose.yml          # Producción (con Traefik)
 ├── docker-compose.dev.yml      # Desarrollo local (solo PostgreSQL + Redis)
 ├── deploy.sh                   # Script de despliegue en VPS
@@ -79,25 +79,15 @@ MVP completo — Fases 0–7 implementadas y con tests.
 ### Instalación
 
 ```bash
-# 1. Clonar el repositorio
 git clone https://github.com/Nicaragua2018/decide-nicaragua.git
 cd decide-nicaragua
-
-# 2. Instalar dependencias
 pnpm install
-
-# 3. Crear variables de entorno
 cp .env.example .env
 # Editar .env con los valores correctos para desarrollo local
 
-# 4. Levantar PostgreSQL y Redis
 docker compose -f docker-compose.dev.yml up -d
-
-# 5. Aplicar migraciones y crear datos iniciales
-pnpm --filter @decide/api exec prisma migrate dev
-pnpm db:seed
-
-# 6. Iniciar en modo desarrollo (hot reload)
+pnpm db:migrate
+pnpm --filter @decide/api db:seed
 pnpm dev
 ```
 
@@ -105,7 +95,7 @@ El frontend estará en `http://localhost:3000` y la API en `http://localhost:400
 
 ### Variables de entorno principales (`.env`)
 
-Ver `.env.example` para la lista completa con instrucciones. Las más importantes:
+Ver `.env.example` para la lista completa y las instrucciones.
 
 ```bash
 DATABASE_URL=postgresql://decide:decide_dev_password@localhost:5432/decide_dev
@@ -122,12 +112,16 @@ ADMIN_SEED_EMAIL=admin@example.com
 ADMIN_SEED_PASSWORD=<mínimo 12 caracteres>
 ```
 
-### Tests
+### Comandos principales
 
 ```bash
-pnpm test                          # Todos los tests (155 en backend)
-pnpm --filter @decide/api test     # Solo backend
-pnpm --filter @decide/api typecheck  # Verificación de tipos
+pnpm dev                    # Levanta frontend y backend en paralelo
+pnpm build                  # Compila los paquetes del monorepo
+pnpm test                   # Ejecuta todos los tests
+pnpm lint                   # Ejecuta linters
+pnpm db:migrate             # Aplica migraciones de Prisma en apps/api
+pnpm --filter @decide/api db:seed  # Ejecuta el seed inicial en apps/api
+pnpm --filter @decide/api db:studio # Abre Prisma Studio
 ```
 
 ---
@@ -137,12 +131,9 @@ pnpm --filter @decide/api typecheck  # Verificación de tipos
 ### Primera vez
 
 ```bash
-# 1. Generar migración inicial
 ./scripts/generate-migration.sh
 git add apps/api/prisma/migrations/
 git commit -m "feat: initial database migration"
-
-# 2. Desplegar (valida requisitos, construye imágenes, migra y reinicia)
 ./deploy.sh
 ```
 
@@ -152,7 +143,7 @@ git commit -m "feat: initial database migration"
 ./deploy.sh
 ```
 
-El script valida que estén presentes las variables de entorno requeridas, construye las imágenes Docker, ejecuta `prisma migrate deploy` y reinicia los servicios con health checks.
+`deploy.sh` valida variables de entorno, construye imágenes Docker, ejecuta `prisma migrate deploy` y reinicia los servicios con health checks.
 
 **Requisitos del servidor:**
 - Ubuntu 20.04+
@@ -164,39 +155,39 @@ El script valida que estén presentes las variables de entorno requeridas, const
 
 ## Documentación técnica
 
-- [Arquitectura](docs/ARCHITECTURE.md) — Diagrama de componentes, separación de identidad, modelo de datos
-- [Decisiones técnicas](docs/DECISIONS.md) — ADRs explicando por qué se eligió cada tecnología
-- [Seguridad](docs/SECURITY.md) — Modelo de amenazas, controles implementados, auditoría interna
-- [Roadmap](docs/ROADMAP.md) — Fases completadas y próximas iteraciones
+- [Arquitectura](docs/ARCHITECTURE.md) — arquitectura del sistema y modelo de datos
+- [Decisiones técnicas](docs/DECISIONS.md) — ADRs y justificaciones de diseño
+- [Seguridad](docs/SECURITY.md) — modelo de amenazas y controles implementados
+- [Roadmap](docs/ROADMAP.md) — estado del desarrollo, fases y próximas prioridades
+- [Documentación técnica](docs/README.md) — índice del contenido del directorio `docs/`
 
 ---
 
 ## Principios de diseño
 
-- **Legitimidad primero**: los resultados de votaciones y sortitions son verificables de forma independiente, sin confiar en el servidor.
-- **Seguridad seria**: JWT HttpOnly, refresh token rotation en Redis, rate limiting, CSP, HSTS, auditoría append-only.
-- **Protección de identidad**: separación de tabla de identidad (PII) y perfil operativo; IPs almacenadas como hash.
-- **Mínima complejidad**: suficiente para operar con confianza, preparado para escalar.
-- **Código auditable**: algoritmos críticos (Schulze, Fisher-Yates con SHA-256) tienen tests exhaustivos y están documentados.
+- **Legitimidad democrática:** resultados verificables independientemente.
+- **Seguridad desde el diseño:** cookies HttpOnly, refresh token rotation, rate limiting, CSP, HSTS.
+- **Protección de identidad:** separación de identidad real, perfil operativo y auditoría.
+- **Trazabilidad:** auditoría append-only en la base de datos.
+- **Modularidad:** monorepo con dominios separados para frontend, backend y tipos compartidos.
 
 ---
 
 ## Contribuir
 
-Las contribuciones son bienvenidas. Por favor:
-
-1. Abre un issue antes de empezar trabajo significativo.
-2. Lee [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) y [`docs/DECISIONS.md`](docs/DECISIONS.md) para entender las decisiones existentes.
-3. Los módulos críticos requieren tests. Ejecuta `pnpm test` antes de enviar un PR.
+1. Abre un issue antes de comenzar trabajo significativo.
+2. Lee [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) y [`docs/DECISIONS.md`](docs/DECISIONS.md).
+3. Ejecuta tests antes de enviar un PR: `pnpm test`.
 4. No incluyas credenciales, API keys ni datos personales en commits.
-5. Sigue el estilo TypeScript del proyecto (strict, sin `any`, nombres explícitos).
+5. Mantén el estilo TypeScript: `strict`, sin `any`, nombres claros.
 
-Para vulnerabilidades de seguridad, abre un issue privado o contacta directamente al mantenedor.
+Para vulnerabilidades de seguridad, abre un issue privado o contacta al mantenedor.
 
 ---
 
 ## Licencia
 
 [MIT](LICENSE) — Carlos Robleto, 2026.
+
 
 Este software es libre. Puedes usarlo, modificarlo y distribuirlo bajo los términos de la licencia MIT.

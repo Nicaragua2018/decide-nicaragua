@@ -87,7 +87,8 @@ describe('UsersService', () => {
 
       const result = await service.listUsers();
 
-      expect(result.users[0].displayName).toBeNull();
+      expect(result.users).toHaveLength(1);
+      expect(result.users[0]!.displayName).toBeNull();
     });
 
     it('maps null lastLoginAt to null', async () => {
@@ -96,7 +97,8 @@ describe('UsersService', () => {
 
       const result = await service.listUsers();
 
-      expect(result.users[0].lastLoginAt).toBeNull();
+      expect(result.users).toHaveLength(1);
+      expect(result.users[0]!.lastLoginAt).toBeNull();
     });
 
     it('passes status filter to prisma when provided', async () => {

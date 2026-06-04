@@ -13,6 +13,11 @@ async function bootstrap() {
   // Prefijo global /api
   app.setGlobalPrefix(API_PREFIX);
 
+  // Confiar en el primer proxy (Traefik) para que req.ip refleje la IP real del cliente
+  // Necesario para que ThrottlerGuard aplique rate limiting por IP de usuario, no por IP del contenedor web
+  const expressApp = app.getHttpAdapter().getInstance() as import('express').Application;
+  expressApp.set('trust proxy', 1);
+
   // Parseo de cookies (necesario para tokens HttpOnly)
   app.use(cookieParser());
 
@@ -38,7 +43,7 @@ async function bootstrap() {
     origin: allowedOrigin,
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type'],
+    allowedHeaders: ['Content-Type', 'x-forwarded-for'],
   });
 
   const port = parseInt(process.env['API_PORT'] ?? '4000', 10);

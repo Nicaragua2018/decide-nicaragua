@@ -37,10 +37,10 @@ Decide Nicaragua es una plataforma de participación democrática verificable pa
                                   │
                     ┌─────────────┼─────────────┐
                     │             │             │
-            ┌───────▼──────┐ ┌───▼───┐  ┌──────▼──────┐
-            │  PostgreSQL  │ │ Redis │  │  BullMQ     │
-            │  Puerto 5432 │ │  6379 │  │  (workers)  │
-            └──────────────┘ └───────┘  └─────────────┘
+            ┌───────▼──────┐ ┌───▼───┐  ┌──────▼─────────────────┐
+            │  PostgreSQL  │ │ Redis │  │  BullMQ (planificado)   │
+            │  Puerto 5432 │ │  6379 │  │  (cola de trabajo futura) │
+            └──────────────┘ └───────┘  └─────────────────────────┘
 ```
 
 ---
@@ -91,7 +91,7 @@ Decide Nicaragua es una plataforma de participación democrática verificable pa
 - Rate limiting distribuido.
 - Sesiones de servidor (almacén de refresh tokens activos).
 - Caché de resultados de votaciones publicadas.
-- Cola de trabajos (BullMQ): emails, notificaciones, jobs de auditoría.
+- Cola de trabajos futura (BullMQ planificado para Fase 2).
 
 ---
 

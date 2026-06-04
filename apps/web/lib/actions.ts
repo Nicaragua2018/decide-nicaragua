@@ -228,6 +228,38 @@ export async function updateElectionStatusDirect(formData: FormData): Promise<vo
   await updateElectionStatus(null, formData);
 }
 
+// ─── Newsletter ───────────────────────────────────────────────────────────────
+
+export async function subscribeNewsletter(
+  _prev: ActionResult | null,
+  formData: FormData,
+): Promise<ActionResult> {
+  const email   = (formData.get('email') as string | null)?.trim().toLowerCase();
+  const name    = (formData.get('name') as string | null)?.trim() || undefined;
+  const country = (formData.get('country') as string | null)?.trim().toUpperCase() || undefined;
+
+  if (!email) return { error: 'Ingresa tu correo electrónico.' };
+
+  // Reenviar la IP real del cliente al API para que el rate limiter opere por usuario,
+  // no por la IP compartida del contenedor web
+  const { headers: nextHeaders } = await import('next/headers');
+  const headerStore = await nextHeaders();
+  const clientIp = headerStore.get('x-forwarded-for') ?? headerStore.get('x-real-ip') ?? '';
+
+  const res = await fetch(`${API_URL}/api/newsletter/subscribe`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(clientIp ? { 'x-forwarded-for': clientIp } : {}),
+    },
+    body: JSON.stringify({ email, name, country }),
+  });
+
+  if (res.status === 409) return { error: 'Este correo ya está suscrito.' };
+  if (!res.ok) return { error: await parseError(res) };
+  return { success: true };
+}
+
 // ─── Admin ────────────────────────────────────────────────────────────────────
 
 export async function inviteUser(
