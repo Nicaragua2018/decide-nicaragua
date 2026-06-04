@@ -1,5 +1,4 @@
 import Link from 'next/link';
-import Image from 'next/image';
 import type { Metadata } from 'next';
 
 export const metadata: Metadata = {
@@ -25,26 +24,14 @@ export default function LandingPage() {
 
       {/* Hero */}
       <section style={{
-        position: 'relative',
+        backgroundImage: 'linear-gradient(to bottom, rgba(15,40,120,0.60) 0%, rgba(15,40,120,0.72) 100%), url(/renacer.jpg)',
+        backgroundSize: 'cover',
+        backgroundPosition: 'center',
         color: '#fff',
         padding: '5rem 1rem 4rem',
         textAlign: 'center',
-        overflow: 'hidden',
       }}>
-        {/* Imagen de fondo */}
-        <Image
-          src="/renacer.jpg"
-          alt=""
-          fill
-          priority
-          style={{ objectFit: 'cover', objectPosition: 'center top' }}
-        />
-        {/* Overlay azul semitransparente para legibilidad */}
-        <div style={{
-          position: 'absolute', inset: 0,
-          background: 'linear-gradient(to bottom, rgba(15,40,120,0.60) 0%, rgba(15,40,120,0.72) 100%)',
-        }} />
-        <div className="container" style={{ position: 'relative', zIndex: 1 }}>
+        <div className="container">
           <h1 style={{ fontSize: 'clamp(2rem, 5vw, 3rem)', fontWeight: 800, marginBottom: '1rem', lineHeight: 1.15 }}>
             Participa en las decisiones<br />que construyen Nicaragua
           </h1>
