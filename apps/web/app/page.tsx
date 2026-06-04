@@ -42,7 +42,7 @@ export default function LandingPage() {
         {/* Overlay azul semitransparente para legibilidad */}
         <div style={{
           position: 'absolute', inset: 0,
-          background: 'linear-gradient(135deg, rgba(29,78,216,0.82) 0%, rgba(30,64,175,0.88) 100%)',
+          background: 'linear-gradient(to bottom, rgba(15,40,120,0.60) 0%, rgba(15,40,120,0.72) 100%)',
         }} />
         <div className="container" style={{ position: 'relative', zIndex: 1 }}>
           <h1 style={{ fontSize: 'clamp(2rem, 5vw, 3rem)', fontWeight: 800, marginBottom: '1rem', lineHeight: 1.15 }}>
