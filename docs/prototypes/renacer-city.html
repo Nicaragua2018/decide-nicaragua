@@ -327,6 +327,7 @@ h3{font-family:'Space Grotesk',system-ui,sans-serif;font-size:15px;margin:26px 0
 .term{font-family:inherit;font-size:inherit;line-height:inherit;color:inherit;padding:0;border-bottom:1.5px dotted var(--azul);cursor:help;position:relative;text-align:inherit}
 .term .pop{position:absolute;z-index:85;left:50%;transform:translateX(-50%);bottom:calc(100% + 8px);width:max-content;max-width:min(240px,72vw);background:var(--ink);color:var(--paper);font-family:'Newsreader',Georgia,serif;font-size:12.5px;font-weight:400;line-height:1.5;padding:10px 12px;border-radius:9px;text-align:left;box-shadow:var(--sh);white-space:normal}
 .tlink{font-family:'Space Grotesk',system-ui,sans-serif;font-size:12px;color:var(--mal);text-decoration:underline;padding:0;text-align:left}
+.keybox{font-family:'IBM Plex Mono',ui-monospace,monospace;font-size:10.5px;word-break:break-all;background:var(--wash);border-radius:8px;padding:9px 11px;color:var(--ink2);line-height:1.6}
 .chip:hover{border-color:var(--azul)}
 #toast{position:fixed;left:50%;bottom:22px;transform:translate(-50%,10px);background:var(--ink);color:var(--paper);font-family:'Space Grotesk',system-ui,sans-serif;font-size:12.5px;padding:10px 18px;border-radius:22px;opacity:0;pointer-events:none;transition:.22s;z-index:99;max-width:88vw;text-align:center}
 #toast.on{opacity:1;transform:translate(-50%,0)}
@@ -400,6 +401,7 @@ h3{font-family:'Space Grotesk',system-ui,sans-serif;font-size:15px;margin:26px 0
    <div class="row"><span class="rl">Propuestas con 1 solo <button class="term" data-g="racimo">racimo</button></span><span class="rv c-mal">3 bloqueadas</span></div>
    <div class="row"><span class="rl">Operaciones revertidas este mes</span><span class="rv">1 de 47</span></div>
    <div class="row"><span class="rl">Tesorería auditada por última vez</span><span class="rv">hace 2 días</span></div>
+   <div class="row"><span class="rl">Tu cadena local de actos firmados</span><button class="btn sm" onclick="go('verif')"><span id="agChain">iniciando…</span></button></div>
   </div>
  </div>
 
@@ -437,6 +439,7 @@ h3{font-family:'Space Grotesk',system-ui,sans-serif;font-size:15px;margin:26px 0
      <button class="vb n" id="vbN" onclick="dVote(-1)">En desacuerdo</button>
      <button class="vb p" id="vbP" onclick="dVote(0)">Paso — no cuenta como voto</button>
     </div>
+    <p class="mono num" id="dSello" style="font-size:10px;color:var(--ink3);margin:10px 0 0;line-height:1.5"></p>
     <div id="dNext" hidden style="margin-top:14px"><button class="btn pri full" onclick="go('decid')">Siguiente paso: firmar la reforma del artículo 3 →</button></div>
    </div>
 
@@ -508,6 +511,7 @@ h3{font-family:'Space Grotesk',system-ui,sans-serif;font-size:15px;margin:26px 0
    <div id="dvDone" style="display:none" class="firmado">
     <span id="dvTxt"></span>
     <button class="btn sm" onclick="decideReset()">Cambiar mi voto</button>
+    <span id="dvHash" class="mono" style="font-size:10px;flex-basis:100%"></span>
    </div>
    <div id="dvNext" style="display:none;margin-top:8px"><button class="btn full sm" onclick="go('eleg')">Siguiente: comparar candidatos a mayordomo →</button></div>
 
@@ -765,6 +769,7 @@ h3{font-family:'Space Grotesk',system-ui,sans-serif;font-size:15px;margin:26px 0
     <div class="row"><span class="rl">Contratos y todas sus versiones</span><span class="rv">/contratos</span></div>
     <div class="row"><span class="rl">Matriz de opinión completa (formato Pol.is)</span><span class="rv">/matriz</span></div>
     <p style="font-size:12.5px;color:var(--ink2);margin:11px 0 0;line-height:1.55">Cualquiera puede <b>recalcular el consenso desde cero</b> con estos datos y comprobar si el resultado coincide con el publicado. Si no coincide, el sistema está roto y se sabrá públicamente.</p>
+    <button class="btn full sm" style="margin-top:11px" onclick="go('verif')">Probar la auditoría con tu propia cadena →</button>
    </div>
    <div class="card" style="margin-top:12px">
     <span class="lbl">Recompensa por hallazgos</span>
@@ -851,6 +856,54 @@ h3{font-family:'Space Grotesk',system-ui,sans-serif;font-size:15px;margin:26px 0
  </div>
 </div>
 
+<!-- VERIFICABLE -->
+<div class="view" id="v-verif">
+ <h1>Verificación criptográfica</h1>
+ <p class="vsub">No confíes: comprueba. Cada acto que firmas — opiniones, votos vinculantes, duelos, consultas — se encadena en un registro sellado con hash que puedes auditar, recalcular y exportar tú mismo, aquí y ahora.</p>
+
+ <div class="warn">
+  <p class="wt">
+   <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><path d="M12 9v4M12 17h.01M10.3 3.9L1.8 18a2 2 0 001.7 3h17a2 2 0 001.7-3L13.7 3.9a2 2 0 00-3.4 0z"/></svg>
+   Qué prueba esto — y qué no
+  </p>
+  <p>En este prototipo la cadena vive solo en tu navegador: demuestra el mecanismo real (firmas ECDSA, encadenado de hashes, recuento reproducible), no la red. En producción cada acto se replica en los nodos del territorio y en los observadores externos, y la clave privada vive en hardware seguro del ciudadano — nunca en el almacenamiento del navegador.</p>
+ </div>
+
+ <div class="grid2">
+  <div>
+   <div class="card">
+    <span class="lbl">Tu identidad criptográfica</span>
+    <div class="row" style="margin-top:8px"><span class="rl">Algoritmo</span><span class="rv">ECDSA · P-256 · SHA-256</span></div>
+    <div class="row"><span class="rl">Generada</span><span class="rv">localmente, en tu dispositivo</span></div>
+    <div class="row"><span class="rl">Clave privada</span><span class="rv c-ok">nunca sale de aquí</span></div>
+    <span class="lbl" style="display:block;margin:12px 0 6px">Clave pública</span>
+    <div class="keybox" id="vPubFull">generando…</div>
+    <button class="btn full sm" style="margin-top:10px" onclick="copiarPub()">Copiar clave pública</button>
+    <p class="mono" style="font-size:10.5px;color:var(--ink3);margin:9px 0 0;line-height:1.55">Firmar no revela quién eres: revela que fuiste tú. Tu seudónimo y tu clave son la misma persona matemática.</p>
+   </div>
+
+   <div class="card" style="margin-top:12px">
+    <span class="lbl">Auditoría en un clic</span>
+    <div style="display:flex;flex-direction:column;gap:8px;margin-top:11px">
+     <button class="btn full" onclick="verificarUI()">Verificar cadena y firmas</button>
+     <button class="btn full" onclick="recontarUI()">Recalcular mi participación desde cero</button>
+     <button class="btn full" onclick="exportar()">Exportar registro firmado (JSON)</button>
+     <button class="btn dan full sm" onclick="borrarTodo(this)">Borrar mis datos locales</button>
+    </div>
+    <p id="vRes" style="font-size:13px;margin:11px 0 0;line-height:1.55" role="status"></p>
+   </div>
+  </div>
+
+  <div class="card">
+   <span class="lbl">Cadena de actos — los más recientes</span>
+   <div class="row" style="margin-top:8px"><span class="rl">Actos sellados</span><span class="rv num" id="vN">0</span></div>
+   <div class="row"><span class="rl">Raíz Merkle del registro</span><span class="rv" id="vMerkle">—</span></div>
+   <div class="audit" style="margin-top:10px" id="vList"></div>
+   <p class="mono" style="font-size:10.5px;color:var(--ink3);margin:10px 0 0;line-height:1.55">Cada acto guarda el hash del anterior: alterar uno rompe todos los siguientes. Igual que la tesorería, tu participación es una cadena — no un archivo editable.</p>
+  </div>
+ </div>
+</div>
+
 </main>
 
 <div id="toast" role="status" aria-live="polite"></div>
@@ -863,6 +916,131 @@ function toast(m){
  clearTimeout(t._h);t._h=setTimeout(()=>t.classList.remove('on'),3200);
 }
 function swT(b){b.setAttribute('aria-checked',b.getAttribute('aria-checked')==='true'?'false':'true')}
+
+/* ---------- CRIPTO: IDENTIDAD Y CADENA DE ACTOS (WebCrypto) ---------- */
+const store={
+ get(k){try{return localStorage.getItem(k)}catch(e){return (this._m||{})[k]||null}},
+ set(k,v){try{localStorage.setItem(k,v)}catch(e){(this._m=this._m||{})[k]=v}},
+ del(k){try{localStorage.removeItem(k)}catch(e){if(this._m)delete this._m[k]}}
+};
+const enc=new TextEncoder();
+const hex=b=>[...new Uint8Array(b)].map(x=>x.toString(16).padStart(2,'0')).join('');
+const fromHex=s=>new Uint8Array(s.match(/../g).map(x=>parseInt(x,16)));
+async function sha(s){return hex(await crypto.subtle.digest('SHA-256',enc.encode(s)))}
+let PRIV=null,PUB=null,PUBHEX='';
+async function idInit(){
+ const pj=store.get('rcPriv'),bj=store.get('rcPub');
+ if(pj&&bj){
+  PRIV=await crypto.subtle.importKey('jwk',JSON.parse(pj),{name:'ECDSA',namedCurve:'P-256'},true,['sign']);
+  PUB=await crypto.subtle.importKey('jwk',JSON.parse(bj),{name:'ECDSA',namedCurve:'P-256'},true,['verify']);
+ }else{
+  const kp=await crypto.subtle.generateKey({name:'ECDSA',namedCurve:'P-256'},true,['sign','verify']);
+  PRIV=kp.privateKey;PUB=kp.publicKey;
+  store.set('rcPriv',JSON.stringify(await crypto.subtle.exportKey('jwk',PRIV)));
+  store.set('rcPub',JSON.stringify(await crypto.subtle.exportKey('jwk',PUB)));
+ }
+ PUBHEX=hex(await crypto.subtle.exportKey('raw',PUB));
+}
+let LEDGER=[];
+let chainQ=Promise.resolve(null);
+function acto(tipo,datos){
+ if(!PRIV)return Promise.resolve(null);
+ chainQ=chainQ.then(()=>_acto(tipo,datos)).catch(()=>null);
+ return chainQ;
+}
+async function _acto(tipo,datos){
+ const prev=LEDGER.length?LEDGER[LEDGER.length-1].hash:'génesis';
+ const i=LEDGER.length,ts=new Date().toISOString();
+ const hash=await sha(JSON.stringify({i,ts,tipo,datos,prev}));
+ const firma=hex(await crypto.subtle.sign({name:'ECDSA',hash:'SHA-256'},PRIV,enc.encode(hash)));
+ LEDGER.push({i,ts,tipo,datos,prev,hash,firma});
+ store.set('rcLedger',JSON.stringify(LEDGER));
+ vRender();
+ return hash;
+}
+const TIPO_L={genesis:'génesis',opinion:'opinión',afirmacion:'afirmación',duelo:'duelo',
+ voto_vinculante:'voto vinculante',voto_anulado:'voto anulado',consulta:'consulta'};
+async function merkle(){
+ if(!LEDGER.length)return null;
+ let nivel=LEDGER.map(a=>a.hash);
+ while(nivel.length>1){
+  const nx=[];
+  for(let i=0;i<nivel.length;i+=2)nx.push(await sha(nivel[i]+(nivel[i+1]||nivel[i])));
+  nivel=nx;
+ }
+ return nivel[0];
+}
+async function vRender(){
+ const n=LEDGER.length;
+ const ac=document.getElementById('agChain');
+ if(ac)ac.textContent=n+' acto'+(n===1?'':'s')+' · sellada';
+ document.getElementById('vN').textContent=n;
+ document.getElementById('vList').innerHTML=LEDGER.slice(-8).reverse().map(a=>
+  `<div class="ar"><span>#${a.i} · ${TIPO_L[a.tipo]||a.tipo} · 0x${a.hash.slice(0,10)}…</span><span class="ok">firmado ✓</span></div>`).join('')
+  ||'<div class="ar"><span>sin actos todavía — participa y vuelve</span><span></span></div>';
+ const m=await merkle();
+ document.getElementById('vMerkle').textContent=m?('0x'+m.slice(0,16)+'…'):'—';
+ if(PUBHEX)document.getElementById('vPubFull').textContent=PUBHEX;
+}
+async function verificar(){
+ let prev='génesis';
+ for(const a of LEDGER){
+  const h=await sha(JSON.stringify({i:a.i,ts:a.ts,tipo:a.tipo,datos:a.datos,prev:a.prev}));
+  if(a.prev!==prev||h!==a.hash)return{ok:false,i:a.i,motivo:'el hash no encadena'};
+  const f=await crypto.subtle.verify({name:'ECDSA',hash:'SHA-256'},PUB,fromHex(a.firma),enc.encode(a.hash));
+  if(!f)return{ok:false,i:a.i,motivo:'la firma no verifica'};
+  prev=a.hash;
+ }
+ return{ok:true,n:LEDGER.length};
+}
+async function verificarUI(){
+ const o=document.getElementById('vRes');
+ o.textContent='Verificando…';
+ const r=await verificar();
+ o.innerHTML=r.ok
+  ?'<b class="c-ok">✓ Cadena íntegra.</b> '+r.n+' actos: todos los hashes encadenan y todas las firmas ECDSA verifican contra tu clave pública.'
+  :'<b class="c-mal">✗ Ruptura en el acto #'+r.i+'</b> ('+r.motivo+'). El registro fue alterado después de firmarse.';
+}
+async function recontarUI(){
+ const ops=LEDGER.filter(a=>a.tipo==='opinion');
+ const acu=ops.filter(a=>a.datos.voto===1).length;
+ const des=ops.filter(a=>a.datos.voto===-1).length;
+ const pas=ops.filter(a=>a.datos.voto===0).length;
+ const du=LEDGER.filter(a=>a.tipo==='duelo').length;
+ const ult=[...LEDGER].reverse().find(a=>a.tipo==='voto_vinculante'||a.tipo==='voto_anulado');
+ const vv=ult&&ult.tipo==='voto_vinculante'?'firmado '+ult.datos.sentido:'sin voto vigente';
+ const okDeck=(ops.length===done-6)&&(acu+des===sv-7);
+ const okDu=(du===eIdx-3);
+ const okVv=((ult&&ult.tipo==='voto_vinculante')===votedDecid);
+ const todo=okDeck&&okDu&&okVv;
+ document.getElementById('vRes').innerHTML=
+  '<b class="'+(todo?'c-ok':'c-mal')+'">'+(todo?'✓ El recuento coincide con lo que muestra la interfaz.':'✗ El recuento NO coincide con la interfaz.')+'</b> '+
+  'Desde la cadena: '+ops.length+' opiniones ('+acu+' de acuerdo, '+des+' en desacuerdo, '+pas+' pasos), '+du+' duelos, '+vv+'.';
+}
+async function exportar(){
+ const data={territorio:'Renacer City',formato:'cadena-de-actos/v1',exportado:new Date().toISOString(),
+  clavePublica:PUBHEX,algoritmo:'ECDSA P-256 + SHA-256',raizMerkle:await merkle(),actos:LEDGER};
+ const b=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});
+ const a=document.createElement('a');a.href=URL.createObjectURL(b);a.download='renacer-registro.json';
+ document.body.appendChild(a);a.click();a.remove();URL.revokeObjectURL(a.href);
+ toast('Registro exportado — cualquier auditor puede verificarlo sin pedirte permiso');
+}
+function copiarPub(){
+ if(!PUBHEX){toast('La clave aún se está generando');return}
+ if(navigator.clipboard&&navigator.clipboard.writeText){
+  navigator.clipboard.writeText(PUBHEX).then(()=>toast('Clave pública copiada'),()=>toast('No se pudo copiar — selecciónala manualmente'));
+ }else toast('No se pudo copiar — selecciónala manualmente');
+}
+let borrarArmado=false;
+function borrarTodo(btn){
+ if(!borrarArmado){
+  borrarArmado=true;btn.textContent='¿Seguro? Toca otra vez para borrar clave y cadena';
+  setTimeout(()=>{borrarArmado=false;btn.textContent='Borrar mis datos locales'},4000);
+  return;
+ }
+ ['rcPriv','rcPub','rcLedger','rcHola'].forEach(k=>store.del(k));
+ location.reload();
+}
 
 /* ---------- GLOSARIO ---------- */
 const GLOSS={
@@ -929,6 +1107,7 @@ const TABS=[
  ['tes','Tesorería','M3 10h18M7 15h4M5 6h14a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2z'],
  ['const','Constitución','M4 4h11l5 5v11H4zM15 4v5h5',1],
  ['fisc','Fiscalización','M11 19a8 8 0 100-16 8 8 0 000 16zM21 21l-4.35-4.35M8.5 11l2 2 4-4',1],
+ ['verif','Verificable','M6 11V8a6 6 0 0112 0v3M5 11h14v9H5zM12 15v2'],
  null,
  ['reg','Registro','M9 11a4 4 0 100-8 4 4 0 000 8zM3 21v-1a6 6 0 016-6h1M17 14v6M14 17h6'],
  ['cons','Consulta','M4 4h16a2 2 0 012 2v12a2 2 0 01-2 2H4a2 2 0 01-2-2V6a2 2 0 012-2zM22 6l-10 7L2 6'],
@@ -1004,6 +1183,9 @@ function dRender(){
 function dVote(v){
  if(done>=TOTAL)return;
  if(v!==0){sv++;document.getElementById('myV').textContent=sv+' votos';moveMe(v)}
+ acto('opinion',{n:done+1,voto:v}).then(h=>{
+  if(h)document.getElementById('dSello').textContent='Acto sellado y firmado: 0x'+h.slice(0,12)+'… ✓';
+ });
  done++;dRender();
 }
 const ns=document.getElementById('ns');
@@ -1013,6 +1195,7 @@ function addStmt(){
  if(!txt)return;
  added++;TOTAL++;
  S.push({t:txt,w:'afirmación ciudadana · tuya · recién enviada al mazo',s:'<span class="nos">Sin fuente adjunta: los observadores pueden anotar evidencia después.</span>'});
+ acto('afirmacion',{texto:txt});
  ns.value='';
  document.getElementById('nsC').innerHTML='0 / 140 · '+added+' afirmaciones ciudadanas en circulación — <b style="color:var(--ok)">la tuya entró al mazo (ahora son '+TOTAL+')</b>';
  dRender();
@@ -1040,12 +1223,15 @@ function moveMe(v){
 function verContra(){
  document.getElementById('evContra').scrollIntoView({behavior:REDUCED?'auto':'smooth',block:'center'});
 }
-function decideVote(v){
+function decideVote(v,replay){
  votedDecid=true;
  document.getElementById('dvBtns').style.display='none';
  document.getElementById('dvDone').style.display='flex';
  document.getElementById('dvNext').style.display=(eIdx<PAIRS.length)?'':'none';
  document.getElementById('dvTxt').textContent='Voto firmado '+(v>0?'a favor':'en contra')+' · peso 4.30 · puedes cambiarlo hasta el cierre.';
+ if(!replay)acto('voto_vinculante',{propuesta:'reforma-articulo-3',sentido:v>0?'a favor':'en contra',peso:4.3}).then(h=>{
+  if(h)document.getElementById('dvHash').textContent='Comprobante: 0x'+h.slice(0,16)+'… · verifícalo en la pestaña Verificable';
+ });
  updateTodo();
 }
 function decideReset(){
@@ -1053,6 +1239,8 @@ function decideReset(){
  document.getElementById('dvBtns').style.display='';
  document.getElementById('dvDone').style.display='none';
  document.getElementById('dvNext').style.display='none';
+ document.getElementById('dvHash').textContent='';
+ acto('voto_anulado',{propuesta:'reforma-articulo-3'});
  updateTodo();
 }
 
@@ -1096,7 +1284,9 @@ function eRender(){
 }
 function ePick(side){
  if(eIdx>=PAIRS.length)return;
- eWins[PAIRS[eIdx][side]]++;
+ const g=PAIRS[eIdx][side];
+ eWins[g]++;
+ acto('duelo',{p:eIdx,g,candidato:CANDS[g][0]});
  eIdx++;eRender();
 }
 
@@ -1128,8 +1318,11 @@ document.getElementById('auds').innerHTML=AUDS.map(a=>
 function sendC(){
  const a=document.getElementById('cAsunto'),m=document.getElementById('cMsg');
  if(!a.value.trim()&&!m.value.trim()){toast('Escribe al menos el asunto o el mensaje antes de enviar');return}
+ const canal=document.getElementById('cCanal').value;
+ const contenido=a.value+'\n'+m.value;
  a.value='';m.value='';
- document.getElementById('cOk').innerHTML='<b style="color:var(--ok)">Enviada · folio #4183.</b> El plazo corre desde ahora y el cumplimiento quedará en el registro público.';
+ sha(contenido).then(hu=>acto('consulta',{canal,huella:hu}));
+ document.getElementById('cOk').innerHTML='<b style="color:var(--ok)">Enviada · folio #4183.</b> El plazo corre desde ahora y el cumplimiento quedará en el registro público. En tu cadena se sella solo la huella del mensaje, nunca su contenido.';
 }
 
 /* ---------- CONSTITUCIÓN ---------- */
@@ -1200,8 +1393,38 @@ document.getElementById('arts').innerHTML=ARTS.map(a=>{
    <button class="btn sm ${btn[0]}" onclick="go('${btn[2]}')">${btn[1]}</button></div>
  </div>`}).join('');
 
-dRender();
-eRender();
+/* ---------- ARRANQUE: identidad, cadena y reproducción del estado ---------- */
+(async function boot(){
+ try{await idInit()}catch(e){/* sin WebCrypto: la app funciona sin sellado */}
+ try{const lj=store.get('rcLedger');if(lj)LEDGER=JSON.parse(lj)}catch(e){LEDGER=[]}
+
+ /* Reproducir la cadena: el estado de la interfaz se deriva del registro,
+    no al revés — el mismo principio que el recuento público. */
+ let sentido='a favor',vv=false;
+ for(const a of LEDGER){
+  if(a.tipo==='afirmacion'&&a.datos&&a.datos.texto){
+   added++;TOTAL++;
+   S.push({t:a.datos.texto,w:'afirmación ciudadana · tuya · sellada 0x'+a.hash.slice(0,8)+'…',
+    s:'<span class="nos">Sin fuente adjunta: los observadores pueden anotar evidencia después.</span>'});
+  }else if(a.tipo==='opinion'){
+   if(done<TOTAL){done++;if(a.datos.voto!==0){sv++;moveMe(a.datos.voto)}}
+  }else if(a.tipo==='duelo'){
+   if(eIdx<PAIRS.length&&typeof a.datos.g==='number'){eWins[a.datos.g]++;eIdx++}
+  }else if(a.tipo==='voto_vinculante'){vv=true;sentido=a.datos.sentido||'a favor'}
+  else if(a.tipo==='voto_anulado'){vv=false}
+ }
+ document.getElementById('myV').textContent=sv+' votos';
+ if(vv)decideVote(sentido==='a favor'?1:-1,true);
+ if(PRIV&&!LEDGER.length)await _acto('genesis',{territorio:'Renacer City',formato:'cadena-de-actos/v1'});
+
+ dRender();
+ eRender();
+ vRender();
+ if(!PRIV){
+  document.getElementById('vPubFull').textContent='WebCrypto no está disponible en este contexto: la app funciona, pero sin sellado criptográfico.';
+  const ac=document.getElementById('agChain');if(ac)ac.textContent='no disponible';
+ }
+})();
 </script>
 
 </body>
