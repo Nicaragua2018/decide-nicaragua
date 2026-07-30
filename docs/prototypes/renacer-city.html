@@ -856,6 +856,84 @@ h3{font-family:'Space Grotesk',system-ui,sans-serif;font-size:15px;margin:26px 0
  </div>
 </div>
 
+<!-- COOPERATIVA -->
+<div class="view" id="v-coop">
+ <h1>Caja Renacer — cooperativa de ahorro</h1>
+ <p class="vsub">Ahorro familiar con Bitcoin como activo de reserva y <button class="term" data-g="participacion">participaciones</button> contables respaldadas 1:1. Abierta a nuevos socios por las mismas vías del Registro — pero aquí el capital no compra poder: un socio, un voto.</p>
+
+ <div class="warn">
+  <p class="wt">
+   <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><path d="M12 9v4M12 17h.01M10.3 3.9L1.8 18a2 2 0 001.7 3h17a2 2 0 001.7-3L13.7 3.9a2 2 0 00-3.4 0z"/></svg>
+   Prototipo educativo — y por qué la caja no emite su propia criptomoneda
+  </p>
+  <p>Una moneda propia de una caja pequeña no es reserva de valor: sin liquidez, su precio lo fija quien la controla, y venderla al público es una emisión de valores no registrada — el patrón exacto de las estafas que este territorio quiere impedir. Por eso la caja usa <b>Bitcoin como activo de reserva</b> y participaciones contables internas, auditables contra la reserva. <b>Esta pantalla no capta dinero ni es asesoría financiera:</b> simula el mecanismo. Una caja real exige constitución legal (la captación de ahorro del público está regulada en toda jurisdicción), compras en mercados regulados y custodia multifirma.</p>
+ </div>
+
+ <div class="hexband" style="margin-bottom:20px">
+ <div class="grid4">
+  <div class="stat"><div class="n" id="cReservaBTC">₿ 0,8623</div><div class="l">reserva en Bitcoin · custodia 3 de 5</div></div>
+  <div class="stat"><div class="n" id="cEstable">$ 5.200</div><div class="l">colchón en establecoin para retiros</div></div>
+  <div class="stat"><div class="n" id="cNAV">$ 295,9</div><div class="l">valor de la participación (reserva ÷ emitidas)</div></div>
+  <div class="stat"><div class="n" id="cSocios">12</div><div class="l">socios · un voto cada uno, aporte quien aporte</div></div>
+ </div>
+ </div>
+
+ <div class="grid2">
+  <div>
+   <div class="card">
+    <span class="lbl">Tu posición</span>
+    <div class="row" style="margin-top:8px"><span class="rl">Participaciones</span><span class="rv num" id="cMyU">0,0000</span></div>
+    <div class="row"><span class="rl">Valor actual</span><span class="rv num" id="cMyVal">$ 0,00</span></div>
+    <div class="row"><span class="rl">Total aportado</span><span class="rv num" id="cMyAp">$ 0,00</span></div>
+    <div class="row"><span class="rl">Resultado</span><span class="rv num" id="cMyRend">—</span></div>
+    <div class="row"><span class="rl">Retiro</span><span class="rv" id="cRetEstado">sin solicitudes</span></div>
+   </div>
+
+   <div class="card" style="margin-top:12px">
+    <span class="lbl">Simular un aporte</span>
+    <p style="font-size:12.5px;color:var(--ink2);margin:8px 0 10px;line-height:1.5">Tu aporte se convierte según la regla publicada — 70% a Bitcoin, 30% al colchón — y emite participaciones al valor del día. Queda sellado en tu cadena.</p>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+     <label class="sr" for="cMonto">Monto en USD</label>
+     <input id="cMonto" type="number" min="10" max="5000" placeholder="Monto en USD (10 – 5.000)" style="flex:1;min-width:160px;background:var(--card);border:1px solid var(--line);border-radius:8px;padding:10px 12px;font-size:14px;color:var(--ink)">
+     <button class="btn pri" onclick="aporteUI()">Aportar y sellar</button>
+    </div>
+    <p class="mono num" id="cAporteInfo" style="font-size:10.5px;color:var(--ink3);margin:9px 0 0;line-height:1.5"></p>
+   </div>
+
+   <div class="card" style="margin-top:12px">
+    <span class="lbl">Solicitar retiro</span>
+    <p style="font-size:12.5px;color:var(--ink2);margin:8px 0 10px;line-height:1.5">Aviso de 7 días y firma de 3 de 5 custodios. Nadie — ni quien fundó la caja — puede retirar solo.</p>
+    <button class="btn full sm" onclick="retiroUI()">Solicitar retiro de mis participaciones</button>
+   </div>
+  </div>
+
+  <div>
+   <div class="card">
+    <span class="lbl">Reglas de la caja — publicadas antes del primer aporte</span>
+    <div class="row" style="margin-top:8px"><span class="rl">Conversión de aportes</span><span class="rv">70% BTC · 30% establecoin</span></div>
+    <div class="row"><span class="rl">Compra de BTC</span><span class="rv"><button class="term" data-g="dca" style="text-transform:none">DCA</button> semanal · sin discreción</span></div>
+    <div class="row"><span class="rl">Retiros</span><span class="rv">aviso 7 días · máx. 20% de la reserva al mes</span></div>
+    <div class="row"><span class="rl">Custodia</span><span class="rv c-ok">multifirma 3 de 5 · llaves en 3 hogares</span></div>
+    <div class="row"><span class="rl">Gobierno</span><span class="rv c-sol">1 socio = 1 voto · el capital no vota</span></div>
+    <div class="row"><span class="rl">Cambiar estas reglas</span><span class="rv">2 racimos + 66% · nunca retroactivo</span></div>
+   </div>
+
+   <div class="card" style="margin-top:12px">
+    <span class="lbl"><button class="term" data-g="reservas" style="text-transform:inherit;letter-spacing:inherit">Prueba de reservas</button> · precio BTC simulado: $67.400</span>
+    <svg id="cSpark" viewBox="0 0 300 60" preserveAspectRatio="none" role="img" aria-label="Precio de Bitcoin, últimas 12 semanas (simulado)" style="width:100%;height:60px;margin-top:10px"></svg>
+    <div class="row"><span class="rl">Dirección de reserva (pública)</span><span class="rv">bc1q…demo</span></div>
+    <button class="btn full sm" style="margin-top:11px" onclick="recalcCoop()">Recalcular el valor de la participación desde cero</button>
+    <p id="cRes" style="font-size:12.5px;margin:9px 0 0;line-height:1.5" role="status"></p>
+   </div>
+
+   <div class="card" style="margin-top:12px">
+    <span class="lbl">Riesgos, sin maquillaje</span>
+    <p style="font-size:12.5px;color:var(--ink2);margin:8px 0 0;line-height:1.6">Bitcoin ha caído más de 50% varias veces en su historia y volverá a hacerlo: la caja es para horizontes de años, no de meses. No hay seguro de depósito. Aporta solo lo que tu familia puede dejar quieto. La regla 70/30 y el DCA no eliminan el riesgo — eliminan la improvisación.</p>
+   </div>
+  </div>
+ </div>
+</div>
+
 <!-- VERIFICABLE -->
 <div class="view" id="v-verif">
  <h1>Verificación criptográfica</h1>
@@ -959,7 +1037,8 @@ async function _acto(tipo,datos){
  return hash;
 }
 const TIPO_L={genesis:'génesis',opinion:'opinión',afirmacion:'afirmación',duelo:'duelo',
- voto_vinculante:'voto vinculante',voto_anulado:'voto anulado',consulta:'consulta'};
+ voto_vinculante:'voto vinculante',voto_anulado:'voto anulado',consulta:'consulta',
+ aporte:'aporte a la caja',retiro:'retiro solicitado'};
 async function merkle(){
  if(!LEDGER.length)return null;
  let nivel=LEDGER.map(a=>a.hash);
@@ -1050,7 +1129,10 @@ const GLOSS={
  mayordomo:'Ciudadano electo que administra un área (tesorería, registro…). Propone pero nunca decide solo, y es revocable en cualquier momento.',
  dominio:'Área de conocimiento (derecho, protocolo, tesorería…). Completar sus retos sube el peso de tu voto hasta un techo de ×1.30.',
  multifirma:'Ningún desembolso sale con una sola firma: se necesitan 3 de los 5 firmantes electos. Así se elimina el punto único de corrupción.',
- cuorum:'Participación mínima para que una votación sea válida. Cómo calcularlo es justo lo que la colmena está deliberando ahora.'
+ cuorum:'Participación mínima para que una votación sea válida. Cómo calcularlo es justo lo que la colmena está deliberando ahora.',
+ participacion:'Unidad contable interna de la caja: tu parte proporcional de la reserva real (BTC + estable). No es una moneda, no se vende fuera y su valor se recalcula desde la reserva, no desde un mercado.',
+ dca:'Compra programada (dollar-cost averaging): la caja compra BTC en montos fijos y fechas fijas, sin intentar adivinar el precio. Elimina la discrecionalidad — y con ella, la tentación.',
+ reservas:'Prueba de reservas: las direcciones de la caja son públicas y cualquiera puede sumar lo que contienen y compararlo con las participaciones emitidas. Si no cuadra, se sabe.'
 };
 function closePops(except){
  document.querySelectorAll('.term[aria-expanded="true"]').forEach(b=>{
@@ -1105,6 +1187,7 @@ const TABS=[
  ['eleg','Elegir','M12 8a4 4 0 100-8 4 4 0 000 8zM4 21v-1a8 8 0 0116 0v1'],
  null,
  ['tes','Tesorería','M3 10h18M7 15h4M5 6h14a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2z'],
+ ['coop','Cooperativa','M12 2v20M17 6.5H9.8a3.2 3.2 0 000 6.4h4.4a3.2 3.2 0 010 6.4H7'],
  ['const','Constitución','M4 4h11l5 5v11H4zM15 4v5h5',1],
  ['fisc','Fiscalización','M11 19a8 8 0 100-16 8 8 0 000 16zM21 21l-4.35-4.35M8.5 11l2 2 4-4',1],
  ['verif','Verificable','M6 11V8a6 6 0 0112 0v3M5 11h14v9H5zM12 15v2'],
@@ -1393,6 +1476,72 @@ document.getElementById('arts').innerHTML=ARTS.map(a=>{
    <button class="btn sm ${btn[0]}" onclick="go('${btn[2]}')">${btn[1]}</button></div>
  </div>`}).join('');
 
+/* ---------- COOPERATIVA: CAJA RENACER ---------- */
+const PRECIO=67400;
+const SERIE=[58.2,59.1,57.4,60.3,61.8,60.9,63.2,64.0,62.7,65.1,66.3,67.4];
+const CBASE={btc:.8623,usd:5200,units:214};
+let COOP={...CBASE},MY={u:0,ap:0},RETIRO=false;
+const nf=(n,d)=>n.toLocaleString('es-NI',{minimumFractionDigits:d,maximumFractionDigits:d});
+function coopNAV(){return (COOP.btc*PRECIO+COOP.usd)/COOP.units}
+function coopRender(){
+ const nav=coopNAV();
+ document.getElementById('cReservaBTC').textContent='₿ '+nf(COOP.btc,4);
+ document.getElementById('cEstable').textContent='$ '+nf(COOP.usd,0);
+ document.getElementById('cNAV').textContent='$ '+nf(nav,1);
+ document.getElementById('cMyU').textContent=nf(MY.u,4);
+ document.getElementById('cMyVal').textContent='$ '+nf(MY.u*nav,2);
+ document.getElementById('cMyAp').textContent='$ '+nf(MY.ap,2);
+ const r=document.getElementById('cMyRend');
+ if(MY.ap>0){
+  const d=MY.u*nav-MY.ap;
+  r.textContent=(d>=0?'+':'−')+'$ '+nf(Math.abs(d),2);
+  r.className='rv num '+(d>=0?'c-ok':'c-mal');
+ }else{r.textContent='—';r.className='rv num'}
+ document.getElementById('cRetEstado').textContent=RETIRO?'1 solicitud · 0 de 3 firmas · ventana de 7 días':'sin solicitudes';
+ document.getElementById('cAporteInfo').textContent='Valor de participación hoy: $ '+nf(nav,2)+' · un aporte de $100 emitiría '+nf(100/nav,4)+' participaciones';
+}
+function aporteUI(){
+ const inp=document.getElementById('cMonto');
+ const m=parseFloat(inp.value);
+ if(!(m>=10&&m<=5000)){toast('El aporte simulado debe estar entre 10 y 5.000 USD');return}
+ const nav=coopNAV(),u=m/nav;
+ COOP.btc+=m*.7/PRECIO;COOP.usd+=m*.3;COOP.units+=u;
+ MY.u+=u;MY.ap+=m;
+ acto('aporte',{monto:m,unidades:+u.toFixed(4),nav:+nav.toFixed(2),precioBTC:PRECIO}).then(h=>{
+  if(h)toast('Aporte sellado 0x'+h.slice(0,10)+'… · recibiste '+nf(u,4)+' participaciones');
+ });
+ inp.value='';coopRender();
+}
+function retiroUI(){
+ if(MY.u<=0){toast('Aún no tienes participaciones: simula primero un aporte');return}
+ if(RETIRO){toast('Ya hay una solicitud en curso — espera la ventana de 7 días');return}
+ RETIRO=true;
+ acto('retiro',{unidades:+MY.u.toFixed(4)});
+ coopRender();
+ toast('Retiro solicitado y sellado: requiere 3 de 5 firmas tras el aviso de 7 días');
+}
+function recalcCoop(){
+ let c={...CBASE},my={u:0,ap:0};
+ for(const a of LEDGER){
+  if(a.tipo==='aporte'){
+   c.btc+=a.datos.monto*.7/(a.datos.precioBTC||PRECIO);c.usd+=a.datos.monto*.3;c.units+=a.datos.unidades;
+   my.u+=a.datos.unidades;my.ap+=a.datos.monto;
+  }
+ }
+ const nav=(c.btc*PRECIO+c.usd)/c.units;
+ const ok=Math.abs(nav-coopNAV())<0.01&&Math.abs(my.u-MY.u)<0.0001;
+ document.getElementById('cRes').innerHTML=ok
+  ?'<b class="c-ok">✓ Coincide.</b> Recalculado desde la cadena: reserva ₿ '+nf(c.btc,4)+' + $ '+nf(c.usd,0)+' ÷ '+nf(c.units,4)+' participaciones = $ '+nf(nav,2)+' — igual que lo publicado.'
+  :'<b class="c-mal">✗ No coincide.</b> El valor recalculado ($ '+nf(nav,2)+') difiere del publicado. La caja estaría rota y se sabría públicamente.';
+}
+(function spark(){
+ const s=document.getElementById('cSpark');
+ const min=Math.min(...SERIE),max=Math.max(...SERIE);
+ const pts=SERIE.map((v,i)=>(i*(300/(SERIE.length-1))).toFixed(1)+','+(52-(v-min)/(max-min)*44).toFixed(1)).join(' ');
+ s.innerHTML='<polyline points="'+pts+'" fill="none" stroke="var(--azul)" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>'+
+  '<circle cx="300" cy="'+(52-(SERIE[SERIE.length-1]-min)/(max-min)*44).toFixed(1)+'" r="3.2" fill="var(--sol)" stroke="var(--card)" stroke-width="1.5"/>';
+})();
+
 /* ---------- ARRANQUE: identidad, cadena y reproducción del estado ---------- */
 (async function boot(){
  try{await idInit()}catch(e){/* sin WebCrypto: la app funciona sin sellado */}
@@ -1412,6 +1561,10 @@ document.getElementById('arts').innerHTML=ARTS.map(a=>{
    if(eIdx<PAIRS.length&&typeof a.datos.g==='number'){eWins[a.datos.g]++;eIdx++}
   }else if(a.tipo==='voto_vinculante'){vv=true;sentido=a.datos.sentido||'a favor'}
   else if(a.tipo==='voto_anulado'){vv=false}
+  else if(a.tipo==='aporte'){
+   COOP.btc+=a.datos.monto*.7/(a.datos.precioBTC||PRECIO);COOP.usd+=a.datos.monto*.3;COOP.units+=a.datos.unidades;
+   MY.u+=a.datos.unidades;MY.ap+=a.datos.monto;
+  }else if(a.tipo==='retiro'){RETIRO=true}
  }
  document.getElementById('myV').textContent=sv+' votos';
  if(vv)decideVote(sentido==='a favor'?1:-1,true);
@@ -1420,6 +1573,7 @@ document.getElementById('arts').innerHTML=ARTS.map(a=>{
  dRender();
  eRender();
  vRender();
+ coopRender();
  if(!PRIV){
   document.getElementById('vPubFull').textContent='WebCrypto no está disponible en este contexto: la app funciona, pero sin sellado criptográfico.';
   const ac=document.getElementById('agChain');if(ac)ac.textContent='no disponible';
