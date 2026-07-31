@@ -161,7 +161,7 @@ MÓDULOS:
 3. DECIDIR: propuesta vinculante con umbral de 2 racimos + 60% (política) o 66% (reforma constitucional); desglose plegable del peso del voto (base ×1.00, multiplicador por dominio hasta ×1.30, delegaciones recibidas +1 cada una); evidencia en contra visible antes de firmar; voto con comprobante hash y opción de cambiarlo hasta el cierre.
 4. ELEGIR (Condorcet): comparación de candidatos por pares (6 candidatos = 15 duelos), méritos auditables (nunca promesas), ranking en vivo por duelos ganados, boleta firmada al completar.
 5. TESORERÍA: fondo común con multifirma 3 de 5, desembolsos pendientes de firmas, registro de auditoría con hash y estado (ejecutado/revertido), reglas publicadas antes del primer aporte.
-6. COOPERATIVA «Caja Renacer»: ahorro familiar con Bitcoin como activo de reserva (NUNCA emite moneda propia — el documento explica por qué: sin liquidez no hay reserva de valor y sería emisión de valores no registrada); participaciones contables = reserva ÷ emitidas; aportes con regla publicada 70% BTC / 30% establecoin; DCA semanal; retiros con aviso de 7 días y multifirma 3/5; 1 socio = 1 voto sin importar capital; prueba de reservas con recálculo en un clic; tarjeta de riesgos honesta (caídas >50% históricas, sin seguro de depósito, horizonte de años); descargo visible: prototipo educativo, no capta dinero ni es asesoría financiera.
+6. COOPERATIVA «Caja Renacer» — IMPORTANTE: este módulo se construye VISIBLE PERO DESHABILITADO en la primera versión. Los controles de aporte y retiro deben nacer con el atributo disabled y con una guarda en el código que rechace la acción aunque se invoque desde la consola; no basta con ocultarlos. Encabeza la vista una caja roja «Etapa 2 — no habilitada en esta versión» que enumera las cuatro condiciones para abrirla (auditoría externa publicada, cooperativa constituida legalmente, custodia multifirma en hardware, prueba de reservas reproducida por dos observadores) y un botón «Activar modo demostración» que habilita la simulación con una etiqueta permanente «sin dinero real» — para presentaciones, nunca para operar. Contenido del módulo: ahorro familiar con Bitcoin como activo de reserva (NUNCA emite moneda propia — el documento explica por qué: sin liquidez no hay reserva de valor y sería emisión de valores no registrada); participaciones contables = reserva ÷ emitidas; aportes con regla publicada 70% BTC / 30% establecoin; DCA semanal; retiros con aviso de 7 días y multifirma 3/5; 1 socio = 1 voto sin importar capital; prueba de reservas con recálculo en un clic; tarjeta de riesgos honesta (caídas >50% históricas, sin seguro de depósito, horizonte de años); descargo visible: prototipo educativo, no capta dinero ni es asesoría financiera.
 7. CONSTITUCIÓN: 12 artículos con estados (vigente / reforma en votación / impugnación admitida / objeción reuniendo apoyo); cualquier ciudadano OBJETA (1 persona), solo la colmena IMPUGNA (5% del padrón + 2 racimos); ruta de reforma en 5 pasos; advertencia honesta de que no existe el umbral perfecto.
 8. FISCALIZACIÓN: observadores externos que la comunidad no puede remover; datos abiertos sin autorización (/padron /votos /tesoreria /contratos /matriz); recompensas por hallazgos sin acuerdos de confidencialidad; hallazgos publicados íntegros.
 9. VERIFICABLE (criptografía real con WebCrypto): al primer uso se genera un par ECDSA P-256 local (la clave privada nunca sale del dispositivo); cada acto del usuario (opinión, afirmación, duelo, voto, aporte, consulta) se sella con SHA-256 encadenado al acto anterior y se firma; raíz Merkle; botones de «Verificar cadena y firmas», «Recalcular participación desde cero», «Exportar registro firmado (JSON)» y «Borrar datos locales» (doble confirmación); el estado de la app se reconstruye reproduciendo la cadena al cargar; manipular el almacenamiento debe romper la verificación indicando el acto exacto.
@@ -291,6 +291,8 @@ firma  = ECDSA-P256-SHA256(clave_privada, hash) // hex
  <li>Ningún flujo permite retirar con menos de 3 firmas ni sin la ventana de 7 días.</li>
  <li>El descargo «no capta dinero, no es asesoría» es visible sin scroll en la vista.</li>
  <li>La pantalla explica por qué NO se emite moneda propia.</li>
+ <li><b>Sin la puerta de etapa cumplida, no existe ninguna ruta —ni de interfaz ni de API— que mueva fondos.</b> Los controles nacen <code>disabled</code> y la función de aporte rechaza la acción aunque se invoque desde la consola.</li>
+ <li>El modo demostración muestra una etiqueta permanente «sin dinero real» mientras esté activo.</li>
 </ul>
 
 <h2 id="diseno"><span class="n">08</span>Sistema de diseño</h2>
@@ -324,7 +326,7 @@ firma  = ECDSA-P256-SHA256(clave_privada, hash) // hex
  <li>Deliberar completo (mazo, mapa, puente, afirmaciones propias).</li>
  <li>Verificable (identidad, cadena, verificación, exportación) — <b>antes</b> que los módulos de dinero, porque todos dependen de él.</li>
  <li>Decidir + Elegir.</li>
- <li>Tesorería + Caja Renacer.</li>
+ <li>Tesorería. <b>La Caja Renacer se construye en este punto pero se entrega deshabilitada</b> (ver módulo 6 del prompt): la habilitación es una decisión de etapa 2, no una tarea de desarrollo.</li>
  <li>Constitución + Fiscalización + Consulta + Registro + Ciudadanía.</li>
  <li>Fase 1: API de actos con anclaje diario y datos abiertos.</li>
 </ol>

@@ -328,6 +328,18 @@ h3{font-family:'Space Grotesk',system-ui,sans-serif;font-size:15px;margin:26px 0
 .term .pop{position:absolute;z-index:85;left:50%;transform:translateX(-50%);bottom:calc(100% + 8px);width:max-content;max-width:min(240px,72vw);background:var(--ink);color:var(--paper);font-family:'Newsreader',Georgia,serif;font-size:12.5px;font-weight:400;line-height:1.5;padding:10px 12px;border-radius:9px;text-align:left;box-shadow:var(--sh);white-space:normal}
 .tlink{font-family:'Space Grotesk',system-ui,sans-serif;font-size:12px;color:var(--mal);text-decoration:underline;padding:0;text-align:left}
 .keybox{font-family:'IBM Plex Mono',ui-monospace,monospace;font-size:10.5px;word-break:break-all;background:var(--wash);border-radius:8px;padding:9px 11px;color:var(--ink2);line-height:1.6}
+.gate{border:1.5px solid var(--mal-bd);background:var(--mal-f);border-radius:12px;padding:16px 18px;margin-bottom:18px}
+.gate .gt{font-family:'Space Grotesk',system-ui,sans-serif;font-size:14px;font-weight:600;color:var(--mal);margin:0 0 7px;display:flex;gap:8px;align-items:center}
+.gate p{margin:0 0 10px;font-size:13.5px;color:var(--ink2);line-height:1.6;max-width:72ch}
+.gate p:last-child{margin-bottom:0}
+.gate .cond{font-size:12.5px;color:var(--ink2);line-height:1.6;margin:0 0 10px;padding-left:18px}
+.gate .cond li{margin-bottom:4px}
+.demo-badge{display:none;font-family:'IBM Plex Mono',ui-monospace,monospace;font-size:9.5px;letter-spacing:.06em;text-transform:uppercase;background:var(--sol-f);color:var(--sol-tx);border:1px solid var(--sol-bd);border-radius:11px;padding:3px 9px}
+body.demo .demo-badge{display:inline-block}
+body.demo .gate{border-color:var(--sol-bd);background:var(--sol-f)}
+body.demo .gate .gt{color:var(--sol-tx)}
+.bloq{opacity:.55}
+body.demo .bloq{opacity:1}
 .chip:hover{border-color:var(--azul)}
 #toast{position:fixed;left:50%;bottom:22px;transform:translate(-50%,10px);background:var(--ink);color:var(--paper);font-family:'Space Grotesk',system-ui,sans-serif;font-size:12.5px;padding:10px 18px;border-radius:22px;opacity:0;pointer-events:none;transition:.22s;z-index:99;max-width:88vw;text-align:center}
 #toast.on{opacity:1;transform:translate(-50%,0)}
@@ -858,8 +870,27 @@ h3{font-family:'Space Grotesk',system-ui,sans-serif;font-size:15px;margin:26px 0
 
 <!-- COOPERATIVA -->
 <div class="view" id="v-coop">
- <h1>Caja Renacer — cooperativa de ahorro</h1>
+ <h1>Caja Renacer — cooperativa de ahorro <span class="demo-badge">modo demostración</span></h1>
  <p class="vsub">Ahorro familiar con Bitcoin como activo de reserva y <button class="term" data-g="participacion">participaciones</button> contables respaldadas 1:1. Abierta a nuevos socios por las mismas vías del Registro — pero aquí el capital no compra poder: un socio, un voto.</p>
+
+ <div class="gate">
+  <p class="gt">
+   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><path d="M6 11V8a6 6 0 0112 0v3M5 11h14v9H5z"/></svg>
+   <span id="gateTit">Etapa 2 — no habilitada en esta versión</span>
+  </p>
+  <p>Este módulo está <b>diseñado pero cerrado</b>. La primera versión funcional de Renacer City sale sin la caja: primero se prueba la gobernanza y la capa verificable con decisiones reales, y solo después se toca el dinero. Lo que ves aquí es la arquitectura que se implementará, no un servicio en operación.</p>
+  <p style="font-weight:600;margin-bottom:6px">La etapa 2 no comienza hasta que se cumplan las cuatro condiciones:</p>
+  <ol class="cond">
+   <li>Auditoría externa independiente de la capa criptográfica, publicada íntegra y con los hallazgos críticos corregidos.</li>
+   <li>Cooperativa constituida legalmente, con jurisdicción definida y reglas de gasto registradas.</li>
+   <li>Custodia multifirma real: cinco llaves en hardware, en hogares distintos, con procedimiento de sucesión probado.</li>
+   <li>Prueba de reservas reproducida por dos observadores independientes antes del primer aporte.</li>
+  </ol>
+  <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+   <button class="btn sm" id="btnDemo" onclick="toggleDemo()">Activar modo demostración</button>
+   <span class="mono" style="font-size:10.5px;color:var(--ink3)">para enseñar el mecanismo en una presentación, sin dinero real</span>
+  </div>
+ </div>
 
  <div class="warn">
   <p class="wt">
@@ -889,21 +920,21 @@ h3{font-family:'Space Grotesk',system-ui,sans-serif;font-size:15px;margin:26px 0
     <div class="row"><span class="rl">Retiro</span><span class="rv" id="cRetEstado">sin solicitudes</span></div>
    </div>
 
-   <div class="card" style="margin-top:12px">
-    <span class="lbl">Simular un aporte</span>
+   <div class="card bloq" style="margin-top:12px">
+    <span class="lbl">Simular un aporte <span class="demo-badge">demostración</span></span>
     <p style="font-size:12.5px;color:var(--ink2);margin:8px 0 10px;line-height:1.5">Tu aporte se convierte según la regla publicada — 70% a Bitcoin, 30% al colchón — y emite participaciones al valor del día. Queda sellado en tu cadena.</p>
     <div style="display:flex;gap:8px;flex-wrap:wrap">
      <label class="sr" for="cMonto">Monto en USD</label>
-     <input id="cMonto" type="number" min="10" max="5000" placeholder="Monto en USD (10 – 5.000)" style="flex:1;min-width:160px;background:var(--card);border:1px solid var(--line);border-radius:8px;padding:10px 12px;font-size:14px;color:var(--ink)">
-     <button class="btn pri" onclick="aporteUI()">Aportar y sellar</button>
+     <input id="cMonto" type="number" min="10" max="5000" disabled placeholder="Monto en USD (10 – 5.000)" style="flex:1;min-width:160px;background:var(--card);border:1px solid var(--line);border-radius:8px;padding:10px 12px;font-size:14px;color:var(--ink)">
+     <button class="btn pri" id="btnAporte" disabled onclick="aporteUI()">Aportar y sellar</button>
     </div>
     <p class="mono num" id="cAporteInfo" style="font-size:10.5px;color:var(--ink3);margin:9px 0 0;line-height:1.5"></p>
    </div>
 
-   <div class="card" style="margin-top:12px">
-    <span class="lbl">Solicitar retiro</span>
+   <div class="card bloq" style="margin-top:12px">
+    <span class="lbl">Solicitar retiro <span class="demo-badge">demostración</span></span>
     <p style="font-size:12.5px;color:var(--ink2);margin:8px 0 10px;line-height:1.5">Aviso de 7 días y firma de 3 de 5 custodios. Nadie — ni quien fundó la caja — puede retirar solo.</p>
-    <button class="btn full sm" onclick="retiroUI()">Solicitar retiro de mis participaciones</button>
+    <button class="btn full sm" id="btnRetiro" disabled onclick="retiroUI()">Solicitar retiro de mis participaciones</button>
    </div>
   </div>
 
@@ -1480,7 +1511,22 @@ document.getElementById('arts').innerHTML=ARTS.map(a=>{
 const PRECIO=67400;
 const SERIE=[58.2,59.1,57.4,60.3,61.8,60.9,63.2,64.0,62.7,65.1,66.3,67.4];
 const CBASE={btc:.8623,usd:5200,units:214};
-let COOP={...CBASE},MY={u:0,ap:0},RETIRO=false;
+let COOP={...CBASE},MY={u:0,ap:0},RETIRO=false,DEMO=false;
+function setDemo(on){
+ DEMO=on;
+ document.body.classList.toggle('demo',on);
+ ['cMonto','btnAporte','btnRetiro'].forEach(id=>{const e=document.getElementById(id);if(e)e.disabled=!on});
+ document.getElementById('gateTit').textContent=on
+  ?'Modo demostración — mecanismo simulado, sin dinero real'
+  :'Etapa 2 — no habilitada en esta versión';
+ document.getElementById('btnDemo').textContent=on?'Salir del modo demostración':'Activar modo demostración';
+ try{store.set('rcDemo',on?'1':'0')}catch(e){}
+}
+function toggleDemo(){
+ setDemo(!DEMO);
+ toast(DEMO?'Modo demostración activo: los aportes son simulados y no representan dinero real'
+           :'Caja cerrada de nuevo — vuelve a la etapa 2');
+}
 const nf=(n,d)=>n.toLocaleString('es-NI',{minimumFractionDigits:d,maximumFractionDigits:d});
 function coopNAV(){return (COOP.btc*PRECIO+COOP.usd)/COOP.units}
 function coopRender(){
@@ -1501,6 +1547,7 @@ function coopRender(){
  document.getElementById('cAporteInfo').textContent='Valor de participación hoy: $ '+nf(nav,2)+' · un aporte de $100 emitiría '+nf(100/nav,4)+' participaciones';
 }
 function aporteUI(){
+ if(!DEMO){toast('La caja está cerrada: se habilita en la etapa 2, tras la auditoría y la constitución legal');return}
  const inp=document.getElementById('cMonto');
  const m=parseFloat(inp.value);
  if(!(m>=10&&m<=5000)){toast('El aporte simulado debe estar entre 10 y 5.000 USD');return}
@@ -1513,6 +1560,7 @@ function aporteUI(){
  inp.value='';coopRender();
 }
 function retiroUI(){
+ if(!DEMO){toast('La caja está cerrada: se habilita en la etapa 2, tras la auditoría y la constitución legal');return}
  if(MY.u<=0){toast('Aún no tienes participaciones: simula primero un aporte');return}
  if(RETIRO){toast('Ya hay una solicitud en curso — espera la ventana de 7 días');return}
  RETIRO=true;
@@ -1574,6 +1622,7 @@ function recalcCoop(){
  eRender();
  vRender();
  coopRender();
+ setDemo(store.get('rcDemo')==='1');
  if(!PRIV){
   document.getElementById('vPubFull').textContent='WebCrypto no está disponible en este contexto: la app funciona, pero sin sellado criptográfico.';
   const ac=document.getElementById('agChain');if(ac)ac.textContent='no disponible';

@@ -208,6 +208,7 @@ td{padding:9px 10px;border-bottom:1px solid var(--line2);vertical-align:top}
  <li><b>No es una red social.</b> No hay muro, seguidores, respuestas ni hilos: el diseño impide responder a personas, solo votar afirmaciones.</li>
  <li><b>No emite criptomoneda propia</b> ni token de gobernanza. Ver decisión <code>ADR-01</code>.</li>
  <li><b>No sustituye la constitución legal</b> de una cooperativa ni la asesoría financiera o jurídica.</li>
+ <li><b>No mueve dinero en la primera versión.</b> La caja llega en una segunda etapa, tras cumplir la puerta de etapa (sección 05).</li>
  <li><b>No busca maximizar tiempo de uso.</b> Una sesión eficiente de tres minutos es mejor producto que una de treinta.</li>
  <li><b>No implementa mensajería privada</b> en v1: crearía metadatos de contacto que ponen en riesgo a los usuarios.</li>
 </ul>
@@ -326,13 +327,14 @@ td{padding:9px 10px;border-bottom:1px solid var(--line2);vertical-align:top}
  </div>
 </div>
 <div class="hu dinero">
- <div class="id"><span>HU-09 · Cooperativa</span><span class="pri">Prioridad: media · v2</span></div>
+ <div class="id"><span>HU-09 · Cooperativa</span><span class="pri">Etapa 2 · bloqueada por puerta de etapa</span></div>
  <p class="txt">Como <b>familia Robleto</b>, queremos ahorrar juntos en Bitcoin sabiendo exactamente cuánto vale nuestra parte y bajo qué reglas, sin que nadie pueda cambiarlas a mitad de camino.</p>
  <div class="ac"><b>Criterios de aceptación</b>
   <span>Entonces</span> el valor de la participación se calcula siempre como reserva ÷ participaciones emitidas y no existe ningún campo editable para fijarlo.<br>
   <span>Cuando</span> solicito un retiro, <span>entonces</span> se aplica la ventana de 7 días y se exigen 3 de 5 firmas, sin excepción para fundadores.<br>
   <span>Cuando</span> recalculo la reserva desde la cadena de aportes, <span>entonces</span> el resultado coincide con el valor publicado.<br>
-  <span>Entonces</span> el descargo de responsabilidad y la tarjeta de riesgos son visibles sin desplazamiento en la vista.
+  <span>Entonces</span> el descargo de responsabilidad y la tarjeta de riesgos son visibles sin desplazamiento en la vista.<br>
+  <span>Dado</span> que la puerta de etapa no se ha cumplido, <span>entonces</span> los controles de aporte y retiro están deshabilitados en el código —no solo ocultos— y ninguna ruta de la aplicación permite mover fondos.
  </div>
 </div>
 
@@ -378,13 +380,27 @@ td{padding:9px 10px;border-bottom:1px solid var(--line2);vertical-align:top}
   <tr><td><b>Elegir</b> (Condorcet)</td><td>—</td><td>Completo</td><td>Revocación automática por incumplimiento</td></tr>
   <tr><td><b>Registro</b> (unicidad)</td><td>Vía A (avales) + cuarentena</td><td>Vías B y C</td><td>Detección de coordinación</td></tr>
   <tr><td><b>Tesorería</b></td><td>Solo lectura pública</td><td>Multifirma operativa</td><td>Contratos on-chain</td></tr>
-  <tr><td><b>Cooperativa</b> (Caja)</td><td>—</td><td>Contabilidad y prueba de reservas</td><td>Custodia real con hardware, tras constitución legal</td></tr>
+  <tr><td><b>Cooperativa</b> (Caja)</td><td><b style="color:var(--mal)">No habilitada</b></td><td><b style="color:var(--mal)">No habilitada</b> · visible como diseño cerrado</td><td>Etapa 2: solo tras la puerta de etapa</td></tr>
   <tr><td><b>Constitución</b></td><td>Lectura + objeción</td><td>Ruta de reforma completa</td><td>—</td></tr>
   <tr><td><b>Fiscalización</b></td><td>Datos abiertos</td><td>Acreditación de observadores</td><td>Recompensas por hallazgos</td></tr>
   <tr><td><b>Consulta</b></td><td>—</td><td>4 canales con escalamiento</td><td>Buzón cifrado de respuesta</td></tr>
   <tr><td><b>Ciudadanía</b></td><td>Reputación + modo de riesgo</td><td>Delegaciones</td><td>Congelación por persecución</td></tr>
  </tbody>
 </table>
+</div>
+
+<h3>Puerta de etapa — el dinero va en una segunda etapa</h3>
+<div class="contra" style="border-color:var(--mal-bd)">
+ <h4>La caja no se habilita en la primera versión funcional</h4>
+ <p style="margin-bottom:10px">La primera versión sale <b>sin capacidad de recibir ni mover fondos</b>. El módulo de cooperativa existe como diseño visible y cerrado: se puede leer su arquitectura y sus reglas, pero los controles de aporte y retiro están deshabilitados en el código, no solo ocultos. Se prueba primero la gobernanza y la capa verificable con decisiones reales; el dinero viene después, cuando el mecanismo ya demostró funcionar.</p>
+ <p style="margin-bottom:6px"><b>La etapa 2 no comienza hasta cumplir las cuatro condiciones, todas verificables por terceros:</b></p>
+ <ol style="margin:0;padding-left:20px;font-size:13px;color:var(--ink2);line-height:1.6">
+  <li>Auditoría externa independiente de la capa criptográfica, publicada íntegra y con hallazgos críticos corregidos.</li>
+  <li>Cooperativa constituida legalmente, con jurisdicción definida y reglas de gasto registradas.</li>
+  <li>Custodia multifirma real: cinco llaves en hardware, en hogares distintos, con procedimiento de sucesión probado.</li>
+  <li>Prueba de reservas reproducida por dos observadores independientes antes del primer aporte.</li>
+ </ol>
+ <p style="margin:10px 0 0"><b>Para presentaciones</b> existe un modo demostración explícito que simula el mecanismo con una etiqueta permanente «sin dinero real». Activarlo nunca habilita fondos: es una maqueta operable, no un servicio.</p>
 </div>
 
 <h2 id="metricas"><span class="n">06</span>Métricas de éxito</h2>
@@ -415,6 +431,12 @@ td{padding:9px 10px;border-bottom:1px solid var(--line2);vertical-align:top}
  <div class="body"><b>Decisión:</b> la cooperativa usa Bitcoin como activo de reserva y participaciones contables internas; no emite moneda ni token de gobernanza.<br>
  <b>Motivo:</b> una moneda emitida por una comunidad pequeña carece de liquidez, por lo que su precio lo determina quien la controla — es lo contrario de una reserva de valor. Además, ofrecerla al público como inversión constituye emisión de valores no registrada en prácticamente toda jurisdicción, incluida Nicaragua. Es exactamente el patrón de las estafas que este proyecto existe para hacer imposibles.<br>
  <b>Costo aceptado:</b> se renuncia a un mecanismo llamativo de captación y a la narrativa de «token comunitario».</div>
+</details>
+<details class="adr"><summary><span class="cod">ADR-08</span> La caja se habilita en una segunda etapa, no en la primera versión<span></span></summary>
+ <div class="body"><b>Decisión:</b> la primera versión funcional sale sin capacidad de recibir ni mover fondos. El módulo de cooperativa se publica visible pero cerrado, con los controles deshabilitados en el código.<br>
+ <b>Motivo:</b> el dinero es la parte del sistema donde un error no se puede deshacer. La gobernanza y la capa verificable deben demostrar que funcionan con decisiones reales antes de que exista un solo aporte; además, operar con ahorro de terceros sin constitución legal previa es el mayor riesgo del proyecto, tanto jurídico como reputacional. Un proyecto que nace para hacer imposible la corrupción no puede empezar saltándose sus propios controles.<br>
+ <b>Costo aceptado:</b> se retrasa la parte más atractiva para captar socios, y hay que sostener el interés de la comunidad con la gobernanza sola durante los primeros meses.<br>
+ <b>Reversible:</b> sí, cumpliendo las cuatro condiciones de la puerta de etapa — nunca por decisión de una sola persona.</div>
 </details>
 <details class="adr"><summary><span class="cod">ADR-02</span> Deliberación tipo Pol.is, sin hilos ni respuestas<span></span></summary>
  <div class="body"><b>Decisión:</b> solo se vota lo que otros afirmaron; no existe responder, citar ni replicar.<br>
@@ -486,14 +508,14 @@ td{padding:9px 10px;border-bottom:1px solid var(--line2);vertical-align:top}
  </div>
  <div class="hito">
   <div class="h1c"><b>M3</b>meses 5–6</div>
-  <div class="h2c"><h4>Auditoría externa y piloto de la caja <span class="est e-pen">Pendiente</span></h4>
-  <p>Auditoría independiente de la capa criptográfica y del cálculo de racimos, publicada íntegra. En paralelo, constitución legal de la cooperativa y contabilidad en operación sin dinero real.</p>
-  <span class="sal">Criterio de salida: informe externo publicado y hallazgos críticos corregidos</span></div>
+  <div class="h2c"><h4>Auditoría externa y puerta de etapa <span class="est e-pen">Pendiente</span></h4>
+  <p>Auditoría independiente de la capa criptográfica y del cálculo de racimos, publicada íntegra. En paralelo, constitución legal de la cooperativa. <b>Aquí se evalúan las cuatro condiciones</b> que abren la etapa 2; si alguna falla, la caja sigue cerrada y no hay excepción por urgencia ni por presión de socios.</p>
+  <span class="sal">Criterio de salida: informe externo publicado, hallazgos críticos corregidos y cooperativa constituida</span></div>
  </div>
  <div class="hito">
-  <div class="h1c"><b>M4</b>mes 7 en adelante</div>
-  <div class="h2c"><h4>Operación con fondos reales <span class="est e-pen">Pendiente</span></h4>
-  <p>Solo si M3 cerró limpio: multifirma con dispositivos de hardware en tres hogares, primeros aportes reales y prueba de reservas pública desde el primer día.</p>
+  <div class="h1c"><b>M4</b>etapa 2</div>
+  <div class="h2c"><h4>Habilitación de la caja con fondos reales <span class="est e-pen">Bloqueado</span></h4>
+  <p>Solo si M3 cerró limpio y las cuatro condiciones se cumplieron: multifirma con dispositivos de hardware en tres hogares, primeros aportes reales y prueba de reservas pública desde el primer día. Hasta entonces el módulo permanece deshabilitado en el código.</p>
   <span class="sal">Criterio de salida: prueba de reservas reproducida por dos observadores independientes</span></div>
  </div>
 </div>
