@@ -340,6 +340,19 @@ body.demo .gate{border-color:var(--sol-bd);background:var(--sol-f)}
 body.demo .gate .gt{color:var(--sol-tx)}
 .bloq{opacity:.55}
 body.demo .bloq{opacity:1}
+.puerta{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:12px 0}
+.pu{border-radius:10px;padding:12px 14px;font-size:12.5px;line-height:1.55}
+.pu.abierta{border:1px solid var(--ok-bd);background:var(--ok-f);color:var(--ink2)}
+.pu.cerrada{border:1px solid var(--mal-bd);background:var(--card);color:var(--ink2)}
+.pu b{font-family:'Space Grotesk',system-ui,sans-serif;font-size:12.5px;display:flex;justify-content:space-between;gap:8px;align-items:center;margin-bottom:5px}
+.pu.abierta b{color:var(--ok)}.pu.cerrada b{color:var(--mal)}
+.pu .llave{font-family:'IBM Plex Mono',ui-monospace,monospace;font-size:9.5px;letter-spacing:.05em;text-transform:uppercase;white-space:nowrap}
+.debsel{display:flex;gap:7px;flex-wrap:wrap;margin-bottom:12px}
+.ds{border:1px solid var(--line);border-radius:18px;padding:7px 14px;font-family:'Space Grotesk',system-ui,sans-serif;font-size:12.5px;color:var(--ink2);background:var(--card);display:flex;align-items:center;gap:7px}
+.ds:hover{border-color:var(--azul);color:var(--azul)}
+.ds.on{border-color:var(--azul);background:var(--cielo);color:var(--azul-osc);font-weight:600}
+.ds .fund{font-family:'IBM Plex Mono',ui-monospace,monospace;font-size:9px;letter-spacing:.05em;text-transform:uppercase;background:var(--sol-f);color:var(--sol-tx);border-radius:9px;padding:2px 7px}
+@media(max-width:900px){.puerta{grid-template-columns:1fr}}
 .chip:hover{border-color:var(--azul)}
 #toast{position:fixed;left:50%;bottom:22px;transform:translate(-50%,10px);background:var(--ink);color:var(--paper);font-family:'Space Grotesk',system-ui,sans-serif;font-size:12.5px;padding:10px 18px;border-radius:22px;opacity:0;pointer-events:none;transition:.22s;z-index:99;max-width:88vw;text-align:center}
 #toast.on{opacity:1;transform:translate(-50%,0)}
@@ -402,7 +415,7 @@ body.demo .bloq{opacity:1}
  <div class="grid2" style="margin-bottom:20px">
   <div class="card">
    <span class="lbl">Te toca a ti · <span id="tdCount">3 pendientes</span></span>
-   <div class="row" style="margin-top:8px"><span class="rl">Deliberar sobre cuórum on-chain <span class="est">~3 min</span></span><span id="tdDelib"></span></div>
+   <div class="row" style="margin-top:8px"><span class="rl">Debate fundacional: cómo se aportará a la Caja <span class="est">~3 min</span></span><span id="tdDelib"></span></div>
    <div class="row"><span class="rl">Reforma del artículo 3 — voto vinculante <span class="est">~1 min</span></span><span id="tdDecid"></span></div>
    <div class="row"><span class="rl">Elegir <button class="term" data-g="mayordomo">mayordomo</button> de Tesorería <span class="est">~4 min</span></span><span id="tdEleg"></span></div>
    <div class="row"><span class="rl">Objeción al artículo 7 · falta un segundo racimo</span><button class="btn sm" onclick="go('const')">Ver expediente</button></div>
@@ -434,6 +447,8 @@ body.demo .bloq{opacity:1}
 <div class="view" id="v-delib">
  <h1>Deliberar</h1>
  <p class="vsub">No se responde ni se cita a nadie: solo se vota lo que otros afirmaron. Sin hilos ni réplicas, el sistema puede medir acuerdo real en lugar de medir volumen.</p>
+
+ <div class="debsel" id="debSel" role="group" aria-label="Debates abiertos"></div>
 
  <div class="grid2">
   <div>
@@ -472,13 +487,13 @@ body.demo .bloq{opacity:1}
     <span class="lbl">Mapa de opinión en vivo</span>
     <p style="font-size:12px;color:var(--ink2);margin:5px 0 11px;line-height:1.5">Los <button class="term" data-g="racimo">racimos</button> se forman por cómo votas, no por a quién sigues. Pasar no te mueve.</p>
     <svg id="map" viewBox="0 0 300 150" preserveAspectRatio="none" role="img" aria-label="Mapa de racimos de opinión"></svg>
-    <div class="lg"><i style="background:var(--rac-a)"></i>Racimo A · cuórum alto <b>41%</b></div>
-    <div class="lg"><i style="background:var(--rac-b)"></i>Racimo B · padrón activo <b>52%</b></div>
+    <div class="lg"><i style="background:var(--rac-a)"></i>Racimo A · cuota igual <b>41%</b></div>
+    <div class="lg"><i style="background:var(--rac-b)"></i>Racimo B · aporte variable <b>52%</b></div>
     <div class="lg"><i style="background:var(--me)"></i>Tú <b id="myV">7 votos</b></div>
    </div>
    <div class="bridge">
     <div class="bt"><button class="term" data-g="puente" style="text-transform:inherit;letter-spacing:inherit;font-size:inherit;color:inherit">Afirmación puente</button> detectada</div>
-    <p>«El cuórum debe calcularse sobre ciudadanos activos, no sobre el padrón histórico.» — apoyada por <b>79% del racimo A</b> y <b>84% del racimo B</b>. Atraviesa la división: candidata a pasar a votación.</p>
+    <p>«Las reglas de aporte solo podrán cambiarse con dos racimos y 66%, igual que un artículo constitucional.» — apoyada por <b>81% del racimo A</b> y <b>86% del racimo B</b>. Atraviesa la división: candidata a pasar a votación.</p>
    </div>
   </div>
  </div>
@@ -878,13 +893,23 @@ body.demo .bloq{opacity:1}
    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><path d="M6 11V8a6 6 0 0112 0v3M5 11h14v9H5z"/></svg>
    <span id="gateTit">Etapa 2 — no habilitada en esta versión</span>
   </p>
-  <p>Este módulo está <b>diseñado pero cerrado</b>. La primera versión funcional de Renacer City sale sin la caja: primero se prueba la gobernanza y la capa verificable con decisiones reales, y solo después se toca el dinero. Lo que ves aquí es la arquitectura que se implementará, no un servicio en operación.</p>
-  <p style="font-weight:600;margin-bottom:6px">La etapa 2 no comienza hasta que se cumplan las cuatro condiciones:</p>
+  <p>La caja se abre en dos tiempos. El <b>capital social fundacional lo pone una sola persona</b>, que asume el riesgo antes de que existan las reglas. Los <b>aportes individuales están cerrados</b> hasta que la colmena decida, por deliberación y consenso, cómo se aporta y cómo se administra. Quien escribe las reglas no es quien puso el dinero: esa es toda la idea.</p>
+  <div class="puerta">
+   <div class="pu abierta">
+    <b><span>Puerta A · capital fundacional</span><span class="llave">abierta</span></b>
+    Un solo socio fundador, con fondos propios y a riesgo propio. No es captación de ahorro de terceros. Da participaciones sin ningún derecho de voto adicional.
+   </div>
+   <div class="pu cerrada">
+    <b><span>Puerta B · aportes individuales</span><span class="llave">cerrada</span></b>
+    Se abre únicamente cuando la colmena ratifique las reglas de aporte con 2 racimos + 66%, y tras cumplirse las cuatro condiciones de abajo.
+   </div>
+  </div>
+  <p style="font-weight:600;margin-bottom:6px">Condiciones para abrir la puerta B:</p>
   <ol class="cond">
+   <li><b>Reglas de aporte ratificadas por la colmena</b> — el debate fundacional está abierto ahora en Deliberar.</li>
    <li>Auditoría externa independiente de la capa criptográfica, publicada íntegra y con los hallazgos críticos corregidos.</li>
    <li>Cooperativa constituida legalmente, con jurisdicción definida y reglas de gasto registradas.</li>
-   <li>Custodia multifirma real: cinco llaves en hardware, en hogares distintos, con procedimiento de sucesión probado.</li>
-   <li>Prueba de reservas reproducida por dos observadores independientes antes del primer aporte.</li>
+   <li>Custodia multifirma real: cinco llaves en hardware, en hogares distintos, y prueba de reservas reproducida por dos observadores.</li>
   </ol>
   <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
    <button class="btn sm" id="btnDemo" onclick="toggleDemo()">Activar modo demostración</button>
@@ -902,11 +927,20 @@ body.demo .bloq{opacity:1}
 
  <div class="hexband" style="margin-bottom:20px">
  <div class="grid4">
-  <div class="stat"><div class="n" id="cReservaBTC">₿ 0,8623</div><div class="l">reserva en Bitcoin · custodia 3 de 5</div></div>
-  <div class="stat"><div class="n" id="cEstable">$ 5.200</div><div class="l">colchón en establecoin para retiros</div></div>
-  <div class="stat"><div class="n" id="cNAV">$ 295,9</div><div class="l">valor de la participación (reserva ÷ emitidas)</div></div>
-  <div class="stat"><div class="n" id="cSocios">12</div><div class="l">socios · un voto cada uno, aporte quien aporte</div></div>
+  <div class="stat"><div class="n" id="cReservaBTC">₿ 0,0260</div><div class="l">capital fundacional en Bitcoin · custodia 3 de 5</div></div>
+  <div class="stat"><div class="n" id="cEstable">$ 750</div><div class="l">colchón en establecoin para retiros</div></div>
+  <div class="stat"><div class="n" id="cNAV">$ 100,0</div><div class="l">valor de la participación (reserva ÷ emitidas)</div></div>
+  <div class="stat"><div class="n" id="cSocios">1</div><div class="l">socio fundador · aportes individuales pendientes de consenso</div></div>
  </div>
+ </div>
+
+ <div class="card" style="border-color:var(--sol-bd);margin-bottom:16px">
+  <span class="lbl">Lo que la colmena tiene que decidir antes de abrir la puerta B</span>
+  <p style="font-size:13.5px;color:var(--ink2);margin:8px 0 12px;line-height:1.6;max-width:72ch">Cuánto se aporta y cada cuánto, si la cuota es igual para todos o proporcional, qué techo de participaciones evita que alguien concentre la caja, y qué pasa con el capital del fundador cuando la cooperativa crezca. <b>Nada de esto lo decide quien puso el dinero.</b></p>
+  <div style="display:flex;gap:8px;flex-wrap:wrap">
+   <button class="btn pri" onclick="irDebateCaja()">Ir al debate fundacional</button>
+   <button class="btn" onclick="go('const')">Ver el umbral que exige (2 racimos + 66%)</button>
+  </div>
  </div>
 
  <div class="grid2">
@@ -941,7 +975,9 @@ body.demo .bloq{opacity:1}
   <div>
    <div class="card">
     <span class="lbl">Reglas de la caja — publicadas antes del primer aporte</span>
-    <div class="row" style="margin-top:8px"><span class="rl">Conversión de aportes</span><span class="rv">70% BTC · 30% establecoin</span></div>
+    <div class="row" style="margin-top:8px"><span class="rl">Capital social fundacional</span><span class="rv c-ok">1 socio · fondos propios a riesgo propio</span></div>
+    <div class="row"><span class="rl">Reglas de aporte individual</span><span class="rv c-mal">las decide la colmena · sin decidir</span></div>
+    <div class="row"><span class="rl">Conversión de aportes</span><span class="rv">70% BTC · 30% establecoin</span></div>
     <div class="row"><span class="rl">Compra de BTC</span><span class="rv"><button class="term" data-g="dca" style="text-transform:none">DCA</button> semanal · sin discreción</span></div>
     <div class="row"><span class="rl">Retiros</span><span class="rv">aviso 7 días · máx. 20% de la reserva al mes</span></div>
     <div class="row"><span class="rl">Custodia</span><span class="rv c-ok">multifirma 3 de 5 · llaves en 3 hogares</span></div>
@@ -1119,9 +1155,10 @@ async function recontarUI(){
  const du=LEDGER.filter(a=>a.tipo==='duelo').length;
  const ult=[...LEDGER].reverse().find(a=>a.tipo==='voto_vinculante'||a.tipo==='voto_anulado');
  const vv=ult&&ult.tipo==='voto_vinculante'?'firmado '+ult.datos.sentido:'sin voto vigente';
- const okDeck=(ops.length===done-6)&&(acu+des===sv-7);
+ const votadas=Object.values(DEB).reduce((n,d)=>n+(d.done-d.base),0);
+ const okDeck=(ops.length===votadas)&&(acu+des===sv-7);
  const okDu=(du===eIdx-3);
- const okVv=((ult&&ult.tipo==='voto_vinculante')===votedDecid);
+ const okVv=(!!(ult&&ult.tipo==='voto_vinculante'))===votedDecid;
  const todo=okDeck&&okDu&&okVv;
  document.getElementById('vRes').innerHTML=
   '<b class="'+(todo?'c-ok':'c-mal')+'">'+(todo?'✓ El recuento coincide con lo que muestra la interfaz.':'✗ El recuento NO coincide con la interfaz.')+'</b> '+
@@ -1195,10 +1232,10 @@ catch(err){document.getElementById('hola').hidden=false}
 /* ---------- TE TOCA A TI ---------- */
 let votedDecid=false;
 function updateTodo(){
- const dDone=done>=TOTAL,eDone=eIdx>=PAIRS.length;
+ const dc=DEB.caja,dDone=dc.done>=dc.total,eDone=eIdx>=PAIRS.length;
  document.getElementById('tdDelib').innerHTML=dDone
   ?'<span class="hecho">✓ Hecho</span>'
-  :'<button class="btn sm" onclick="go(\'delib\')">'+(TOTAL-done)+' afirmaciones</button>';
+  :'<button class="btn sm" onclick="irDebateCaja()">'+(dc.total-dc.done)+' afirmaciones</button>';
  document.getElementById('tdDecid').innerHTML=votedDecid
   ?'<span class="hecho">✓ Voto firmado</span>'
   :'<button class="btn sm" onclick="go(\'decid\')">Firmar</button>';
@@ -1250,7 +1287,7 @@ addEventListener('hashchange',()=>go(location.hash.slice(1),true));
 
 /* ---------- ÁGORA: flujo ---------- */
 const FLOW=[
- ['Deliberación','delib',[['Cuórum mínimo para ratificar una ley on-chain','312 opiniones · 3 racimos',25],['Moneda de reputación por trabajo comunitario','48 opiniones · sin racimos',11]]],
+ ['Deliberación','delib',[['Aportes a la Caja · decisión fundacional','462 opiniones · 2 racimos',0],['Cuórum mínimo para ratificar una ley on-chain','312 opiniones · 3 racimos',25]]],
  ['Consenso','delib',[['Sede virtual para ciudadanos perseguidos','520 opiniones · 2 racimos',63],['Reputación mínima para proponer','887 opiniones · 2 racimos',57]]],
  ['Votación','decid',[['Reforma art. 3 · delegación revocable sin plazo','1.140 opiniones · 2 racimos',82]]],
  ['Ratificado','const',[['Cláusula de asilo digital','2.310 firmantes · 96%',100]]],
@@ -1262,57 +1299,88 @@ document.getElementById('flow').innerHTML=FLOW.map(c=>
    <div class="bar"><i style="width:${p[2]}%"></i></div></button>`).join('')}</div>`).join('');
 
 /* ---------- DELIBERAR ---------- */
-const S=[
- {t:"Ratificar una ley on-chain debe exigir un cuórum mínimo del 40% del padrón activo.",w:"afirmación ciudadana · anónima · 312 votos",s:'<span class="nos">Sin fuente empírica: umbral propuesto por un ciudadano, aún sin respaldo en literatura.</span>'},
- {t:"El cuórum debe calcularse sobre ciudadanos activos en los últimos 90 días, no sobre el padrón histórico.",w:"afirmación ciudadana · @jimena_tesoreria · 288 votos",s:"Criterio de padrón activo usado en gobernanza de DAOs para evitar cuórums imposibles cuando la participación decae."},
- {t:"Un cuórum de participación invita a boicotear: quien se abstiene organizado, veta.",w:"afirmación ciudadana · @paolo_protocolo · 240 votos",s:"Aguiar-Conraria &amp; Magalhães (2010): los cuórums de participación incentivan la abstención estratégica en referendos."},
- {t:"Si una votación no alcanza el cuórum, debe extenderse siete días antes de anularse.",w:"afirmación ciudadana · anónima · 197 votos",s:'<span class="nos">Sin fuente empírica: regla operativa propuesta por un ciudadano.</span>'},
- {t:"Las delegaciones activas deben contar para el cuórum aunque el delegado no vote esa semana.",w:"afirmación ciudadana · @ren_derecho · 173 votos",s:"Blum &amp; Zuber (2016): la delegación transfiere presencia además de preferencia. <span class='nos'>Interpretación discutida en el propio debate.</span>"}
-];
-let TOTAL=24,done=6,sv=7,added=18;
+const DEB={
+ caja:{
+  nombre:'Aportes a la Caja',fund:true,total:18,done:0,base:0,added:11,
+  S:[
+   {t:"Todo socio debe aportar la misma cuota mensual, sin importar sus ingresos: igual aporte protege la igualdad de voz.",w:"afirmación ciudadana · @jimena_tesoreria · 96 votos",s:"Principio de participación económica equitativa de la Alianza Cooperativa Internacional. <span class='nos'>Su lectura como «cuota idéntica» está discutida en el propio debate.</span>"},
+   {t:"La cuota mínima debe ser baja —cinco dólares al mes— para que nadie quede fuera de la cooperativa por pobreza.",w:"afirmación ciudadana · anónima · 88 votos",s:'<span class="nos">Sin fuente empírica: monto propuesto por un ciudadano, pendiente de contraste con la capacidad real de los socios.</span>'},
+   {t:"Los aportes deben ser voluntarios y variables: quien puede más aporta más, y aun así vota exactamente igual.",w:"afirmación ciudadana · @ana_puentes · 74 votos",s:"Separación entre capital y voto, base del modelo cooperativo frente al de sociedad anónima."},
+   {t:"Ningún socio debe poder tener más del 20% de las participaciones totales, aunque pueda pagarlas.",w:"afirmación ciudadana · @paolo_protocolo · 71 votos",s:"Techos de concentración usados en cooperativas de ahorro para evitar que un socio pueda vaciar la caja al retirarse."},
+   {t:"El capital del socio fundador no debe poder reembolsarse hasta que la caja tenga treinta socios activos.",w:"afirmación ciudadana · @ren_derecho · 69 votos",s:'<span class="nos">Sin fuente empírica: propuesta de capital subordinado; protege a los socios nuevos frente a una salida temprana del fundador.</span>'},
+   {t:"Las reglas de aporte solo podrán cambiarse con dos racimos y 66%, igual que un artículo constitucional.",w:"afirmación ciudadana · anónima · 64 votos",s:"Coherencia con el artículo 12: lo que gobierna el dinero común no debe ser más fácil de cambiar que lo que gobierna el voto."}
+  ]
+ },
+ cuorum:{
+  nombre:'Cuórum para ratificar on-chain',fund:false,total:24,done:6,base:6,added:18,
+  S:[
+   {t:"Ratificar una ley on-chain debe exigir un cuórum mínimo del 40% del padrón activo.",w:"afirmación ciudadana · anónima · 312 votos",s:'<span class="nos">Sin fuente empírica: umbral propuesto por un ciudadano, aún sin respaldo en literatura.</span>'},
+   {t:"El cuórum debe calcularse sobre ciudadanos activos en los últimos 90 días, no sobre el padrón histórico.",w:"afirmación ciudadana · @jimena_tesoreria · 288 votos",s:"Criterio de padrón activo usado en gobernanza de DAOs para evitar cuórums imposibles cuando la participación decae."},
+   {t:"Un cuórum de participación invita a boicotear: quien se abstiene organizado, veta.",w:"afirmación ciudadana · @paolo_protocolo · 240 votos",s:"Aguiar-Conraria &amp; Magalhães (2010): los cuórums de participación incentivan la abstención estratégica en referendos."},
+   {t:"Si una votación no alcanza el cuórum, debe extenderse siete días antes de anularse.",w:"afirmación ciudadana · anónima · 197 votos",s:'<span class="nos">Sin fuente empírica: regla operativa propuesta por un ciudadano.</span>'},
+   {t:"Las delegaciones activas deben contar para el cuórum aunque el delegado no vote esa semana.",w:"afirmación ciudadana · @ren_derecho · 173 votos",s:"Blum &amp; Zuber (2016): la delegación transfiere presencia además de preferencia. <span class='nos'>Interpretación discutida en el propio debate.</span>"}
+  ]
+ }
+};
+let DACT='caja',sv=7;
+const D=()=>DEB[DACT];
+function selRender(){
+ document.getElementById('debSel').innerHTML=Object.entries(DEB).map(([k,d])=>
+  `<button class="ds${k===DACT?' on':''}" onclick="setDebate('${k}')" aria-pressed="${k===DACT}">
+    ${d.nombre}${d.fund?'<span class="fund">fundacional</span>':''}
+    <span class="mono num" style="font-size:10px;opacity:.75">${d.total-d.done}</span>
+   </button>`).join('');
+}
+function setDebate(k){DACT=k;selRender();dRender()}
+function irDebateCaja(){setDebate('caja');go('delib')}
 function dRender(){
+ const d=D();
  const q=document.getElementById('dStmt'),who=document.getElementById('dWho'),
        src=document.getElementById('dSrcB'),cnt=document.getElementById('dCount'),
        ph=document.getElementById('dPhase');
- ph.textContent='Deliberación · '+Math.round(done/TOTAL*100)+'%';
- document.getElementById('dBar').style.width=Math.round(done/TOTAL*100)+'%';
- const fin=done>=TOTAL;
+ const pct=Math.round(d.done/d.total*100);
+ ph.textContent=(d.fund?'Debate fundacional · ':'Deliberación · ')+pct+'%';
+ document.getElementById('dBar').style.width=pct+'%';
+ const fin=d.done>=d.total;
  document.getElementById('dNext').hidden=!fin||votedDecid;
+ document.getElementById('nsC').textContent='0 / 140 · '+d.added+' afirmaciones ciudadanas en circulación';
  if(fin){
-  q.textContent='Mazo completado: evaluaste las '+TOTAL+' afirmaciones de este debate. Tus votos ya alimentan el mapa de racimos.';
+  q.textContent='Mazo completado: evaluaste las '+d.total+' afirmaciones de «'+d.nombre+'». Tus votos ya alimentan el mapa de racimos.';
   who.textContent='puedes seguir aportando afirmaciones nuevas abajo';
-  src.style.display='none';cnt.textContent='Afirmación '+TOTAL+' de '+TOTAL;
+  src.style.display='none';cnt.textContent='Afirmación '+d.total+' de '+d.total;
   ['vbY','vbN','vbP'].forEach(id=>document.getElementById(id).disabled=true);
-  updateTodo();
+  selRender();updateTodo();
   return;
  }
  src.style.display='';
  ['vbY','vbN','vbP'].forEach(id=>document.getElementById(id).disabled=false);
- const s=S[(done-6)%S.length];
+ const s=d.S[(d.done-d.base)%d.S.length];
  q.textContent=s.t;who.textContent=s.w;
  document.getElementById('dSrc').innerHTML=s.s;
- cnt.textContent='Afirmación '+(done+1)+' de '+TOTAL;
- updateTodo();
+ cnt.textContent='Afirmación '+(d.done+1)+' de '+d.total;
+ selRender();updateTodo();
 }
 function dVote(v){
- if(done>=TOTAL)return;
+ const d=D();
+ if(d.done>=d.total)return;
  if(v!==0){sv++;document.getElementById('myV').textContent=sv+' votos';moveMe(v)}
- acto('opinion',{n:done+1,voto:v}).then(h=>{
+ acto('opinion',{debate:DACT,n:d.done+1,voto:v}).then(h=>{
   if(h)document.getElementById('dSello').textContent='Acto sellado y firmado: 0x'+h.slice(0,12)+'… ✓';
  });
- done++;dRender();
+ d.done++;dRender();
 }
 const ns=document.getElementById('ns');
-ns.addEventListener('input',()=>document.getElementById('nsC').textContent=ns.value.length+' / 140 · '+added+' afirmaciones ciudadanas en circulación');
+ns.addEventListener('input',()=>document.getElementById('nsC').textContent=ns.value.length+' / 140 · '+D().added+' afirmaciones ciudadanas en circulación');
 function addStmt(){
  const txt=ns.value.trim();
  if(!txt)return;
- added++;TOTAL++;
- S.push({t:txt,w:'afirmación ciudadana · tuya · recién enviada al mazo',s:'<span class="nos">Sin fuente adjunta: los observadores pueden anotar evidencia después.</span>'});
- acto('afirmacion',{texto:txt});
+ const d=D();
+ d.added++;d.total++;
+ d.S.push({t:txt,w:'afirmación ciudadana · tuya · recién enviada al mazo',s:'<span class="nos">Sin fuente adjunta: los observadores pueden anotar evidencia después.</span>'});
+ acto('afirmacion',{debate:DACT,texto:txt});
  ns.value='';
- document.getElementById('nsC').innerHTML='0 / 140 · '+added+' afirmaciones ciudadanas en circulación — <b style="color:var(--ok)">la tuya entró al mazo (ahora son '+TOTAL+')</b>';
  dRender();
+ document.getElementById('nsC').innerHTML='0 / 140 · '+d.added+' afirmaciones ciudadanas en circulación — <b style="color:var(--ok)">la tuya entró al mazo (ahora son '+d.total+')</b>';
 }
 
 /* mapa */
@@ -1510,7 +1578,10 @@ document.getElementById('arts').innerHTML=ARTS.map(a=>{
 /* ---------- COOPERATIVA: CAJA RENACER ---------- */
 const PRECIO=67400;
 const SERIE=[58.2,59.1,57.4,60.3,61.8,60.9,63.2,64.0,62.7,65.1,66.3,67.4];
-const CBASE={btc:.8623,usd:5200,units:214};
+/* Capital social fundacional: 2.500 USD aportados por un solo socio.
+   70% a BTC (1.750 / 67.400 = 0,025964 ₿) + 30% al colchón (750 USD).
+   Se emiten 25 participaciones a la par: 2.500 / 25 = 100,00 USD cada una. */
+const CBASE={btc:.025964,usd:750,units:25};
 let COOP={...CBASE},MY={u:0,ap:0},RETIRO=false,DEMO=false;
 function setDemo(on){
  DEMO=on;
@@ -1600,11 +1671,13 @@ function recalcCoop(){
  let sentido='a favor',vv=false;
  for(const a of LEDGER){
   if(a.tipo==='afirmacion'&&a.datos&&a.datos.texto){
-   added++;TOTAL++;
-   S.push({t:a.datos.texto,w:'afirmación ciudadana · tuya · sellada 0x'+a.hash.slice(0,8)+'…',
+   const d=DEB[a.datos.debate]||DEB.cuorum;
+   d.added++;d.total++;
+   d.S.push({t:a.datos.texto,w:'afirmación ciudadana · tuya · sellada 0x'+a.hash.slice(0,8)+'…',
     s:'<span class="nos">Sin fuente adjunta: los observadores pueden anotar evidencia después.</span>'});
   }else if(a.tipo==='opinion'){
-   if(done<TOTAL){done++;if(a.datos.voto!==0){sv++;moveMe(a.datos.voto)}}
+   const d=DEB[a.datos.debate]||DEB.cuorum;
+   if(d.done<d.total){d.done++;if(a.datos.voto!==0){sv++;moveMe(a.datos.voto)}}
   }else if(a.tipo==='duelo'){
    if(eIdx<PAIRS.length&&typeof a.datos.g==='number'){eWins[a.datos.g]++;eIdx++}
   }else if(a.tipo==='voto_vinculante'){vv=true;sentido=a.datos.sentido||'a favor'}
@@ -1618,6 +1691,7 @@ function recalcCoop(){
  if(vv)decideVote(sentido==='a favor'?1:-1,true);
  if(PRIV&&!LEDGER.length)await _acto('genesis',{territorio:'Renacer City',formato:'cadena-de-actos/v1'});
 
+ selRender();
  dRender();
  eRender();
  vRender();

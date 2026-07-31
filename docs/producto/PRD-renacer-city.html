@@ -389,16 +389,20 @@ td{padding:9px 10px;border-bottom:1px solid var(--line2);vertical-align:top}
 </table>
 </div>
 
-<h3>Puerta de etapa — el dinero va en una segunda etapa</h3>
+<h3>Puerta de etapa — dos hojas, no una</h3>
 <div class="contra" style="border-color:var(--mal-bd)">
- <h4>La caja no se habilita en la primera versión funcional</h4>
- <p style="margin-bottom:10px">La primera versión sale <b>sin capacidad de recibir ni mover fondos</b>. El módulo de cooperativa existe como diseño visible y cerrado: se puede leer su arquitectura y sus reglas, pero los controles de aporte y retiro están deshabilitados en el código, no solo ocultos. Se prueba primero la gobernanza y la capa verificable con decisiones reales; el dinero viene después, cuando el mecanismo ya demostró funcionar.</p>
- <p style="margin-bottom:6px"><b>La etapa 2 no comienza hasta cumplir las cuatro condiciones, todas verificables por terceros:</b></p>
+ <h4>El capital fundacional entra primero; los aportes individuales, solo tras el consenso</h4>
+ <p style="margin-bottom:10px">La caja se abre en dos tiempos, y el orden es la garantía anticorrupción más fuerte del proyecto: <b>quien pone el dinero no escribe las reglas de aporte.</b></p>
+ <ul style="margin:0 0 10px;padding-left:20px;font-size:13px;color:var(--ink2);line-height:1.6">
+  <li><b>Puerta A · capital social fundacional — abierta.</b> Un solo socio fundador aporta fondos propios, a riesgo propio, antes de que existan reglas de aporte. No constituye captación de ahorro del público, que es lo que exige autorización regulatoria. Sus participaciones no otorgan ningún derecho de voto adicional: un socio, un voto.</li>
+  <li><b>Puerta B · aportes individuales — cerrada.</b> Solo se abre cuando la colmena ratifique las reglas de aporte con 2 racimos + 66% <i>y</i> se cumplan las condiciones de auditoría, constitución legal y custodia.</li>
+ </ul>
+ <p style="margin-bottom:6px"><b>Condiciones para abrir la puerta B, todas verificables por terceros:</b></p>
  <ol style="margin:0;padding-left:20px;font-size:13px;color:var(--ink2);line-height:1.6">
+  <li>Reglas de aporte deliberadas y ratificadas por la colmena — es el debate fundacional del sistema.</li>
   <li>Auditoría externa independiente de la capa criptográfica, publicada íntegra y con hallazgos críticos corregidos.</li>
   <li>Cooperativa constituida legalmente, con jurisdicción definida y reglas de gasto registradas.</li>
-  <li>Custodia multifirma real: cinco llaves en hardware, en hogares distintos, con procedimiento de sucesión probado.</li>
-  <li>Prueba de reservas reproducida por dos observadores independientes antes del primer aporte.</li>
+  <li>Custodia multifirma real en hardware y prueba de reservas reproducida por dos observadores independientes.</li>
  </ol>
  <p style="margin:10px 0 0"><b>Para presentaciones</b> existe un modo demostración explícito que simula el mecanismo con una etiqueta permanente «sin dinero real». Activarlo nunca habilita fondos: es una maqueta operable, no un servicio.</p>
 </div>
@@ -431,6 +435,12 @@ td{padding:9px 10px;border-bottom:1px solid var(--line2);vertical-align:top}
  <div class="body"><b>Decisión:</b> la cooperativa usa Bitcoin como activo de reserva y participaciones contables internas; no emite moneda ni token de gobernanza.<br>
  <b>Motivo:</b> una moneda emitida por una comunidad pequeña carece de liquidez, por lo que su precio lo determina quien la controla — es lo contrario de una reserva de valor. Además, ofrecerla al público como inversión constituye emisión de valores no registrada en prácticamente toda jurisdicción, incluida Nicaragua. Es exactamente el patrón de las estafas que este proyecto existe para hacer imposibles.<br>
  <b>Costo aceptado:</b> se renuncia a un mecanismo llamativo de captación y a la narrativa de «token comunitario».</div>
+</details>
+<details class="adr"><summary><span class="cod">ADR-09</span> El fundador pone el capital inicial; la comunidad escribe las reglas de aporte<span></span></summary>
+ <div class="body"><b>Decisión:</b> la cooperativa se funda con capital social aportado por una sola persona, con fondos propios y a riesgo propio. Las reglas de aporte individual —cuánto, cada cuánto, con qué techo de concentración y qué pasa con el capital fundacional— no las fija el fundador: se deliberan en el módulo Deliberar y se ratifican con 2 racimos + 66%.<br>
+ <b>Motivo:</b> invierte el incentivo que corrompe a las cajas pequeñas. Lo habitual es que quien aporta el capital escriba las reglas y se reserve privilegios; aquí quien arriesga primero renuncia a decidir cómo entrarán los demás. Además separa lo jurídico: capital de un socio fundador no es captación de ahorro del público, que es lo que dispara la exigencia de autorización. Y da al sistema de deliberación su primer debate con consecuencias reales, que es la mejor prueba posible del mecanismo.<br>
+ <b>Costo aceptado:</b> el fundador asume pérdida total si el proyecto no prospera, y pierde control sobre condiciones que le afectan económicamente.<br>
+ <b>Salvaguarda:</b> el tratamiento del capital fundacional —si es reembolsable, cuándo y con qué prelación— es una de las afirmaciones sometidas a la propia colmena, no una cláusula que el fundador se autoconceda.</div>
 </details>
 <details class="adr"><summary><span class="cod">ADR-08</span> La caja se habilita en una segunda etapa, no en la primera versión<span></span></summary>
  <div class="body"><b>Decisión:</b> la primera versión funcional sale sin capacidad de recibir ni mover fondos. El módulo de cooperativa se publica visible pero cerrado, con los controles deshabilitados en el código.<br>
@@ -527,6 +537,8 @@ td{padding:9px 10px;border-bottom:1px solid var(--line2);vertical-align:top}
  <li><b>Cálculo del cuórum.</b> ¿Sobre padrón histórico o sobre ciudadanos activos en 90 días? Es el debate abierto en Deliberar y su resultado cambia la validez de todas las votaciones.</li>
  <li><b>Umbral de admisión de impugnaciones.</b> El 5% del padrón fue una elección inicial, no un resultado. Con un padrón mayor, ese porcentaje puede volverse inalcanzable.</li>
  <li><b>Jurisdicción de la cooperativa.</b> Los socios están en varios países; dónde se constituye legalmente la caja determina qué regulación aplica y qué protección real tienen los ahorros.</li>
+ <li><b>Tratamiento del capital fundacional.</b> ¿Es una aportación no reembolsable que funda la cooperativa, o capital subordinado que se devuelve al fundador solo después de los demás socios y pasado un umbral de tamaño? Va a la colmena, no la decide quien lo aportó.</li>
+ <li><b>Quién delibera las reglas de aporte.</b> Hace falta una base de socios con voto pleno <i>antes</i> de decidir cómo se aporta; si no, el fundador decidiría solo y lo llamaría consenso. El orden propuesto es: registro y cuarentena primero, debate fundacional después, apertura de la puerta B al final.</li>
  <li><b>Sostenimiento económico del proyecto.</b> Si la infraestructura se paga del fondo común, la tesorería adquiere poder sobre quien desarrolla. Está sin resolver.</li>
 </ul>
 
