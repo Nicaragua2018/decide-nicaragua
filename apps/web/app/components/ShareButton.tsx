@@ -5,7 +5,11 @@ import { useState } from 'react';
 const SHARE_TEXT =
   'Puedes seguir las decisiones de la comunidad nicaragüense desde cualquier lugar del mundo: https://nicaraguadecide.org — Invitación a observadores y auditorías.';
 
-export function ShareButton() {
+interface ShareButtonProps {
+  variant?: 'nav' | 'hero' | 'light';
+}
+
+export function ShareButton({ variant = 'hero' }: ShareButtonProps) {
   const [copied, setCopied] = useState(false);
 
   async function handleClick() {
@@ -14,7 +18,6 @@ export function ShareButton() {
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     } catch {
-      // Fallback: seleccionar texto de un input oculto
       const ta = document.createElement('textarea');
       ta.value = SHARE_TEXT;
       ta.style.position = 'fixed';
@@ -29,14 +32,18 @@ export function ShareButton() {
     }
   }
 
+  const base = 'ln-share-btn';
+  const variantClass = variant !== 'hero' ? ` ln-share-btn--${variant}` : '';
+  const copiedClass  = copied ? ' ln-share-btn--copied' : '';
+
   return (
     <button
       type="button"
       onClick={handleClick}
-      className={`ln-share-btn${copied ? ' ln-share-btn--copied' : ''}`}
+      className={`${base}${variantClass}${copiedClass}`}
       aria-label="Copiar enlace de invitación"
     >
-      {copied ? '✓ Enlace copiado' : '↗ Compartir enlace'}
+      {copied ? '✓ Copiado' : '↗ Compartir'}
     </button>
   );
 }

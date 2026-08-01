@@ -2,21 +2,60 @@ import Link from 'next/link';
 import type { Metadata } from 'next';
 import { serverFetch } from '@/lib/api';
 import SignalForm from '@/components/SignalForm';
-import { updateProposalStatusDirect, createCommentDirect } from '@/lib/actions';
+import { CommentsSection } from './CommentsSection';
+import { updateProposalStatusDirect } from '@/lib/actions';
 import { ProposalStatus } from '@decide/shared';
-import type { ProposalDetail } from '@decide/shared';
+import type { ProposalDetail, SignalCounts } from '@decide/shared';
 
 const STATUS_LABEL: Record<ProposalStatus, string> = {
-  [ProposalStatus.draft]: 'Borrador',
-  [ProposalStatus.open]: 'Abierta',
-  [ProposalStatus.closed]: 'Cerrada',
+  [ProposalStatus.draft]:    'Borrador',
+  [ProposalStatus.open]:     'Abierta',
+  [ProposalStatus.closed]:   'Cerrada',
   [ProposalStatus.archived]: 'Archivada',
 };
 const NEXT_STATUS: Partial<Record<ProposalStatus, ProposalStatus[]>> = {
-  [ProposalStatus.draft]: [ProposalStatus.open],
-  [ProposalStatus.open]:  [ProposalStatus.closed],
-  [ProposalStatus.closed]: [ProposalStatus.archived],
+  [ProposalStatus.draft]:   [ProposalStatus.open],
+  [ProposalStatus.open]:    [ProposalStatus.closed],
+  [ProposalStatus.closed]:  [ProposalStatus.archived],
 };
+const NEXT_STATUS_LABEL: Partial<Record<ProposalStatus, string>> = {
+  [ProposalStatus.open]:     'Abrir para debate',
+  [ProposalStatus.closed]:   'Cerrar propuesta',
+  [ProposalStatus.archived]: 'Archivar',
+};
+
+function ConsensusBar({ counts }: { counts: SignalCounts }) {
+  const total = counts.support + counts.neutral + counts.object;
+  if (total === 0) {
+    return <p className="text-sm text-muted">Aún no hay señales de consenso.</p>;
+  }
+  const pct = (n: number) => Math.round((n / total) * 100);
+  const supportPct = pct(counts.support);
+  const neutralPct = pct(counts.neutral);
+  const objectPct  = pct(counts.object);
+
+  return (
+    <div className="consensus-block">
+      <div className="consensus-bar">
+        {supportPct > 0 && (
+          <div className="consensus-seg consensus-seg--support" style={{ width: `${supportPct}%` }} />
+        )}
+        {neutralPct > 0 && (
+          <div className="consensus-seg consensus-seg--neutral" style={{ width: `${neutralPct}%` }} />
+        )}
+        {objectPct > 0 && (
+          <div className="consensus-seg consensus-seg--object"  style={{ width: `${objectPct}%`  }} />
+        )}
+      </div>
+      <div className="consensus-legend">
+        <span className="signal-count signal-support">✓ Apoyo {supportPct}% <small>({counts.support})</small></span>
+        <span className="signal-count signal-neutral">◆ Neutral {neutralPct}% <small>({counts.neutral})</small></span>
+        <span className="signal-count signal-object">✗ Objeción {objectPct}% <small>({counts.object})</small></span>
+        <span className="text-xs text-muted">{total} señal{total !== 1 ? 'es' : ''} emitidas</span>
+      </div>
+    </div>
+  );
+}
 
 export async function generateMetadata({
   params,
@@ -40,20 +79,12 @@ export default async function ProposalPage({
   if (!res.ok) return <p className="empty-state">Propuesta no encontrada.</p>;
   const proposal = (await res.json()) as ProposalDetail;
 
-  const rootComments  = proposal.comments.filter((c) => !c.parentId);
-  const repliesById   = new Map(
-    rootComments.map((c) => [
-      c.id,
-      proposal.comments.filter((r) => r.parentId === c.id),
-    ]),
-  );
-
   const nextStatuses = NEXT_STATUS[proposal.status] ?? [];
-  const isOpen = proposal.status === 'open';
+  const isOpen       = proposal.status === ProposalStatus.open;
 
   return (
     <>
-      {/* Header */}
+      {/* Cabecera */}
       <div className="page-header">
         <Link href={`/groups/${proposal.groupId}?tab=proposals`} className="text-sm text-muted">
           ← Volver al grupo
@@ -66,23 +97,20 @@ export default async function ProposalPage({
         </div>
         <p className="card-meta">
           {proposal.authorDisplayName} · {new Date(proposal.createdAt).toLocaleDateString('es-NI')}
+          {' · '}{proposal.commentCount} comentario{proposal.commentCount !== 1 ? 's' : ''}
         </p>
       </div>
 
-      {/* Body */}
+      {/* Cuerpo de la propuesta */}
       <div className="card mb-4">
-        <p style={{ whiteSpace: 'pre-wrap' }}>{proposal.body}</p>
+        <p style={{ whiteSpace: 'pre-wrap', lineHeight: 1.75 }}>{proposal.body}</p>
       </div>
 
       {/* Señales de consenso */}
       <div className="card mb-4">
-        <p className="card-title">Señales de consenso</p>
-        <div className="signal-bar mt-2">
-          <span className="signal-count">✓ Apoyo: {proposal.signalCounts.support}</span>
-          <span className="signal-count">◆ Neutral: {proposal.signalCounts.neutral}</span>
-          <span className="signal-count">✗ Objeción: {proposal.signalCounts.object}</span>
-        </div>
-        <div className="mt-4">
+        <p className="card-title mb-3">Señales de consenso</p>
+        <ConsensusBar counts={proposal.signalCounts} />
+        <div className="mt-4" style={{ borderTop: '1px solid var(--border)', paddingTop: '1rem' }}>
           <p className="text-sm font-medium mb-2">Tu posición:</p>
           <SignalForm
             proposalId={id}
@@ -92,17 +120,23 @@ export default async function ProposalPage({
         </div>
       </div>
 
-      {/* Cambiar estado (autor) */}
-      {nextStatuses.length > 0 && (
+      {/* Gestión del autor — solo visible si el usuario es el autor */}
+      {proposal.isAuthor && nextStatuses.length > 0 && (
         <div className="card mb-4">
-          <p className="card-title">Gestión del autor</p>
-          <div className="flex gap-2 mt-2">
+          <p className="card-title">Gestionar propuesta</p>
+          <p className="text-sm text-muted mt-1 mb-3">
+            Como autor, puedes avanzar el estado de esta propuesta.
+          </p>
+          <div className="flex gap-2 flex-wrap">
             {nextStatuses.map((s) => (
               <form key={s} action={updateProposalStatusDirect}>
                 <input type="hidden" name="proposalId" value={id} />
-                <input type="hidden" name="status" value={s} />
-                <button type="submit" className="btn btn-ghost btn-sm">
-                  Marcar como {STATUS_LABEL[s].toLowerCase()}
+                <input type="hidden" name="status"     value={s} />
+                <button
+                  type="submit"
+                  className={s === ProposalStatus.archived ? 'btn btn-ghost btn-sm' : 'btn btn-primary btn-sm'}
+                >
+                  {NEXT_STATUS_LABEL[s] ?? `Marcar como ${STATUS_LABEL[s].toLowerCase()}`}
                 </button>
               </form>
             ))}
@@ -112,43 +146,12 @@ export default async function ProposalPage({
 
       {/* Comentarios */}
       <div className="card">
-        <p className="card-title mb-4">Comentarios ({proposal.commentCount})</p>
-
-        {rootComments.map((comment) => (
-          <div key={comment.id} style={{ marginBottom: '1.25rem' }}>
-            <p className="text-sm font-medium">{comment.authorDisplayName}</p>
-            <p className="card-meta">{new Date(comment.createdAt).toLocaleDateString('es-NI')}</p>
-            <p className="mt-1">{comment.body}</p>
-
-            {repliesById.get(comment.id)?.map((reply) => (
-              <div
-                key={reply.id}
-                style={{ marginLeft: '1.5rem', marginTop: '0.75rem',
-                         paddingLeft: '0.75rem', borderLeft: '2px solid var(--border)' }}
-              >
-                <p className="text-sm font-medium">{reply.authorDisplayName}</p>
-                <p className="card-meta">{new Date(reply.createdAt).toLocaleDateString('es-NI')}</p>
-                <p className="mt-1">{reply.body}</p>
-              </div>
-            ))}
-          </div>
-        ))}
-
-        {/* Nuevo comentario */}
-        {isOpen && (
-          <form action={createCommentDirect} className="form mt-4"
-                style={{ borderTop: '1px solid var(--border)', paddingTop: '1rem' }}>
-            <input type="hidden" name="proposalId" value={id} />
-            <div className="form-field">
-              <label className="form-label" htmlFor="body">Añadir comentario</label>
-              <textarea id="body" name="body" required className="form-textarea"
-                        placeholder="Escribe tu comentario…" rows={3} />
-            </div>
-            <div>
-              <button type="submit" className="btn btn-primary btn-sm">Publicar comentario</button>
-            </div>
-          </form>
-        )}
+        <p className="card-title mb-4">Debate ({proposal.commentCount})</p>
+        <CommentsSection
+          proposalId={id}
+          comments={proposal.comments}
+          isOpen={isOpen}
+        />
       </div>
     </>
   );

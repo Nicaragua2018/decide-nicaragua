@@ -417,7 +417,6 @@ tr:hover td { background: #F9FAFB; }
 
 /* ── Contacto ────────────────────────────────────────────────── */
 .ln-contact { background: var(--ln-parch); padding: 5rem 0; }
-.ln-contact .ln-container { max-width: 560px; }
 .ln-contact-title {
   font-family: var(--ln-serif);
   font-size: clamp(1.5rem, 3vw, 2rem);
@@ -426,7 +425,7 @@ tr:hover td { background: #F9FAFB; }
 }
 .ln-contact-body {
   color: #5a5a5a; line-height: 1.8;
-  font-size: 0.95rem; margin-bottom: 1.75rem;
+  font-size: 0.95rem;
 }
 
 /* ── Footer ──────────────────────────────────────────────────── */
@@ -875,4 +874,495 @@ tr:hover td { background: #F9FAFB; }
 .ln-share-btn--copied {
   background: rgba(255, 255, 255, 0.25);
   border-color: rgba(255, 255, 255, 0.9);
+}
+
+/* ============================================================
+   App interior — mejoras de UX (navbar, dashboard, pipeline)
+   ============================================================ */
+
+/* ── NavBar: estado activo + avatar ─────────────────────────── */
+.navbar-link-active {
+  color: var(--primary);
+  font-weight: 600;
+}
+.navbar-avatar {
+  width: 30px; height: 30px;
+  border-radius: 50%;
+  background: var(--primary-light);
+  color: var(--primary);
+  font-size: 0.72rem; font-weight: 700;
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0; letter-spacing: 0.02em;
+}
+
+/* ── Breadcrumb ─────────────────────────────────────────────── */
+.breadcrumb {
+  display: flex; align-items: center; gap: 0.4rem;
+  font-size: 0.8rem; color: var(--text-muted);
+  margin-bottom: 1.25rem;
+}
+.breadcrumb-link {
+  color: var(--primary); text-decoration: none;
+}
+.breadcrumb-link:hover { text-decoration: underline; }
+.breadcrumb-sep { color: var(--border); }
+.breadcrumb-current { color: var(--text); font-weight: 500; }
+
+/* ── Dashboard: bienvenida ──────────────────────────────────── */
+.dash-welcome {
+  display: flex; align-items: flex-start; justify-content: space-between;
+  gap: 1rem; margin-bottom: 1.75rem; flex-wrap: wrap;
+}
+.dash-section-header {
+  display: flex; align-items: center; gap: 0.6rem;
+  margin: 1.75rem 0 1rem;
+}
+.dash-section-title {
+  font-size: 1rem; font-weight: 600; color: var(--text);
+}
+.dash-section-count {
+  background: var(--primary-light); color: var(--primary);
+  font-size: 0.72rem; font-weight: 700;
+  padding: 0.15rem 0.5rem; border-radius: 999px;
+}
+
+/* ── Pipeline ───────────────────────────────────────────────── */
+.pipeline {
+  background: var(--bg-white);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 1.1rem 1.5rem;
+  margin-bottom: 1.75rem;
+  box-shadow: var(--shadow);
+}
+.pipeline-label {
+  font-size: 0.72rem; font-weight: 600; letter-spacing: 0.1em;
+  text-transform: uppercase; color: var(--text-muted);
+  margin-bottom: 0.85rem;
+}
+.pipeline-steps {
+  list-style: none;
+  display: flex; align-items: flex-start;
+  gap: 0; flex-wrap: wrap;
+}
+.pipeline-step {
+  display: flex; align-items: center; gap: 0.6rem;
+  padding: 0.1rem 0.5rem 0.1rem 0;
+}
+.pipeline-num {
+  width: 22px; height: 22px; border-radius: 50%;
+  background: var(--primary); color: #fff;
+  font-size: 0.7rem; font-weight: 700;
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+}
+.pipeline-body {
+  display: flex; flex-direction: column; gap: 0.05rem;
+}
+.pipeline-body strong {
+  font-size: 0.8rem; font-weight: 600; color: var(--text);
+  white-space: nowrap;
+}
+.pipeline-body span {
+  font-size: 0.7rem; color: var(--text-muted); white-space: nowrap;
+}
+.pipeline-arrow {
+  color: var(--border); font-size: 1.1rem;
+  margin: 0 0.15rem; line-height: 1;
+  flex-shrink: 0;
+}
+
+/* ── Grupos en grid ─────────────────────────────────────────── */
+.group-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 1rem;
+}
+.group-card {
+  display: flex; flex-direction: column;
+  background: var(--bg-white);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 1.25rem;
+  box-shadow: var(--shadow);
+  text-decoration: none; color: inherit;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.group-card:hover {
+  border-color: var(--primary);
+  box-shadow: 0 4px 12px rgba(29,78,216,0.08);
+  text-decoration: none;
+}
+.group-card-type {
+  font-size: 0.68rem; font-weight: 600; letter-spacing: 0.08em;
+  text-transform: uppercase; color: var(--text-muted);
+  margin-bottom: 0.5rem;
+}
+.group-card-name {
+  font-size: 1rem; font-weight: 600; color: var(--text);
+  margin-bottom: 0.35rem; line-height: 1.35;
+}
+.group-card-desc {
+  font-size: 0.82rem; color: var(--text-muted);
+  line-height: 1.55; flex: 1; margin-bottom: 1rem;
+}
+.group-card-footer {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-top: auto; padding-top: 0.75rem;
+  border-top: 1px solid var(--border);
+}
+.group-card-members {
+  font-size: 0.78rem; color: var(--text-muted);
+}
+.group-card-cta {
+  font-size: 0.78rem; color: var(--primary); font-weight: 500;
+}
+
+/* ── Empty card (con ícono y CTA) ───────────────────────────── */
+.empty-card {
+  text-align: center;
+  padding: 3.5rem 2rem;
+  background: var(--bg-white);
+  border: 1px dashed var(--border);
+  border-radius: var(--radius);
+}
+.empty-card-icon {
+  font-size: 2rem; display: block; margin-bottom: 0.75rem;
+}
+.empty-card-title {
+  font-weight: 600; color: var(--text);
+  margin-bottom: 0.4rem; font-size: 0.95rem;
+}
+.empty-card-sub {
+  font-size: 0.85rem; color: var(--text-muted);
+  line-height: 1.65; max-width: 380px;
+  margin: 0 auto 1.25rem;
+}
+
+/* ── Item card (propuestas, elecciones, sorteos) ─────────────── */
+.item-card {
+  display: flex; align-items: center;
+  justify-content: space-between; gap: 1rem;
+  cursor: pointer;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.item-card:hover {
+  border-color: var(--primary);
+  box-shadow: 0 2px 8px rgba(29,78,216,0.07);
+}
+.item-card-main { flex: 1; min-width: 0; }
+.signal-support { color: var(--success); }
+.signal-neutral { color: #0369A1; }
+.signal-object  { color: var(--danger); }
+
+/* ── Group header ────────────────────────────────────────────── */
+.group-header {
+  display: flex; align-items: flex-start;
+  justify-content: space-between; gap: 1rem;
+  flex-wrap: wrap;
+}
+
+/* ── Responsive (app interior) ──────────────────────────────── */
+@media (max-width: 640px) {
+  .pipeline-steps { flex-direction: column; gap: 0.5rem; }
+  .pipeline-arrow { display: none; }
+  .pipeline-step  { padding: 0; }
+  .group-grid { grid-template-columns: 1fr; }
+  .dash-welcome { flex-direction: column; }
+}
+
+/* ============================================================
+   Landing page — secciones nuevas (Cómo funciona, CTA,
+   Contacto rediseñado, Footer con links, ShareButton variantes)
+   ============================================================ */
+
+/* ── Cómo funciona ──────────────────────────────────────────── */
+.ln-how { background: #fff; padding: 6rem 0; }
+.ln-how-steps {
+  display: flex; flex-direction: column; gap: 0;
+  margin-top: 2.5rem;
+}
+.ln-how-step {
+  display: flex; align-items: flex-start; gap: 1.25rem;
+  padding: 1.25rem 0;
+  border-bottom: 1px solid rgba(0,0,0,0.06);
+}
+.ln-how-step:last-child { border-bottom: none; }
+.ln-how-num {
+  font-size: 0.72rem; font-weight: 700; letter-spacing: 0.1em;
+  color: var(--ln-gold); background: rgba(196,146,42,0.08);
+  border-radius: 3px; padding: 0.25rem 0.5rem;
+  flex-shrink: 0; margin-top: 2px;
+}
+.ln-how-body {
+  display: flex; flex-direction: column; gap: 0.2rem;
+}
+.ln-how-body strong {
+  font-size: 0.92rem; font-weight: 600; color: var(--ln-navy);
+}
+.ln-how-body span {
+  font-size: 0.85rem; color: #5a5a5a; line-height: 1.65;
+}
+
+/* ── CTA central ────────────────────────────────────────────── */
+.ln-cta-section { background: var(--ln-parch); padding: 6rem 0; }
+.ln-cta-section-inner {
+  display: grid; grid-template-columns: 1fr auto;
+  gap: 3rem; align-items: center;
+}
+.ln-cta-section-btns {
+  display: flex; flex-direction: column; gap: 0.75rem;
+  flex-shrink: 0; min-width: 220px;
+}
+.ln-cta-section .ln-section-title { margin-bottom: 1rem; }
+.ln-trust-body {
+  font-size: 0.9rem; color: #5a5a5a; line-height: 1.75;
+  max-width: 520px;
+}
+
+/* ── Contacto (layout de dos columnas) ──────────────────────── */
+.ln-contact { background: #fff; padding: 5rem 0; }
+.ln-contact-inner {
+  display: grid; grid-template-columns: 1fr auto;
+  gap: 3rem; align-items: center;
+}
+.ln-contact-actions {
+  display: flex; flex-direction: column; gap: 0.75rem;
+  flex-shrink: 0; min-width: 200px;
+}
+
+/* ── Footer links ───────────────────────────────────────────── */
+.ln-footer-links {
+  display: flex; align-items: center; gap: 1.5rem; flex-wrap: wrap;
+}
+.ln-footer-link {
+  color: rgba(255,255,255,0.45); font-size: 0.78rem;
+  text-decoration: none; transition: color 0.15s;
+}
+.ln-footer-link:hover { color: rgba(255,255,255,0.85); }
+.ln-footer-copy {
+  font-size: 0.72rem; color: rgba(255,255,255,0.3);
+  letter-spacing: 0.04em;
+}
+
+/* ── ShareButton variantes ──────────────────────────────────── */
+/* variant="nav" — apariencia sobria para la barra de navegación */
+.ln-share-btn--nav {
+  background: transparent;
+  border-color: rgba(0,0,0,0.2);
+  color: var(--ln-navy);
+  font-size: 0.82rem;
+  padding: 0.4rem 0.85rem;
+}
+.ln-share-btn--nav:hover {
+  background: rgba(0,0,0,0.05);
+  border-color: rgba(0,0,0,0.35);
+}
+
+/* variant="light" — sobre fondo claro */
+.ln-share-btn--light {
+  background: transparent;
+  border-color: var(--ln-navy);
+  color: var(--ln-navy);
+}
+.ln-share-btn--light:hover {
+  background: rgba(14,30,69,0.06);
+}
+.ln-share-btn--light:focus-visible {
+  outline: 2px solid var(--ln-navy);
+}
+
+/* ── Responsive (landing — nuevas secciones) ─────────────────── */
+@media (max-width: 768px) {
+  .ln-cta-section-inner  { grid-template-columns: 1fr; }
+  .ln-cta-section-btns   { flex-direction: row; flex-wrap: wrap; min-width: unset; }
+  .ln-contact-inner      { grid-template-columns: 1fr; }
+  .ln-contact-actions    { flex-direction: row; flex-wrap: wrap; min-width: unset; }
+}
+@media (max-width: 480px) {
+  .ln-how-steps          { gap: 0; }
+  .ln-cta-section-btns   { flex-direction: column; }
+  .ln-contact-actions    { flex-direction: column; }
+  .ln-footer-links       { gap: 1rem; }
+}
+
+/* ============================================================
+   Mejoras UX — Consenso, Comentarios, VoteForm, Sortition
+   ============================================================ */
+
+/* ── Barra de consenso ──────────────────────────────────────── */
+.consensus-block { }
+.consensus-bar {
+  display: flex; height: 10px; border-radius: 99px;
+  overflow: hidden; background: var(--border);
+  margin-bottom: 0.75rem;
+}
+.consensus-seg {
+  transition: width 0.4s ease;
+  height: 100%;
+}
+.consensus-seg--support { background: var(--success); }
+.consensus-seg--neutral { background: #0369A1; }
+.consensus-seg--object  { background: var(--danger); }
+.consensus-legend {
+  display: flex; flex-wrap: wrap; gap: 0.75rem 1.25rem;
+  align-items: center;
+}
+.consensus-legend small { color: var(--text-muted); }
+
+/* ── Comentarios con hilos ──────────────────────────────────── */
+.comment-thread {
+  margin-bottom: 1.5rem;
+  padding-bottom: 1.5rem;
+  border-bottom: 1px solid var(--border);
+}
+.comment-thread:last-of-type { border-bottom: none; margin-bottom: 0; }
+.comment-root { }
+.comment-reply {
+  margin-left: 1.5rem;
+  margin-top: 0.75rem;
+  padding-left: 0.85rem;
+  border-left: 2px solid var(--border);
+}
+.comment-header {
+  display: flex; align-items: baseline; gap: 0.5rem;
+  margin-bottom: 0.25rem;
+}
+.comment-author { font-size: 0.85rem; font-weight: 600; color: var(--text); }
+.comment-date   { font-size: 0.75rem; color: var(--text-muted); }
+.comment-body   { font-size: 0.9rem; line-height: 1.7; color: var(--text); }
+.comment-reply-btn {
+  background: none; border: none; cursor: pointer;
+  font-size: 0.78rem; color: var(--primary);
+  padding: 0.3rem 0; margin-top: 0.4rem;
+  font-family: inherit;
+}
+.comment-reply-btn:hover { text-decoration: underline; }
+.comment-reply-form {
+  margin-top: 0.75rem;
+  padding: 0.85rem;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+.comment-reply-actions {
+  display: flex; gap: 0.5rem; margin-top: 0.5rem;
+}
+.comment-new-form {
+  margin-top: 1.5rem;
+  padding-top: 1.25rem;
+  border-top: 1px solid var(--border);
+}
+
+/* ── VoteForm — lista ordenable ──────────────────────────────── */
+.rank-list {
+  display: flex; flex-direction: column; gap: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+.rank-item {
+  display: flex; align-items: center; gap: 0.85rem;
+  padding: 0.75rem 1rem;
+  background: var(--bg-white);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.rank-item:hover {
+  border-color: var(--primary-light);
+  box-shadow: 0 1px 4px rgba(29,78,216,0.06);
+}
+.rank-num {
+  font-size: 0.72rem; font-weight: 700; letter-spacing: 0.08em;
+  color: #fff; background: var(--primary);
+  width: 22px; height: 22px;
+  border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+}
+.rank-info { flex: 1; min-width: 0; }
+.rank-controls {
+  display: flex; flex-direction: column; gap: 0.15rem;
+  flex-shrink: 0;
+}
+.rank-arrow {
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  width: 28px; height: 24px;
+  cursor: pointer;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  display: flex; align-items: center; justify-content: center;
+  transition: background 0.12s, color 0.12s;
+}
+.rank-arrow:hover:not(:disabled) {
+  background: var(--primary-light);
+  color: var(--primary);
+  border-color: var(--primary-light);
+}
+.rank-arrow:disabled { opacity: 0.25; cursor: not-allowed; }
+
+/* ── Candidatos en listado y formulario ─────────────────────── */
+.candidate-list {
+  list-style: none; padding: 0; margin: 0;
+  display: flex; flex-direction: column; gap: 0.5rem;
+}
+.candidate-item {
+  padding: 0.6rem 0;
+  border-bottom: 1px solid var(--border);
+  font-size: 0.9rem;
+}
+.candidate-item:last-child { border-bottom: none; }
+.candidate-title { font-weight: 600; color: var(--text); }
+.candidate-desc  { color: var(--text-muted); }
+
+.candidate-form-list {
+  display: flex; flex-direction: column; gap: 0.85rem;
+  margin-bottom: 0.5rem;
+}
+.candidate-form-item {
+  display: flex; align-items: flex-start; gap: 0.75rem;
+}
+.candidate-form-num {
+  width: 24px; height: 24px; border-radius: 50%;
+  background: var(--border); color: var(--text-muted);
+  font-size: 0.72rem; font-weight: 700;
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0; margin-top: 0.55rem;
+}
+
+/* ── Sortition: verificación mejorada ────────────────────────── */
+.verify-row {
+  display: flex; align-items: baseline; gap: 0.75rem;
+  margin-bottom: 0.5rem;
+}
+.verify-value  { font-family: monospace; font-size: 0.82rem; }
+.verify-seed-wrap { flex: 1; }
+.verify-seed {
+  display: block; width: 100%; word-break: break-all;
+  font-size: 0.75rem; padding: 0.5rem 0.75rem;
+}
+.verify-compare {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;
+}
+.verify-names {
+  list-style: decimal; padding-left: 1.25rem;
+  font-size: 0.82rem; line-height: 1.9;
+}
+
+/* ── Alert info ──────────────────────────────────────────────── */
+.alert-info {
+  padding: 0.75rem 1rem;
+  background: #EFF6FF;
+  border: 1px solid #BFDBFE;
+  border-radius: var(--radius);
+  color: #1E40AF;
+  line-height: 1.6;
+}
+
+/* ── Responsive ─────────────────────────────────────────────── */
+@media (max-width: 640px) {
+  .verify-compare  { grid-template-columns: 1fr; }
+  .consensus-legend { gap: 0.5rem 0.75rem; }
+  .rank-item       { padding: 0.6rem 0.75rem; }
 }

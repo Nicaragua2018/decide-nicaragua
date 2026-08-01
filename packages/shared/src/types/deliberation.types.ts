@@ -40,6 +40,8 @@ export interface CommentItem {
 
 export interface ProposalDetail extends ProposalSummary {
   body: string;
+  authorProfileId: string;
+  isAuthor: boolean;
   comments: CommentItem[];
   /** Señal del usuario autenticado, o null si no ha señalado */
   userSignal: SignalType | null;
