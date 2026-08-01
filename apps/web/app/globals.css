@@ -876,3 +876,198 @@ tr:hover td { background: #F9FAFB; }
   background: rgba(255, 255, 255, 0.25);
   border-color: rgba(255, 255, 255, 0.9);
 }
+
+/* ============================================================
+   App interior — mejoras de UX (navbar, dashboard, pipeline)
+   ============================================================ */
+
+/* ── NavBar: estado activo + avatar ─────────────────────────── */
+.navbar-link-active {
+  color: var(--primary);
+  font-weight: 600;
+}
+.navbar-avatar {
+  width: 30px; height: 30px;
+  border-radius: 50%;
+  background: var(--primary-light);
+  color: var(--primary);
+  font-size: 0.72rem; font-weight: 700;
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0; letter-spacing: 0.02em;
+}
+
+/* ── Breadcrumb ─────────────────────────────────────────────── */
+.breadcrumb {
+  display: flex; align-items: center; gap: 0.4rem;
+  font-size: 0.8rem; color: var(--text-muted);
+  margin-bottom: 1.25rem;
+}
+.breadcrumb-link {
+  color: var(--primary); text-decoration: none;
+}
+.breadcrumb-link:hover { text-decoration: underline; }
+.breadcrumb-sep { color: var(--border); }
+.breadcrumb-current { color: var(--text); font-weight: 500; }
+
+/* ── Dashboard: bienvenida ──────────────────────────────────── */
+.dash-welcome {
+  display: flex; align-items: flex-start; justify-content: space-between;
+  gap: 1rem; margin-bottom: 1.75rem; flex-wrap: wrap;
+}
+.dash-section-header {
+  display: flex; align-items: center; gap: 0.6rem;
+  margin: 1.75rem 0 1rem;
+}
+.dash-section-title {
+  font-size: 1rem; font-weight: 600; color: var(--text);
+}
+.dash-section-count {
+  background: var(--primary-light); color: var(--primary);
+  font-size: 0.72rem; font-weight: 700;
+  padding: 0.15rem 0.5rem; border-radius: 999px;
+}
+
+/* ── Pipeline ───────────────────────────────────────────────── */
+.pipeline {
+  background: var(--bg-white);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 1.1rem 1.5rem;
+  margin-bottom: 1.75rem;
+  box-shadow: var(--shadow);
+}
+.pipeline-label {
+  font-size: 0.72rem; font-weight: 600; letter-spacing: 0.1em;
+  text-transform: uppercase; color: var(--text-muted);
+  margin-bottom: 0.85rem;
+}
+.pipeline-steps {
+  list-style: none;
+  display: flex; align-items: flex-start;
+  gap: 0; flex-wrap: wrap;
+}
+.pipeline-step {
+  display: flex; align-items: center; gap: 0.6rem;
+  padding: 0.1rem 0.5rem 0.1rem 0;
+}
+.pipeline-num {
+  width: 22px; height: 22px; border-radius: 50%;
+  background: var(--primary); color: #fff;
+  font-size: 0.7rem; font-weight: 700;
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+}
+.pipeline-body {
+  display: flex; flex-direction: column; gap: 0.05rem;
+}
+.pipeline-body strong {
+  font-size: 0.8rem; font-weight: 600; color: var(--text);
+  white-space: nowrap;
+}
+.pipeline-body span {
+  font-size: 0.7rem; color: var(--text-muted); white-space: nowrap;
+}
+.pipeline-arrow {
+  color: var(--border); font-size: 1.1rem;
+  margin: 0 0.15rem; line-height: 1;
+  flex-shrink: 0;
+}
+
+/* ── Grupos en grid ─────────────────────────────────────────── */
+.group-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 1rem;
+}
+.group-card {
+  display: flex; flex-direction: column;
+  background: var(--bg-white);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 1.25rem;
+  box-shadow: var(--shadow);
+  text-decoration: none; color: inherit;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.group-card:hover {
+  border-color: var(--primary);
+  box-shadow: 0 4px 12px rgba(29,78,216,0.08);
+  text-decoration: none;
+}
+.group-card-type {
+  font-size: 0.68rem; font-weight: 600; letter-spacing: 0.08em;
+  text-transform: uppercase; color: var(--text-muted);
+  margin-bottom: 0.5rem;
+}
+.group-card-name {
+  font-size: 1rem; font-weight: 600; color: var(--text);
+  margin-bottom: 0.35rem; line-height: 1.35;
+}
+.group-card-desc {
+  font-size: 0.82rem; color: var(--text-muted);
+  line-height: 1.55; flex: 1; margin-bottom: 1rem;
+}
+.group-card-footer {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-top: auto; padding-top: 0.75rem;
+  border-top: 1px solid var(--border);
+}
+.group-card-members {
+  font-size: 0.78rem; color: var(--text-muted);
+}
+.group-card-cta {
+  font-size: 0.78rem; color: var(--primary); font-weight: 500;
+}
+
+/* ── Empty card (con ícono y CTA) ───────────────────────────── */
+.empty-card {
+  text-align: center;
+  padding: 3.5rem 2rem;
+  background: var(--bg-white);
+  border: 1px dashed var(--border);
+  border-radius: var(--radius);
+}
+.empty-card-icon {
+  font-size: 2rem; display: block; margin-bottom: 0.75rem;
+}
+.empty-card-title {
+  font-weight: 600; color: var(--text);
+  margin-bottom: 0.4rem; font-size: 0.95rem;
+}
+.empty-card-sub {
+  font-size: 0.85rem; color: var(--text-muted);
+  line-height: 1.65; max-width: 380px;
+  margin: 0 auto 1.25rem;
+}
+
+/* ── Item card (propuestas, elecciones, sorteos) ─────────────── */
+.item-card {
+  display: flex; align-items: center;
+  justify-content: space-between; gap: 1rem;
+  cursor: pointer;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.item-card:hover {
+  border-color: var(--primary);
+  box-shadow: 0 2px 8px rgba(29,78,216,0.07);
+}
+.item-card-main { flex: 1; min-width: 0; }
+.signal-support { color: var(--success); }
+.signal-neutral { color: #0369A1; }
+.signal-object  { color: var(--danger); }
+
+/* ── Group header ────────────────────────────────────────────── */
+.group-header {
+  display: flex; align-items: flex-start;
+  justify-content: space-between; gap: 1rem;
+  flex-wrap: wrap;
+}
+
+/* ── Responsive ─────────────────────────────────────────────── */
+@media (max-width: 640px) {
+  .pipeline-steps { flex-direction: column; gap: 0.5rem; }
+  .pipeline-arrow { display: none; }
+  .pipeline-step  { padding: 0; }
+  .group-grid { grid-template-columns: 1fr; }
+  .dash-welcome { flex-direction: column; }
+}
