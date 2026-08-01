@@ -126,6 +126,8 @@ export class DeliberationService {
       body: proposal.body,
       status: proposal.status as unknown as ProposalStatus,
       authorDisplayName: proposal.author.displayName,
+      authorProfileId: proposal.authorProfileId,
+      isAuthor: proposal.authorProfileId === profileId,
       signalCounts: computeSignalCounts(proposal.signals.map((s) => s.signal as string)),
       commentCount: proposal._count.comments,
       createdAt: proposal.createdAt.toISOString(),

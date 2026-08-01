@@ -1185,3 +1185,184 @@ tr:hover td { background: #F9FAFB; }
   .ln-contact-actions    { flex-direction: column; }
   .ln-footer-links       { gap: 1rem; }
 }
+
+/* ============================================================
+   Mejoras UX — Consenso, Comentarios, VoteForm, Sortition
+   ============================================================ */
+
+/* ── Barra de consenso ──────────────────────────────────────── */
+.consensus-block { }
+.consensus-bar {
+  display: flex; height: 10px; border-radius: 99px;
+  overflow: hidden; background: var(--border);
+  margin-bottom: 0.75rem;
+}
+.consensus-seg {
+  transition: width 0.4s ease;
+  height: 100%;
+}
+.consensus-seg--support { background: var(--success); }
+.consensus-seg--neutral { background: #0369A1; }
+.consensus-seg--object  { background: var(--danger); }
+.consensus-legend {
+  display: flex; flex-wrap: wrap; gap: 0.75rem 1.25rem;
+  align-items: center;
+}
+.consensus-legend small { color: var(--text-muted); }
+
+/* ── Comentarios con hilos ──────────────────────────────────── */
+.comment-thread {
+  margin-bottom: 1.5rem;
+  padding-bottom: 1.5rem;
+  border-bottom: 1px solid var(--border);
+}
+.comment-thread:last-of-type { border-bottom: none; margin-bottom: 0; }
+.comment-root { }
+.comment-reply {
+  margin-left: 1.5rem;
+  margin-top: 0.75rem;
+  padding-left: 0.85rem;
+  border-left: 2px solid var(--border);
+}
+.comment-header {
+  display: flex; align-items: baseline; gap: 0.5rem;
+  margin-bottom: 0.25rem;
+}
+.comment-author { font-size: 0.85rem; font-weight: 600; color: var(--text); }
+.comment-date   { font-size: 0.75rem; color: var(--text-muted); }
+.comment-body   { font-size: 0.9rem; line-height: 1.7; color: var(--text); }
+.comment-reply-btn {
+  background: none; border: none; cursor: pointer;
+  font-size: 0.78rem; color: var(--primary);
+  padding: 0.3rem 0; margin-top: 0.4rem;
+  font-family: inherit;
+}
+.comment-reply-btn:hover { text-decoration: underline; }
+.comment-reply-form {
+  margin-top: 0.75rem;
+  padding: 0.85rem;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+.comment-reply-actions {
+  display: flex; gap: 0.5rem; margin-top: 0.5rem;
+}
+.comment-new-form {
+  margin-top: 1.5rem;
+  padding-top: 1.25rem;
+  border-top: 1px solid var(--border);
+}
+
+/* ── VoteForm — lista ordenable ──────────────────────────────── */
+.rank-list {
+  display: flex; flex-direction: column; gap: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+.rank-item {
+  display: flex; align-items: center; gap: 0.85rem;
+  padding: 0.75rem 1rem;
+  background: var(--bg-white);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.rank-item:hover {
+  border-color: var(--primary-light);
+  box-shadow: 0 1px 4px rgba(29,78,216,0.06);
+}
+.rank-num {
+  font-size: 0.72rem; font-weight: 700; letter-spacing: 0.08em;
+  color: #fff; background: var(--primary);
+  width: 22px; height: 22px;
+  border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+}
+.rank-info { flex: 1; min-width: 0; }
+.rank-controls {
+  display: flex; flex-direction: column; gap: 0.15rem;
+  flex-shrink: 0;
+}
+.rank-arrow {
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  width: 28px; height: 24px;
+  cursor: pointer;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  display: flex; align-items: center; justify-content: center;
+  transition: background 0.12s, color 0.12s;
+}
+.rank-arrow:hover:not(:disabled) {
+  background: var(--primary-light);
+  color: var(--primary);
+  border-color: var(--primary-light);
+}
+.rank-arrow:disabled { opacity: 0.25; cursor: not-allowed; }
+
+/* ── Candidatos en listado y formulario ─────────────────────── */
+.candidate-list {
+  list-style: none; padding: 0; margin: 0;
+  display: flex; flex-direction: column; gap: 0.5rem;
+}
+.candidate-item {
+  padding: 0.6rem 0;
+  border-bottom: 1px solid var(--border);
+  font-size: 0.9rem;
+}
+.candidate-item:last-child { border-bottom: none; }
+.candidate-title { font-weight: 600; color: var(--text); }
+.candidate-desc  { color: var(--text-muted); }
+
+.candidate-form-list {
+  display: flex; flex-direction: column; gap: 0.85rem;
+  margin-bottom: 0.5rem;
+}
+.candidate-form-item {
+  display: flex; align-items: flex-start; gap: 0.75rem;
+}
+.candidate-form-num {
+  width: 24px; height: 24px; border-radius: 50%;
+  background: var(--border); color: var(--text-muted);
+  font-size: 0.72rem; font-weight: 700;
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0; margin-top: 0.55rem;
+}
+
+/* ── Sortition: verificación mejorada ────────────────────────── */
+.verify-row {
+  display: flex; align-items: baseline; gap: 0.75rem;
+  margin-bottom: 0.5rem;
+}
+.verify-value  { font-family: monospace; font-size: 0.82rem; }
+.verify-seed-wrap { flex: 1; }
+.verify-seed {
+  display: block; width: 100%; word-break: break-all;
+  font-size: 0.75rem; padding: 0.5rem 0.75rem;
+}
+.verify-compare {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;
+}
+.verify-names {
+  list-style: decimal; padding-left: 1.25rem;
+  font-size: 0.82rem; line-height: 1.9;
+}
+
+/* ── Alert info ──────────────────────────────────────────────── */
+.alert-info {
+  padding: 0.75rem 1rem;
+  background: #EFF6FF;
+  border: 1px solid #BFDBFE;
+  border-radius: var(--radius);
+  color: #1E40AF;
+  line-height: 1.6;
+}
+
+/* ── Responsive ─────────────────────────────────────────────── */
+@media (max-width: 640px) {
+  .verify-compare  { grid-template-columns: 1fr; }
+  .consensus-legend { gap: 0.5rem 0.75rem; }
+  .rank-item       { padding: 0.6rem 0.75rem; }
+}
