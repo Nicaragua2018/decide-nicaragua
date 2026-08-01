@@ -156,7 +156,7 @@ export class DeliberationService {
       where: { id: proposalId },
       data: {
         status: newStatus,
-        closedAt: new Date(),
+        ...(dto.status === 'closed' && { closedAt: new Date() }),
       },
     });
 

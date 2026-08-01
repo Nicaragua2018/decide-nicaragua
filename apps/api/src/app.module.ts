@@ -60,7 +60,7 @@ export class AppModule {}
 
 /** Valida que las variables de entorno críticas estén presentes al arrancar */
 function validateEnv(config: Record<string, unknown>): Record<string, unknown> {
-  const required = ['DATABASE_URL', 'REDIS_URL', 'JWT_SECRET', 'APP_URL'];
+  const required = ['DATABASE_URL', 'REDIS_URL', 'JWT_SECRET', 'APP_URL', 'IP_HASH_SALT', 'RESEND_API_KEY', 'EMAIL_FROM'];
 
   for (const key of required) {
     if (!config[key]) {

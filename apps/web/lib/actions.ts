@@ -166,7 +166,7 @@ export async function castVote(
     }
   }
 
-  const res = await actionFetch(`/api/voting/elections/${electionId}/vote`, {
+  const res = await actionFetch(`/api/voting/elections/${electionId}/ballots`, {
     method: 'POST',
     body: JSON.stringify({ rankings }),
   });
