@@ -1,0 +1,48 @@
+# Ejemplo de despliegue en el VPS Hetzner (junto al n8n ya existente).
+# Copiar como docker-compose.yml en el servidor y ajustar secretos vía .env.
+services:
+  asistente:
+    build:
+      context: ../.. # raíz del monorepo
+      dockerfile: apps/asistente/Dockerfile
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgresql://asistente:${ASISTENTE_DB_PASSWORD}@asistente-db:5432/asistente
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
+      WEBHOOK_SECRET: ${WEBHOOK_SECRET}
+      BUSINESS_NAME: ${BUSINESS_NAME:-H&N Corintian Construction}
+      BUSINESS_ADDRESS: ${BUSINESS_ADDRESS:-}
+      BUSINESS_PHONE: ${BUSINESS_PHONE:-}
+      BUSINESS_EMAIL: ${BUSINESS_EMAIL:-}
+      ASISTENTE_PORT: '4100'
+    depends_on:
+      asistente-db:
+        condition: service_healthy
+    networks:
+      - asistente
+      # Conectar también a la red donde corre n8n para que lo alcance
+      # por http://asistente:4100 (ajustar el nombre de la red externa):
+      # - n8n_default
+
+  asistente-db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: asistente
+      POSTGRES_PASSWORD: ${ASISTENTE_DB_PASSWORD}
+      POSTGRES_DB: asistente
+    volumes:
+      - asistente-db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U asistente']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - asistente
+
+volumes:
+  asistente-db-data:
+
+networks:
+  asistente:

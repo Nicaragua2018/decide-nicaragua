@@ -1,0 +1,141 @@
+// Asistente Agéntico para Contratistas — Schema de Prisma
+// Modelo de datos según sección 7 del PRD (caso Héctor Mejía).
+// Base de datos independiente de la plataforma Decide Nicaragua:
+// usa su propia DATABASE_URL (VPS Hetzner del asistente).
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─── Enums ────────────────────────────────────────────────────────────────────
+
+enum JobStatus {
+  draft    // Extraído de la foto, aún incompleto o sin invoice generado
+  invoiced // Invoice generado y enviado por WhatsApp
+  paid     // El cliente ya pagó el invoice
+}
+
+enum PaymentStatus {
+  pending // Se le debe al subcontratista
+  paid    // Ya se le pagó
+}
+
+// ─── Modelos ──────────────────────────────────────────────────────────────────
+
+// Clientes: general contractors que le pagan a Héctor
+// (Bed Rock Construction, Admer Const Group, etc.)
+model Client {
+  id           String  @id @default(uuid())
+  name         String  @unique
+  address      String?
+  contactEmail String? @map("contact_email")
+  contactPhone String? @map("contact_phone")
+  // Project Manager que va en copia de los invoices (requisito de formalidad)
+  pmName       String? @map("pm_name")
+  pmEmail      String? @map("pm_email")
+
+  jobs Job[]
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("clients")
+}
+
+// Subcontratistas: bloqueros/ayudantes que Héctor contrata por trabajo
+model Subcontractor {
+  id          String   @id @default(uuid())
+  name        String   @unique
+  phone       String?
+  defaultRate Decimal? @map("default_rate") @db.Decimal(10, 2)
+  notes       String?
+
+  payments JobSubcontractorPayment[]
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("subcontractors")
+}
+
+// Trabajos / jobsites — un registro por invoice
+model Job {
+  id             String    @id @default(uuid())
+  clientId       String    @map("client_id")
+  client         Client    @relation(fields: [clientId], references: [id])
+  // Numeración consecutiva controlada por el sistema (no por el usuario)
+  // para evitar duplicados — requisito de formalidad de los clientes.
+  invoiceNumber  Int       @unique @map("invoice_number")
+  jobsiteAddress String    @map("jobsite_address")
+  workDate       DateTime  @map("work_date") @db.Date
+  description    String?
+  status         JobStatus @default(draft)
+
+  lineItems JobLineItem[]
+  payments  JobSubcontractorPayment[]
+  expenses  JobExpense[]
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("jobs")
+}
+
+// Líneas del invoice (conceptos con cantidad, precio unitario y monto)
+model JobLineItem {
+  id          String  @id @default(uuid())
+  jobId       String  @map("job_id")
+  job         Job     @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  description String
+  quantity    Decimal @db.Decimal(10, 2)
+  unitPrice   Decimal @map("unit_price") @db.Decimal(10, 2)
+  amount      Decimal @db.Decimal(10, 2)
+
+  @@map("job_line_items")
+}
+
+// Pagos a subcontratistas ligados a cada trabajo
+model JobSubcontractorPayment {
+  id              String        @id @default(uuid())
+  jobId           String        @map("job_id")
+  job             Job           @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  subcontractorId String        @map("subcontractor_id")
+  subcontractor   Subcontractor @relation(fields: [subcontractorId], references: [id])
+  amountOwed      Decimal       @map("amount_owed") @db.Decimal(10, 2)
+  amountPaid      Decimal       @default(0) @map("amount_paid") @db.Decimal(10, 2)
+  paidAt          DateTime?     @map("paid_at")
+  status          PaymentStatus @default(pending)
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("job_subcontractor_payments")
+}
+
+// Gastos adicionales por trabajo (materiales, etc.)
+model JobExpense {
+  id          String  @id @default(uuid())
+  jobId       String  @map("job_id")
+  job         Job     @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  description String
+  amount      Decimal @db.Decimal(10, 2)
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("job_expenses")
+}
+
+// Estado de conversación por hilo de WhatsApp — soporta el flujo de
+// preguntas de aclaración: guarda el borrador parcial y los campos pendientes.
+model ConversationState {
+  id               String   @id @default(uuid())
+  whatsappThreadId String   @unique @map("whatsapp_thread_id")
+  // Borrador del invoice en construcción (JSON con la extracción parcial)
+  draft            Json?
+  // Campos obligatorios que faltan por confirmar, en orden de pregunta
+  pendingFields    Json     @default("[]") @map("pending_fields")
+  updatedAt        DateTime @updatedAt @map("updated_at")
+
+  @@map("conversation_state")
+}

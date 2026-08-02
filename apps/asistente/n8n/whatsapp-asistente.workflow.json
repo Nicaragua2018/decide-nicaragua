@@ -1,0 +1,83 @@
+{
+  "name": "Asistente Héctor — WhatsApp",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "whatsapp-in",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "whatsapp-trigger",
+      "name": "WhatsApp Webhook (proveedor)",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [0, 0],
+      "notesInFlow": true,
+      "notes": "Apuntar aquí el webhook del proveedor de WhatsApp Business (Twilio / 360dialog / Meta). Ajustar el nodo 'Normalizar mensaje' al formato del proveedor elegido."
+    },
+    {
+      "parameters": {
+        "jsCode": "// Normaliza el payload del proveedor de WhatsApp al formato del asistente.\n// EJEMPLO para Twilio WhatsApp (ajustar según proveedor):\n//   body.From  -> threadId\n//   body.Body  -> text\n//   body.MediaUrl0 -> imagen (descargarla en un nodo HTTP previo si aplica)\nconst body = $input.first().json.body ?? $input.first().json;\nreturn [{\n  json: {\n    threadId: String(body.From ?? body.from ?? 'desconocido').replace(/[^0-9+a-zA-Z:]/g, ''),\n    text: body.Body ?? body.text ?? null,\n    imageBase64: body.imageBase64 ?? null,\n    imageMediaType: body.imageMediaType ?? null,\n  },\n}];"
+      },
+      "id": "normalize",
+      "name": "Normalizar mensaje",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [220, 0]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://asistente:4100/webhook/whatsapp",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-webhook-secret",
+              "value": "={{ $env.ASISTENTE_WEBHOOK_SECRET }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json) }}",
+        "options": { "timeout": 120000 }
+      },
+      "id": "call-asistente",
+      "name": "Llamar Asistente",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [440, 0],
+      "notesInFlow": true,
+      "notes": "El asistente responde { reply, attachment? }. attachment.base64 es el PDF del invoice."
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($json) }}",
+        "options": {}
+      },
+      "id": "respond",
+      "name": "Responder a WhatsApp",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [660, 0],
+      "notesInFlow": true,
+      "notes": "Según el proveedor: enviar $json.reply como texto y, si existe $json.attachment, subir el PDF (decodificar base64) y mandarlo como documento al mismo número."
+    }
+  ],
+  "connections": {
+    "WhatsApp Webhook (proveedor)": {
+      "main": [[{ "node": "Normalizar mensaje", "type": "main", "index": 0 }]]
+    },
+    "Normalizar mensaje": {
+      "main": [[{ "node": "Llamar Asistente", "type": "main", "index": 0 }]]
+    },
+    "Llamar Asistente": {
+      "main": [[{ "node": "Responder a WhatsApp", "type": "main", "index": 0 }]]
+    }
+  },
+  "settings": { "executionOrder": "v1" },
+  "pinData": {}
+}

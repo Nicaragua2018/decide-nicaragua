@@ -344,6 +344,26 @@ Usar **Resend** como proveedor de email transaccional.
 
 ---
 
+## ADR-016: Asistente agéntico para contratistas como app independiente en el monorepo
+
+**Fecha:** 2026-08-02
+**Estado:** Aceptado
+
+### Decisión
+Implementar el asistente del PRD "Asistente Agéntico para Contratistas (caso Héctor Mejía)" como una app separada `apps/asistente`, con su **propia base de datos Postgres** y su **propio despliegue** (VPS con Docker + n8n), sin dependencias de código con `apps/api` ni `apps/web`.
+
+### Justificación
+- Es un producto distinto a Decide Nicaragua (otro usuario, otros datos, otro VPS); mezclar schemas o módulos acoplaría ciclos de vida que no tienen relación.
+- El monorepo ya provee tooling compartido (pnpm, Turborepo, `@decide/tsconfig`, convenciones NestJS/Prisma/vitest), lo que abarata el desarrollo sin acoplar el runtime.
+- El PRD exige el stack que este repo ya domina: NestJS + Prisma + Postgres, orquestación con n8n, Claude API para visión/intención.
+
+### Consecuencias
+- `apps/asistente` tiene `DATABASE_URL`, migraciones y Dockerfile propios; no comparte la red ni la base de la plataforma.
+- La numeración consecutiva de invoices se garantiza con unique constraint + reintento (no con secuencias por sesión).
+- La salida del modelo pasa siempre por structured outputs + normalización defensiva antes de tocar la base de datos.
+
+---
+
 ## Decisiones pendientes
 
 | ID | Pregunta | Prioridad |
