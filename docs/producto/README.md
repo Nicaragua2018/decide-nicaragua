@@ -1,14 +1,19 @@
 # Renacer City — paquete de desarrollo
 
-Tres documentos que, juntos, permiten que cualquier desarrollador (humano o IA)
+Cuatro documentos que, juntos, permiten que cualquier desarrollador (humano o IA)
 construya la aplicación web completa. Todos son archivos HTML autónomos: se abren
 con doble clic en cualquier navegador, sin instalar ni servir nada.
 
 | Documento | Qué contiene | Empieza aquí si… |
 |---|---|---|
+| [`FILOSOFIA-republica-inteligente.html`](FILOSOFIA-republica-inteligente.html) | Texto fundacional en quince artículos, con anexo que mapea cada principio al mecanismo que lo ejerce y declara las tensiones sin resolver | …necesitas entender **por qué** existe el proyecto |
 | [`PRD-renacer-city.html`](PRD-renacer-city.html) | Problema, personas, historias de usuario con criterios de aceptación, alcance por versión, métricas y contra-métricas, registro de decisiones (ADR), riesgos e hitos | …vas a **planificar** el producto o priorizar el trabajo |
 | [`BLUEPRINT-renacer-city.html`](BLUEPRINT-renacer-city.html) | Prompt maestro copiable, arquitectura por fases, modelo de datos SQL, protocolo de la cadena de actos, API, criterios de aceptación técnicos y sistema de diseño | …vas a **codificar** |
 | [`../prototypes/renacer-city.html`](../prototypes/renacer-city.html) | La aplicación funcionando: doce módulos, criptografía ECDSA real, cadena de actos firmados y cooperativa de ahorro | …quieres **ver y probar** cómo debe verse y comportarse |
+
+**Jerarquía:** la Filosofía establece el porqué, el PRD el qué, el Blueprint el
+cómo y el prototipo demuestra que no es una promesa. Cuando alguno contradiga a
+los demás, gana la Filosofía y el resto se corrige.
 
 ## Cómo usarlos
 
