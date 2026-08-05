@@ -8,6 +8,7 @@ Este directorio contiene la documentación de diseño, decisiones y seguridad de
 - `DECISIONS.md` — registros de decisiones técnicas (ADRs) que explican por qué se eligieron las tecnologías y patrones actuales.
 - `SECURITY.md` — modelo de amenazas, controles implementados, checklist de seguridad y procedimientos de respuesta a incidentes.
 - `ROADMAP.md` — estado de desarrollo, fases completadas y prioridades para las próximas iteraciones.
+- `ESTUDIO-VIDEO.md` — diseño consolidado del módulo de estudio de video con clones digitales para comunicación política (ADR-017): arquitectura, modelo de datos, pipeline, seguridad y plan de implementación.
 
 ## Uso recomendado
 
