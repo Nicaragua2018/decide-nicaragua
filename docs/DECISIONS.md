@@ -366,6 +366,49 @@ Registrar el servidor MCP de OpenArt (`https://mcp.openart.ai/mcp`) en `.mcp.jso
 
 ---
 
+## ADR-017: Estudio de video con clones digitales para comunicación política
+
+**Fecha:** 2026-08-05
+**Estado:** Propuesto (pendiente de validación con piloto)
+
+### Contexto
+Renacer Democrático necesita proyectar masivamente la imagen y las propuestas de sus voceros mediante video, con producción frecuente (varias piezas por semana) y presencia constante en las plataformas que consume la diáspora nicaragüense (WhatsApp, TikTok, YouTube, Facebook). Grabar cada video de forma tradicional no escala con un equipo pequeño.
+
+La tecnología de clones digitales (voz clonada + avatar visual del vocero real, con su consentimiento) permite generar videos a partir de un guion en minutos. Sin embargo, introduce riesgos serios en el contexto de un movimiento opositor en el exilio:
+
+- Los assets biométricos (modelo de voz, avatar) permiten fabricar declaraciones falsas de dirigentes si son comprometidos.
+- Normalizar avatares de IA facilita que terceros hostiles hagan pasar deepfakes por comunicados oficiales.
+- El uso no transparente de IA erosionaría la legitimidad democrática que es principio fundacional del proyecto.
+
+### Decisión
+Construir un módulo de estudio de video dentro del monorepo con las siguientes decisiones vinculantes:
+
+1. **Proveedores iniciales (Ruta A):** HeyGen o Tavus para avatar visual y ElevenLabs para voz, orquestados desde un backend propio (NestJS + BullMQ). El proveedor queda abstraído tras una interfaz propia (patrón ya usado con `EmailService`/Resend) para permitir migración futura a modelos autoalojados (Ruta B: LivePortrait/EchoMimic + XTTS/F5-TTS) si el costo o el riesgo lo justifican.
+2. **Consentimiento explícito y revocable:** ningún clon se crea sin consentimiento documentado del vocero. La revocación desactiva el clon y elimina los assets ante el proveedor.
+3. **Assets biométricos como secretos:** acceso restringido por rol, nunca en el repositorio, y cada generación de video queda registrada en la auditoría append-only (quién, cuándo, qué guion, qué avatar).
+4. **Flujo de aprobación editorial:** redactor → revisor → aprobación final del vocero cuyo avatar se usa. Ningún video se publica sin la aprobación de la persona clonada.
+5. **Transparencia obligatoria:** todo video generado lleva divulgación visible de que fue producido con IA y metadatos de procedencia (C2PA/watermark cuando el tooling lo permita).
+6. **Registro público verificable:** cada video oficial publicado se registra con su hash SHA-256 en una página pública del sitio. Esto permite a cualquier persona verificar si un video que circula es auténtico, y da al movimiento una respuesta inmediata frente a deepfakes hostiles ("no está en el registro, es falso").
+7. **Piloto antes de escalar:** se valida con un solo vocero (calidad del español, acento, recepción de la audiencia) antes de onboardear al resto del equipo.
+
+### Justificación
+- La Ruta A produce calidad alta con semanas (no meses) de desarrollo y sin operar GPUs propias; el MVP es esencialmente orquestación de APIs.
+- El registro público de hashes convierte la transparencia en defensa activa: protege contra acusaciones de fabricación y contra suplantaciones de terceros, alineado con el principio de verificabilidad independiente del proyecto.
+- La abstracción del proveedor evita lock-in y deja abierta la vía de soberanía de datos (Ruta B) sin rediseño.
+
+### Alternativas rechazadas
+- **Ruta B desde el inicio (autoalojado):** calidad inferior, requiere GPU dedicada (~24 GB VRAM) y carga operativa que el equipo no puede asumir antes de validar el formato.
+- **Grabación tradicional:** no escala a la frecuencia de publicación necesaria con un equipo pequeño.
+- **Uso de avatares sin divulgación de IA:** rechazado por incompatible con la legitimidad democrática del proyecto, además del riesgo reputacional si se descubre.
+
+### Consecuencias
+- Se suben datos biométricos de opositores a proveedores comerciales en EE.UU. (HeyGen/Tavus/ElevenLabs). Cada vocero debe aceptar este riesgo explícitamente en su consentimiento; quien no lo acepte no participa hasta que exista la Ruta B.
+- Costo recurrente por suscripción/minuto renderizado (decenas a pocos cientos de USD/mes según volumen); revisar umbral de migración a Ruta B si el volumen crece.
+- Nuevo módulo en el monorepo (panel editorial Next.js + orquestación NestJS/BullMQ), con roles nuevos en el RBAC (redactor, revisor, vocero).
+- `docs/SECURITY.md` debe actualizarse con el modelo de amenazas de los clones cuando el módulo entre en desarrollo.
+
+---
+
 ## Decisiones pendientes
 
 | ID | Pregunta | Prioridad |
