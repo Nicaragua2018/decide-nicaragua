@@ -4,6 +4,7 @@ Este directorio contiene la documentación de diseño, decisiones y seguridad de
 
 ## ¿Qué encontrarás aquí?
 
+- `VISION.md` — mapa del ecosistema completo (filosofía → doctrina → vehículos → ejecución), tensiones estratégicas y foco actual.
 - `ARCHITECTURE.md` — descripción de alto nivel de la arquitectura, componentes, modelo de datos y flujo de autenticación.
 - `DECISIONS.md` — registros de decisiones técnicas (ADRs) que explican por qué se eligieron las tecnologías y patrones actuales.
 - `SECURITY.md` — modelo de amenazas, controles implementados, checklist de seguridad y procedimientos de respuesta a incidentes.
