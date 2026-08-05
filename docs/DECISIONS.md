@@ -344,6 +344,28 @@ Usar **Resend** como proveedor de email transaccional.
 
 ---
 
+## ADR-016: Servidor MCP de OpenArt para generación de imágenes
+
+**Fecha:** 2026-08-05
+**Estado:** Aceptado
+
+### Contexto
+El proyecto necesita generar material visual (ilustraciones para la web pública, prototipos como Renacer City, material de difusión) sin depender de diseño manual en cada iteración. Claude Code soporta servidores MCP (Model Context Protocol) configurados a nivel de proyecto.
+
+### Decisión
+Registrar el servidor MCP de OpenArt (`https://mcp.openart.ai/mcp`) en `.mcp.json` en la raíz del repositorio, con transporte HTTP.
+
+### Justificación
+- `.mcp.json` es el mecanismo estándar de Claude Code para compartir servidores MCP entre todo el equipo vía git.
+- La autenticación se realiza por OAuth gestionado por Claude Code en cada máquina: **no se almacena ningún secreto en el repositorio**, consistente con la política de secretos del proyecto.
+- El servidor solo se usa como herramienta de desarrollo; no forma parte del runtime de la plataforma ni procesa datos de usuarios.
+
+### Consecuencias
+- Cada colaborador debe aprobar el servidor la primera vez que abra el proyecto en Claude Code (prompt de confianza de `.mcp.json`) y autenticarse con su propia cuenta de OpenArt.
+- Los assets generados que se incorporen al repositorio deben revisarse igual que cualquier otro contenido antes de commitear.
+
+---
+
 ## Decisiones pendientes
 
 | ID | Pregunta | Prioridad |

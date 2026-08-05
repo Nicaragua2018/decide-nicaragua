@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "openart": {
+      "type": "http",
+      "url": "https://mcp.openart.ai/mcp"
+    }
+  }
+}
