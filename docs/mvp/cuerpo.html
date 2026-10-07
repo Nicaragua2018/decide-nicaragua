@@ -1,0 +1,249 @@
+<header>
+ <div class="hbar">
+  <div class="logo">
+   <svg viewBox="0 0 48 40" fill="none" aria-hidden="true">
+    <g stroke="#F2B722" stroke-width="2.6" stroke-linecap="round">
+     <line x1="24" y1="4" x2="24" y2="8"/><line x1="13" y1="8.5" x2="15.8" y2="11.3"/><line x1="35" y1="8.5" x2="32.2" y2="11.3"/>
+     <line x1="8.5" y1="19" x2="12.5" y2="19"/><line x1="39.5" y1="19" x2="35.5" y2="19"/>
+    </g>
+    <circle cx="24" cy="19" r="7" fill="#F2B722"/>
+    <path d="M6 30c6-4.5 12-4.5 18 0s12 4.5 18 0" stroke="#1D5FAD" stroke-width="3.4" stroke-linecap="round"/>
+    <path d="M10 35.5c4.8-3.4 9.4-3.4 14 0s9.2 3.4 14 0" stroke="#F2B722" stroke-width="2.4" stroke-linecap="round"/>
+   </svg>
+   <div><b id="daoNombre">—</b><span id="daoLema">—</span></div>
+  </div>
+  <div class="spacer"></div>
+  <button class="chip" onclick="ir('yo')" id="chipYo">
+   <span class="av" aria-hidden="true"></span>
+   <span class="t"><b id="chipSeudo">—</b><span id="chipPeso">—</span></span>
+  </button>
+ </div>
+ <nav class="tabs" aria-label="Secciones"><div class="tabs-in" id="tabs"></div></nav>
+</header>
+
+<main>
+
+<!-- PANEL -->
+<div class="view on" id="v-panel">
+ <h1>Panel de la asamblea</h1>
+ <p class="vsub" id="panelSub">—</p>
+ <div class="grid4" style="margin-bottom:20px" id="panelStats"></div>
+ <div class="grid2">
+  <div class="card">
+   <span class="lbl">Te toca a ti</span>
+   <div id="panelPend" style="margin-top:8px"></div>
+  </div>
+  <div class="card">
+   <span class="lbl">Estado de la asamblea</span>
+   <div id="panelSalud" style="margin-top:8px"></div>
+  </div>
+ </div>
+ <h3>Última actividad</h3>
+ <div class="card"><div id="panelAct"></div></div>
+</div>
+
+<!-- CONSENSOS -->
+<div class="view" id="v-consenso">
+ <h1>Encontrar consensos</h1>
+ <p class="vsub">No se responde a nadie: se vota lo que otros afirmaron. El sistema agrupa a los miembros por cómo votan y detecta las afirmaciones que unen a grupos enfrentados. Esas son las que pasan a propuesta.</p>
+ <div class="grid2">
+  <div>
+   <div class="stmt">
+    <div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:center">
+     <span class="pill p-azul" id="csTema">—</span>
+     <span class="mono num" style="font-size:10.5px;color:var(--ink3)" id="csCount">—</span>
+    </div>
+    <div class="bar" style="margin-top:12px"><i id="csBar" style="width:0%"></i></div>
+    <p class="q" id="csTexto">—</p>
+    <p class="mono" style="font-size:10.5px;color:var(--ink3);margin:12px 0 0" id="csAutor">—</p>
+    <div class="votes">
+     <button class="vb y" id="csY" onclick="csVotar(1)">De acuerdo</button>
+     <button class="vb n" id="csN" onclick="csVotar(-1)">En desacuerdo</button>
+     <button class="vb p" id="csP" onclick="csVotar(0)">Paso — no cuenta</button>
+    </div>
+    <p class="mono" id="csSello" style="font-size:10px;color:var(--ink3);margin:12px 0 0"></p>
+   </div>
+   <div class="aporte">
+    <h4>Aporta tu propia afirmación</h4>
+    <p>Si falta una posición, escríbela. Entra al mazo y los demás la votarán igual que las otras. Máximo 140 caracteres, sin responder a nadie.</p>
+    <div class="linea">
+     <label class="sr" for="csNueva">Tu afirmación</label>
+     <input id="csNueva" maxlength="140" placeholder="Escribe una afirmación que se pueda votar…">
+     <button class="btn pri" onclick="csAportar()">Enviar al mazo</button>
+    </div>
+   </div>
+  </div>
+  <div>
+   <div class="card">
+    <span class="lbl">Mapa de opinión — calculado en vivo</span>
+    <p style="font-size:12px;color:var(--ink2);margin:6px 0 11px;line-height:1.5">Proyección de los votos reales de todos los miembros por análisis de componentes principales. Los grupos se calculan con k-medias, no están asignados a mano.</p>
+    <svg id="mapa" viewBox="0 0 320 190" preserveAspectRatio="none" role="img" aria-label="Mapa de agrupamientos de opinión"></svg>
+    <div id="mapaLg"></div>
+   </div>
+   <div id="csPuentes"></div>
+  </div>
+ </div>
+</div>
+
+<!-- CONSULTAS -->
+<div class="view" id="v-consulta">
+ <h1>Consultar opciones</h1>
+ <p class="vsub">Preguntas de respuesta cerrada para decidir entre alternativas concretas. El recuento aplica el peso de voto delegado: si alguien te delegó este dominio, tu respuesta arrastra su voz.</p>
+ <div id="consultasLista"></div>
+ <div class="card" style="margin-top:16px">
+  <span class="lbl">Proponer una consulta</span>
+  <div class="form" style="margin-top:11px">
+   <label class="sr" for="cnPregunta">Pregunta</label>
+   <input id="cnPregunta" placeholder="¿Qué pregunta quieres someter a la asamblea?">
+   <label class="sr" for="cnOpciones">Opciones</label>
+   <input id="cnOpciones" placeholder="Opciones separadas por punto y coma: Sí; No; Aplazar">
+   <label class="sr" for="cnDominio">Dominio</label>
+   <select id="cnDominio"></select>
+   <button class="btn pri full" onclick="cnCrear()">Publicar consulta</button>
+  </div>
+ </div>
+</div>
+
+<!-- PROPUESTAS -->
+<div class="view" id="v-propuesta">
+ <h1>Debatir propuestas</h1>
+ <p class="vsub">Cada propuesta recoge apoyos y argumentos estructurados a favor y en contra — una intervención por miembro, sin hilos ni réplicas. Al reunir apoyo de dos agrupamientos distintos pasa a votación vinculante.</p>
+ <div id="propsLista"></div>
+ <div class="card" style="margin-top:16px">
+  <span class="lbl">Redactar una propuesta</span>
+  <div class="form" style="margin-top:11px">
+   <label class="sr" for="prTitulo">Título</label>
+   <input id="prTitulo" placeholder="Título de la propuesta">
+   <label class="sr" for="prCuerpo">Desarrollo</label>
+   <textarea id="prCuerpo" placeholder="Qué propones y por qué. Sé concreto: la asamblea vota el texto, no la intención."></textarea>
+   <label class="sr" for="prDominio">Dominio</label>
+   <select id="prDominio"></select>
+   <label class="sr" for="prTipo">Tipo</label>
+   <select id="prTipo"><option value="ordinaria">Política ordinaria — umbral 60%</option><option value="reforma">Reforma del reglamento — umbral 66%</option></select>
+   <button class="btn pri full" onclick="prCrear()">Publicar propuesta</button>
+  </div>
+ </div>
+</div>
+
+<!-- ELECCIONES -->
+<div class="view" id="v-eleccion">
+ <h1>Elegir cargos</h1>
+ <p class="vsub">Se compara de dos en dos y gana quien vence a todos en enfrentamientos directos: el método Condorcet elimina el voto útil. Se muestra mérito verificable, nunca promesa de campaña.</p>
+ <div class="grid2">
+  <div class="card">
+   <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:12px">
+    <span class="lbl" id="elCargo">—</span>
+    <span class="mono num" style="font-size:11px;color:var(--ink3)" id="elProg">—</span>
+   </div>
+   <div class="bar" style="margin-bottom:16px"><i id="elBar" style="width:0%"></i></div>
+   <div class="par" id="elPar"></div>
+   <div id="elFin" style="display:none"></div>
+  </div>
+  <div>
+   <div class="card">
+    <span class="lbl">Resultado provisional</span>
+    <div id="elRank" style="margin-top:8px"></div>
+   </div>
+   <div class="card" style="margin-top:12px">
+    <span class="lbl">Matriz de enfrentamientos</span>
+    <p style="font-size:12px;color:var(--ink2);margin:6px 0 10px;line-height:1.5">Cada celda indica si quien está en la fila venció a quien está en la columna.</p>
+    <div style="overflow-x:auto"><table class="matriz" id="elMatriz"></table></div>
+   </div>
+  </div>
+ </div>
+</div>
+
+<!-- DELEGACIÓN -->
+<div class="view" id="v-delegacion">
+ <h1>Democracia líquida</h1>
+ <p class="vsub">Puedes delegar tu voto por dominio en quien entienda mejor cada asunto, y recuperarlo al instante sin dar explicaciones. La delegación es transitiva: si tu delegado delega a su vez, tu voz sigue la cadena.</p>
+ <div class="grid2">
+  <div>
+   <h3 style="margin-top:0">Tus dominios</h3>
+   <div id="delDominios"></div>
+  </div>
+  <div>
+   <div class="card">
+    <span class="lbl">Tu poder de voto efectivo</span>
+    <div id="delPeso" style="margin-top:8px"></div>
+   </div>
+   <div class="card" style="margin-top:12px">
+    <span class="lbl">Concentración de delegaciones</span>
+    <p style="font-size:12px;color:var(--ink2);margin:6px 0 10px;line-height:1.5">Si un solo miembro acumula demasiadas, la democracia líquida degenera en oligarquía. El reglamento fija el tope.</p>
+    <div id="delConc"></div>
+   </div>
+  </div>
+ </div>
+</div>
+
+<!-- REGLAMENTO -->
+<div class="view" id="v-reglamento">
+ <h1>Reglamento constitutivo</h1>
+ <p class="vsub">Las reglas que la asamblea se dio a sí misma. Ningún artículo es inmodificable: cualquier miembro puede proponer una reforma, pero aprobarla exige dos agrupamientos y el 66%.</p>
+ <div class="card" style="margin-bottom:18px">
+  <span class="lbl">Umbrales vigentes</span>
+  <div id="regUmbrales" style="margin-top:8px"></div>
+ </div>
+ <div id="regArts"></div>
+</div>
+
+<!-- BLOG -->
+<div class="view" id="v-blog">
+ <h1>Noticias y recursos</h1>
+ <p class="vsub">Lo que la comunidad necesita saber y las herramientas que puede usar. Cada entrada queda sellada en el registro verificable con su fecha y su autor.</p>
+ <div class="grid2">
+  <div>
+   <div id="blogLista"></div>
+   <div class="card" style="margin-top:4px">
+    <span class="lbl">Publicar una entrada</span>
+    <div class="form" style="margin-top:11px">
+     <label class="sr" for="blTitulo">Título</label>
+     <input id="blTitulo" placeholder="Título de la entrada">
+     <label class="sr" for="blEtiqueta">Etiqueta</label>
+     <select id="blEtiqueta"><option>noticia</option><option>recurso</option><option>convocatoria</option><option>acta</option></select>
+     <label class="sr" for="blCuerpo">Contenido</label>
+     <textarea id="blCuerpo" placeholder="Escribe la entrada…"></textarea>
+     <button class="btn pri full" onclick="blPublicar()">Publicar y sellar</button>
+    </div>
+   </div>
+  </div>
+  <div>
+   <div class="card">
+    <span class="lbl">Recursos de interés</span>
+    <div id="blRecursos" style="margin-top:10px"></div>
+   </div>
+  </div>
+ </div>
+</div>
+
+<!-- MI CUENTA -->
+<div class="view" id="v-yo">
+ <h1>Mi membresía</h1>
+ <p class="vsub">Una acción por persona, un voto por acción. Tu identidad es un par de claves que se generó en este dispositivo y cuya parte privada nunca sale de él.</p>
+ <div class="grid2">
+  <div>
+   <div class="card">
+    <span class="lbl">Identidad criptográfica</span>
+    <div id="yoIdent" style="margin-top:8px"></div>
+   </div>
+   <div class="card" style="margin-top:12px">
+    <span class="lbl">Tu actividad sellada</span>
+    <div id="yoActos" style="margin-top:8px"></div>
+   </div>
+  </div>
+  <div>
+   <div class="card">
+    <span class="lbl">Verificación</span>
+    <div style="display:flex;flex-direction:column;gap:8px;margin-top:11px">
+     <button class="btn full" onclick="verificarUI()">Verificar cadena y firmas</button>
+     <button class="btn full" onclick="exportarUI()">Exportar registro firmado</button>
+     <button class="btn dan full sm" onclick="borrarUI(this)">Borrar mis datos locales</button>
+    </div>
+    <p id="yoRes" style="font-size:13px;margin:12px 0 0;line-height:1.55" role="status"></p>
+   </div>
+  </div>
+ </div>
+</div>
+
+</main>
+<div id="toast" role="status" aria-live="polite"></div>
