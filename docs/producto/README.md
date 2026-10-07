@@ -1,6 +1,6 @@
 # Renacer City — paquete de desarrollo
 
-Seis documentos que, juntos, permiten que cualquier desarrollador (humano o IA)
+Siete documentos que, juntos, permiten que cualquier desarrollador (humano o IA)
 construya la aplicación web completa. Todos son archivos HTML autónomos: se abren
 con doble clic en cualquier navegador, sin instalar ni servir nada.
 
@@ -11,6 +11,7 @@ con doble clic en cualquier navegador, sin instalar ni servir nada.
 | [`BLUEPRINT-renacer-city.html`](BLUEPRINT-renacer-city.html) | Prompt maestro copiable, arquitectura por fases, modelo de datos SQL, protocolo de la cadena de actos, API, criterios de aceptación técnicos y sistema de diseño | …vas a **codificar** |
 | [`SUBRED-cooperativa-herramientas-ia.html`](SUBRED-cooperativa-herramientas-ia.html) | Revisión técnica de la subred Bittensor propuesta y arquitectura corregida en dos capas, con ruta por fases que no exige capital inicial | …evalúas la **cooperativa de herramientas de IA** |
 | [`PAPER-gobernanza-cooperativa.html`](PAPER-gobernanza-cooperativa.html) | Documento de trabajo en formato académico: Go Found Us y la suscripción fundacional de un dólar, modelo «una acción por persona, un voto por acción», arquitectura de cuatro capas, estructura de capital en tres tramos para 750.000 USD y análisis jurídico por tramo | …necesitas **presentar o defender** el modelo ante socios, juristas o financiadores |
+| [`PRECEDENTES-catalogo.html`](PRECEDENTES-catalogo.html) | Catálogo anotado de once proyectos en producción —Semaphore, Optimism, Moloch, Pol.is, Decidim, Consul, Bittensor y otros— con qué tomar de cada uno, qué evitar, tabla comparada y el hueco que ninguno ocupa | …vas a **integrar o reusar** software existente en lugar de escribirlo |
 | [`../prototypes/renacer-city.html`](../prototypes/renacer-city.html) | La aplicación funcionando: doce módulos, criptografía ECDSA real, cadena de actos firmados y cooperativa de ahorro | …quieres **ver y probar** cómo debe verse y comportarse |
 
 **Jerarquía:** la Filosofía establece el porqué, el PRD el qué, el Blueprint el
