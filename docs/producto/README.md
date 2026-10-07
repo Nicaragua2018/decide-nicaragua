@@ -1,6 +1,6 @@
 # Renacer City — paquete de desarrollo
 
-Cinco documentos que, juntos, permiten que cualquier desarrollador (humano o IA)
+Seis documentos que, juntos, permiten que cualquier desarrollador (humano o IA)
 construya la aplicación web completa. Todos son archivos HTML autónomos: se abren
 con doble clic en cualquier navegador, sin instalar ni servir nada.
 
@@ -10,6 +10,7 @@ con doble clic en cualquier navegador, sin instalar ni servir nada.
 | [`PRD-renacer-city.html`](PRD-renacer-city.html) | Problema, personas, historias de usuario con criterios de aceptación, alcance por versión, métricas y contra-métricas, registro de decisiones (ADR), riesgos e hitos | …vas a **planificar** el producto o priorizar el trabajo |
 | [`BLUEPRINT-renacer-city.html`](BLUEPRINT-renacer-city.html) | Prompt maestro copiable, arquitectura por fases, modelo de datos SQL, protocolo de la cadena de actos, API, criterios de aceptación técnicos y sistema de diseño | …vas a **codificar** |
 | [`SUBRED-cooperativa-herramientas-ia.html`](SUBRED-cooperativa-herramientas-ia.html) | Revisión técnica de la subred Bittensor propuesta y arquitectura corregida en dos capas, con ruta por fases que no exige capital inicial | …evalúas la **cooperativa de herramientas de IA** |
+| [`PAPER-gobernanza-cooperativa.html`](PAPER-gobernanza-cooperativa.html) | Documento de trabajo en formato académico: modelo «una acción por persona, un voto por acción», arquitectura de cuatro capas, estructura de capital en tres tramos para 750.000 USD y análisis jurídico de la captación | …necesitas **presentar o defender** el modelo ante socios, juristas o financiadores |
 | [`../prototypes/renacer-city.html`](../prototypes/renacer-city.html) | La aplicación funcionando: doce módulos, criptografía ECDSA real, cadena de actos firmados y cooperativa de ahorro | …quieres **ver y probar** cómo debe verse y comportarse |
 
 **Jerarquía:** la Filosofía establece el porqué, el PRD el qué, el Blueprint el
