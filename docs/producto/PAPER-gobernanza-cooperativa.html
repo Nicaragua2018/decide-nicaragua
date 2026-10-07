@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Patrimonio colectivo y gobernanza no plutocrática en una cooperativa digital</title>
+<title>Go Found Us — Patrimonio colectivo y gobernanza no plutocrática</title>
 <meta name="color-scheme" content="light dark">
 </head>
 <body>
@@ -169,7 +169,7 @@ td strong{color:var(--ink)}
 <header class="head">
  <div class="venue">Renacer Nicaragua &middot; Documento de trabajo RN-2026-01</div>
  <h1 class="title">Patrimonio colectivo y gobernanza no plutocrática en una cooperativa digital</h1>
- <p class="subtitle">Una acción por persona, un voto por acción: diseño de una DAO cooperativa con deliberación medida sobre Pol.is y Decidim</p>
+ <p class="subtitle">Go Found Us: suscripción fundacional de un dólar, una acción por persona y un voto por acción en una DAO cooperativa sobre Pol.is y Decidim</p>
  <p class="authors">Renacer Nicaragua</p>
  <p class="affil">Comunidad política de la diáspora nicaragüense</p>
  <div class="datum">octubre de 2026 &middot; versión 1.0 &middot; propuesta sujeta a deliberación</div>
@@ -177,19 +177,20 @@ td strong{color:var(--ink)}
 
 <section class="abs">
  <h2>Resumen</h2>
- <p>La mayoría de las organizaciones autónomas descentralizadas asignan el poder de decisión en proporción al capital aportado, reproduciendo en cadena la plutocracia que dicen superar. Este trabajo propone y especifica una alternativa: una cooperativa digital de patrimonio colectivo donde <b>cada persona suscribe exactamente una acción social, intransferible, que confiere exactamente un voto</b>, con independencia de cuánto capital adicional aporte. El diseño desacopla deliberadamente tres funciones que las DAO suelen confundir —financiación, voz y ejecución— y las asigna a mecanismos distintos: aportación de capital en tramos sin derecho político diferencial, deliberación medida mediante agrupamiento de opinión al estilo Pol.is y participación estructurada sobre Decidim, y ejecución mediante contrato inteligente con multifirma.</p>
- <p>Se analiza el objetivo de capitalización de 750.000 dólares y se demuestra que una estructura de tramo único es incompatible con el principio de igualdad de oportunidades: fijar el precio de la acción lo bastante alto para alcanzar la meta con pocos socios excluye a quienes el proyecto existe para servir. Se propone en su lugar una estructura de tres tramos que alcanza la meta sin alterar el reparto de voto. Finalmente se examinan los riesgos jurídicos —principalmente la calificación de la acción social como valor negociable— y se identifica la <i>limited cooperative association</i> de Colorado como envoltorio legal compatible con voto por membresía.</p>
- <p class="kw"><b>Palabras clave</b> &nbsp;gobernanza cooperativa; DAO; democracia líquida; Pol.is; Decidim; patrimonio colectivo; plutocracia algorítmica; diáspora; verificabilidad criptográfica.</p>
+ <p>La mayoría de las organizaciones autónomas descentralizadas asignan el poder de decisión en proporción al capital aportado, reproduciendo en cadena la plutocracia que dicen superar. Este trabajo propone y especifica una alternativa: una cooperativa digital de patrimonio colectivo donde <b>cada persona suscribe exactamente una acción social, intransferible, que confiere exactamente un voto</b>, con independencia de cuánto capital adicional aporte. El mecanismo de entrada, denominado <i>Go Found Us</i>, es un contrato inteligente de invitación: la suscripción cuesta <b>un dólar</b>, umbral deliberadamente fijado en el mínimo que permite registrar una voluntad sin excluir a nadie. El diseño desacopla tres funciones que las DAO suelen confundir —financiación, voz y ejecución— y las asigna a mecanismos distintos.</p>
+ <p>Se demuestra un resultado que invierte la intuición de partida: <b>la acción de un dólar no es un instrumento de financiación sino de acreditación</b>. Alcanzar una meta de 750.000 dólares por esa vía exigiría 750.000 socios, cifra que casi ninguna organización voluntaria del mundo alcanza. El dólar no financia el patrimonio: acredita quién lo gobierna, y es precisamente ese censo verificable —no el capital de los fundadores— el activo que vuelve creíble la captación ante donantes institucionales. Se propone en consecuencia una estructura de tres tramos que alcanza la meta sin que ningún aportante obtenga un voto adicional.</p>
+ <p>Se examina la viabilidad técnica de una suscripción de un dólar, donde el coste de transacción puede exceder al propio aporte, y se identifica una solución disponible: redes de segunda capa con el precompilado RIP-7212, que abarata la verificación de firmas secp256r1 en más de un 98% y permite suscribirse con la huella o el rostro del teléfono, sin monedero ni frase semilla. Finalmente se analizan los riesgos jurídicos y se identifica la <i>limited cooperative association</i> de Colorado como envoltorio compatible con voto por membresía.</p>
+ <p class="kw"><b>Palabras clave</b> &nbsp;gobernanza cooperativa; DAO; democracia líquida; Pol.is; Decidim; patrimonio colectivo; plutocracia algorítmica; diáspora; verificabilidad criptográfica; RIP-7212; llaves de acceso.</p>
 </section>
 
 <section class="abs en">
  <h2>Abstract</h2>
- <p>Most decentralised autonomous organisations allocate decision power in proportion to contributed capital, reproducing on-chain the plutocracy they claim to overcome. This paper specifies an alternative: a digital cooperative holding collective assets in which <b>each person subscribes exactly one non-transferable membership share carrying exactly one vote</b>, regardless of any additional capital contributed. The design deliberately decouples three functions that DAOs usually conflate —funding, voice and execution— assigning each to a distinct mechanism: capital contribution in tranches carrying no differential political rights, measured deliberation through Pol.is-style opinion clustering and structured participation on Decidim, and execution through a smart contract under multisignature control. We analyse a 750,000 USD capitalisation target and show that a single-tranche structure is incompatible with equality of opportunity. A three-tranche structure is proposed that meets the target without altering vote distribution. Legal risks are examined, chiefly the characterisation of the membership share as a security, and Colorado's limited cooperative association is identified as a legal wrapper compatible with per-member voting.</p>
-</section>
+ <p>Most decentralised autonomous organisations allocate decision power in proportion to contributed capital, reproducing on-chain the plutocracy they claim to overcome. This paper specifies an alternative: a digital cooperative holding collective assets in which <b>each person subscribes exactly one non-transferable membership share carrying exactly one vote</b>, regardless of any additional capital contributed. The entry mechanism, named <i>Go Found Us</i>, is a smart contract of invitation whose subscription price is <b>one dollar</b> — the minimum threshold that records a deliberate act of will while excluding no one. We prove a counter-intuitive result: the one-dollar share is not a funding instrument but a credentialing one. Reaching a 750,000 USD target through it alone would require 750,000 members. The dollar does not fund the commons; it certifies who governs them, and that auditable census —not founder capital— is the asset that makes institutional fundraising credible. A three-tranche structure is proposed that meets the target without granting any contributor an additional vote. We examine the technical viability of a one-dollar subscription, where transaction cost may exceed the contribution itself, and identify layer-two networks with the RIP-7212 precompile as a working solution, enabling enrolment by fingerprint or face with no wallet and no seed phrase.</p>
+ </section>
 
 <h2 class="sec" id="s1"><span class="n">1</span>Introducción</h2>
 <p class="lead">Una organización que reparte el voto según el capital no es una democracia con tecnología: es una sociedad anónima con criptografía. La promesa de las DAO fue eliminar al intermediario que concentra poder; su implementación dominante —voto ponderado por tenencia de <i>tokens</i>— lo reintrodujo bajo otro nombre. Quien compra más, decide más. En una comunidad de personas exiliadas, donde la desigualdad económica es extrema y a menudo consecuencia directa de la persecución sufrida, ese diseño convertiría la victimización en desventaja política permanente.</p>
-<p>Este documento especifica el modelo de gobernanza y la estructura de capital de una cooperativa digital de patrimonio colectivo constituida por miembros de la diáspora nicaragüense. Su regla constitutiva se enuncia en una línea: <b>una acción por persona, un voto por acción</b>. La formulación es deliberadamente recursiva —parece conceder el voto a la acción y no a la persona— pero produce igualdad política exacta siempre que se cumplan dos condiciones que la literatura cooperativa conoce bien y que la práctica de las DAO suele ignorar: que ninguna persona pueda suscribir más de una acción, y que la acción sea intransferible. La sección 3 demuestra que esas dos condiciones son el elemento portante del diseño, y que sin ellas la fórmula degenera en plutocracia en el primer mercado secundario.</p>
+<p>Este documento especifica el modelo de gobernanza y la estructura de capital de una cooperativa digital de patrimonio colectivo constituida por miembros de la diáspora nicaragüense. Su regla constitutiva se enuncia en una línea: <b>una acción por persona, un voto por acción</b>. Su mecanismo de entrada, <i>Go Found Us</i>, es un contrato inteligente de invitación cuyo precio de suscripción es un dólar: no se trata de recaudar sino de fundar, y el nombre lo dice —no <i>fund</i> sino <i>found</i>. La formulación es deliberadamente recursiva —parece conceder el voto a la acción y no a la persona— pero produce igualdad política exacta siempre que se cumplan dos condiciones que la literatura cooperativa conoce bien y que la práctica de las DAO suele ignorar: que ninguna persona pueda suscribir más de una acción, y que la acción sea intransferible. La sección 3 demuestra que esas dos condiciones son el elemento portante del diseño, y que sin ellas la fórmula degenera en plutocracia en el primer mercado secundario.</p>
 <p>La contribución de este trabajo es triple. Primero, un modelo de gobernanza que separa capital de voz sin renunciar a captar capital (sección 3). Segundo, una arquitectura de cuatro capas que combina medición de consenso, deliberación estructurada, ejecución automática y auditoría criptográfica, usando componentes libres existentes en lugar de construir desde cero (sección 4). Tercero, un análisis honesto de la estructura económica necesaria para alcanzar una meta de 750.000 dólares sin violar el principio de igualdad de oportunidades, y de los riesgos jurídicos que esa captación conlleva (secciones 5 y 6).</p>
 
 <h2 class="sec" id="s2"><span class="n">2</span>Antecedentes</h2>
@@ -289,68 +290,92 @@ td strong{color:var(--ink)}
 
 <h3 class="sub"><span class="n">4.3</span>Identidad y prueba de unicidad</h3>
 <p>El modelo descansa sobre un supuesto que es, con diferencia, el más frágil: que cada persona puede demostrar ser distinta de todas las demás sin que el sistema llegue a saber quién es. Una capa de unicidad débil permite fabricar consenso con cuentas falsas —ataque que la generación automática de texto ha abaratado radicalmente—; una capa demasiado estricta expone o excluye a la persona perseguida, que es precisamente a quien el proyecto debe servir. El diseño ofrece tres vías alternativas, ninguna obligatoria: avales cruzados de socios de agrupamientos distintos, verificación documental de un solo uso en que el documento se descarta tras generar una prueba criptográfica de unicidad, y verificación presencial por dos delegados que firman conjuntamente. A ello se añade una cuarentena de veintiún días con voz deliberativa pero sin voto vinculante, que encarece el ataque relámpago sin excluir a nadie de la conversación.</p>
+<p>Conviene además advertir un efecto que el precio de suscripción introduce y que suele pasarse por alto. En un esquema con acciones caras, el coste económico de fabricar identidades falsas actúa como defensa de segundo orden: suplantar mil socios a cien dólares cuesta cien mil. <b>A un dólar, cuesta mil.</b> La suscripción fundacional elimina deliberadamente esa barrera económica —que es también la barrera que excluye al pobre— y al hacerlo <b>traslada la totalidad de la defensa a la capa de unicidad</b>. Esta no es una objeción al precio de un dólar: es la razón por la que la prueba de unicidad deja de ser un componente más y pasa a ser la dependencia crítica del sistema entero.</p>
 <div class="nota"><b>Esta tensión no se resuelve, se administra.</b> Ningún diseño conocido satisface simultáneamente unicidad fuerte, anonimato fuerte y accesibilidad universal. El sistema debe declarar explícitamente en qué punto del triángulo se sitúa, en lugar de sugerir que lo ha superado.</div>
 
-<h2 class="sec" id="s5"><span class="n">5</span>Estructura de capital</h2>
+<h3 class="sub"><span class="n">4.5</span>Viabilidad técnica de una suscripción de un dólar</h3>
+<p>Un aporte de un dólar plantea un problema que la mayoría de los diseños de gobernanza en cadena nunca enfrentan: <b>el coste de la transacción puede superar al propio aporte</b>. Una escritura de estado en la capa base de Ethereum cuesta, en condiciones normales, varias veces un dólar. Un sistema que pida un dólar y cobre tres de comisión habría fracasado en su propio objetivo de inclusión antes de registrar al primer socio.</p>
+<p>Existen tres mecanismos combinables que resuelven el problema, y conviene adoptarlos los tres:</p>
+<ul>
+ <li><b>Red de segunda capa.</b> En rollups como Optimism, Base, Arbitrum o Polygon zkEVM el coste de una suscripción se sitúa en fracciones de centavo, de modo que la comisión deja de ser material frente al aporte.</li>
+ <li><b>Suscripción patrocinada.</b> Mediante transacciones delegadas, la cooperativa asume la comisión y el socio solo firma. Esto desacopla la condición de socio de la tenencia previa de criptomoneda, requisito que de otro modo excluiría a la mayor parte del padrón potencial.</li>
+ <li><b>Llaves de acceso en lugar de monederos.</b> El precompilado RIP-7212, finalizado y desplegado en Optimism, Base, Arbitrum, zkSync Era y Polygon zkEVM, verifica firmas sobre la curva secp256r1 por unos 3.450 de gas frente a los 200.000 a 300.000 que exigía su implementación en contrato: una reducción superior al 98% <span class="cite">[13]</span>. Esa es la curva del Secure Enclave de Apple, del almacén de claves de Android y del estándar FIDO2.</li>
+</ul>
+<div class="nota"><b>Continuidad con la capa de auditoría.</b> La implementación de referencia descrita en 4.4 ya genera claves ECDSA sobre P-256 —es decir, secp256r1— en el navegador del ciudadano. Con RIP-7212, <b>esas mismas claves son verificables en cadena sin conversión ni puente</b>: la persona se suscribe con su huella o su rostro, sin monedero, sin frase semilla y sin haber tocado una criptomoneda antes. La elección de curva hecha por razones de accesibilidad web resulta ser la correcta también en cadena.</div>
 
-<h3 class="sub"><span class="n">5.1</span>El dilema del tramo único</h3>
-<p>Supóngase que la totalidad de la meta de 750.000 dólares se captara mediante acciones sociales iguales. Como cada persona suscribe exactamente una, el número de socios necesarios queda determinado por el precio unitario:</p>
+<h2 class="sec" id="s5"><span class="n">5</span>Go Found Us y la estructura de capital</h2>
+
+<h3 class="sub"><span class="n">5.1</span>La suscripción fundacional de un dólar</h3>
+<p><i>Go Found Us</i> es el contrato de invitación por el que una persona se convierte en socia. Su precio es un dólar, y la elección de esa cifra es un acto de diseño, no una concesión comercial. Un dólar es suficiente para registrar una <b>voluntad deliberada</b> —nadie se suscribe por accidente, y el acto queda firmado y sellado— y es lo bastante bajo para que la capacidad económica deje de ser un filtro de entrada. El nombre expresa la diferencia con la recaudación convencional: no se invita a <i>financiarnos</i> sino a <i>fundarnos</i>.</p>
+<p>La acción así suscrita confiere condición de socio y exactamente un voto. No confiere derecho a rendimiento, no se transfiere y no se acumula. En términos patrimoniales es casi nada; en términos políticos es todo lo que hay.</p>
+
+<h3 class="sub"><span class="n">5.2</span>Lo que un dólar no puede financiar</h3>
+<p>De la regla de una acción por persona se sigue una aritmética inflexible: el capital captado por esta vía es igual al número de socios. La tabla 2 muestra lo que ese capital permite en cada escala.</p>
 <div class="tscroll">
 <table>
- <caption><b>Tabla 2.</b> Precio de la acción frente a socios requeridos para alcanzar 750.000 USD en un esquema de tramo único.</caption>
- <thead><tr><th>Precio de la acción</th><th class="num">Socios requeridos</th><th>Consecuencia</th></tr></thead>
+ <caption><b>Tabla 2.</b> Capital captado mediante suscripciones de un dólar según el tamaño del padrón, y destino que ese capital permite cubrir. La última fila corresponde a la meta de capitalización.</caption>
+ <thead><tr><th class="num">Socios</th><th class="num">Capital tramo A</th><th>Qué permite financiar</th></tr></thead>
  <tbody>
-  <tr><td><strong>1.000 USD</strong></td><td class="num">750</td><td>Excluye a la mayoría de la diáspora trabajadora</td></tr>
-  <tr><td><strong>500 USD</strong></td><td class="num">1.500</td><td>Sigue siendo prohibitivo para buena parte del padrón</td></tr>
-  <tr><td><strong>250 USD</strong></td><td class="num">3.000</td><td>Accesible con esfuerzo; captación exigente</td></tr>
-  <tr><td><strong>100 USD</strong></td><td class="num">7.500</td><td>Accesible; captación muy difícil en fase inicial</td></tr>
-  <tr><td><strong>50 USD</strong></td><td class="num">15.000</td><td>Plenamente inclusivo; captación inviable a corto plazo</td></tr>
+  <tr><td class="num">1.000</td><td class="num">1.000 USD</td><td>Nada material, pero el censo ya existe y es auditable</td></tr>
+  <tr><td class="num">10.000</td><td class="num">10.000 USD</td><td>Infraestructura de la plataforma durante un año</td></tr>
+  <tr><td class="num">50.000</td><td class="num">50.000 USD</td><td>Infraestructura más una auditoría externa independiente</td></tr>
+  <tr><td class="num">100.000</td><td class="num">100.000 USD</td><td>Lo anterior más un fondo operativo de reserva</td></tr>
+  <tr><td class="num">750.000</td><td class="num">750.000 USD</td><td>La meta íntegra, con un padrón que pocas organizaciones voluntarias alcanzan</td></tr>
  </tbody>
 </table>
 </div>
-<p>El resultado es una contradicción interna. Un precio alto alcanza la meta con pocos socios pero convierte la cooperativa en un club de quienes pueden pagar, vulnerando el principio de igualdad de oportunidades que la funda. Un precio bajo preserva ese principio pero exige una base de socios que ninguna organización nueva reúne en su primer año. <b>El tramo único no admite solución: el problema está en la estructura, no en el precio.</b></p>
+<p>La conclusión es inequívoca y conviene enunciarla sin rodeos: <b>la suscripción de un dólar no es el mecanismo de financiación del patrimonio colectivo</b>. Alcanzar 750.000 dólares por esa única vía exigiría 750.000 socios, una cifra del orden de la diáspora entera. Diseñar la captación sobre ese supuesto sería construir el proyecto sobre una condición que no se cumplirá.</p>
 
-<h3 class="sub"><span class="n">5.2</span>Estructura de tres tramos</h3>
-<p>La solución es la que el cooperativismo emplea desde hace décadas: separar la aportación que confiere condición de socio de la que simplemente aporta capital. Se proponen tres tramos con derechos políticos idénticos —es decir, ninguno confiere voto adicional— y prelación distinta en caso de liquidación.</p>
+<h3 class="sub"><span class="n">5.3</span>El censo como activo: por qué la legitimidad desbloquea el capital</h3>
+<p>El resultado anterior parece una objeción al modelo y es en realidad su argumento más sólido, siempre que se reinterprete qué compra el dólar. <b>El dólar no compra patrimonio: acredita gobierno.</b> Lo que produce es un censo de personas verificadas como únicas, cada una con un voto igual, cuya composición cualquiera puede recalcular desde datos abiertos sin pedir permiso.</p>
+<p>Ese censo es, para un financiador institucional, un activo de un valor que el capital de los fundadores jamás tendría. Una fundación que financia libertad de prensa, derechos humanos o apoyo a diásporas no evalúa cuánto pusieron los promotores: evalúa si existe una base real a la que la organización represente, y si esa representación es comprobable. Una cooperativa con cincuenta mil socios verificados criptográficamente, con voto igual y actas auditables, presenta una credencial que una organización con quinientos socios acaudalados no puede presentar a ningún precio.</p>
+<div class="nota"><b>Inversión del orden habitual.</b> El modelo convencional capta capital primero y construye legitimidad después, con el capital como prueba de seriedad. Aquí la secuencia se invierte: <b>primero se acredita el padrón, y el padrón acreditado es lo que desbloquea el capital</b>. Esa inversión es la razón por la que el dólar funciona y no es una ingenuidad.</div>
+
+<h3 class="sub"><span class="n">5.4</span>Estructura de tres tramos</h3>
+<p>La meta se alcanza combinando tres tramos con derechos políticos idénticos —ninguno confiere voto adicional— y prelación distinta en caso de liquidación. El escenario de la figura 2 supone un padrón de cincuenta mil socios.</p>
 
 <figure>
  <div class="cap2">
   <div class="col2">
    <h5>Flujo de capital</h5>
-   <div class="tr a"><b>Tramo A &middot; Acción social</b>Igual para todos, intransferible, una por persona. Confiere condición de socio.<span class="mo">100 USD &times; 2.500 socios = 250.000 USD</span></div>
-   <div class="tr b"><b>Tramo B &middot; Aportación voluntaria</b>Variable, subordinada, reembolsable después del tramo A. Para quien puede y quiere aportar más.<span class="mo">promedio 500 USD &times; 600 socios = 300.000 USD</span></div>
-   <div class="tr c"><b>Tramo C &middot; Financiación no reembolsable</b>Donaciones y subvenciones de fundaciones de libertad de prensa, derechos humanos y apoyo a diásporas.<span class="mo">200.000 USD</span></div>
+   <div class="tr a"><b>Tramo A &middot; Go Found Us</b>Un dólar, igual para todos, intransferible, una por persona. Confiere condición de socio y voto.<span class="mo">1 USD &times; 50.000 socios = 50.000 USD</span></div>
+   <div class="tr b"><b>Tramo B &middot; Aportación voluntaria</b>Variable, subordinada, reembolsable después del tramo A. Para quien puede y quiere aportar más.<span class="mo">promedio 600 USD &times; 500 socios = 300.000 USD</span></div>
+   <div class="tr c"><b>Tramo C &middot; Financiación no reembolsable</b>Donaciones y subvenciones institucionales, acreditadas por el censo del tramo A.<span class="mo">400.000 USD</span></div>
   </div>
   <div class="col2">
    <h5>Derechos políticos</h5>
    <div class="voto">
-    <div class="big">2.500 socios<br>2.500 votos</div>
+    <div class="big">50.000 socios<br>50.000 votos</div>
     <div class="sm">El censo electoral lo determina exclusivamente el tramo A. Quien aporta en los tramos B o C no obtiene ni un voto adicional.</div>
    </div>
    <div class="nolink">Los tramos B y C no tienen arista hacia el voto.<br>La ausencia de esa arista es el diseño.</div>
   </div>
  </div>
- <figcaption><b>Figura 2.</b> Estructura de capital en tres tramos. El total asciende a 750.000 USD con 2.500 socios y 2.500 votos. Un socio que aportara 10.000 USD en el tramo B tendría exactamente el mismo poder de decisión que uno que solo suscribiera su acción de 100 USD.</figcaption>
+ <figcaption><b>Figura 2.</b> Estructura de capital en tres tramos: 750.000 USD con 50.000 socios y 50.000 votos. Un socio que aportara 10.000 USD en el tramo B tendría exactamente el mismo poder de decisión que uno que solo suscribiera su dólar fundacional. El tramo A aporta el 6,7% del capital y el 100% del gobierno.</figcaption>
 </figure>
 
-<p>La estructura cumple las tres restricciones simultáneamente: alcanza la meta, mantiene la acción en un precio que la diáspora trabajadora puede pagar, y preserva la igualdad política exacta. Añade además una propiedad deseable: diversifica el origen del capital, de modo que la retirada de un aportante mayor no compromete la viabilidad ni —y esto importa más— le concede influencia desproporcionada por la vía de la amenaza de retirada.</p>
+<p>La estructura satisface simultáneamente las tres restricciones del problema: alcanza la meta, mantiene la entrada en un dólar y preserva la igualdad política exacta. Añade una propiedad defensiva: al diversificar el origen del capital, la retirada de un aportante mayor no compromete la viabilidad ni —lo que importa más— le concede influencia por la vía de amenazar con retirarse.</p>
 
-<h3 class="sub"><span class="n">5.3</span>Administración del patrimonio</h3>
+<h3 class="sub"><span class="n">5.5</span>La subred como patrimonio recuperable</h3>
+<p>El destino declarado del patrimonio es el registro de una subred de inteligencia artificial que quede en propiedad colectiva de los socios. Esa decisión tiene una propiedad económica que conviene hacer explícita porque altera el perfil de riesgo: el coste de registro de una subred se <b>bloquea, no se quema</b>, y es recuperable por quien la registró si la subred llegara a desregistrarse. El patrimonio no se gasta: queda inmovilizado en un activo del que la cooperativa conserva la titularidad.</p>
+<p>El coste de registro es dinámico —se dobla con cada registro y decae con el tiempo— y durante 2026 ha oscilado aproximadamente entre 765 y 3.800 TAO, lo que a precios recientes sitúa la operación entre unos 145.000 y unos 750.000 dólares. Esa horquilla explica por sí sola la magnitud de la meta, y también por qué el momento de ejecutar el registro es una decisión económica relevante que debe someterse al umbral de reforma y no quedar en manos de los administradores.</p>
+
+<h3 class="sub"><span class="n">5.6</span>Administración del patrimonio</h3>
 <p>El patrimonio común se administra bajo reglas publicadas <b>antes</b> de recibir el primer aporte, condición que la literatura sobre gobierno de recursos comunes identifica como determinante del éxito institucional <span class="cite">[8]</span>. Ningún administrador puede firmar solo un desembolso: la ejecución exige tres de cinco firmas, con llaves custodiadas en hogares distintos, y cada operación queda registrada con su estado anterior y posterior. El mandato de los administradores es revocable en cualquier momento, y el incumplimiento reiterado de plazos de respuesta abre votación de revocación de forma automática, sin que nadie deba solicitarla.</p>
 
 <h2 class="sec" id="s6"><span class="n">6</span>Análisis jurídico</h2>
 
 <div class="alerta">
- <h4>Riesgo principal: la acción social puede calificar como valor negociable</h4>
- <p>Ofrecer públicamente un instrumento que confiere derechos patrimoniales y expectativa de retorno derivada del esfuerzo de terceros constituye, en la práctica totalidad de las jurisdicciones, una <b>oferta de valores sujeta a registro o exención</b>. La captación de ahorro del público está además específicamente regulada. Hacerlo sin cobertura legal expondría a los promotores a responsabilidad personal y, para un proyecto cuya tesis es la superioridad de las instituciones verificables, sería autodestructivo en el plano reputacional.</p>
- <p>Dos rasgos del diseño <i>atenúan</i> el riesgo sin eliminarlo: la intransferibilidad de la acción y la ausencia de expectativa de lucro pasivo. Ninguno sustituye el dictamen de un abogado de valores en cada jurisdicción donde resida un socio. <b>Este documento no es asesoría jurídica ni financiera.</b></p>
+ <h4>El riesgo no es uniforme: depende del tramo</h4>
+ <p>Ofrecer públicamente un instrumento que confiere derechos patrimoniales y expectativa de retorno derivada del esfuerzo de terceros constituye, en la práctica totalidad de las jurisdicciones, una <b>oferta de valores sujeta a registro o exención</b>. Pero los tres tramos de la sección 5 no comparten ese perfil, y tratarlos como un bloque único lleva a conclusiones equivocadas en ambas direcciones.</p>
+ <p><b>El tramo A es el menos expuesto.</b> Un dólar intransferible, sin derecho a rendimiento, sin mercado posible y cuya única contraprestación es el derecho a participar, se parece mucho más a una <b>cuota de afiliación</b> que a un valor negociable. La ausencia de expectativa de lucro —elemento central en los criterios habituales de calificación— es aquí estructural y no retórica: el contrato carece de mecanismo alguno para distribuir rendimientos a la acción.</p>
+ <p><b>El tramo B es el expuesto.</b> Una aportación variable y reembolsable, hecha con la expectativa de recuperarla y posiblemente revalorizada por la gestión colectiva, reúne los rasgos que las autoridades examinan. Es el tramo que exige dictamen, documentación de suscripción y, muy probablemente, acogerse a una exención específica.</p>
+ <p>Ninguna de estas observaciones sustituye el dictamen de un abogado de valores en cada jurisdicción donde resida un socio. <b>Este documento no es asesoría jurídica ni financiera.</b></p>
 </div>
 
-<h3 class="sub"><span class="n">6.1</span>Envoltorio legal: la cooperativa como figura, no como metáfora</h3>
-<p>La <i>limited cooperative association</i> (LCA) del estado de Colorado presenta un encaje notable con este diseño: admite expresamente el voto por membresía —un socio, un voto— además del voto por patronazgo, distribuye retornos según actividad y no según capital, y ha sido analizada como envoltorio legal para organizaciones autónomas descentralizadas, resolviendo los problemas de personalidad jurídica y responsabilidad limitada que una DAO sin envoltorio arrastra <span class="cite">[9]</span><span class="cite">[10]</span>. La alternativa más citada, la <i>DAO LLC</i> de Wyoming, reconoce personalidad jurídica pero por defecto calcula el interés de membresía en función de las aportaciones de activos digitales, lo que exige redactar expresamente en los documentos de gobierno la cláusula que desactiva ese reparto <span class="cite">[11]</span>. Entre ambas, la LCA parte de la regla que este modelo necesita; la DAO LLC obliga a derogarla.</p>
-
-<h3 class="sub"><span class="n">6.2</span>Incompatibilidad entre donación y suscripción</h3>
-<p>Una campaña en plataformas de recaudación por donación y una suscripción de acciones son instrumentos jurídicamente incompatibles, y conviene no mezclarlos en un mismo llamamiento. Las plataformas de donación prohíben en sus condiciones de uso las ofertas de inversión o participación; prometer acciones, derechos de gobierno o retorno a cambio de una donación vulnera esas condiciones y, con mayor gravedad, puede constituir oferta de valores encubierta. La vía correcta es mantenerlos separados: <b>el tramo C puede captarse como donación genuina y sin contraprestación</b>; los tramos A y B exigen un proceso de suscripción con documentación propia, verificación de la condición de socio y cobertura legal.</p>
+<h3 class="sub"><span class="n">6.2</span>Go Found Us no es una campaña de donación</h3>
+<p>Conviene no confundir el mecanismo propuesto con una recaudación en plataformas de donación, aunque el nombre juegue con esa referencia. Las plataformas de donación prohíben en sus condiciones de uso las ofertas de inversión o participación, y prometer derechos de gobierno a cambio de una donación las vulneraría. <i>Go Found Us</i> opera en sentido contrario: no pide dinero a cambio de nada, ni promete retorno a cambio de dinero. Pide <b>un dólar a cambio de un voto</b>, que es una transacción de naturaleza asociativa y no comercial.</p>
+<p>Esa naturaleza debe reflejarse en el lenguaje de todo el material público. Un llamamiento que diga «invierte en nosotros» o que insinúe revalorización desplazaría el tramo A hacia el terreno de los valores negociables por efecto de la propia comunicación, aunque el contrato no haya cambiado una línea. <b>El tramo C, en cambio, sí puede captarse como donación genuina y sin contraprestación</b>, y debe mantenerse en un proceso separado, con su propia documentación.</p>
 
 <h3 class="sub"><span class="n">6.3</span>Socios en múltiples jurisdicciones</h3>
 <p>La diáspora reside en numerosos países, de modo que la normativa aplicable no es una sino muchas. Un enfoque practicable consiste en constituir la cooperativa en una jurisdicción compatible, restringir inicialmente la suscripción a los países donde se cuente con dictamen favorable, y ampliar el ámbito por fases conforme se obtengan nuevos dictámenes. Es más lento y menos épico que un llamamiento global simultáneo, y es la única vía que no pone en riesgo a los propios socios.</p>
@@ -361,7 +386,8 @@ td strong{color:var(--ink)}
  <li><b>La unicidad de persona no está resuelta</b>, solo administrada (4.3). Es el supuesto del que depende todo lo demás y es el más frágil.</li>
  <li><b>El agrupamiento de opinión es manipulable</b> por coordinación: un grupo suficientemente grande que vote de forma idéntica puede fabricar dos agrupamientos aparentes y satisfacer el umbral de transversalidad. Mitigarlo exige publicar el algoritmo de agrupamiento para auditoría externa y fijar tamaños mínimos de grupo.</li>
  <li><b>La democracia líquida tiene evidencia desfavorable</b> <span class="cite">[6]</span>. Se adopta con límites, no con entusiasmo.</li>
- <li><b>La captación de 2.500 socios no está demostrada.</b> La estructura de tres tramos resuelve la aritmética, no la movilización.</li>
+ <li><b>La captación de decenas de miles de socios no está demostrada.</b> La estructura de tres tramos resuelve la aritmética; la movilización es un problema distinto y no resuelto.</li>
+ <li><b>El tramo C es un supuesto, no un compromiso.</b> La tesis de que el censo desbloquea financiación institucional es plausible y no está verificada: ninguna fundación se ha pronunciado.</li>
  <li><b>Ninguna cifra de este documento ha sido validada en operación.</b> Los valores de la tabla 2 y de la figura 2 son escenarios de diseño, no proyecciones.</li>
 </ul>
 
@@ -371,10 +397,10 @@ td strong{color:var(--ink)}
  <caption><b>Tabla 3.</b> Secuencia propuesta. Las fases 1 y 2 no mueven fondos de terceros y son íntegramente reversibles.</caption>
  <thead><tr><th>Fase</th><th>Contenido</th><th>Condición de salida</th></tr></thead>
  <tbody>
-  <tr><td><strong>1 &middot; Gobernanza</strong></td><td>Despliegue de las capas 4, 3 y 1 sin patrimonio. Deliberación y decisiones vinculantes reales sobre asuntos no económicos.</td><td>Una decisión tomada y recalculada por un tercero independiente</td></tr>
+  <tr><td><strong>1 &middot; Censo</strong></td><td>Despliegue de Go Found Us y de las capas 4, 3 y 1. Suscripción de un dólar, deliberación y decisiones vinculantes reales sobre asuntos no económicos.</td><td>Padrón verificable en crecimiento y una decisión recalculada por un tercero independiente</td></tr>
   <tr><td><strong>2 &middot; Constitución</strong></td><td>Elección de jurisdicción, constitución de la figura cooperativa, dictamen de valores y redacción estatutaria.</td><td>Entidad constituida y dictamen favorable en al menos una jurisdicción</td></tr>
   <tr><td><strong>3 &middot; Auditoría</strong></td><td>Auditoría externa independiente del contrato inteligente y del algoritmo de agrupamiento, publicada íntegra.</td><td>Informe publicado y hallazgos críticos corregidos</td></tr>
-  <tr><td><strong>4 &middot; Capitalización</strong></td><td>Apertura de los tres tramos por separado, con custodia multifirma operativa desde el primer dólar.</td><td>Prueba de reservas reproducida por dos observadores independientes</td></tr>
+  <tr><td><strong>4 &middot; Capitalización</strong></td><td>Apertura de los tramos B y C por separado, con custodia multifirma operativa desde el primer dólar, y decisión del momento de registro de la subred.</td><td>Prueba de reservas reproducida por dos observadores independientes</td></tr>
  </tbody>
 </table>
 </div>
@@ -382,7 +408,8 @@ td strong{color:var(--ink)}
 
 <h2 class="sec" id="s9"><span class="n">9</span>Conclusiones</h2>
 <p>Una DAO que reparte el voto según el capital no corrige la concentración de poder: la automatiza. Este trabajo ha especificado una alternativa construida sobre un principio con un siglo de evidencia institucional —un socio, un voto— y la ha trasladado a una infraestructura verificable sin renunciar a captar capital. La pieza portante no es la criptografía sino una ausencia deliberada: la función que permitiría transferir una acción, y con ella el voto, no existe.</p>
-<p>El análisis económico arroja una conclusión incómoda y útil: la meta de 750.000 dólares es inalcanzable mediante acciones iguales sin excluir a quienes el proyecto existe para servir. La estructura de tres tramos resuelve esa contradicción manteniendo intacto el censo electoral, y al hacerlo ilustra la tesis general del diseño: <b>el capital puede entrar por muchas puertas siempre que ninguna de ellas conduzca a la urna.</b></p>
+<p>El análisis económico arroja un resultado que invierte la intuición de partida y que constituye la aportación práctica principal de este trabajo: <b>la suscripción de un dólar no financia el patrimonio colectivo, lo acredita</b>. Pretender reunir 750.000 dólares a un dólar por socio exigiría un padrón del orden de la diáspora entera. Pero el censo que esa suscripción produce —decenas de miles de personas verificadas como únicas, con voto igual y actas que cualquiera puede recalcular— es exactamente la credencial que vuelve creíble la captación ante quien sí puede aportar esa cifra. El orden habitual se invierte: no es el capital el que otorga legitimidad, sino la legitimidad la que atrae capital.</p>
+<p>De ahí se sigue el principio que resume el diseño: <b>el capital puede entrar por muchas puertas siempre que ninguna de ellas conduzca a la urna.</b> Un socio que aporte diez mil dólares y otro que solo haya firmado su dólar fundacional pesan exactamente lo mismo cuando se cuenta.</p>
 <p>Queda pendiente lo más difícil, que no es técnico. Demostrar unicidad sin conocer identidades, resistir la coordinación maliciosa y reunir miles de socios dispersos en una docena de países son problemas abiertos. Enunciarlos como abiertos, y no como resueltos, es parte del método que este documento propone.</p>
 
 <section class="refs">
@@ -400,6 +427,7 @@ td strong{color:var(--ink)}
   <li>«Solving the Riddle of the DAO with Colorado's Cooperative Laws»: la <i>limited cooperative association</i> admite voto por membresía o por patronazgo y sirve como envoltorio legal de una DAO.</li>
   <li>Wyoming DAO Supplement, W.S. 17-31-101 y siguientes. El interés de membresía se calcula por defecto según aportaciones de activos digitales, salvo disposición expresa en los documentos de gobierno. <a href="https://cryptoslate.com/crypto-laws/wyoming-dao-supplement/">cryptoslate.com</a></li>
   <li>Aguiar-Conraria, L. y Magalhães, P. «Referendum design, quorum rules and turnout». <i>Public Choice</i>, 144, 2010.</li>
+  <li>RIP-7212: <i>Precompile for secp256r1 Curve Support</i>. Finalizado y desplegado en Optimism, Base, Arbitrum, zkSync Era y Polygon zkEVM. Reduce la verificación de firmas de unos 200.000–300.000 de gas a unos 3.450. <a href="https://ethereum-magicians.org/t/eip-7212-precompiled-for-secp256r1-curve-support/14789">ethereum-magicians.org</a></li>
  </ol>
  <div class="apend">
   <p style="font-size:13px;color:var(--ink3);margin:0;text-align:left"><b>Nota sobre el estado del documento.</b> Este es un documento de trabajo sometido al mismo procedimiento que describe: se objeta, se impugna y se reforma por deliberación y consenso transversal. No constituye asesoría jurídica, financiera ni de inversión, y no es una oferta ni una invitación a suscribir instrumento alguno.</p>
