@@ -107,8 +107,15 @@ export async function createElection(
   let i = 0;
   while (formData.has(`candidate_title_${i.toString()}`)) {
     const title = formData.get(`candidate_title_${i.toString()}`) as string;
+    const desc  = formData.get(`candidate_description_${i.toString()}`) as string | null;
     if (title.trim()) {
-      candidates.push({ title: title.trim(), position: i + 1 });
+      const trimmedDesc = desc?.trim();
+      const entry: { title: string; description?: string; position: number } = {
+        title: title.trim(),
+        position: i + 1,
+      };
+      if (trimmedDesc) entry.description = trimmedDesc;
+      candidates.push(entry);
     }
     i++;
   }
@@ -166,7 +173,7 @@ export async function castVote(
     }
   }
 
-  const res = await actionFetch(`/api/voting/elections/${electionId}/vote`, {
+  const res = await actionFetch(`/api/voting/elections/${electionId}/ballots`, {
     method: 'POST',
     body: JSON.stringify({ rankings }),
   });

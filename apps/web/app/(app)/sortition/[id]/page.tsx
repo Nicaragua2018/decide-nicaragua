@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import type { Metadata } from 'next';
 import { serverFetch } from '@/lib/api';
+import { ConfirmForm } from '@/components/ConfirmForm';
 import { executeDraw, cancelDraw } from '@/lib/actions';
 import type { SortitionDrawDetail, SortitionStatus, SortitionVerificationResult } from '@decide/shared';
 
@@ -26,9 +27,9 @@ export default async function SortitionPage({
   params: Promise<{ id: string }>;
   searchParams: Promise<{ verify?: string }>;
 }) {
-  const { id }         = await params;
-  const { verify }     = await searchParams;
-  const showVerify     = verify === '1';
+  const { id }     = await params;
+  const { verify } = await searchParams;
+  const showVerify = verify === '1';
 
   const res = await serverFetch(`/api/sortition/draws/${id}`);
   if (!res.ok) return <p className="empty-state">Sorteo no encontrado.</p>;
@@ -56,27 +57,38 @@ export default async function SortitionPage({
           </span>
         </div>
         <p className="card-meta">
-          Selección de {draw.selectionSize} miembros ·{' '}
+          Selección de {draw.selectionSize} miembro{draw.selectionSize !== 1 ? 's' : ''} ·{' '}
           {new Date(draw.createdAt).toLocaleDateString('es-NI')}
         </p>
         {draw.description && <p className="mt-2">{draw.description}</p>}
       </div>
 
-      {/* Administración */}
+      {/* Administración (pendiente) */}
       {isPending && (
         <div className="card mb-4">
-          <p className="card-title mb-2">Ejecutar sorteo</p>
+          <p className="card-title mb-1">Ejecutar sorteo</p>
           <p className="text-sm text-muted mb-3">
-            Al ejecutar se genera una semilla pública y se seleccionan {draw.selectionSize} miembros
-            aleatoriamente del grupo.
+            Se generará una semilla pública aleatoria y se seleccionarán{' '}
+            {draw.selectionSize} miembro{draw.selectionSize !== 1 ? 's' : ''} usando el algoritmo
+            Fisher-Yates con SHA-256. El resultado es reproducible e independientemente verificable.
           </p>
+          <div className="alert-info mb-4 text-sm">
+            Esta acción es <strong>irreversible</strong>. Una vez ejecutado el sorteo,
+            los miembros seleccionados quedan registrados en la auditoría pública.
+          </div>
           <div className="flex gap-2">
-            <form action={executeDraw.bind(null, id)}>
+            <ConfirmForm
+              action={executeDraw.bind(null, id)}
+              message={`¿Ejecutar el sorteo ahora? Se seleccionarán ${draw.selectionSize} miembro${draw.selectionSize !== 1 ? 's' : ''} aleatoriamente. Esta acción no se puede deshacer.`}
+            >
               <button className="btn btn-primary">Ejecutar sorteo</button>
-            </form>
-            <form action={cancelDraw.bind(null, id)}>
-              <button className="btn btn-ghost">Cancelar</button>
-            </form>
+            </ConfirmForm>
+            <ConfirmForm
+              action={cancelDraw.bind(null, id)}
+              message="¿Cancelar este sorteo? Se marcará como cancelado y no podrá ejecutarse."
+            >
+              <button className="btn btn-ghost">Cancelar sorteo</button>
+            </ConfirmForm>
           </div>
         </div>
       )}
@@ -84,7 +96,10 @@ export default async function SortitionPage({
       {/* Miembros seleccionados */}
       {isCompleted && (
         <div className="card mb-4">
-          <p className="card-title mb-3">Miembros seleccionados</p>
+          <p className="card-title mb-3">
+            Miembros seleccionados ({draw.selectedMembers.length} de{' '}
+            {draw.poolSize ?? '?'} en el universo)
+          </p>
           <ul className="member-list">
             {draw.selectedMembers.map((m) => (
               <li key={m.profileId} className="member-item">
@@ -93,33 +108,39 @@ export default async function SortitionPage({
               </li>
             ))}
           </ul>
-          {draw.poolSize !== null && (
-            <p className="text-xs text-muted mt-3">
-              Seleccionados de un universo de {draw.poolSize} miembros.
-            </p>
-          )}
         </div>
       )}
 
-      {/* Datos técnicos y verificación */}
+      {/* Verificación técnica */}
       {isCompleted && (
         <div className="card mb-4">
-          <p className="card-title mb-2">Datos de verificación</p>
-          <p className="text-sm text-muted mb-1">
-            Algoritmo: <code>{draw.algorithm}</code>
+          <p className="card-title mb-2">Datos de verificación independiente</p>
+          <div className="verify-row">
+            <span className="text-sm text-muted">Algoritmo:</span>
+            <code className="verify-value">{draw.algorithm}</code>
+          </div>
+          <div className="verify-row">
+            <span className="text-sm text-muted">Semilla pública (seed):</span>
+            <div className="verify-seed-wrap">
+              <code className="verify-box verify-seed">{draw.seed}</code>
+            </div>
+          </div>
+          <p className="text-xs text-muted mt-2">
+            Con esta semilla y el listado de miembros del grupo en el momento del sorteo,
+            cualquier persona puede reproducir el resultado aplicando el mismo algoritmo.
           </p>
-          <p className="text-sm font-medium mb-1">Semilla pública (seed):</p>
-          <div className="verify-box mb-3">{draw.seed}</div>
 
-          {!showVerify ? (
-            <Link href={`/sortition/${id}?verify=1`} className="btn btn-ghost btn-sm">
-              Verificar resultado de forma independiente
-            </Link>
-          ) : (
-            <Link href={`/sortition/${id}`} className="btn btn-ghost btn-sm">
-              Ocultar verificación
-            </Link>
-          )}
+          <div className="mt-3">
+            {!showVerify ? (
+              <Link href={`/sortition/${id}?verify=1`} className="btn btn-ghost btn-sm">
+                Verificar resultado en el servidor
+              </Link>
+            ) : (
+              <Link href={`/sortition/${id}`} className="btn btn-ghost btn-sm">
+                Ocultar verificación
+              </Link>
+            )}
+          </div>
         </div>
       )}
 
@@ -128,24 +149,34 @@ export default async function SortitionPage({
         <div className="card">
           <div className={`alert alert-${verification.verified ? 'success' : 'error'} mb-3`}>
             {verification.verified
-              ? '✓ Verificado: los resultados almacenados coinciden con el algoritmo.'
-              : '✗ ¡Atención! Los resultados no coinciden con el algoritmo. Posible manipulación.'}
+              ? '✓ Verificado: los resultados almacenados coinciden con la recomputación.'
+              : '✗ ¡Alerta! Los resultados no coinciden con el algoritmo. Contacta a los administradores.'}
           </div>
           <div className="flex gap-4 text-sm mb-3">
-            <span>Universo: {verification.poolSize} perfiles</span>
-            <span>Selección: {verification.selectionSize}</span>
+            <span>Universo: <strong>{verification.poolSize}</strong> perfiles</span>
+            <span>Selección: <strong>{verification.selectionSize}</strong></span>
           </div>
-          <div className="flex gap-4">
-            <div style={{ flex: 1 }}>
-              <p className="text-sm font-medium mb-1">IDs almacenados:</p>
-              <ol className="verify-box" style={{ paddingLeft: '1rem' }}>
-                {verification.storedIds.map((id, i) => <li key={i}>{id}</li>)}
+
+          {/* Mostrar nombres en lugar de IDs crudos */}
+          <div className="verify-compare">
+            <div>
+              <p className="text-sm font-medium mb-1">Selección almacenada:</p>
+              <ol className="verify-box verify-names">
+                {draw.selectedMembers
+                  .sort((a, b) => a.selectionOrder - b.selectionOrder)
+                  .map((m, i) => (
+                    <li key={i}>{m.displayName ?? m.profileId}</li>
+                  ))}
               </ol>
             </div>
-            <div style={{ flex: 1 }}>
+            <div>
               <p className="text-sm font-medium mb-1">IDs recomputados:</p>
-              <ol className="verify-box" style={{ paddingLeft: '1rem' }}>
-                {verification.recomputedIds.map((id, i) => <li key={i}>{id}</li>)}
+              <ol className="verify-box verify-names">
+                {verification.recomputedIds.map((rid, i) => (
+                  <li key={i}>
+                    {draw.selectedMembers.find((m) => m.profileId === rid)?.displayName ?? rid}
+                  </li>
+                ))}
               </ol>
             </div>
           </div>

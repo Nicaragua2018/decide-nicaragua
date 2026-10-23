@@ -39,7 +39,7 @@ export class AuditService {
    */
   async log(params: AuditEventParams): Promise<void> {
     try {
-      const salt = this.config.get<string>('IP_HASH_SALT') ?? 'default-salt';
+      const salt = this.config.getOrThrow<string>('IP_HASH_SALT');
 
       await this.prisma.auditEvent.create({
         data: {

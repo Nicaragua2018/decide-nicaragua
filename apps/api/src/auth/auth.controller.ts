@@ -151,6 +151,7 @@ export class AuthController {
    * Rota access y refresh tokens usando el refresh_token cookie.
    */
   @Post('refresh')
+  @Throttle({ default: { limit: 10, ttl: 60_000 } })
   @HttpCode(HttpStatus.OK)
   async refresh(
     @Req() req: Request,
