@@ -1,6 +1,6 @@
 # Nicaragua Decide — Primeros 200: diseño
 
-Fecha: 2026-11-01 · Autor del pedido: Carlos Robleto · Estado: aprobado por partes en conversación, pendiente de revisión escrita
+Fecha: 2026-11-01 · Autor del pedido: Carlos Robleto · Estado: aprobado por Carlos Robleto el 2026-11-01
 
 ## 1. Objetivo
 
@@ -102,6 +102,13 @@ Asistente de los foros: (a) **moderación**: marca mensajes que parecen romper l
 - Correo de invitaciones por el mismo proveedor SMTP que usa el boletín de OpenCivic.
 - Despliegue por PR aprobada por Carlos, como el sitio de OpenCivic.
 - Identidad separada del perfil; IP solo como huella cifrada; verificación en dos pasos obligatoria para la mesa y los observadores, opcional para los demás; copias de seguridad diarias cifradas; sin rastreadores de terceros ni Google; revisión de seguridad completa antes de abrir a los 200.
+
+## 11b. Identidad visual
+
+- **Logo:** urna electoral con una papeleta marcada entrando por la ranura y la palabra **VOTO** al frente, cuya V es una marca de verificación dorada (`apps/web/public/logo-nicaragua-decide.svg`, boceto aprobado para iterar).
+- **Portada:** una ilustración dibujada de una Nicaragua multirracial y pluricultural (mestiza, indígena, afrodescendiente, miskita, garífuna, creole, del Pacífico, el Centro y el Caribe). Sin emblemas de ningún grupo. Si se genera con IA, lleva la etiqueta «Ilustración generada con IA».
+- **Página «Acerca de»:** la foto `renacer.jpg` (generada con IA, etiquetada como tal) junto a un reconocimiento a **RENACER**, grupo de nicaragüenses exiliados que apoya el proyecto, aportó muchas ideas sobre su estructura organizativa y democrática, y forma su primer círculo de miembros. Se aclara que cualquier grupo u organización puede sumarse en igualdad de condiciones y que los cargos se eligen por votación.
+- La portada deja de usar `renacer.jpg` como fondo.
 
 ## 12. Fases
 
