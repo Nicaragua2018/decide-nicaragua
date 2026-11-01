@@ -1,0 +1,54 @@
+/** Cargos de la mesa directiva (spec §3). */
+export enum BoardRole {
+  administrador = 'administrador',
+  coordinador_general = 'coordinador_general',
+  secretario = 'secretario',
+}
+
+export const BOARD_ROLES: BoardRole[] = [
+  BoardRole.administrador,
+  BoardRole.coordinador_general,
+  BoardRole.secretario,
+];
+
+/** Acciones delicadas que requieren 2 de 3 aprobaciones de la mesa. */
+export enum BoardActionType {
+  suspend_user = 'suspend_user',
+  change_origin = 'change_origin',
+}
+
+export interface BoardSeatSummary {
+  role: BoardRole;
+  holder: { profileId: string; displayName: string } | null;
+  source: 'fundador' | 'eleccion' | null;
+  since: string | null;
+}
+
+export interface BoardActionSummary {
+  id: string;
+  type: BoardActionType;
+  targetDisplayName: string | null;
+  params: Record<string, unknown>;
+  reason: string;
+  status: 'pending' | 'approved' | 'rejected' | 'executed';
+  proposedBy: string;
+  approvals: { role: BoardRole; approve: boolean }[];
+  createdAt: string;
+}
+
+/** Estado de verificación que ve la propia persona. */
+export interface VerificationStatus {
+  status: string;
+  references: { kind: 'invitador' | 'segunda'; displayName: string }[];
+  missing: ('invitador' | 'segunda')[];
+}
+
+/** Persona pendiente que el miembro actual puede confirmar. */
+export interface PendingVerification {
+  userId: string;
+  displayName: string;
+  birthDepartment: string | null;
+  hostCommunity: string | null;
+  invitedByMe: boolean;
+  referencesCount: number;
+}

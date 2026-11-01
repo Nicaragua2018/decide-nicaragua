@@ -41,6 +41,15 @@ export const ACTIVE_STATUSES: AccountStatus[] = [
   AccountStatus.external_collaborator,
 ];
 
+/**
+ * Estados que pueden iniciar sesión. Incluye pending_verification para que la
+ * persona vea en qué va su verificación; sin membresías no puede participar.
+ */
+export const LOGIN_STATUSES: AccountStatus[] = [
+  ...ACTIVE_STATUSES,
+  AccountStatus.pending_verification,
+];
+
 export const CAN_VOTE_STATUSES: AccountStatus[] = [
   AccountStatus.verified_citizen,
 ];
