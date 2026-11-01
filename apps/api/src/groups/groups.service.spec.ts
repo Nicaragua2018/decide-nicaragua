@@ -46,6 +46,7 @@ function buildPrismaMock() {
       findMany: vi.fn(),
       findUnique: vi.fn(),
       upsert: vi.fn(),
+      deleteMany: vi.fn(),
     },
     group: {
       findUnique: vi.fn(),
@@ -66,6 +67,7 @@ describe('GroupsService', () => {
   beforeEach(() => {
     vi.resetAllMocks();
     prisma = buildPrismaMock();
+    vi.mocked(prisma.groupMembership.deleteMany).mockResolvedValue({ count: 0 } as never);
     service = new GroupsService(prisma as unknown as PrismaService);
   });
 
@@ -112,6 +114,8 @@ describe('GroupsService', () => {
         name: 'Managua',
         memberCount: 5,
         isMember: true,
+        activated: false,
+        minActiveMembers: 7,
       });
     });
 
@@ -179,7 +183,7 @@ describe('GroupsService', () => {
       expect(prisma.group.upsert).toHaveBeenCalledWith(
         expect.objectContaining({
           where: { slug: 'country-cr' },
-          create: expect.objectContaining({ name: 'CR', type: 'territorial_residence' }),
+          create: expect.objectContaining({ name: 'Costa Rica', type: 'territorial_residence' }),
         }),
       );
     });
@@ -218,6 +222,62 @@ describe('GroupsService', () => {
           where: { slug: 'rio-san-juan' },
         }),
       );
+    });
+  });
+
+  describe('syncMemberships() — comunidades de acogida', () => {
+    it('EE. UU. con estado: une a la comunidad del estado con nombre en español', async () => {
+      vi.mocked(prisma.profile.findUnique).mockResolvedValue({ id: 'p1' } as never);
+      vi.mocked(prisma.group.upsert).mockResolvedValue({ id: 'g-fl' } as never);
+      vi.mocked(prisma.groupMembership.upsert).mockResolvedValue({} as never);
+
+      await service.syncMemberships('u1', null, 'US', 'FL');
+
+      expect(prisma.group.upsert).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { slug: 'country-us-fl' },
+          create: expect.objectContaining({ name: 'Florida, EE. UU.', type: 'territorial_residence' }),
+        }),
+      );
+    });
+
+    it('al cambiar de comunidad de acogida quita la membresía anterior del mismo tipo', async () => {
+      vi.mocked(prisma.profile.findUnique).mockResolvedValue({ id: 'p1' } as never);
+      vi.mocked(prisma.group.upsert).mockResolvedValue({ id: 'g-cr' } as never);
+      vi.mocked(prisma.groupMembership.upsert).mockResolvedValue({} as never);
+
+      await service.syncMemberships('u1', null, 'CR', null);
+
+      expect(prisma.groupMembership.deleteMany).toHaveBeenCalledWith({
+        where: {
+          profileId: 'p1',
+          group: { is: { type: 'territorial_residence', NOT: { slug: 'country-cr' } } },
+        },
+      });
+    });
+  });
+
+  describe('getGroupById() — activación', () => {
+    it('activated es true desde MIN_ACTIVE_MEMBERS miembros', async () => {
+      vi.mocked(prisma.group.findUnique).mockResolvedValue({
+        id: 'g1', name: 'León', slug: 'leon', type: 'territorial_origin', description: null,
+        isActive: true, _count: { memberships: 7 },
+      } as never);
+      vi.mocked(prisma.groupMembership.findUnique).mockResolvedValue({ id: 'm1' } as never);
+
+      const detail = await service.getGroupById('g1', 'p1');
+      expect(detail.activated).toBe(true);
+      expect(detail.minActiveMembers).toBe(7);
+    });
+
+    it('activated es false con menos miembros', async () => {
+      vi.mocked(prisma.group.findUnique).mockResolvedValue({
+        id: 'g1', name: 'León', slug: 'leon', type: 'territorial_origin', description: null,
+        isActive: true, _count: { memberships: 6 },
+      } as never);
+      vi.mocked(prisma.groupMembership.findUnique).mockResolvedValue(null as never);
+
+      expect((await service.getGroupById('g1', 'p1')).activated).toBe(false);
     });
   });
 });

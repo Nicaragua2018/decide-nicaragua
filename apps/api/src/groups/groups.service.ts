@@ -2,7 +2,9 @@ import { Injectable, NotFoundException, Logger } from '@nestjs/common';
 import { GroupType } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { slugify } from '../common/utils/slugify.util';
+import { MIN_ACTIVE_MEMBERS } from '@decide/shared';
 import type { GroupSummary, GroupDetail, GroupListResponse } from '@decide/shared';
+import { hostCommunity } from '../common/utils/host-community.util';
 
 @Injectable()
 export class GroupsService {
@@ -63,6 +65,8 @@ export class GroupsService {
       description: group.description,
       memberCount: group._count.memberships,
       isMember: membership !== null,
+      activated: group._count.memberships >= MIN_ACTIVE_MEMBERS,
+      minActiveMembers: MIN_ACTIVE_MEMBERS,
     };
   }
 
@@ -70,7 +74,8 @@ export class GroupsService {
 
   /**
    * Crea o asegura las membresías territoriales de un usuario.
-   * Se llama tras `acceptInvite`. Es idempotente — puede llamarse varias veces.
+   * Se llama al verificarse la persona y cuando un miembro verificado cambia de comunidad de acogida.
+   * Es idempotente — puede llamarse varias veces.
    *
    * Grupos asignados:
    *  - territorial_origin:    basado en birthDepartment del perfil
@@ -102,14 +107,14 @@ export class GroupsService {
       );
     }
 
-    if (currentCountry) {
-      const countryCode = currentCountry.toUpperCase();
+    const acogida = hostCommunity(currentCountry, currentRegion);
+    if (acogida) {
       operations.push(
         this.upsertMembership(profile.id, {
-          name: countryCode,
-          slug: `country-${currentCountry.toLowerCase()}`,
+          name: acogida.name,
+          slug: acogida.slug,
           type: GroupType.territorial_residence,
-          description: `Ciudadanos residentes en ${countryCode}`,
+          description: `Nicaragüenses que viven en ${acogida.name}`,
         }),
       );
     }
@@ -128,6 +133,14 @@ export class GroupsService {
       description: string;
     },
   ): Promise<void> {
+    // Una sola comunidad por tipo: al mudarse (o tras un cambio de origen aprobado) se sale de la anterior.
+    await this.prisma.groupMembership.deleteMany({
+      where: {
+        profileId,
+        group: { is: { type: groupData.type, NOT: { slug: groupData.slug } } },
+      },
+    });
+
     // Encontrar o crear el grupo
     const group = await this.prisma.group.upsert({
       where: { slug: groupData.slug },
