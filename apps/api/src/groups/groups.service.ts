@@ -80,6 +80,7 @@ export class GroupsService {
     userId: string,
     birthDepartment: string | null,
     currentCountry: string | null,
+    currentRegion: string | null = null,
   ): Promise<void> {
     const profile = await this.prisma.profile.findUnique({ where: { userId } });
 

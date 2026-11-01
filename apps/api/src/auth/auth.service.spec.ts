@@ -79,9 +79,14 @@ const prismaMock = {
     findUnique: vi.fn(),
     create: vi.fn(),
     update: vi.fn(),
+    count: vi.fn(),
   },
   profile: {
     create: vi.fn(),
+    update: vi.fn(),
+  },
+  boardSeat: {
+    findFirst: vi.fn(),
   },
   auditEvent: {
     create: vi.fn(),
@@ -214,6 +219,25 @@ describe('AuthService', () => {
       expect(prismaMock.user.create).not.toHaveBeenCalled();
       expect(emailMock.sendInvite).not.toHaveBeenCalled();
     });
+
+    it('rechaza si el miembro ya tiene 5 invitaciones pendientes', async () => {
+      prismaMock.user.findUnique.mockResolvedValue(null);
+      prismaMock.boardSeat.findFirst.mockResolvedValue(null);
+      prismaMock.user.count.mockResolvedValue(5);
+
+      await expect(service.inviteUser(dto, 'actor-id', ip)).rejects.toThrow(ForbiddenException);
+      expect(prismaMock.user.create).not.toHaveBeenCalled();
+    });
+
+    it('el administrador no tiene límite de invitaciones', async () => {
+      prismaMock.user.findUnique.mockResolvedValue(null);
+      prismaMock.boardSeat.findFirst.mockResolvedValue({ role: 'administrador' });
+      prismaMock.user.count.mockResolvedValue(40);
+      prismaMock.user.create.mockResolvedValue({ ...invitedUser, id: 'new-id' });
+
+      await service.inviteUser(dto, 'admin-id', ip);
+      expect(prismaMock.user.create).toHaveBeenCalled();
+    });
   });
 
   // ─── acceptInvite ────────────────────────────────────────────────────────────
@@ -235,6 +259,15 @@ describe('AuthService', () => {
 
       expect(bcrypt.hash).toHaveBeenCalledWith(dto.password, 12);
       expect(prismaMock.$transaction).toHaveBeenCalledOnce();
+    });
+
+    it('no crea membresías al registrarse (se crean al verificarse)', async () => {
+      prismaMock.user.findUnique.mockResolvedValue(invitedUser);
+      await service.acceptInvite(
+        { token: INVITE_TOKEN, password: 'contraseña-segura-1', displayName: 'Ana', birthDepartment: 'León', currentCountry: 'US', currentRegion: 'FL' },
+        '127.0.0.1',
+      );
+      expect(groupsMock.syncMemberships).not.toHaveBeenCalled();
     });
 
     it('lanza BadRequestException si el token no existe', async () => {
@@ -337,14 +370,27 @@ describe('AuthService', () => {
       expect(msgA).toBe(msgB);
     });
 
-    it('lanza ForbiddenException si la cuenta está en pending_verification', async () => {
+    it('lanza ForbiddenException si la cuenta está solo invitada (sin registrar)', async () => {
       prismaMock.user.findUnique.mockResolvedValue({
         ...baseUser,
-        status: AccountStatus.pending_verification,
+        status: AccountStatus.invited,
       });
       vi.mocked(bcrypt.compare).mockResolvedValue(true as never);
 
       await expect(service.login(dto, ip)).rejects.toThrow(ForbiddenException);
+    });
+
+    it('una persona pendiente de verificación puede iniciar sesión', async () => {
+      prismaMock.user.findUnique.mockResolvedValue({
+        ...baseUser,
+        status: AccountStatus.pending_verification,
+        passwordHash: '$2b$12$hash',
+      });
+      vi.mocked(bcrypt.compare).mockResolvedValue(true as never);
+      prismaMock.user.update.mockResolvedValue({});
+
+      const result = await service.login({ email: baseUser.email, password: 'x' }, '127.0.0.1');
+      expect(result.user.status).toBe(AccountStatus.pending_verification);
     });
 
     it('lanza ForbiddenException si la cuenta está suspendida', async () => {
@@ -429,6 +475,17 @@ describe('AuthService', () => {
       expect(jwtMock.sign).toHaveBeenCalledOnce();
     });
 
+    it('conserva el profileId en el nuevo token', async () => {
+      redisMock.get.mockResolvedValue(baseUser.id);
+      prismaMock.user.findUnique.mockResolvedValue({ ...baseUser, status: AccountStatus.verified_citizen });
+
+      await service.refreshTokens('rt-id', '127.0.0.1');
+
+      expect(jwtMock.sign).toHaveBeenCalledWith(
+        expect.objectContaining({ profileId: baseUser.profile.id }),
+      );
+    });
+
     it('lanza UnauthorizedException si el token no existe en Redis', async () => {
       redisMock.get.mockResolvedValue(null);
 
@@ -451,6 +508,19 @@ describe('AuthService', () => {
 
       // El token debe ser revocado aunque el usuario no sea válido
       expect(redisMock.del).toHaveBeenCalledWith(`rt:${INVITE_TOKEN}`);
+    });
+  });
+
+  describe('updateProfile', () => {
+    it('no permite cambiar por cuenta propia un territorio de origen ya elegido', async () => {
+      prismaMock.user.findUnique.mockResolvedValue({
+        ...baseUser,
+        profile: { ...baseUser.profile, birthDepartment: 'León' },
+      });
+
+      await expect(
+        service.updateProfile(baseUser.id, { birthDepartment: 'Managua' }, '127.0.0.1'),
+      ).rejects.toThrow(BadRequestException);
     });
   });
 
