@@ -13,12 +13,6 @@ CREATE TYPE "BoardActionType" AS ENUM ('suspend_user', 'change_origin');
 -- CreateEnum
 CREATE TYPE "BoardActionStatus" AS ENUM ('pending', 'approved', 'rejected', 'executed');
 
--- DropIndex
-DROP INDEX "newsletter_subscriptions_email_idx";
-
--- AlterTable
-ALTER TABLE "newsletter_subscriptions" ALTER COLUMN "id" DROP DEFAULT;
-
 -- AlterTable
 ALTER TABLE "profiles" ADD COLUMN     "currentRegion" TEXT;
 

@@ -490,11 +490,13 @@ model SortitionMember {
  * Rate limiting estricto en el controlador (5 req / hora por IP).
  */
 model NewsletterSubscription {
-  id          String    @id @default(uuid()) @db.Uuid
+  id          String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   email       String    @unique
   name        String?
   country     String?   // ISO 3166-1 alpha-2 (país de residencia)
   createdAt   DateTime  @default(now()) @db.Timestamptz
+
+  @@index([email])
 
   @@map("newsletter_subscriptions")
 }
