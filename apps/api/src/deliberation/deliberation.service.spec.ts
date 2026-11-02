@@ -558,6 +558,29 @@ describe('DeliberationService', () => {
       expect(prisma.moderationAction.findFirst).toHaveBeenCalledTimes(1);
     });
 
+    it('el autor de una respuesta oculta recibe el id de la moderación para apelar; otros no', async () => {
+      const topic = {
+        ...base,
+        comments: [{ id: 'c1', body: 'x', hidden: true, parentId: null, createdAt: new Date(), authorProfileId: PROFILE_ID, author: { displayName: 'Y' } }],
+        _count: { comments: 1 },
+      };
+      prisma.groupMembership.findUnique.mockResolvedValue(mockMembership);
+      prisma.moderationAction.findFirst.mockResolvedValue({ id: 'ma1', reason: 'Ofensa', status: 'oculto' });
+      prisma.proposal.findUnique.mockResolvedValue(topic);
+      expect((await service.getProposalById('t1', PROFILE_ID)).comments[0]?.moderationId).toBe('ma1');
+      prisma.proposal.findUnique.mockResolvedValue(topic);
+      expect((await service.getProposalById('t1', 'p3')).comments[0]?.moderationId).toBeNull();
+    });
+
+    it('el autor de un tema oculto recibe el id de la moderación; si ya fue apelada, no', async () => {
+      prisma.groupMembership.findUnique.mockResolvedValue(mockMembership);
+      prisma.proposal.findUnique.mockResolvedValue({ ...base, hidden: true, authorProfileId: PROFILE_ID });
+      prisma.moderationAction.findFirst.mockResolvedValue({ id: 'ma2', reason: 'Ofensa', status: 'oculto' });
+      expect((await service.getProposalById('t1', PROFILE_ID)).moderationId).toBe('ma2');
+      prisma.moderationAction.findFirst.mockResolvedValue({ id: 'ma2', reason: 'Ofensa', status: 'apelado' });
+      expect((await service.getProposalById('t1', PROFILE_ID)).moderationId).toBeNull();
+    });
+
     it('la lista muestra un título neutro para un tema oculto', async () => {
       prisma.groupMembership.findUnique.mockResolvedValue(mockMembership);
       prisma.proposal.findMany.mockResolvedValue([{ ...base, hidden: true }]);

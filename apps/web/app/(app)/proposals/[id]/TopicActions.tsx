@@ -18,7 +18,7 @@ export function TopicActions({ proposal }: { proposal: ProposalDetail }) {
   const [closeState, closeAction, closing] = useActionState<ActionResult | null, FormData>(closeTopic, null);
   const [hideState, hideAction, hiding] = useActionState<ActionResult | null, FormData>(hideContent, null);
 
-  const canAct = proposal.isAuthor || proposal.canModerate;
+  const canAct = (proposal.isAuthor || proposal.canModerate) && !proposal.hidden;
   const isOpen = proposal.status === ProposalStatus.open;
   const endsAt = proposal.deliberationEndsAt ? new Date(proposal.deliberationEndsAt) : null;
   const deliberationOver = endsAt !== null && endsAt.getTime() <= Date.now();

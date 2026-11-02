@@ -4,6 +4,7 @@ import { serverFetch } from '@/lib/api';
 import SignalForm from '@/components/SignalForm';
 import { CommentsSection } from './CommentsSection';
 import { TopicActions } from './TopicActions';
+import { AppealForm } from './AppealForm';
 import { updateProposalStatusDirect } from '@/lib/actions';
 import { ProposalStatus } from '@decide/shared';
 import type { ProposalDetail, SignalCounts } from '@decide/shared';
@@ -111,9 +112,12 @@ export default async function ProposalPage({
       {/* Cuerpo de la propuesta */}
       <div className="card mb-4">
         {proposal.hidden ? (
-          <p className="alert alert-warning">
-            Este tema fue ocultado por la moderación. Motivo: {proposal.hiddenReason}.
-          </p>
+          <>
+            <p className="alert alert-warning">
+              Este tema fue ocultado por la moderación. Motivo: {proposal.hiddenReason}.
+            </p>
+            {proposal.moderationId && <AppealForm moderationId={proposal.moderationId} topicId={id} />}
+          </>
         ) : (
           <p style={{ whiteSpace: 'pre-wrap', lineHeight: 1.75 }}>{proposal.body}</p>
         )}
@@ -138,12 +142,16 @@ export default async function ProposalPage({
         <p className="card-title mb-3">Señales de consenso</p>
         <ConsensusBar counts={proposal.signalCounts} />
         <div className="mt-4" style={{ borderTop: '1px solid var(--border)', paddingTop: '1rem' }}>
-          <p className="text-sm font-medium mb-2">Tu posición:</p>
-          <SignalForm
-            proposalId={id}
-            currentSignal={proposal.userSignal}
-            isOpen={isOpen}
-          />
+          {!proposal.hidden && (
+            <>
+              <p className="text-sm font-medium mb-2">Tu posición:</p>
+              <SignalForm
+                proposalId={id}
+                currentSignal={proposal.userSignal}
+                isOpen={isOpen}
+              />
+            </>
+          )}
         </div>
       </div>
 

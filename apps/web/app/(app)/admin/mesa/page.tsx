@@ -1,16 +1,18 @@
 import type { Metadata } from 'next';
-import type { BoardActionSummary, BoardSeatSummary, UserListResponse } from '@decide/shared';
+import type { BoardActionSummary, BoardSeatSummary, ModerationAppeal, UserListResponse } from '@decide/shared';
 import { serverFetch } from '@/lib/api';
+import { AppealsList } from './AppealsList';
 import { AssignSeatForm, ProposeActionForm, ROLE_LABEL, VoteButtons } from './MesaForms';
 
 export const metadata: Metadata = { title: 'Mesa directiva' };
 
 export default async function MesaPage() {
-  const [seatsRes, meRes, actionsRes, usersRes] = await Promise.all([
+  const [seatsRes, meRes, actionsRes, usersRes, appealsRes] = await Promise.all([
     serverFetch('/api/board/seats'),
     serverFetch('/api/board/me'),
     serverFetch('/api/board/actions'),
     serverFetch('/api/users?status=verified_citizen'),
+    serverFetch('/api/forums/moderation/appeals'),
   ]);
   const seats = seatsRes.ok ? ((await seatsRes.json()) as BoardSeatSummary[]) : [];
   const me = meRes.ok ? ((await meRes.json()) as { role: string | null }) : { role: null };
@@ -18,6 +20,7 @@ export default async function MesaPage() {
 
   const actions = actionsRes.ok ? ((await actionsRes.json()) as BoardActionSummary[]) : [];
   const users = usersRes.ok ? ((await usersRes.json()) as UserListResponse).users : [];
+  const appeals = appealsRes.ok ? ((await appealsRes.json()) as ModerationAppeal[]) : [];
   const noElected = seats.every((s) => s.source !== 'eleccion');
 
   return (
@@ -65,6 +68,11 @@ export default async function MesaPage() {
             {a.status === 'pending' && <VoteButtons actionId={a.id} />}
           </div>
         ))}
+      </section>
+
+      <section className="mt-2">
+        <h2 className="section-title">Apelaciones de moderación</h2>
+        <AppealsList appeals={appeals} />
       </section>
     </>
   );

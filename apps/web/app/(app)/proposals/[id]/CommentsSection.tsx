@@ -3,6 +3,7 @@
 import { useActionState, useState } from 'react';
 import { createCommentDirect, hideContent, type ActionResult } from '@/lib/actions';
 import type { CommentItem } from '@decide/shared';
+import { AppealForm } from './AppealForm';
 
 interface CommentsSectionProps {
   proposalId: string;
@@ -64,9 +65,14 @@ export function CommentsSection({ proposalId, comments, isOpen, canModerate = fa
               </span>
             </div>
             {comment.hidden ? (
-              <p className="comment-body text-muted">
-                Respuesta oculta por la moderación. Motivo: {comment.hiddenReason}.
-              </p>
+              <>
+                <p className="comment-body text-muted">
+                  Respuesta oculta por la moderación. Motivo: {comment.hiddenReason}.
+                </p>
+                {comment.moderationId && (
+                  <AppealForm moderationId={comment.moderationId} topicId={proposalId} />
+                )}
+              </>
             ) : (
               <p className="comment-body">{comment.body}</p>
             )}
@@ -124,9 +130,14 @@ export function CommentsSection({ proposalId, comments, isOpen, canModerate = fa
                 </span>
               </div>
               {reply.hidden ? (
-                <p className="comment-body text-muted">
-                  Respuesta oculta por la moderación. Motivo: {reply.hiddenReason}.
-                </p>
+                <>
+                  <p className="comment-body text-muted">
+                    Respuesta oculta por la moderación. Motivo: {reply.hiddenReason}.
+                  </p>
+                  {reply.moderationId && (
+                    <AppealForm moderationId={reply.moderationId} topicId={proposalId} />
+                  )}
+                </>
               ) : (
                 <p className="comment-body">{reply.body}</p>
               )}

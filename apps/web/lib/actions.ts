@@ -401,6 +401,16 @@ export async function hideContent(_prev: ActionResult | null, formData: FormData
   return { success: true };
 }
 
+export async function appealModeration(_prev: ActionResult | null, formData: FormData): Promise<ActionResult> {
+  const res = await actionFetch(`/api/forums/moderation/${String(formData.get('moderationId'))}/appeal`, {
+    method: 'POST',
+    body: JSON.stringify({ text: formData.get('text') }),
+  });
+  if (!res.ok) return { error: await parseError(res) };
+  revalidatePath(`/proposals/${String(formData.get('topicId'))}`);
+  return { success: true };
+}
+
 export async function resolveAppeal(moderationId: string, restore: boolean): Promise<ActionResult> {
   const res = await actionFetch(`/api/forums/moderation/${moderationId}/resolve`, {
     method: 'POST',

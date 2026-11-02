@@ -41,6 +41,8 @@ export interface CommentItem {
   createdAt: string;
   hidden: boolean;
   hiddenReason: string | null;
+  /** Solo para el autor de contenido oculto aún sin apelar; permite apelar. */
+  moderationId: string | null;
 }
 
 export interface ProposalDetail extends ProposalSummary {
@@ -55,6 +57,7 @@ export interface ProposalDetail extends ProposalSummary {
   conclusion: string | null;
   objections: string | null;
   hiddenReason: string | null;
+  moderationId: string | null;
   canModerate: boolean;
 }
 

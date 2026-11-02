@@ -133,6 +133,7 @@ export class DeliberationService {
     // Una consulta por comentario oculto (la escala es pequeña).
     const comments: CommentItem[] = [];
     for (const c of proposal.comments) {
+      const cm = c.hidden ? await this.hiddenInfo('respuesta', c.id, c.authorProfileId, profileId) : null;
       comments.push({
         id: c.id,
         authorDisplayName: c.author.displayName,
@@ -140,11 +141,14 @@ export class DeliberationService {
         parentId: c.parentId,
         createdAt: c.createdAt.toISOString(),
         hidden: c.hidden,
-        hiddenReason: c.hidden ? await this.hiddenReason('respuesta', c.id) : null,
+        hiddenReason: cm?.reason ?? null,
+        moderationId: cm?.moderationId ?? null,
       });
     }
 
-    const topicReason = proposal.hidden ? await this.hiddenReason('tema', proposal.id) : null;
+    const topicInfo = proposal.hidden
+      ? await this.hiddenInfo('tema', proposal.id, proposal.authorProfileId, profileId)
+      : null;
 
     return {
       id: proposal.id,
@@ -167,7 +171,8 @@ export class DeliberationService {
       electionId: proposal.electionId,
       conclusion: proposal.conclusion,
       objections: proposal.objections,
-      hiddenReason: topicReason,
+      hiddenReason: topicInfo?.reason ?? null,
+      moderationId: topicInfo?.moderationId ?? null,
       // Lo calcula ForumsService (Tarea 4/5); este servicio no conoce los permisos de moderación.
       canModerate: false,
     };
@@ -341,14 +346,24 @@ export class DeliberationService {
     }
   }
 
-  /** Motivo de la acción de moderación más reciente sobre un tema o respuesta. */
-  private async hiddenReason(target: 'tema' | 'respuesta', targetId: string): Promise<string | null> {
+  /**
+   * Motivo de la acción de moderación más reciente sobre un tema o respuesta y, solo si quien
+   * consulta es el autor y la acción sigue sin apelar ('oculto'), el id para apelarla.
+   */
+  private async hiddenInfo(
+    target: 'tema' | 'respuesta',
+    targetId: string,
+    authorProfileId: string,
+    viewerProfileId: string,
+  ): Promise<{ reason: string | null; moderationId: string | null }> {
     const action = await this.prisma.moderationAction.findFirst({
       where: { target, targetId },
       orderBy: { createdAt: 'desc' },
-      select: { reason: true },
+      select: { id: true, reason: true, status: true },
     });
-    return action?.reason ?? null;
+    const canAppeal =
+      action !== null && authorProfileId === viewerProfileId && (action.status as string) === 'oculto';
+    return { reason: action?.reason ?? null, moderationId: canAppeal ? action.id : null };
   }
 
   private requireMutableStatus(status: string): void {
