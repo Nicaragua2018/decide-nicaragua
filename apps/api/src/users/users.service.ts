@@ -85,6 +85,13 @@ export class UsersService {
    * Valida que la transición sea permitida según el flujo del ciclo de vida.
    */
   async updateStatus(userId: string, newStatus: AccountStatus): Promise<UserSummary> {
+    if (newStatus === AccountStatus.verified_citizen) {
+      throw new BadRequestException('La verificación se hace con dos referencias, no desde el panel.');
+    }
+    if (newStatus === AccountStatus.suspended) {
+      throw new BadRequestException('Suspender una cuenta requiere la aprobación de 2 de los 3 cargos de la mesa.');
+    }
+
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
       include: { profile: true },

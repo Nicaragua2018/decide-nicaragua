@@ -14,12 +14,13 @@ import {
 import { UsersService } from './users.service';
 import { UpdateUserStatusDto } from './dto/update-user-status.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
-import { VerifiedCitizenGuard } from '../auth/guards/verified-citizen.guard';
-import { AccountStatus } from '@decide/shared';
+import { BoardGuard, BoardRoles } from '../board/board.guard';
+import { AccountStatus, BoardRole } from '@decide/shared';
 import type { UserListResponse, UserSummary } from '@decide/shared';
 
 @Controller('users')
-@UseGuards(JwtAuthGuard, VerifiedCitizenGuard)
+@UseGuards(JwtAuthGuard, BoardGuard)
+@BoardRoles(BoardRole.administrador)
 export class UsersController {
   constructor(private readonly usersService: UsersService) {}
 
@@ -27,7 +28,7 @@ export class UsersController {
    * GET /api/users
    * Lista todos los usuarios con perfil.
    * Filtrable por ?status=pending_verification
-   * Solo ciudadanos verificados.
+   * Solo el administrador de la mesa.
    */
   @Get()
   async listUsers(
@@ -44,7 +45,7 @@ export class UsersController {
    * PATCH /api/users/:id/status
    * Cambia el estado de un usuario.
    * Valida que la transición sea permitida (ver UsersService).
-   * Solo ciudadanos verificados.
+   * Solo el administrador de la mesa.
    */
   @Patch(':id/status')
   @HttpCode(HttpStatus.OK)

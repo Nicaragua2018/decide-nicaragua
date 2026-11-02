@@ -136,7 +136,7 @@ describe('UsersService', () => {
       prisma.user.findUnique.mockResolvedValue(null);
 
       await expect(
-        service.updateStatus(USER_ID, AccountStatus.verified_citizen),
+        service.updateStatus(USER_ID, AccountStatus.rejected),
       ).rejects.toThrow(NotFoundException);
     });
 
@@ -152,56 +152,30 @@ describe('UsersService', () => {
       ).rejects.toThrow(BadRequestException);
     });
 
-    it('allows pending_verification → verified_citizen', async () => {
-      const updatedUser = {
-        ...mockDbUser,
-        status: AccountStatus.verified_citizen,
-      };
-      prisma.user.findUnique.mockResolvedValue(mockDbUser);
-      prisma.user.update.mockResolvedValue(updatedUser);
-
-      const result = await service.updateStatus(USER_ID, AccountStatus.verified_citizen);
-
-      expect(prisma.user.update).toHaveBeenCalledWith(
-        expect.objectContaining({
-          where: { id: USER_ID },
-          data: { status: AccountStatus.verified_citizen },
-        }),
-      );
-      expect(result.status).toBe(AccountStatus.verified_citizen);
+    it('no verifica directamente: verificar va por referencias', async () => {
+      prisma.user.findUnique.mockResolvedValue(mockDbUser); // pending_verification
+      await expect(service.updateStatus(USER_ID, AccountStatus.verified_citizen)).rejects.toThrow(BadRequestException);
+      expect(prisma.user.update).not.toHaveBeenCalled();
     });
 
-    it('allows verified_citizen → suspended', async () => {
-      const base = { ...mockDbUser, status: AccountStatus.verified_citizen };
-      prisma.user.findUnique.mockResolvedValue(base);
-      prisma.user.update.mockResolvedValue({ ...base, status: AccountStatus.suspended });
-
-      const result = await service.updateStatus(USER_ID, AccountStatus.suspended);
-
-      expect(result.status).toBe(AccountStatus.suspended);
-    });
-
-    it('allows suspended → verified_citizen', async () => {
-      const base = { ...mockDbUser, status: AccountStatus.suspended };
-      prisma.user.findUnique.mockResolvedValue(base);
-      prisma.user.update.mockResolvedValue({ ...base, status: AccountStatus.verified_citizen });
-
-      const result = await service.updateStatus(USER_ID, AccountStatus.verified_citizen);
-
-      expect(result.status).toBe(AccountStatus.verified_citizen);
+    it('no suspende directamente: suspender requiere 2 de 3 de la mesa', async () => {
+      prisma.user.findUnique.mockResolvedValue({ ...mockDbUser, status: AccountStatus.verified_citizen });
+      await expect(service.updateStatus(USER_ID, AccountStatus.suspended)).rejects.toThrow(BadRequestException);
+      expect(prisma.user.update).not.toHaveBeenCalled();
     });
 
     it('returns correct UserSummary shape', async () => {
-      const updatedUser = { ...mockDbUser, status: AccountStatus.verified_citizen };
-      prisma.user.findUnique.mockResolvedValue(mockDbUser);
+      const base = { ...mockDbUser, status: AccountStatus.pending_verification };
+      const updatedUser = { ...base, status: AccountStatus.rejected };
+      prisma.user.findUnique.mockResolvedValue(base);
       prisma.user.update.mockResolvedValue(updatedUser);
 
-      const result = await service.updateStatus(USER_ID, AccountStatus.verified_citizen);
+      const result = await service.updateStatus(USER_ID, AccountStatus.rejected);
 
       expect(result).toEqual({
         id: USER_ID,
         email: 'ana@example.com',
-        status: AccountStatus.verified_citizen,
+        status: AccountStatus.rejected,
         displayName: 'Ana García',
         createdAt: '2026-01-10T08:00:00.000Z',
         lastLoginAt: '2026-01-15T10:00:00.000Z',
