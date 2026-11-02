@@ -50,10 +50,10 @@ describe('BoardService', () => {
       await expect(service.assignFounderSeat(ADMIN, 'secretario' as never, 'p-x', 'ip')).rejects.toThrow(BadRequestException);
     });
 
-    it('el cargo de administrador no se asigna desde aquÌ', async () => {
+    it('el cargo de administrador no se asigna desde aqu√≠', async () => {
       prisma.boardSeat.findFirst.mockResolvedValue({ role: 'administrador' });
       prisma.boardSeat.count.mockResolvedValue(0);
-      await expect(service.assignFounderSeat(ADMIN, 'administrador' as never, 'p-x', 'ip')).rejects.toThrow('no se asigna desde aquÌ');
+      await expect(service.assignFounderSeat(ADMIN, 'administrador' as never, 'p-x', 'ip')).rejects.toThrow('no se asigna desde aqu√≠');
       expect(prisma.boardSeat.create).not.toHaveBeenCalled();
     });
 
@@ -61,7 +61,7 @@ describe('BoardService', () => {
       prisma.boardSeat.findFirst.mockResolvedValue({ role: 'administrador' });
       prisma.boardSeat.count.mockResolvedValue(0);
       prisma.boardSeat.findUnique.mockResolvedValue({ role: 'secretario', profileId: 'p-sec' });
-      await expect(service.assignFounderSeat(ADMIN, 'secretario' as never, 'p-x', 'ip')).rejects.toThrow('ya est· ocupado');
+      await expect(service.assignFounderSeat(ADMIN, 'secretario' as never, 'p-x', 'ip')).rejects.toThrow('ya est√° ocupado');
       expect(prisma.boardSeat.create).not.toHaveBeenCalled();
     });
 
