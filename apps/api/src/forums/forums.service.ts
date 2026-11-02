@@ -5,6 +5,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import {
   DELIBERATION_DAYS,
   VOTING_DAYS,
@@ -90,7 +91,13 @@ export class ForumsService {
   private async ensureDefault(groupId: string, groupName: string): Promise<void> {
     const existing = await this.prisma.forum.findFirst({ where: { groupId, isDefault: true } });
     if (!existing) {
-      await this.prisma.forum.create({ data: { groupId, title: `Foro de ${groupName}`, isDefault: true } });
+      try {
+        await this.prisma.forum.create({ data: { groupId, title: `Foro de ${groupName}`, isDefault: true } });
+      } catch (err) {
+        // Otra petición lo creó a la vez (índice único parcial): basta con releerlo.
+        if (!(err instanceof Prisma.PrismaClientKnownRequestError) || err.code !== 'P2002') throw err;
+        await this.prisma.forum.findFirst({ where: { groupId, isDefault: true } });
+      }
     }
   }
 
@@ -219,7 +226,11 @@ export class ForumsService {
           },
         },
       });
-      await tx.proposal.update({ where: { id: topicId }, data: { electionId: e.id } });
+      const vinculada = await tx.proposal.updateMany({
+        where: { id: topicId, electionId: null, status: 'open', hidden: false },
+        data: { electionId: e.id },
+      });
+      if (vinculada.count === 0) throw new ConflictException('La votación de esta propuesta ya está abierta.');
       return e;
     });
     void this.audit.log({
@@ -254,6 +265,7 @@ export class ForumsService {
     if (dto.target === 'tema') {
       const t = await this.prisma.proposal.findUnique({ where: { id: dto.targetId } });
       if (!t) throw new NotFoundException('Tema no encontrado');
+      if (t.hidden) throw new ConflictException('Este contenido ya está oculto.');
       groupId = t.groupId;
     } else {
       const c = await this.prisma.proposalComment.findUnique({
@@ -261,18 +273,21 @@ export class ForumsService {
         include: { proposal: { select: { groupId: true } } },
       });
       if (!c) throw new NotFoundException('Respuesta no encontrada');
+      if (c.hidden) throw new ConflictException('Este contenido ya está oculto.');
       groupId = c.proposal.groupId;
     }
     if (!(await this.canModerate(profileId, groupId))) {
       throw new ForbiddenException('No tienes permiso para moderar en esta comunidad.');
     }
-    if (dto.target === 'tema') {
-      await this.prisma.proposal.update({ where: { id: dto.targetId }, data: { hidden: true } });
-    } else {
-      await this.prisma.proposalComment.update({ where: { id: dto.targetId }, data: { hidden: true } });
-    }
-    const action = await this.prisma.moderationAction.create({
-      data: { target: dto.target, targetId: dto.targetId, reason: dto.reason, moderatorProfileId: profileId },
+    const action = await this.prisma.$transaction(async (tx) => {
+      if (dto.target === 'tema') {
+        await tx.proposal.update({ where: { id: dto.targetId }, data: { hidden: true } });
+      } else {
+        await tx.proposalComment.update({ where: { id: dto.targetId }, data: { hidden: true } });
+      }
+      return tx.moderationAction.create({
+        data: { target: dto.target, targetId: dto.targetId, reason: dto.reason, moderatorProfileId: profileId },
+      });
     });
     void this.audit.log({
       ...(await this.actorId(profileId)),
@@ -326,16 +341,18 @@ export class ForumsService {
     const action = await this.prisma.moderationAction.findUnique({ where: { id: moderationId } });
     if (!action) throw new NotFoundException('Moderación no encontrada');
     if ((action.status as string) !== 'apelado') throw new BadRequestException('Esta moderación no tiene una apelación pendiente.');
-    if (restore) {
-      if ((action.target as string) === 'tema') {
-        await this.prisma.proposal.update({ where: { id: action.targetId }, data: { hidden: false } });
-      } else {
-        await this.prisma.proposalComment.update({ where: { id: action.targetId }, data: { hidden: false } });
+    await this.prisma.$transaction(async (tx) => {
+      if (restore) {
+        if ((action.target as string) === 'tema') {
+          await tx.proposal.update({ where: { id: action.targetId }, data: { hidden: false } });
+        } else {
+          await tx.proposalComment.update({ where: { id: action.targetId }, data: { hidden: false } });
+        }
       }
-    }
-    await this.prisma.moderationAction.update({
-      where: { id: moderationId },
-      data: { status: restore ? 'restaurado' : 'confirmado', resolvedAt: new Date() },
+      await tx.moderationAction.update({
+        where: { id: moderationId },
+        data: { status: restore ? 'restaurado' : 'confirmado', resolvedAt: new Date() },
+      });
     });
     void this.audit.log({
       ...(await this.actorId(profileId)),

@@ -5,6 +5,7 @@ import {
   BadRequestException,
   Logger,
 } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { ProposalStatus, SignalType } from '@decide/shared';
 import type {
   ProposalSummary,
@@ -327,9 +328,17 @@ export class DeliberationService {
     const existing = await this.prisma.forum.findFirst({ where: { groupId, isDefault: true } });
     if (existing) return existing;
     const group = await this.prisma.group.findUnique({ where: { id: groupId } });
-    return this.prisma.forum.create({
-      data: { groupId, title: `Foro de ${group?.name ?? 'la comunidad'}`, isDefault: true },
-    });
+    try {
+      return await this.prisma.forum.create({
+        data: { groupId, title: `Foro de ${group?.name ?? 'la comunidad'}`, isDefault: true },
+      });
+    } catch (err) {
+      // Otra petición lo creó a la vez (índice único parcial): se relee.
+      if (!(err instanceof Prisma.PrismaClientKnownRequestError) || err.code !== 'P2002') throw err;
+      const creado = await this.prisma.forum.findFirst({ where: { groupId, isDefault: true } });
+      if (!creado) throw err;
+      return creado;
+    }
   }
 
   /** Motivo de la acción de moderación más reciente sobre un tema o respuesta. */

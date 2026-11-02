@@ -1,5 +1,6 @@
 import 'reflect-metadata';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { Prisma } from '@prisma/client';
 import { BadRequestException, ConflictException, ForbiddenException } from '@nestjs/common';
 import { ForumsService } from './forums.service';
 
@@ -8,7 +9,7 @@ function buildPrisma() {
     groupMembership: { findUnique: vi.fn(), findMany: vi.fn() },
     group: { findUnique: vi.fn() },
     forum: { findFirst: vi.fn(), findUnique: vi.fn(), findMany: vi.fn(), create: vi.fn() },
-    proposal: { findUnique: vi.fn(), findMany: vi.fn(), update: vi.fn() },
+    proposal: { findUnique: vi.fn(), findMany: vi.fn(), update: vi.fn(), updateMany: vi.fn() },
     proposalComment: { findUnique: vi.fn(), update: vi.fn() },
     election: { create: vi.fn() },
     moderationAction: { create: vi.fn(), findUnique: vi.fn(), findMany: vi.fn(), update: vi.fn() },
@@ -43,6 +44,19 @@ describe('ForumsService', () => {
       expect(await service.canModerate(YO, 'g1')).toBe(true);
       board.roleOf.mockResolvedValueOnce(null);
       expect(await service.canModerate(YO, 'g1')).toBe(false);
+    });
+  });
+
+  describe('foro por defecto', () => {
+    it('si otra petición lo creó a la vez (P2002), lo relee en vez de fallar', async () => {
+      prisma.groupMembership.findMany.mockResolvedValue([{ groupId: 'g1', group: { name: 'Mi comunidad' } }]);
+      prisma.forum.findFirst.mockResolvedValue(null);
+      prisma.forum.create.mockRejectedValue(
+        new Prisma.PrismaClientKnownRequestError('dup', { code: 'P2002', clientVersion: 'x' }),
+      );
+      prisma.forum.findMany.mockResolvedValue([]);
+      await expect(service.listMine(YO)).resolves.toEqual([]);
+      expect(prisma.forum.findFirst).toHaveBeenCalledTimes(2);
     });
   });
 
@@ -112,7 +126,7 @@ describe('ForumsService', () => {
     it('crea la elección con A favor, En contra, Abstención y la vincula', async () => {
       prisma.proposal.findUnique.mockResolvedValue(propuesta());
       prisma.election.create.mockResolvedValue({ id: 'e1' });
-      prisma.proposal.update.mockResolvedValue({});
+      prisma.proposal.updateMany.mockResolvedValue({ count: 1 });
       const r = await service.openVote(YO, 't1', 'ip');
       expect(r).toEqual({ electionId: 'e1' });
       const data = prisma.election.create.mock.calls[0]![0].data;
@@ -120,7 +134,17 @@ describe('ForumsService', () => {
       expect(data.createdByProfileId).toBe(YO);
       expect(data.status).toBe('open');
       expect(data.candidates.create.map((c: { title: string }) => c.title)).toEqual(['A favor', 'En contra', 'Abstención']);
-      expect(prisma.proposal.update).toHaveBeenCalledWith({ where: { id: 't1' }, data: { electionId: 'e1' } });
+      expect(prisma.proposal.updateMany).toHaveBeenCalledWith({
+        where: { id: 't1', electionId: null, status: 'open', hidden: false },
+        data: { electionId: 'e1' },
+      });
+    });
+
+    it('si otra petición ya vinculó la votación (count 0), falla con conflicto', async () => {
+      prisma.proposal.findUnique.mockResolvedValue(propuesta());
+      prisma.election.create.mockResolvedValue({ id: 'e1' });
+      prisma.proposal.updateMany.mockResolvedValue({ count: 0 });
+      await expect(service.openVote(YO, 't1', 'ip')).rejects.toThrow(ConflictException);
     });
   });
 
@@ -166,6 +190,29 @@ describe('ForumsService', () => {
       expect(prisma.moderationAction.create).toHaveBeenCalledWith({
         data: { target: 'respuesta', targetId: 'c1', reason: 'Lenguaje ofensivo', moderatorProfileId: YO },
       });
+    });
+
+    it('no se oculta dos veces lo que ya está oculto', async () => {
+      board.roleOf.mockResolvedValue('administrador');
+      prisma.proposalComment.findUnique.mockResolvedValue({ id: 'c1', hidden: true, proposal: { groupId: 'g1' } });
+      await expect(service.hide(YO, { target: 'respuesta', targetId: 'c1', reason: 'Lenguaje ofensivo' }, 'ip')).rejects.toThrow(ConflictException);
+      expect(prisma.moderationAction.create).not.toHaveBeenCalled();
+    });
+
+    it('ocultar y registrar ocurren en una sola transacción', async () => {
+      board.roleOf.mockResolvedValue('administrador');
+      prisma.proposal.findUnique.mockResolvedValue({ id: 't1', groupId: 'g1', hidden: false });
+      prisma.proposal.update.mockResolvedValue({});
+      prisma.moderationAction.create.mockResolvedValue({ id: 'ma1' });
+      await service.hide(YO, { target: 'tema', targetId: 't1', reason: 'Lenguaje ofensivo' }, 'ip');
+      expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+    });
+
+    it('resolver una apelación ocurre en una sola transacción', async () => {
+      board.roleOf.mockResolvedValue('secretario');
+      prisma.moderationAction.findUnique.mockResolvedValue({ id: 'ma1', target: 'tema', targetId: 't1', status: 'apelado' });
+      await service.resolveAppeal(YO, 'ma1', false, 'ip');
+      expect(prisma.$transaction).toHaveBeenCalledTimes(1);
     });
 
     it('solo el autor apela, una vez', async () => {

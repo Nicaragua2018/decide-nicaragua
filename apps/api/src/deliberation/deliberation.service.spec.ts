@@ -15,6 +15,7 @@ import {
   ForbiddenException,
   BadRequestException,
 } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { ProposalStatus, SignalType } from '@decide/shared';
 
 import { DeliberationService } from './deliberation.service';
@@ -497,6 +498,20 @@ describe('DeliberationService', () => {
       });
       expect(prisma.proposal.create).toHaveBeenCalledWith(
         expect.objectContaining({ data: expect.objectContaining({ forumId: 'f-nuevo' }) }),
+      );
+    });
+
+    it('si otra petición creó el foro por defecto a la vez (P2002), lo relee', async () => {
+      prisma.groupMembership.findUnique.mockResolvedValue(mockMembership);
+      prisma.forum.findFirst.mockResolvedValueOnce(null).mockResolvedValueOnce({ id: 'f-otro' });
+      prisma.group.findUnique.mockResolvedValue({ name: 'Mi comunidad' });
+      prisma.forum.create.mockRejectedValue(
+        new Prisma.PrismaClientKnownRequestError('dup', { code: 'P2002', clientVersion: 'x' }),
+      );
+      prisma.proposal.create.mockResolvedValue({ id: 't1' });
+      await service.createProposal(GROUP_ID, { title: 'Tema de prueba', body: 'Cuerpo del tema' } as never, PROFILE_ID, IP);
+      expect(prisma.proposal.create).toHaveBeenCalledWith(
+        expect.objectContaining({ data: expect.objectContaining({ forumId: 'f-otro' }) }),
       );
     });
   });
