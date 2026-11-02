@@ -362,6 +362,11 @@ El diseño «Primeros 200» (docs/superpowers/specs/2026-11-01-primeros-200-desi
 
 ### Consecuencias
 - El panel de usuarios ya no verifica ni suspende directamente. Las elecciones que llenan los cargos llegan en el plan 3 (`board_seats.source = eleccion`).
+- Suspender a alguien también le quita sus membresías de comunidades, en la misma transacción. Un cargo de la mesa cuyo titular está suspendido no puede actuar (el asiento sigue registrado), y un miembro suspendido no puede dar referencias aunque su sesión diga lo contrario. La migración `limpiar_membresias_no_verificadas` quita las membresías que quedaron de cuentas no verificadas.
+- El panel de usuarios solo rechaza cuentas invitadas o pendientes de verificación (y lo audita como `user.status_changed`). Reactivar a alguien suspendido es una acción futura de la mesa (2 de 3); los observadores se eligen.
+- Cada referencia queda auditada con su vía (`invitador`, `administrador`, `origen` o `acogida`) y la comunidad de acogida de quien refiere en ese momento.
+- La frescura del estado guardado en el token de acceso (un cambio de estado tarda hasta que el token vence) se revisa en el plan 5.
+- La regla contra el abuso de las referencias por comunidad de acogida (antigüedad mínima en esa comunidad) se pospone al plan 3.
 
 ---
 
