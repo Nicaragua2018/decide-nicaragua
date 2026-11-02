@@ -33,9 +33,17 @@ export class BoardService {
 
   // ─── Cargos ────────────────────────────────────────────────────────────────
 
+  /**
+   * Cargo con el que la persona puede actuar. Si su cuenta ya no está
+   * verificada (p. ej. suspendida), no actúa, aunque el asiento siga registrado.
+   */
   async roleOf(profileId: string): Promise<BoardRole | null> {
-    const seat = await this.prisma.boardSeat.findFirst({ where: { profileId } });
-    return seat ? (seat.role as BoardRole) : null;
+    const seat = await this.prisma.boardSeat.findFirst({
+      where: { profileId },
+      include: { profile: { select: { user: { select: { status: true } } } } },
+    });
+    if (!seat || (seat.profile.user.status as string) !== 'verified_citizen') return null;
+    return seat.role as BoardRole;
   }
 
   async isAdministrator(profileId: string): Promise<boolean> {
@@ -204,7 +212,11 @@ export class BoardService {
 
   private async execute(type: BoardActionType, targetUserId: string, params: Record<string, unknown>): Promise<void> {
     if (type === BoardActionType.suspend_user) {
-      await this.prisma.user.update({ where: { id: targetUserId }, data: { status: 'suspended' } });
+      // Los guards de participación miran la membresía: suspender también la quita.
+      await this.prisma.$transaction(async (tx) => {
+        await tx.user.update({ where: { id: targetUserId }, data: { status: 'suspended' } });
+        await tx.groupMembership.deleteMany({ where: { profile: { userId: targetUserId } } });
+      });
       return;
     }
     const birthDepartment = params['birthDepartment'] as string;

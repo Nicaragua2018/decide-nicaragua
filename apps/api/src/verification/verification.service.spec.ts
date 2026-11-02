@@ -43,6 +43,8 @@ describe('VerificationService.confirm()', () => {
     prisma.boardSeat.findFirst.mockResolvedValue(null);
     prisma.verificationReference.create.mockResolvedValue({});
     prisma.verificationReference.findMany.mockResolvedValue([]);
+    // Por defecto: quien refiere está verificado y no comparte comunidades con la persona.
+    prisma.profile.findUnique.mockResolvedValue({ user: { status: 'verified_citizen' }, birthDepartment: 'Masaya', currentCountry: 'ES', currentRegion: null });
   });
 
   it('un pendiente no puede dar referencias', async () => {
@@ -60,7 +62,7 @@ describe('VerificationService.confirm()', () => {
 
   it('quien invitó da la referencia «invitador»', async () => {
     prisma.user.findUnique.mockResolvedValue(pendiente());
-    prisma.profile.findUnique.mockResolvedValue({ birthDepartment: 'Masaya', currentCountry: 'ES', currentRegion: null });
+    prisma.profile.findUnique.mockResolvedValue({ user: { status: 'verified_citizen' }, birthDepartment: 'Masaya', currentCountry: 'ES', currentRegion: null });
     prisma.verificationReference.findMany.mockResolvedValue([{ kind: 'invitador' }]);
 
     await service.confirm(yo({ sub: 'u-inv', profileId: 'p-inv' }), 'u-new', 'ip');
@@ -73,7 +75,7 @@ describe('VerificationService.confirm()', () => {
 
   it('rechaza una segunda referencia de alguien sin relación', async () => {
     prisma.user.findUnique.mockResolvedValue(pendiente());
-    prisma.profile.findUnique.mockResolvedValue({ birthDepartment: 'Masaya', currentCountry: 'ES', currentRegion: null });
+    prisma.profile.findUnique.mockResolvedValue({ user: { status: 'verified_citizen' }, birthDepartment: 'Masaya', currentCountry: 'ES', currentRegion: null });
     await expect(service.confirm(yo(), 'u-new', 'ip')).rejects.toThrow(ForbiddenException);
   });
 
@@ -81,7 +83,7 @@ describe('VerificationService.confirm()', () => {
     prisma.user.findUnique.mockResolvedValue(
       pendiente({ referencesReceived: [{ kind: 'invitador', refereeProfileId: 'p-inv' }] }),
     );
-    prisma.profile.findUnique.mockResolvedValue({ birthDepartment: 'León', currentCountry: 'US', currentRegion: 'TX' });
+    prisma.profile.findUnique.mockResolvedValue({ user: { status: 'verified_citizen' }, birthDepartment: 'León', currentCountry: 'US', currentRegion: 'TX' });
     prisma.verificationReference.findMany.mockResolvedValue([{ kind: 'invitador' }, { kind: 'segunda' }]);
     prisma.user.update.mockResolvedValue({});
 
@@ -94,7 +96,7 @@ describe('VerificationService.confirm()', () => {
 
   it('acepta segunda referencia de la misma comunidad de acogida', async () => {
     prisma.user.findUnique.mockResolvedValue(pendiente());
-    prisma.profile.findUnique.mockResolvedValue({ birthDepartment: 'Masaya', currentCountry: 'CR', currentRegion: null });
+    prisma.profile.findUnique.mockResolvedValue({ user: { status: 'verified_citizen' }, birthDepartment: 'Masaya', currentCountry: 'CR', currentRegion: null });
 
     await service.confirm(yo(), 'u-new', 'ip');
 
@@ -105,7 +107,7 @@ describe('VerificationService.confirm()', () => {
 
   it('el administrador puede ser la segunda referencia aunque no comparta comunidad', async () => {
     prisma.user.findUnique.mockResolvedValue(pendiente());
-    prisma.profile.findUnique.mockResolvedValue({ birthDepartment: 'Masaya', currentCountry: 'ES', currentRegion: null });
+    prisma.profile.findUnique.mockResolvedValue({ user: { status: 'verified_citizen' }, birthDepartment: 'Masaya', currentCountry: 'ES', currentRegion: null });
     prisma.boardSeat.findFirst.mockResolvedValue({ role: 'administrador' });
 
     await service.confirm(yo(), 'u-new', 'ip');
@@ -126,14 +128,14 @@ describe('VerificationService.confirm()', () => {
     prisma.user.findUnique.mockResolvedValue(
       pendiente({ referencesReceived: [{ kind: 'segunda', refereeProfileId: 'p-otro' }] }),
     );
-    prisma.profile.findUnique.mockResolvedValue({ birthDepartment: 'León', currentCountry: 'CR', currentRegion: null });
+    prisma.profile.findUnique.mockResolvedValue({ user: { status: 'verified_citizen' }, birthDepartment: 'León', currentCountry: 'CR', currentRegion: null });
     await expect(service.confirm(yo(), 'u-new', 'ip')).rejects.toThrow(ConflictException);
   });
 
   it('fundación: con menos de 4 verificados, la referencia del administrador basta', async () => {
     prisma.user.count.mockResolvedValue(1);
     prisma.user.findUnique.mockResolvedValue(pendiente({ invitedById: 'u-ref' }));
-    prisma.profile.findUnique.mockResolvedValue({ birthDepartment: 'Masaya', currentCountry: 'ES', currentRegion: null });
+    prisma.profile.findUnique.mockResolvedValue({ user: { status: 'verified_citizen' }, birthDepartment: 'Masaya', currentCountry: 'ES', currentRegion: null });
     prisma.boardSeat.findFirst.mockResolvedValue({ role: 'administrador' });
     prisma.verificationReference.findMany.mockResolvedValue([{ kind: 'invitador' }]);
     prisma.user.update.mockResolvedValue({});
@@ -149,7 +151,7 @@ describe('VerificationService.confirm()', () => {
     prisma.user.findUnique.mockResolvedValue(
       pendiente({ referencesReceived: [{ kind: 'invitador', refereeProfileId: 'p-inv' }] }),
     );
-    prisma.profile.findUnique.mockResolvedValue({ birthDepartment: 'Masaya', currentCountry: 'ES', currentRegion: null });
+    prisma.profile.findUnique.mockResolvedValue({ user: { status: 'verified_citizen' }, birthDepartment: 'Masaya', currentCountry: 'ES', currentRegion: null });
     prisma.boardSeat.findFirst.mockResolvedValue({ role: 'administrador' });
     prisma.verificationReference.findMany.mockResolvedValue([{ kind: 'invitador' }, { kind: 'segunda' }]);
     prisma.user.update.mockResolvedValue({});
@@ -162,7 +164,7 @@ describe('VerificationService.confirm()', () => {
   it('fuera de la fundación (4 o más verificados), el administrador solo no verifica', async () => {
     prisma.user.count.mockResolvedValue(4);
     prisma.user.findUnique.mockResolvedValue(pendiente());
-    prisma.profile.findUnique.mockResolvedValue({ birthDepartment: 'Masaya', currentCountry: 'ES', currentRegion: null });
+    prisma.profile.findUnique.mockResolvedValue({ user: { status: 'verified_citizen' }, birthDepartment: 'Masaya', currentCountry: 'ES', currentRegion: null });
     prisma.boardSeat.findFirst.mockResolvedValue({ role: 'administrador' });
     prisma.verificationReference.findMany.mockResolvedValue([{ kind: 'segunda' }]);
 
@@ -174,7 +176,7 @@ describe('VerificationService.confirm()', () => {
 
   it('la fundación no se reabre: cuenta verificados y suspendidos', async () => {
     prisma.user.findUnique.mockResolvedValue(pendiente());
-    prisma.profile.findUnique.mockResolvedValue({ birthDepartment: 'León', currentCountry: 'CR', currentRegion: null });
+    prisma.profile.findUnique.mockResolvedValue({ user: { status: 'verified_citizen' }, birthDepartment: 'León', currentCountry: 'CR', currentRegion: null });
 
     await service.confirm(yo(), 'u-new', 'ip');
 
@@ -185,7 +187,7 @@ describe('VerificationService.confirm()', () => {
 
   it('decide por la relectura dentro de la transacción (confirmaciones simultáneas)', async () => {
     prisma.user.findUnique.mockResolvedValue(pendiente()); // al leer no había ninguna
-    prisma.profile.findUnique.mockResolvedValue({ birthDepartment: 'León', currentCountry: 'CR', currentRegion: null });
+    prisma.profile.findUnique.mockResolvedValue({ user: { status: 'verified_citizen' }, birthDepartment: 'León', currentCountry: 'CR', currentRegion: null });
     // tras insertar, la otra referencia ya está confirmada
     prisma.verificationReference.findMany.mockResolvedValue([{ kind: 'invitador' }, { kind: 'segunda' }]);
     prisma.user.update.mockResolvedValue({});
@@ -201,7 +203,7 @@ describe('VerificationService.confirm()', () => {
 
   it('una referencia duplicada simultánea (P2002) se informa como conflicto', async () => {
     prisma.user.findUnique.mockResolvedValue(pendiente());
-    prisma.profile.findUnique.mockResolvedValue({ birthDepartment: 'León', currentCountry: 'CR', currentRegion: null });
+    prisma.profile.findUnique.mockResolvedValue({ user: { status: 'verified_citizen' }, birthDepartment: 'León', currentCountry: 'CR', currentRegion: null });
     prisma.verificationReference.create.mockRejectedValue(
       new Prisma.PrismaClientKnownRequestError('dup', { code: 'P2002', clientVersion: 'test' }),
     );
@@ -211,12 +213,93 @@ describe('VerificationService.confirm()', () => {
 
   it('si syncMemberships falla, la persona ya está verificada y no se falla la petición', async () => {
     prisma.user.findUnique.mockResolvedValue(pendiente());
-    prisma.profile.findUnique.mockResolvedValue({ birthDepartment: 'León', currentCountry: 'CR', currentRegion: null });
+    prisma.profile.findUnique.mockResolvedValue({ user: { status: 'verified_citizen' }, birthDepartment: 'León', currentCountry: 'CR', currentRegion: null });
     prisma.verificationReference.findMany.mockResolvedValue([{ kind: 'invitador' }, { kind: 'segunda' }]);
     prisma.user.update.mockResolvedValue({});
     groups.syncMemberships.mockRejectedValue(new Error('boom'));
 
     await expect(service.confirm(yo(), 'u-new', 'ip')).resolves.toBeUndefined();
     expect(prisma.user.update).toHaveBeenCalled();
+  });
+
+  // ── Estado actual de quien da la referencia (no solo el JWT) ──
+
+  it('un miembro suspendido no da referencias aunque su sesión diga verificado', async () => {
+    prisma.user.findUnique.mockResolvedValue(pendiente({ invitedById: 'u-ref' }));
+    prisma.profile.findUnique.mockResolvedValue({ user: { status: 'suspended' }, birthDepartment: 'León', currentCountry: 'CR', currentRegion: null });
+
+    await expect(service.confirm(yo(), 'u-new', 'ip')).rejects.toThrow('Solo un miembro verificado puede dar una referencia.');
+    expect(prisma.verificationReference.create).not.toHaveBeenCalled();
+  });
+
+  it('relee el estado de quien da la referencia en la base de datos', async () => {
+    prisma.user.findUnique.mockResolvedValue(pendiente());
+    prisma.profile.findUnique.mockResolvedValue({ user: { status: 'verified_citizen' }, birthDepartment: 'León', currentCountry: 'CR', currentRegion: null });
+
+    await service.confirm(yo(), 'u-new', 'ip');
+
+    expect(prisma.profile.findUnique).toHaveBeenCalledWith({
+      where: { id: 'p-ref' },
+      include: { user: { select: { status: true } } },
+    });
+  });
+
+  // ── Por qué valía la referencia (spec §9: auditable, sin datos personales) ──
+
+  it('audita la vía «origen» y la comunidad de acogida de quien refiere', async () => {
+    prisma.user.findUnique.mockResolvedValue(pendiente());
+    prisma.profile.findUnique.mockResolvedValue({ user: { status: 'verified_citizen' }, birthDepartment: 'León', currentCountry: 'US', currentRegion: 'TX' });
+
+    await service.confirm(yo(), 'u-new', 'ip');
+
+    expect(audit.log).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: 'verification.reference',
+        metadata: { kind: 'segunda', via: 'origen', refereeHostSlug: 'country-us-tx' },
+      }),
+    );
+  });
+
+  it('audita la vía «acogida» cuando solo comparten comunidad de acogida', async () => {
+    prisma.user.findUnique.mockResolvedValue(pendiente());
+    prisma.profile.findUnique.mockResolvedValue({ user: { status: 'verified_citizen' }, birthDepartment: 'Masaya', currentCountry: 'CR', currentRegion: null });
+
+    await service.confirm(yo(), 'u-new', 'ip');
+
+    expect(audit.log).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: 'verification.reference',
+        metadata: { kind: 'segunda', via: 'acogida', refereeHostSlug: 'country-cr' },
+      }),
+    );
+  });
+
+  it('audita la vía «administrador» aunque también comparta origen', async () => {
+    prisma.user.findUnique.mockResolvedValue(pendiente());
+    prisma.profile.findUnique.mockResolvedValue({ user: { status: 'verified_citizen' }, birthDepartment: 'León', currentCountry: null, currentRegion: null });
+    prisma.boardSeat.findFirst.mockResolvedValue({ role: 'administrador' });
+
+    await service.confirm(yo(), 'u-new', 'ip');
+
+    expect(audit.log).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: 'verification.reference',
+        metadata: { kind: 'segunda', via: 'administrador', refereeHostSlug: null },
+      }),
+    );
+  });
+
+  it('audita la vía «invitador» para quien invitó', async () => {
+    prisma.user.findUnique.mockResolvedValue(pendiente({ invitedById: 'u-ref' }));
+    prisma.profile.findUnique.mockResolvedValue({ user: { status: 'verified_citizen' }, birthDepartment: 'Masaya', currentCountry: 'ES', currentRegion: null });
+
+    await service.confirm(yo(), 'u-new', 'ip');
+
+    expect(audit.log).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: 'verification.reference',
+        metadata: { kind: 'invitador', via: 'invitador', refereeHostSlug: 'country-es' },
+      }),
+    );
   });
 });

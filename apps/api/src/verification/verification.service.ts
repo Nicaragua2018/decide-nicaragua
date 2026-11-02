@@ -20,6 +20,7 @@ import { GroupsService } from '../groups/groups.service';
 import { hostCommunity, sameHostCommunity } from '../common/utils/host-community.util';
 
 type Kind = 'invitador' | 'segunda';
+type Via = 'invitador' | 'administrador' | 'origen' | 'acogida';
 
 @Injectable()
 export class VerificationService {
@@ -41,6 +42,15 @@ export class VerificationService {
     }
     if (referee.sub === subjectUserId) throw new BadRequestException('No puedes confirmarte a ti mismo.');
 
+    // El JWT puede ser anterior a una suspensión: se relee el estado actual.
+    const refereeProfile = await this.prisma.profile.findUnique({
+      where: { id: referee.profileId },
+      include: { user: { select: { status: true } } },
+    });
+    if (!refereeProfile || (refereeProfile.user.status as string) !== AccountStatus.verified_citizen) {
+      throw new ForbiddenException('Solo un miembro verificado puede dar una referencia.');
+    }
+
     const subject = await this.prisma.user.findUnique({
       where: { id: subjectUserId },
       include: { profile: true, referencesReceived: true },
@@ -53,9 +63,6 @@ export class VerificationService {
       throw new ConflictException('Ya diste tu referencia a esta persona.');
     }
 
-    const refereeProfile = await this.prisma.profile.findUnique({ where: { id: referee.profileId } });
-    if (!refereeProfile) throw new ForbiddenException('Perfil no encontrado');
-
     const esAdministrador = !!(await this.prisma.boardSeat.findFirst({
       where: { role: 'administrador', profileId: referee.profileId },
     }));
@@ -66,12 +73,18 @@ export class VerificationService {
     const fundacion = esAdministrador && verificados < BOOTSTRAP_VERIFIED_LIMIT;
 
     let kind: Kind;
+    // Por qué vale la referencia; queda en la auditoría (spec §9).
+    let via: Via;
     if (subject.invitedById === referee.sub) {
       kind = 'invitador';
+      via = 'invitador';
     } else {
       const mismoOrigen =
         !!refereeProfile.birthDepartment && refereeProfile.birthDepartment === subject.profile.birthDepartment;
-      if (!esAdministrador && !mismoOrigen && !sameHostCommunity(refereeProfile, subject.profile)) {
+      if (esAdministrador) via = 'administrador';
+      else if (mismoOrigen) via = 'origen';
+      else if (sameHostCommunity(refereeProfile, subject.profile)) via = 'acogida';
+      else {
         throw new ForbiddenException(
           'La segunda referencia debe darla el administrador o un miembro de su mismo territorio de origen o de su misma comunidad de acogida.',
         );
@@ -112,7 +125,11 @@ export class VerificationService {
       action: 'verification.reference',
       resource: `user:${subjectUserId}`,
       ip,
-      metadata: { kind },
+      metadata: {
+        kind,
+        via,
+        refereeHostSlug: hostCommunity(refereeProfile.currentCountry, refereeProfile.currentRegion)?.slug ?? null,
+      },
     });
     if (!outcome.verified) return;
 
