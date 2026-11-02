@@ -67,6 +67,7 @@ export interface UserSummary {
   email: string;
   status: AccountStatus;
   displayName: string | null;
+  profileId: string | null;
   createdAt: string;
   lastLoginAt: string | null;
 }

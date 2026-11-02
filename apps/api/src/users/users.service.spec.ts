@@ -24,7 +24,7 @@ const mockDbUser = {
   status: AccountStatus.pending_verification,
   createdAt: new Date('2026-01-10T08:00:00Z'),
   lastLoginAt: new Date('2026-01-15T10:00:00Z'),
-  profile: { displayName: 'Ana García' },
+  profile: { id: 'profile-uuid-1', displayName: 'Ana García' },
 };
 
 const mockDbUserNoProfile = {
@@ -76,6 +76,7 @@ describe('UsersService', () => {
         email: 'ana@example.com',
         status: AccountStatus.pending_verification,
         displayName: 'Ana García',
+        profileId: 'profile-uuid-1',
         createdAt: '2026-01-10T08:00:00.000Z',
         lastLoginAt: '2026-01-15T10:00:00.000Z',
       });
@@ -177,6 +178,7 @@ describe('UsersService', () => {
         email: 'ana@example.com',
         status: AccountStatus.rejected,
         displayName: 'Ana García',
+        profileId: 'profile-uuid-1',
         createdAt: '2026-01-10T08:00:00.000Z',
         lastLoginAt: '2026-01-15T10:00:00.000Z',
       });

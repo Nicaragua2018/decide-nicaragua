@@ -73,6 +73,7 @@ export class UsersService {
         email: u.email,
         status: u.status as AccountStatus,
         displayName: u.profile?.displayName ?? null,
+        profileId: u.profile?.id ?? null,
         createdAt: u.createdAt.toISOString(),
         lastLoginAt: u.lastLoginAt?.toISOString() ?? null,
       })),
@@ -119,7 +120,7 @@ export class UsersService {
         status: true,
         createdAt: true,
         lastLoginAt: true,
-        profile: { select: { displayName: true } },
+        profile: { select: { id: true, displayName: true } },
       },
     });
 
@@ -128,6 +129,7 @@ export class UsersService {
       email: updated.email,
       status: updated.status as AccountStatus,
       displayName: updated.profile?.displayName ?? null,
+      profileId: updated.profile?.id ?? null,
       createdAt: updated.createdAt.toISOString(),
       lastLoginAt: updated.lastLoginAt?.toISOString() ?? null,
     };
