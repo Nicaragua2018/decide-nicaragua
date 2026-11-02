@@ -85,6 +85,9 @@ export class DeliberationService {
         signalCounts: computeSignalCounts(p.signals.map((s) => s.signal as string)),
         commentCount: p._count.comments,
         createdAt: p.createdAt.toISOString(),
+        kind: p.kind,
+        hidden: p.hidden,
+        forumId: p.forumId,
       })),
     };
   }
@@ -117,6 +120,8 @@ export class DeliberationService {
       body: c.body,
       parentId: c.parentId,
       createdAt: c.createdAt.toISOString(),
+      hidden: c.hidden,
+      hiddenReason: null,
     }));
 
     return {
@@ -133,6 +138,15 @@ export class DeliberationService {
       createdAt: proposal.createdAt.toISOString(),
       comments,
       userSignal: userSignalRow ? (userSignalRow.signal as unknown as SignalType) : null,
+      kind: proposal.kind,
+      hidden: proposal.hidden,
+      forumId: proposal.forumId,
+      deliberationEndsAt: proposal.deliberationEndsAt?.toISOString() ?? null,
+      electionId: proposal.electionId,
+      conclusion: proposal.conclusion,
+      objections: proposal.objections,
+      hiddenReason: null,
+      canModerate: false,
     };
   }
 

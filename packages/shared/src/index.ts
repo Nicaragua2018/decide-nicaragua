@@ -3,6 +3,7 @@ export * from './types/auth.types.js';
 export * from './types/board.types.js';
 export * from './types/group.types.js';
 export * from './types/deliberation.types.js';
+export * from './types/forum.types.js';
 export * from './types/voting.types.js';
 export * from './types/sortition.types.js';
 export * from './types/audit.types.js';

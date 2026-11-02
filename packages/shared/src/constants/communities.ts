@@ -43,3 +43,12 @@ export const MAX_PENDING_INVITES = 5;
 
 /** Mientras haya menos cuentas verificadas que esto, una referencia del administrador basta (fundación). */
 export const BOOTSTRAP_VERIFIED_LIMIT = 4;
+
+/** Comunidad de toda la plataforma (grupo custom). */
+export const GENERAL_GROUP_SLUG = 'general';
+
+/** Días de deliberación de una propuesta formal antes de poder votarla (plan 3: regla votable). */
+export const DELIBERATION_DAYS = 7;
+
+/** Días que dura la votación de una propuesta formal (plan 3: regla votable). */
+export const VOTING_DAYS = 7;
