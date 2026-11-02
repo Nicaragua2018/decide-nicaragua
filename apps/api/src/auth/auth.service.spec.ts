@@ -230,6 +230,28 @@ describe('AuthService', () => {
       expect(prismaMock.user.create).not.toHaveBeenCalled();
     });
 
+    it('una invitación vencida no cuenta como pendiente', async () => {
+      prismaMock.user.findUnique.mockResolvedValue(null);
+      prismaMock.boardSeat.findFirst.mockResolvedValue(null);
+      prismaMock.user.count.mockResolvedValue(0);
+      prismaMock.user.create.mockResolvedValue({ ...invitedUser, id: 'new-id' });
+
+      const antes = Date.now();
+      await service.inviteUser(dto, 'actor-id', ip);
+
+      expect(prismaMock.user.count).toHaveBeenCalledWith({
+        where: {
+          invitedById: 'actor-id',
+          OR: [
+            { status: 'pending_verification' },
+            { status: 'invited', inviteExpiresAt: { gt: expect.any(Date) } },
+          ],
+        },
+      });
+      const where = (prismaMock.user.count.mock.calls[0] as [{ where: { OR: [unknown, { inviteExpiresAt: { gt: Date } }] } }])[0].where;
+      expect(where.OR[1].inviteExpiresAt.gt.getTime()).toBeGreaterThanOrEqual(antes);
+    });
+
     it('el administrador no tiene límite de invitaciones', async () => {
       prismaMock.user.findUnique.mockResolvedValue(null);
       prismaMock.boardSeat.findFirst.mockResolvedValue({ role: 'administrador' });

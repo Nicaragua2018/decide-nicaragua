@@ -85,10 +85,14 @@ export class AuthService {
       where: { role: 'administrador', profile: { userId: actorId } },
     });
     if (!esAdministrador) {
+      // Una invitación vencida ya no está pendiente: no bloquea invitar a otra persona.
       const pendientes = await this.prisma.user.count({
         where: {
           invitedById: actorId,
-          status: { in: ['invited', 'pending_verification'] },
+          OR: [
+            { status: 'pending_verification' },
+            { status: 'invited', inviteExpiresAt: { gt: new Date() } },
+          ],
         },
       });
       if (pendientes >= MAX_PENDING_INVITES) {
