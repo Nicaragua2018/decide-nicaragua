@@ -344,6 +344,27 @@ Usar **Resend** como proveedor de email transaccional.
 
 ---
 
+## ADR-014: Verificación por dos referencias y mesa directiva (2026-11-01)
+
+**Fecha:** 2026-11-01
+**Estado:** Aceptado
+
+### Contexto
+El diseño «Primeros 200» (docs/superpowers/specs/2026-11-01-primeros-200-design.md) exige que cada cuenta sea una persona única y nicaragüense, y que muchas personas exiliadas no tienen documentos.
+
+### Decisión
+- Una persona queda verificada con dos referencias: quien la invitó y el administrador u otro miembro de su mismo territorio de origen o comunidad de acogida. Tabla `verification_references`.
+- Fundación: mientras haya menos de 4 cuentas verificadas, la referencia del administrador basta (`user.verified` con `via: fundacion` en la auditoría).
+- Las membresías de comunidades se crean al verificarse, no al registrarse: los endpoints de participación dependen de la membresía.
+- La mesa directiva (administrador, coordinador general, secretario) reemplaza al «cualquier ciudadano verificado administra» del MVP. Suspender cuentas y cambiar el territorio de origen requieren 2 de 3 (`board_actions`).
+- Pasada la fundación no se reabre: el conteo incluye cuentas suspendidas.
+- Los cargos fundadores solo llenan cargos vacantes y nunca el de administrador; reemplazar a alguien requiere una decisión de la mesa (plan 3).
+
+### Consecuencias
+- El panel de usuarios ya no verifica ni suspende directamente. Las elecciones que llenan los cargos llegan en el plan 3 (`board_seats.source = eleccion`).
+
+---
+
 ## Decisiones pendientes
 
 | ID | Pregunta | Prioridad |
