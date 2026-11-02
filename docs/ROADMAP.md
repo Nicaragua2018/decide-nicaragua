@@ -32,6 +32,20 @@ Base del diseño «Primeros 200» entregada en las tareas 1 a 9:
 
 ---
 
+## Primeros 200 — Plan 2 (foros): COMPLETO
+
+Foros, propuestas formales, consensos públicos y moderación (ADR-017):
+
+- [x] Base de datos: `forums`, `moderation_actions`; temas con tipo, plazo, votación, conclusión, objeciones y ocultos
+- [x] Comunidad general «Toda la comunidad» para toda persona verificada
+- [x] Temas dentro de foros; contenido oculto sin su texto; cierre solo con consenso
+- [x] Propuesta formal (7 días) y votación «A favor / En contra / Abstención» (7 días)
+- [x] `GET /api/public/consensos` sin sesión y sin nombres
+- [x] Moderación con motivo, apelación de la persona autora y resolución de la mesa
+- [x] Web: «Foros», página de cada foro, acciones del tema y apelaciones en «Mesa»
+
+---
+
 ## Fase 0 — Fundamentos del sistema
 
 **Estado: COMPLETA**

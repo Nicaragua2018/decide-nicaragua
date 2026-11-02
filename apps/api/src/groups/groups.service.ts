@@ -2,7 +2,7 @@ import { Injectable, NotFoundException, Logger } from '@nestjs/common';
 import { GroupType } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { slugify } from '../common/utils/slugify.util';
-import { MIN_ACTIVE_MEMBERS } from '@decide/shared';
+import { MIN_ACTIVE_MEMBERS, GENERAL_GROUP_SLUG } from '@decide/shared';
 import type { GroupSummary, GroupDetail, GroupListResponse } from '@decide/shared';
 import { hostCommunity } from '../common/utils/host-community.util';
 
@@ -119,6 +119,17 @@ export class GroupsService {
       );
     }
 
+    // Toda persona verificada pertenece a la comunidad general (grupo custom:
+    // el borrado por tipo de upsertMembership nunca la toca).
+    operations.push(
+      this.upsertMembership(profile.id, {
+        name: 'Toda la comunidad',
+        slug: GENERAL_GROUP_SLUG,
+        type: GroupType.custom,
+        description: 'Comunidad de todas las personas verificadas de Nicaragua Decide',
+      }),
+    );
+
     await Promise.all(operations);
   }
 
@@ -134,12 +145,14 @@ export class GroupsService {
     },
   ): Promise<void> {
     // Una sola comunidad por tipo: al mudarse (o tras un cambio de origen aprobado) se sale de la anterior.
-    await this.prisma.groupMembership.deleteMany({
-      where: {
-        profileId,
-        group: { is: { type: groupData.type, NOT: { slug: groupData.slug } } },
-      },
-    });
+    if (groupData.type !== GroupType.custom) {
+      await this.prisma.groupMembership.deleteMany({
+        where: {
+          profileId,
+          group: { is: { type: groupData.type, NOT: { slug: groupData.slug } } },
+        },
+      });
+    }
 
     // Encontrar o crear el grupo
     const group = await this.prisma.group.upsert({

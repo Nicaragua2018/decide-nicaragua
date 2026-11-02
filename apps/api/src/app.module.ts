@@ -15,6 +15,7 @@ import { SortitionModule } from './sortition/sortition.module';
 import { UsersModule } from './users/users.module';
 import { BoardModule } from './board/board.module';
 import { VerificationModule } from './verification/verification.module';
+import { ForumsModule } from './forums/forums.module';
 import { NewsletterModule } from './newsletter/newsletter.module';
 
 @Module({
@@ -50,6 +51,7 @@ import { NewsletterModule } from './newsletter/newsletter.module';
     UsersModule,
     BoardModule,
     VerificationModule,
+    ForumsModule,
     NewsletterModule,
   ],
   providers: [

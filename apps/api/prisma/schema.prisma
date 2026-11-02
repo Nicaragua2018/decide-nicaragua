@@ -56,6 +56,23 @@ enum SignalType {
   object   // Objeta la propuesta
 }
 
+enum ProposalKind {
+  tema      // debate abierto
+  propuesta // propuesta formal: plazo de deliberación y luego votación
+}
+
+enum ModerationTarget {
+  tema
+  respuesta
+}
+
+enum ModerationStatus {
+  oculto     // ocultado por la moderación
+  apelado    // el autor apeló
+  restaurado // la mesa lo devolvió a la vista
+  confirmado // la mesa mantuvo la moderación tras la apelación
+}
+
 enum AccountStatus {
   invited
   pending_verification
@@ -168,6 +185,8 @@ model Profile {
   referencesGiven       VerificationReference[] @relation("ReferencesGiven")
   boardApprovals        BoardApproval[]
   boardActionsProposed  BoardAction[]           @relation("BoardActionProposer")
+  forumsCreated    Forum[]            @relation("ForumCreator")
+  moderationsDone  ModerationAction[] @relation("Moderator")
 
   @@map("profiles")
 }
@@ -191,6 +210,7 @@ model Group {
   proposals      Proposal[]
   elections      Election[]
   sortitionDraws SortitionDraw[]
+  forums         Forum[]
 
   @@index([type])
   @@index([isActive])
@@ -234,6 +254,14 @@ model Proposal {
   title           String         @db.VarChar(200)
   body            String
   status          ProposalStatus @default(open)
+  forumId            String?        @db.Uuid
+  forum              Forum?         @relation(fields: [forumId], references: [id])
+  kind               ProposalKind   @default(tema)
+  deliberationEndsAt DateTime?      @db.Timestamptz
+  electionId         String?        @unique @db.Uuid
+  conclusion         String?        @db.VarChar(2000)
+  objections         String?        @db.VarChar(2000)
+  hidden             Boolean        @default(false)
 
   createdAt       DateTime       @default(now()) @db.Timestamptz
   updatedAt       DateTime       @updatedAt @db.Timestamptz
@@ -242,6 +270,7 @@ model Proposal {
   comments        ProposalComment[]
   signals         ConsensusSignal[]
 
+  @@index([forumId])
   @@index([groupId, status])
   @@index([authorProfileId])
   @@map("proposals")
@@ -266,6 +295,7 @@ model ProposalComment {
   parentId        String?   @db.Uuid
   parent          ProposalComment?  @relation("CommentReplies", fields: [parentId], references: [id])
   replies         ProposalComment[] @relation("CommentReplies")
+  hidden          Boolean   @default(false)
 
   createdAt       DateTime  @default(now()) @db.Timestamptz
   updatedAt       DateTime  @updatedAt @db.Timestamptz
@@ -570,6 +600,48 @@ model BoardApproval {
 
   @@unique([actionId, profileId])
   @@map("board_approvals")
+}
+
+/**
+ * Forum — contenedor de temas dentro de un grupo (comunidad).
+ * Cada grupo tiene uno por defecto (isDefault), creado al vuelo.
+ */
+model Forum {
+  id                 String    @id @default(uuid()) @db.Uuid
+  groupId            String    @db.Uuid
+  group              Group     @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  title              String    @db.VarChar(200)
+  description        String?   @db.VarChar(1000)
+  isDefault          Boolean   @default(false)
+  createdByProfileId String?   @db.Uuid
+  createdBy          Profile?  @relation("ForumCreator", fields: [createdByProfileId], references: [id])
+  createdAt          DateTime  @default(now()) @db.Timestamptz
+
+  proposals          Proposal[]
+
+  @@index([groupId])
+  @@map("forums")
+}
+
+/**
+ * ModerationAction — un ocultamiento con su motivo, apelación y resolución.
+ */
+model ModerationAction {
+  id                 String           @id @default(uuid()) @db.Uuid
+  target             ModerationTarget
+  targetId           String           @db.Uuid
+  reason             String           @db.VarChar(500)
+  moderatorProfileId String           @db.Uuid
+  moderator          Profile          @relation("Moderator", fields: [moderatorProfileId], references: [id])
+  status             ModerationStatus @default(oculto)
+  appealText         String?          @db.VarChar(1000)
+  appealedAt         DateTime?        @db.Timestamptz
+  resolvedAt         DateTime?        @db.Timestamptz
+  createdAt          DateTime         @default(now()) @db.Timestamptz
+
+  @@index([target, targetId])
+  @@index([status])
+  @@map("moderation_actions")
 }
 
 /**

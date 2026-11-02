@@ -1,16 +1,51 @@
 'use client';
 
-import { useState } from 'react';
-import { createCommentDirect } from '@/lib/actions';
+import { useActionState, useState } from 'react';
+import { createCommentDirect, hideContent, type ActionResult } from '@/lib/actions';
 import type { CommentItem } from '@decide/shared';
+import { AppealForm } from './AppealForm';
 
 interface CommentsSectionProps {
   proposalId: string;
   comments: CommentItem[];
   isOpen: boolean;
+  canModerate?: boolean;
 }
 
-export function CommentsSection({ proposalId, comments, isOpen }: CommentsSectionProps) {
+function HideCommentForm({ proposalId, commentId }: { proposalId: string; commentId: string }) {
+  const [open, setOpen] = useState(false);
+  const [state, action, pending] = useActionState<ActionResult | null, FormData>(hideContent, null);
+  if (!open) {
+    return (
+      <button type="button" className="comment-reply-btn" onClick={() => setOpen(true)}>
+        Ocultar
+      </button>
+    );
+  }
+  return (
+    <form action={action} className="comment-reply-form">
+      <input type="hidden" name="target" value="respuesta" />
+      <input type="hidden" name="targetId" value={commentId} />
+      <input type="hidden" name="topicId" value={proposalId} />
+      <textarea
+        name="reason"
+        required
+        minLength={10}
+        maxLength={500}
+        rows={2}
+        className="form-textarea"
+        placeholder="Motivo (obligatorio)"
+      />
+      <div className="comment-reply-actions">
+        <button type="submit" className="btn btn-primary btn-sm" disabled={pending}>Ocultar</button>
+        <button type="button" className="btn btn-ghost btn-sm" onClick={() => setOpen(false)}>Cancelar</button>
+      </div>
+      {state && 'error' in state && <p className="alert alert-error">{state.error}</p>}
+    </form>
+  );
+}
+
+export function CommentsSection({ proposalId, comments, isOpen, canModerate = false }: CommentsSectionProps) {
   const [replyingTo, setReplyingTo] = useState<string | null>(null);
 
   const rootComments = comments.filter((c) => !c.parentId);
@@ -29,7 +64,22 @@ export function CommentsSection({ proposalId, comments, isOpen }: CommentsSectio
                 {new Date(comment.createdAt).toLocaleDateString('es-NI')}
               </span>
             </div>
-            <p className="comment-body">{comment.body}</p>
+            {comment.hidden ? (
+              <>
+                <p className="comment-body text-muted">
+                  Respuesta oculta por la moderación. Motivo: {comment.hiddenReason}.
+                </p>
+                {comment.moderationId && (
+                  <AppealForm moderationId={comment.moderationId} topicId={proposalId} />
+                )}
+              </>
+            ) : (
+              <p className="comment-body">{comment.body}</p>
+            )}
+
+            {canModerate && !comment.hidden && (
+              <HideCommentForm proposalId={proposalId} commentId={comment.id} />
+            )}
 
             {isOpen && (
               <button
@@ -79,7 +129,21 @@ export function CommentsSection({ proposalId, comments, isOpen }: CommentsSectio
                   {new Date(reply.createdAt).toLocaleDateString('es-NI')}
                 </span>
               </div>
-              <p className="comment-body">{reply.body}</p>
+              {reply.hidden ? (
+                <>
+                  <p className="comment-body text-muted">
+                    Respuesta oculta por la moderación. Motivo: {reply.hiddenReason}.
+                  </p>
+                  {reply.moderationId && (
+                    <AppealForm moderationId={reply.moderationId} topicId={proposalId} />
+                  )}
+                </>
+              ) : (
+                <p className="comment-body">{reply.body}</p>
+              )}
+              {canModerate && !reply.hidden && (
+                <HideCommentForm proposalId={proposalId} commentId={reply.id} />
+              )}
             </div>
           ))}
         </div>

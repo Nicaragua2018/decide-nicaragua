@@ -163,14 +163,14 @@ describe('GroupsService', () => {
 
       await service.syncMemberships(USER_ID, 'Managua', null);
 
-      expect(prisma.group.upsert).toHaveBeenCalledTimes(1);
+      expect(prisma.group.upsert).toHaveBeenCalledTimes(2);
       expect(prisma.group.upsert).toHaveBeenCalledWith(
         expect.objectContaining({
           where: { slug: 'managua' },
           create: expect.objectContaining({ name: 'Managua', type: 'territorial_origin' }),
         }),
       );
-      expect(prisma.groupMembership.upsert).toHaveBeenCalledTimes(1);
+      expect(prisma.groupMembership.upsert).toHaveBeenCalledTimes(2);
     });
 
     it('upserts one group for currentCountry only', async () => {
@@ -195,8 +195,8 @@ describe('GroupsService', () => {
 
       await service.syncMemberships(USER_ID, 'León', 'ES');
 
-      expect(prisma.group.upsert).toHaveBeenCalledTimes(2);
-      expect(prisma.groupMembership.upsert).toHaveBeenCalledTimes(2);
+      expect(prisma.group.upsert).toHaveBeenCalledTimes(3);
+      expect(prisma.groupMembership.upsert).toHaveBeenCalledTimes(3);
     });
 
     it('is idempotent — calling twice does not throw', async () => {
@@ -207,7 +207,7 @@ describe('GroupsService', () => {
       await service.syncMemberships(USER_ID, 'Managua', null);
       await service.syncMemberships(USER_ID, 'Managua', null);
 
-      expect(prisma.group.upsert).toHaveBeenCalledTimes(2);
+      expect(prisma.group.upsert).toHaveBeenCalledTimes(4);
     });
 
     it('handles departments with diacritics correctly (slugify)', async () => {
@@ -222,6 +222,28 @@ describe('GroupsService', () => {
           where: { slug: 'rio-san-juan' },
         }),
       );
+    });
+  });
+
+  describe('syncMemberships() — comunidad general', () => {
+    it('une a la comunidad general sin borrar otras membresías', async () => {
+      vi.mocked(prisma.profile.findUnique).mockResolvedValue({ id: 'p1' } as never);
+      vi.mocked(prisma.group.upsert).mockResolvedValue({ id: 'g-x' } as never);
+      vi.mocked(prisma.groupMembership.upsert).mockResolvedValue({} as never);
+
+      await service.syncMemberships('u1', 'León', 'CR', null);
+
+      expect(prisma.group.upsert).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { slug: 'general' },
+          create: expect.objectContaining({ name: 'Toda la comunidad', type: 'custom' }),
+        }),
+      );
+      // La comunidad general es 'custom': el borrado por tipo nunca la toca.
+      const deletes = vi
+        .mocked(prisma.groupMembership.deleteMany)
+        .mock.calls.map((c: unknown[]) => JSON.stringify(c[0]));
+      expect(deletes.some((d: string) => d.includes('"custom"'))).toBe(false);
     });
   });
 

@@ -103,8 +103,15 @@ export default async function ElectionPage({
       {!isTallied && election.status !== 'cancelled' && (
         <div className="card mb-4">
           <p className="card-title mb-2">Administración</p>
+          {/* La votación de una propuesta del foro no se abre ni se cancela desde aquí. */}
+          {election.proposalId && (
+            <p className="text-sm text-muted mb-2">
+              Esta votación pertenece a una propuesta del foro.{' '}
+              <Link href={`/proposals/${election.proposalId}`}>Ver la propuesta</Link>
+            </p>
+          )}
           <div className="flex gap-2 flex-wrap">
-            {isDraft && (
+            {isDraft && !election.proposalId && (
               <form action={updateElectionStatusDirect}>
                 <input type="hidden" name="electionId" value={id} />
                 <input type="hidden" name="status"     value="open" />
@@ -113,14 +120,16 @@ export default async function ElectionPage({
             )}
             {isOpen && (
               <>
-                <ConfirmForm
-                  action={updateElectionStatusDirect}
-                  message="¿Cancelar esta elección? Esta acción no se puede deshacer y todos los votos se descartarán."
-                >
-                  <input type="hidden" name="electionId" value={id} />
-                  <input type="hidden" name="status"     value="cancelled" />
-                  <button className="btn btn-danger btn-sm">Cancelar elección</button>
-                </ConfirmForm>
+                {!election.proposalId && (
+                  <ConfirmForm
+                    action={updateElectionStatusDirect}
+                    message="¿Cancelar esta elección? Esta acción no se puede deshacer y todos los votos se descartarán."
+                  >
+                    <input type="hidden" name="electionId" value={id} />
+                    <input type="hidden" name="status"     value="cancelled" />
+                    <button className="btn btn-danger btn-sm">Cancelar elección</button>
+                  </ConfirmForm>
+                )}
 
                 <ConfirmForm
                   action={tallyElection.bind(null, id)}

@@ -83,6 +83,9 @@ function buildPrismaMock() {
     profile: {
       findUnique: vi.fn(),
     },
+    proposal: {
+      findUnique: vi.fn(),
+    },
     $transaction: vi.fn(),
   };
 }
@@ -104,6 +107,8 @@ describe('VotingService', () => {
     audit = buildAuditMock();
     audit.log.mockResolvedValue(undefined);
     prisma.profile.findUnique.mockResolvedValue({ userId: 'user-uuid-1' });
+    // Por defecto la elección no pertenece a ninguna propuesta del foro.
+    prisma.proposal.findUnique.mockResolvedValue(null);
     service = new VotingService(
       prisma as unknown as PrismaService,
       audit as unknown as AuditService,
@@ -184,6 +189,21 @@ describe('VotingService', () => {
       expect(result.userHasVoted).toBe(true);
     });
 
+    it('informa la propuesta del foro a la que pertenece la votación (o null)', async () => {
+      prisma.election.findUnique.mockResolvedValue(mockElectionOpen);
+      prisma.groupMembership.findUnique.mockResolvedValue(mockMembership);
+      prisma.ballot.findUnique.mockResolvedValue(null);
+
+      expect((await service.getElectionById(ELECTION_ID, PROFILE_ID)).proposalId).toBeNull();
+
+      prisma.proposal.findUnique.mockResolvedValue({ id: 'proposal-1' });
+      expect((await service.getElectionById(ELECTION_ID, PROFILE_ID)).proposalId).toBe('proposal-1');
+      expect(prisma.proposal.findUnique).toHaveBeenCalledWith({
+        where: { electionId: ELECTION_ID },
+        select: { id: true },
+      });
+    });
+
     it('lanza NotFoundException si la elección no existe', async () => {
       prisma.election.findUnique.mockResolvedValue(null);
 
@@ -252,6 +272,17 @@ describe('VotingService', () => {
       );
 
       expect(prisma.election.update).toHaveBeenCalled();
+    });
+
+    it('la votación de una propuesta del foro no cambia de estado desde aquí, ni por su creador', async () => {
+      prisma.election.findUnique.mockResolvedValue(mockElectionOpen);
+      prisma.proposal.findUnique.mockResolvedValue({ id: 'proposal-1' });
+
+      await expect(
+        service.updateElectionStatus(ELECTION_ID, { status: ElectionStatus.cancelled }, PROFILE_ID, IP),
+      ).rejects.toThrow('Esta votación pertenece a una propuesta del foro y no se cambia desde aquí.');
+      expect(prisma.proposal.findUnique).toHaveBeenCalledWith({ where: { electionId: ELECTION_ID } });
+      expect(prisma.election.update).not.toHaveBeenCalled();
     });
   });
 
@@ -373,6 +404,29 @@ describe('VotingService', () => {
       await expect(service.tallyElection(ELECTION_ID, OTHER_PROFILE_ID, IP)).rejects.toThrow(
         ForbiddenException,
       );
+    });
+
+    it('la votación de una propuesta del foro la cuenta cualquier miembro una vez cerrada', async () => {
+      prisma.election.findUnique.mockResolvedValue(electionReadyToTally);
+      prisma.proposal.findUnique.mockResolvedValue({ id: 'proposal-1' });
+      prisma.groupMembership.findUnique.mockResolvedValue({ groupId: GROUP_ID, profileId: OTHER_PROFILE_ID });
+      prisma.ballot.findMany.mockResolvedValue([]);
+
+      await service.tallyElection(ELECTION_ID, OTHER_PROFILE_ID, IP);
+
+      expect(prisma.$transaction).toHaveBeenCalled();
+    });
+
+    it('la votación de una propuesta del foro: quien no es miembro, o antes del cierre, no cuenta', async () => {
+      prisma.proposal.findUnique.mockResolvedValue({ id: 'proposal-1' });
+      prisma.election.findUnique.mockResolvedValue(electionReadyToTally);
+      prisma.groupMembership.findUnique.mockResolvedValue(null);
+      await expect(service.tallyElection(ELECTION_ID, OTHER_PROFILE_ID, IP)).rejects.toThrow(ForbiddenException);
+
+      prisma.election.findUnique.mockResolvedValue({ ...mockElectionOpen, endsAt: farFutureDate });
+      prisma.groupMembership.findUnique.mockResolvedValue({ groupId: GROUP_ID, profileId: OTHER_PROFILE_ID });
+      await expect(service.tallyElection(ELECTION_ID, OTHER_PROFILE_ID, IP)).rejects.toThrow(ForbiddenException);
+      expect(prisma.$transaction).not.toHaveBeenCalled();
     });
 
     it('lanza BadRequestException si la elección no ha terminado (endsAt en futuro)', async () => {

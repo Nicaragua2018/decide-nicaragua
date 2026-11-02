@@ -5,6 +5,7 @@ import {
   BadRequestException,
   Logger,
 } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { ProposalStatus, SignalType } from '@decide/shared';
 import type {
   ProposalSummary,
@@ -23,6 +24,8 @@ import { UpdateProposalStatusDto } from './dto/update-proposal-status.dto';
 
 /** Estados que aceptan nuevos comentarios y señales */
 const MUTABLE_STATUSES: string[] = [ProposalStatus.open];
+
+const HIDDEN_TOPIC_TITLE = 'Tema oculto por moderación';
 
 @Injectable()
 export class DeliberationService {
@@ -43,9 +46,22 @@ export class DeliberationService {
   ): Promise<{ id: string }> {
     await this.requireMembership(groupId, profileId);
 
+    let forumId: string;
+    if (dto.forumId) {
+      const forum = await this.prisma.forum.findUnique({ where: { id: dto.forumId } });
+      if (!forum || forum.groupId !== groupId) {
+        throw new BadRequestException('Ese foro no pertenece a esta comunidad.');
+      }
+      forumId = forum.id;
+    } else {
+      forumId = (await this.defaultForum(groupId)).id;
+    }
+
     const proposal = await this.prisma.proposal.create({
       data: {
         groupId,
+        forumId,
+        kind: 'tema',
         authorProfileId: profileId,
         title: dto.title,
         body: dto.body,
@@ -55,7 +71,7 @@ export class DeliberationService {
 
     void this.auditBase(profileId).then((base) =>
       this.audit
-        .log({ ...base, action: 'proposal.created', resource: `proposal:${proposal.id}`, ip, metadata: { groupId, title: dto.title } })
+        .log({ ...base, action: 'proposal.created', resource: `proposal:${proposal.id}`, ip, metadata: { groupId } })
         .catch((err: unknown) => this.logger.error('Audit log failed', err)),
     );
 
@@ -79,12 +95,15 @@ export class DeliberationService {
       proposals: proposals.map((p) => ({
         id: p.id,
         groupId: p.groupId,
-        title: p.title,
+        title: p.hidden ? HIDDEN_TOPIC_TITLE : p.title,
         status: p.status as unknown as ProposalStatus,
         authorDisplayName: p.author.displayName,
         signalCounts: computeSignalCounts(p.signals.map((s) => s.signal as string)),
         commentCount: p._count.comments,
         createdAt: p.createdAt.toISOString(),
+        kind: p.kind,
+        hidden: p.hidden,
+        forumId: p.forumId,
       })),
     };
   }
@@ -111,15 +130,35 @@ export class DeliberationService {
 
     const userSignalRow = proposal.signals.find((s) => s.profileId === profileId);
 
-    const comments: CommentItem[] = proposal.comments.map((c) => ({
-      id: c.id,
-      authorDisplayName: c.author.displayName,
-      body: c.body,
-      parentId: c.parentId,
-      createdAt: c.createdAt.toISOString(),
-    }));
+    // Una consulta por comentario oculto (la escala es pequeña). De un tema oculto no se lee nada.
+    const comments: CommentItem[] = [];
+    for (const c of proposal.hidden ? [] : proposal.comments) {
+      const cm = c.hidden ? await this.hiddenInfo('respuesta', c.id, c.authorProfileId, profileId) : null;
+      comments.push({
+        id: c.id,
+        authorDisplayName: c.author.displayName,
+        body: c.hidden ? '' : c.body,
+        parentId: c.parentId,
+        createdAt: c.createdAt.toISOString(),
+        hidden: c.hidden,
+        hiddenReason: cm?.reason ?? null,
+        moderationId: cm?.moderationId ?? null,
+      });
+    }
 
-    return {
+    const topicInfo = proposal.hidden
+      ? await this.hiddenInfo('tema', proposal.id, proposal.authorProfileId, profileId)
+      : null;
+
+    const electionStatus =
+      proposal.electionId && !proposal.hidden
+        ? (((await this.prisma.election.findUnique({
+            where: { id: proposal.electionId },
+            select: { status: true },
+          }))?.status ?? null) as ProposalDetail['electionStatus'])
+        : null;
+
+    const detail: ProposalDetail = {
       id: proposal.id,
       groupId: proposal.groupId,
       title: proposal.title,
@@ -133,7 +172,21 @@ export class DeliberationService {
       createdAt: proposal.createdAt.toISOString(),
       comments,
       userSignal: userSignalRow ? (userSignalRow.signal as unknown as SignalType) : null,
+      kind: proposal.kind,
+      hidden: proposal.hidden,
+      forumId: proposal.forumId,
+      deliberationEndsAt: proposal.deliberationEndsAt?.toISOString() ?? null,
+      electionId: proposal.electionId,
+      electionStatus,
+      conclusion: proposal.conclusion,
+      objections: proposal.objections,
+      hiddenReason: topicInfo?.reason ?? null,
+      moderationId: topicInfo?.moderationId ?? null,
+      // Lo calcula ForumsService (Tarea 4/5); este servicio no conoce los permisos de moderación.
+      canModerate: false,
     };
+
+    return proposal.hidden ? redactHiddenTopic(detail) : detail;
   }
 
   async updateProposalStatus(
@@ -152,14 +205,34 @@ export class DeliberationService {
       throw new ForbiddenException('Only the author can change the proposal status');
     }
 
+    // Una persona suspendida pierde sus membresías: ya no gestiona sus temas.
+    await this.requireMembership(proposal.groupId, profileId);
+
+    this.requireNotHidden(proposal.hidden);
+
+    if ((proposal.status as string) === 'closed') {
+      throw new BadRequestException('Un tema cerrado con consenso ya no cambia de estado.');
+    }
+
+    if ((dto.status as string) === 'closed') {
+      throw new BadRequestException('Para cerrar un tema usa «Cerrar con consenso».');
+    }
+
+    if ((dto.status as string) === 'archived' && (proposal.kind as string) === 'propuesta') {
+      const election = proposal.electionId
+        ? await this.prisma.election.findUnique({ where: { id: proposal.electionId }, select: { status: true } })
+        : null;
+      const contada = election !== null && ['tallied', 'cancelled'].includes(election.status as string);
+      if (!contada) {
+        throw new BadRequestException('Una propuesta formal no se archiva antes de que se cuente su votación.');
+      }
+    }
+
     const newStatus = dto.status as string as never;
 
     await this.prisma.proposal.update({
       where: { id: proposalId },
-      data: {
-        status: newStatus,
-        ...(dto.status === 'closed' && { closedAt: new Date() }),
-      },
+      data: { status: newStatus },
     });
 
     void this.auditBase(profileId).then((base) =>
@@ -184,6 +257,7 @@ export class DeliberationService {
     }
 
     await this.requireMembership(proposal.groupId, profileId);
+    this.requireNotHidden(proposal.hidden);
     this.requireMutableStatus(proposal.status as string);
 
     if (dto.parentId) {
@@ -193,6 +267,10 @@ export class DeliberationService {
 
       if (!parent || parent.proposalId !== proposalId) {
         throw new BadRequestException('Parent comment not found in this proposal');
+      }
+
+      if (parent.hidden) {
+        throw new BadRequestException('No se puede responder a una respuesta oculta.');
       }
 
       // Solo un nivel de threading — no se permite responder a una respuesta
@@ -234,6 +312,7 @@ export class DeliberationService {
     }
 
     await this.requireMembership(proposal.groupId, profileId);
+    this.requireNotHidden(proposal.hidden);
     this.requireMutableStatus(proposal.status as string);
 
     await this.prisma.consensusSignal.upsert({
@@ -267,6 +346,50 @@ export class DeliberationService {
     }
   }
 
+  private requireNotHidden(hidden: boolean): void {
+    if (hidden) {
+      throw new BadRequestException('Este tema está oculto por moderación.');
+    }
+  }
+
+  /** Foro por defecto del grupo; se crea al vuelo la primera vez. */
+  private async defaultForum(groupId: string): Promise<{ id: string }> {
+    const existing = await this.prisma.forum.findFirst({ where: { groupId, isDefault: true } });
+    if (existing) return existing;
+    const group = await this.prisma.group.findUnique({ where: { id: groupId } });
+    try {
+      return await this.prisma.forum.create({
+        data: { groupId, title: `Foro de ${group?.name ?? 'la comunidad'}`, isDefault: true },
+      });
+    } catch (err) {
+      // Otra petición lo creó a la vez (índice único parcial): se relee.
+      if (!(err instanceof Prisma.PrismaClientKnownRequestError) || err.code !== 'P2002') throw err;
+      const creado = await this.prisma.forum.findFirst({ where: { groupId, isDefault: true } });
+      if (!creado) throw err;
+      return creado;
+    }
+  }
+
+  /**
+   * Motivo de la acción de moderación más reciente sobre un tema o respuesta y, solo si quien
+   * consulta es el autor y la acción sigue sin apelar ('oculto'), el id para apelarla.
+   */
+  private async hiddenInfo(
+    target: 'tema' | 'respuesta',
+    targetId: string,
+    authorProfileId: string,
+    viewerProfileId: string,
+  ): Promise<{ reason: string | null; moderationId: string | null }> {
+    const action = await this.prisma.moderationAction.findFirst({
+      where: { target, targetId },
+      orderBy: { createdAt: 'desc' },
+      select: { id: true, reason: true, status: true },
+    });
+    const canAppeal =
+      action !== null && authorProfileId === viewerProfileId && (action.status as string) === 'oculto';
+    return { reason: action?.reason ?? null, moderationId: canAppeal ? action.id : null };
+  }
+
   private requireMutableStatus(status: string): void {
     if (!MUTABLE_STATUSES.includes(status)) {
       throw new BadRequestException(
@@ -294,6 +417,24 @@ export class DeliberationService {
 }
 
 // ─── Utilidades ───────────────────────────────────────────────────────────────
+
+/**
+ * Único lugar donde se borra todo lo que un tema oculto podría revelar. Todo campo nuevo
+ * con texto del tema (o que apunte a él) debe vaciarse aquí. La mesa ve el original en
+ * la cola de apelaciones.
+ */
+function redactHiddenTopic(detail: ProposalDetail): ProposalDetail {
+  return {
+    ...detail,
+    title: HIDDEN_TOPIC_TITLE,
+    body: '',
+    conclusion: null,
+    objections: null,
+    electionId: null,
+    electionStatus: null,
+    comments: [],
+  };
+}
 
 function computeSignalCounts(signals: string[]): SignalCounts {
   const counts = { support: 0, neutral: 0, object: 0 };

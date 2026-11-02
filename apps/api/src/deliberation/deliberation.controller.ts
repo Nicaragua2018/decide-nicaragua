@@ -16,6 +16,7 @@ import { Throttle } from '@nestjs/throttler';
 import { extractIp } from '../common/utils/ip.util';
 
 import { DeliberationService } from './deliberation.service';
+import { ForumsService } from '../forums/forums.service';
 import { CreateProposalDto } from './dto/create-proposal.dto';
 import { CreateCommentDto } from './dto/create-comment.dto';
 import { SetSignalDto } from './dto/set-signal.dto';
@@ -31,7 +32,10 @@ import type {
 @Controller('deliberation')
 @UseGuards(JwtAuthGuard)
 export class DeliberationController {
-  constructor(private readonly deliberationService: DeliberationService) {}
+  constructor(
+    private readonly deliberationService: DeliberationService,
+    private readonly forums: ForumsService,
+  ) {}
 
   // ─── Proposals ─────────────────────────────────────────────────────────────
 
@@ -74,7 +78,9 @@ export class DeliberationController {
     @CurrentUser() user: JwtPayload,
   ): Promise<ProposalDetail> {
     this.requireProfile(user);
-    return this.deliberationService.getProposalById(id, user.profileId!);
+    const detail = await this.deliberationService.getProposalById(id, user.profileId!);
+    detail.canModerate = await this.forums.canModerate(user.profileId!, detail.groupId);
+    return detail;
   }
 
   /**
