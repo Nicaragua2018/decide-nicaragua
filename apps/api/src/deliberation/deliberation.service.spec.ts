@@ -83,8 +83,14 @@ function buildPrismaMock() {
     moderationAction: {
       findFirst: vi.fn(),
     },
+    election: {
+      findUnique: vi.fn(),
+    },
   };
 }
+
+/** Deja correr las promesas «fire-and-forget» (auditoría). */
+const flush = () => new Promise((r) => setTimeout(r, 0));
 
 function buildAuditMock() {
   return { log: vi.fn() };
@@ -267,6 +273,7 @@ describe('DeliberationService', () => {
   describe('updateProposalStatus', () => {
     it('el autor puede archivar su propuesta', async () => {
       prisma.proposal.findUnique.mockResolvedValue(mockProposal);
+      prisma.groupMembership.findUnique.mockResolvedValue(mockMembership);
       prisma.proposal.update.mockResolvedValue({});
 
       await service.updateProposalStatus(
@@ -283,7 +290,41 @@ describe('DeliberationService', () => {
       );
     });
 
+    it('un autor sin membresía (suspendido) no cambia el estado', async () => {
+      prisma.proposal.findUnique.mockResolvedValue(mockProposal);
+      prisma.groupMembership.findUnique.mockResolvedValue(null);
+      await expect(
+        service.updateProposalStatus(PROPOSAL_ID, { status: ProposalStatus.archived }, PROFILE_ID, IP),
+      ).rejects.toThrow(ForbiddenException);
+      expect(prisma.proposal.update).not.toHaveBeenCalled();
+    });
+
+    it('una propuesta formal sin votación, o con la votación sin contar, no se archiva', async () => {
+      prisma.groupMembership.findUnique.mockResolvedValue(mockMembership);
+      prisma.proposal.findUnique.mockResolvedValue({ ...mockProposal, kind: 'propuesta', electionId: null });
+      await expect(
+        service.updateProposalStatus(PROPOSAL_ID, { status: ProposalStatus.archived }, PROFILE_ID, IP),
+      ).rejects.toThrow('Una propuesta formal no se archiva antes de que se cuente su votación.');
+
+      prisma.proposal.findUnique.mockResolvedValue({ ...mockProposal, kind: 'propuesta', electionId: 'e1' });
+      prisma.election.findUnique.mockResolvedValue({ status: 'open' });
+      await expect(
+        service.updateProposalStatus(PROPOSAL_ID, { status: ProposalStatus.archived }, PROFILE_ID, IP),
+      ).rejects.toThrow(BadRequestException);
+      expect(prisma.proposal.update).not.toHaveBeenCalled();
+    });
+
+    it('una propuesta formal con la votación contada sí se archiva', async () => {
+      prisma.groupMembership.findUnique.mockResolvedValue(mockMembership);
+      prisma.proposal.findUnique.mockResolvedValue({ ...mockProposal, kind: 'propuesta', electionId: 'e1' });
+      prisma.election.findUnique.mockResolvedValue({ status: 'tallied' });
+      prisma.proposal.update.mockResolvedValue({});
+      await service.updateProposalStatus(PROPOSAL_ID, { status: ProposalStatus.archived }, PROFILE_ID, IP);
+      expect(prisma.proposal.update).toHaveBeenCalled();
+    });
+
     it('no cambia el estado de un tema oculto', async () => {
+      prisma.groupMembership.findUnique.mockResolvedValue(mockMembership);
       prisma.proposal.findUnique.mockResolvedValue({ ...mockProposal, hidden: true });
       await expect(
         service.updateProposalStatus(PROPOSAL_ID, { status: ProposalStatus.archived }, PROFILE_ID, IP),
@@ -292,6 +333,7 @@ describe('DeliberationService', () => {
     });
 
     it('un tema cerrado con consenso no se reabre ni se archiva', async () => {
+      prisma.groupMembership.findUnique.mockResolvedValue(mockMembership);
       prisma.proposal.findUnique.mockResolvedValue({ ...mockProposal, status: 'closed' });
       await expect(
         service.updateProposalStatus(PROPOSAL_ID, { status: ProposalStatus.open }, PROFILE_ID, IP),
@@ -300,6 +342,7 @@ describe('DeliberationService', () => {
     });
 
     it('PATCH status ya no cierra: el cierre necesita conclusión', async () => {
+      prisma.groupMembership.findUnique.mockResolvedValue(mockMembership);
       prisma.proposal.findUnique.mockResolvedValue(mockProposal);
       await expect(
         service.updateProposalStatus(PROPOSAL_ID, { status: 'closed' } as never, PROFILE_ID, IP),
@@ -539,6 +582,55 @@ describe('DeliberationService', () => {
           orderBy: { createdAt: 'desc' },
         }),
       );
+    });
+
+    it('un tema oculto no filtra conclusión, objeciones, votación ni respuestas', async () => {
+      prisma.proposal.findUnique.mockResolvedValue({
+        ...base,
+        hidden: true,
+        status: 'closed',
+        conclusion: 'conclusión secreta',
+        objections: 'objeción secreta',
+        electionId: 'e1',
+        comments: [
+          { id: 'c1', body: 'respuesta visible', hidden: false, parentId: null, createdAt: new Date(), authorProfileId: 'p9', author: { displayName: 'Z' } },
+        ],
+        _count: { comments: 1 },
+      });
+      prisma.groupMembership.findUnique.mockResolvedValue(mockMembership);
+      prisma.moderationAction.findFirst.mockResolvedValue({ reason: 'Insultos' });
+      prisma.election.findUnique.mockResolvedValue({ status: 'tallied' });
+      const d = await service.getProposalById('t1', PROFILE_ID);
+      expect(d.conclusion).toBeNull();
+      expect(d.objections).toBeNull();
+      expect(d.electionId).toBeNull();
+      expect(d.electionStatus).toBeNull();
+      expect(d.comments).toEqual([]);
+      expect(JSON.stringify(d)).not.toMatch(/secret|respuesta visible|Título/);
+    });
+
+    it('el detalle informa el estado de la votación vinculada', async () => {
+      prisma.groupMembership.findUnique.mockResolvedValue(mockMembership);
+      prisma.proposal.findUnique.mockResolvedValue({ ...base, kind: 'propuesta', electionId: 'e1' });
+      prisma.election.findUnique.mockResolvedValue({ status: 'open' });
+      const d = await service.getProposalById('t1', PROFILE_ID);
+      expect(d.electionStatus).toBe('open');
+      expect(prisma.election.findUnique).toHaveBeenCalledWith({ where: { id: 'e1' }, select: { status: true } });
+
+      prisma.proposal.findUnique.mockResolvedValue(base);
+      expect((await service.getProposalById('t1', PROFILE_ID)).electionStatus).toBeNull();
+    });
+
+    it('la auditoría de un tema nuevo no guarda su título', async () => {
+      prisma.groupMembership.findUnique.mockResolvedValue(mockMembership);
+      prisma.forum.findFirst.mockResolvedValue({ id: 'f-def', groupId: GROUP_ID });
+      prisma.proposal.create.mockResolvedValue({ id: 't1' });
+      await service.createProposal(GROUP_ID, { title: 'Título delicado', body: 'Cuerpo del tema' } as never, PROFILE_ID, IP);
+      await flush();
+      expect(audit.log).toHaveBeenCalledWith(
+        expect.objectContaining({ action: 'proposal.created', metadata: { groupId: GROUP_ID } }),
+      );
+      expect(JSON.stringify(audit.log.mock.calls)).not.toContain('Título delicado');
     });
 
     it('un comentario oculto no devuelve su texto', async () => {

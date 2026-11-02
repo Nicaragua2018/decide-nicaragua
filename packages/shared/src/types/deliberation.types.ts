@@ -54,6 +54,8 @@ export interface ProposalDetail extends ProposalSummary {
   userSignal: SignalType | null;
   deliberationEndsAt: string | null;
   electionId: string | null;
+  /** Estado de la votación vinculada; null si no hay votación o si el tema está oculto. */
+  electionStatus: 'draft' | 'open' | 'tallied' | 'cancelled' | null;
   conclusion: string | null;
   objections: string | null;
   hiddenReason: string | null;

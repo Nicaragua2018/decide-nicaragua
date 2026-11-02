@@ -11,7 +11,7 @@ function buildPrisma() {
     forum: { findFirst: vi.fn(), findUnique: vi.fn(), findMany: vi.fn(), create: vi.fn() },
     proposal: { findUnique: vi.fn(), findMany: vi.fn(), update: vi.fn(), updateMany: vi.fn() },
     proposalComment: { findUnique: vi.fn(), update: vi.fn() },
-    election: { create: vi.fn() },
+    election: { create: vi.fn(), findUnique: vi.fn(), update: vi.fn() },
     electionResult: { findUnique: vi.fn() },
     electionCandidate: { findUnique: vi.fn() },
     moderationAction: { create: vi.fn(), findUnique: vi.fn(), findMany: vi.fn(), update: vi.fn() },
@@ -152,7 +152,23 @@ describe('ForumsService', () => {
 
     it('no se abre dos veces', async () => {
       prisma.proposal.findUnique.mockResolvedValue(propuesta({ electionId: 'e1' }));
+      prisma.election.findUnique.mockResolvedValue({ status: 'open' });
       await expect(service.openVote(YO, 't1', 'ip')).rejects.toThrow(ConflictException);
+      prisma.election.findUnique.mockResolvedValue({ status: 'tallied' });
+      await expect(service.openVote(YO, 't1', 'ip')).rejects.toThrow(ConflictException);
+      expect(prisma.election.create).not.toHaveBeenCalled();
+    });
+
+    it('si la votación vinculada fue cancelada (tema ocultado y restaurado), se abre otra', async () => {
+      prisma.proposal.findUnique.mockResolvedValue(propuesta({ electionId: 'e-vieja' }));
+      prisma.election.findUnique.mockResolvedValue({ status: 'cancelled' });
+      prisma.election.create.mockResolvedValue({ id: 'e2' });
+      prisma.proposal.updateMany.mockResolvedValue({ count: 1 });
+      expect(await service.openVote(YO, 't1', 'ip')).toEqual({ electionId: 'e2' });
+      expect(prisma.proposal.updateMany).toHaveBeenCalledWith({
+        where: { id: 't1', electionId: 'e-vieja', status: 'open', hidden: false },
+        data: { electionId: 'e2' },
+      });
     });
 
     it('un tema que no es propuesta formal no se vota', async () => {
@@ -210,6 +226,22 @@ describe('ForumsService', () => {
       });
     });
 
+    it('una propuesta formal se cierra solo cuando su votación ya fue contada', async () => {
+      const dto = { conclusion: 'Acordamos crear un fondo común.' };
+      prisma.proposal.update.mockResolvedValue({});
+      prisma.proposal.findUnique.mockResolvedValue({ id: 't1', groupId: 'g1', authorProfileId: YO, status: 'open', hidden: false, kind: 'propuesta', electionId: null });
+      await expect(service.closeWithConsensus(YO, 't1', dto, 'ip')).rejects.toThrow(
+        'Una propuesta formal se cierra cuando su votación ya fue contada.',
+      );
+      prisma.proposal.findUnique.mockResolvedValue({ id: 't1', groupId: 'g1', authorProfileId: YO, status: 'open', hidden: false, kind: 'propuesta', electionId: 'e1' });
+      prisma.election.findUnique.mockResolvedValue({ status: 'open' });
+      await expect(service.closeWithConsensus(YO, 't1', dto, 'ip')).rejects.toThrow(BadRequestException);
+      expect(prisma.proposal.update).not.toHaveBeenCalled();
+      prisma.election.findUnique.mockResolvedValue({ status: 'tallied' });
+      await service.closeWithConsensus(YO, 't1', dto, 'ip');
+      expect(prisma.proposal.update).toHaveBeenCalledTimes(1);
+    });
+
     it('un tema oculto no se cierra con consenso', async () => {
       prisma.proposal.findUnique.mockResolvedValue({ id: 't1', groupId: 'g1', authorProfileId: YO, status: 'open', hidden: true });
       await expect(service.closeWithConsensus(YO, 't1', { conclusion: 'Conclusión larga suficiente.' }, 'ip')).rejects.toThrow(BadRequestException);
@@ -248,6 +280,48 @@ describe('ForumsService', () => {
       prisma.moderationAction.create.mockResolvedValue({ id: 'ma1' });
       await service.hide(YO, { target: 'tema', targetId: 't1', reason: 'Lenguaje ofensivo' }, 'ip');
       expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+    });
+
+    it('ocultar un tema con votación abierta la cancela y le quita el título, en la misma transacción', async () => {
+      board.roleOf.mockResolvedValue('administrador');
+      prisma.proposal.findUnique.mockResolvedValue({ id: 't1', groupId: 'g1', hidden: false, electionId: 'e1', title: 'Título delicado' });
+      prisma.proposal.update.mockResolvedValue({});
+      prisma.election.findUnique.mockResolvedValue({ status: 'open' });
+      prisma.election.update.mockResolvedValue({});
+      prisma.moderationAction.create.mockResolvedValue({ id: 'ma1' });
+      await service.hide(YO, { target: 'tema', targetId: 't1', reason: 'Lenguaje ofensivo' }, 'ip');
+      expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+      expect(prisma.election.update).toHaveBeenCalledWith({
+        where: { id: 'e1' },
+        data: { title: 'Votación de un tema oculto', status: 'cancelled' },
+      });
+    });
+
+    it('ocultar un tema con votación ya contada solo le quita el título', async () => {
+      board.roleOf.mockResolvedValue('administrador');
+      prisma.proposal.findUnique.mockResolvedValue({ id: 't1', groupId: 'g1', hidden: false, electionId: 'e1', title: 'Título delicado' });
+      prisma.proposal.update.mockResolvedValue({});
+      prisma.election.findUnique.mockResolvedValue({ status: 'tallied' });
+      prisma.election.update.mockResolvedValue({});
+      prisma.moderationAction.create.mockResolvedValue({ id: 'ma1' });
+      await service.hide(YO, { target: 'tema', targetId: 't1', reason: 'Lenguaje ofensivo' }, 'ip');
+      expect(prisma.election.update).toHaveBeenCalledWith({
+        where: { id: 'e1' },
+        data: { title: 'Votación de un tema oculto' },
+      });
+    });
+
+    it('restaurar un tema con votación le devuelve el título, sin reabrirla', async () => {
+      board.roleOf.mockResolvedValue('secretario');
+      prisma.moderationAction.findUnique.mockResolvedValue({ id: 'ma1', target: 'tema', targetId: 't1', status: 'apelado' });
+      prisma.proposal.update.mockResolvedValue({ id: 't1', title: 'Fondo común', electionId: 'e1' });
+      prisma.election.update.mockResolvedValue({});
+      prisma.moderationAction.update.mockResolvedValue({});
+      await service.resolveAppeal(YO, 'ma1', true, 'ip');
+      expect(prisma.election.update).toHaveBeenCalledWith({
+        where: { id: 'e1' },
+        data: { title: 'Votación: Fondo común' },
+      });
     });
 
     it('resolver una apelación ocurre en una sola transacción', async () => {

@@ -134,6 +134,11 @@ export class VotingService {
 
     if (!election) throw new NotFoundException('Election not found');
 
+    // La votación de una propuesta del foro solo se cancela por moderación (ForumsService.hide).
+    if (await this.isProposalVote(electionId)) {
+      throw new ForbiddenException('Esta votación pertenece a una propuesta del foro y no se cambia desde aquí.');
+    }
+
     if (election.createdByProfileId !== profileId) {
       throw new ForbiddenException('Only the creator can change the election status');
     }
@@ -242,7 +247,15 @@ export class VotingService {
 
     if (!election) throw new NotFoundException('Election not found');
     if (election.createdByProfileId !== profileId) {
-      throw new ForbiddenException('Only the creator can tally the election');
+      // La votación de una propuesta del foro no depende de una sola persona: una vez
+      // cerrada, cualquier miembro de la comunidad puede pedir el conteo.
+      const puedeContar =
+        election.endsAt <= new Date() &&
+        (await this.isProposalVote(electionId)) &&
+        (await this.isMember(election.groupId, profileId));
+      if (!puedeContar) {
+        throw new ForbiddenException('Only the creator can tally the election');
+      }
     }
     if ((election.status as string) !== ElectionStatus.open) {
       throw new BadRequestException('Only open elections can be tallied');
@@ -340,6 +353,17 @@ export class VotingService {
   }
 
   // ─── Helpers privados ─────────────────────────────────────────────────────
+
+  private async isProposalVote(electionId: string): Promise<boolean> {
+    return Boolean(await this.prisma.proposal.findUnique({ where: { electionId } }));
+  }
+
+  private async isMember(groupId: string, profileId: string): Promise<boolean> {
+    const m = await this.prisma.groupMembership.findUnique({
+      where: { groupId_profileId: { groupId, profileId } },
+    });
+    return Boolean(m);
+  }
 
   private async requireMembership(groupId: string, profileId: string): Promise<void> {
     const membership = await this.prisma.groupMembership.findUnique({

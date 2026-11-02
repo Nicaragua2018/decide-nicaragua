@@ -71,7 +71,7 @@ export class DeliberationService {
 
     void this.auditBase(profileId).then((base) =>
       this.audit
-        .log({ ...base, action: 'proposal.created', resource: `proposal:${proposal.id}`, ip, metadata: { groupId, title: dto.title } })
+        .log({ ...base, action: 'proposal.created', resource: `proposal:${proposal.id}`, ip, metadata: { groupId } })
         .catch((err: unknown) => this.logger.error('Audit log failed', err)),
     );
 
@@ -130,9 +130,9 @@ export class DeliberationService {
 
     const userSignalRow = proposal.signals.find((s) => s.profileId === profileId);
 
-    // Una consulta por comentario oculto (la escala es pequeña).
+    // Una consulta por comentario oculto (la escala es pequeña). De un tema oculto no se lee nada.
     const comments: CommentItem[] = [];
-    for (const c of proposal.comments) {
+    for (const c of proposal.hidden ? [] : proposal.comments) {
       const cm = c.hidden ? await this.hiddenInfo('respuesta', c.id, c.authorProfileId, profileId) : null;
       comments.push({
         id: c.id,
@@ -150,11 +150,19 @@ export class DeliberationService {
       ? await this.hiddenInfo('tema', proposal.id, proposal.authorProfileId, profileId)
       : null;
 
-    return {
+    const electionStatus =
+      proposal.electionId && !proposal.hidden
+        ? (((await this.prisma.election.findUnique({
+            where: { id: proposal.electionId },
+            select: { status: true },
+          }))?.status ?? null) as ProposalDetail['electionStatus'])
+        : null;
+
+    const detail: ProposalDetail = {
       id: proposal.id,
       groupId: proposal.groupId,
-      title: proposal.hidden ? HIDDEN_TOPIC_TITLE : proposal.title,
-      body: proposal.hidden ? '' : proposal.body,
+      title: proposal.title,
+      body: proposal.body,
       status: proposal.status as unknown as ProposalStatus,
       authorDisplayName: proposal.author.displayName,
       authorProfileId: proposal.authorProfileId,
@@ -169,6 +177,7 @@ export class DeliberationService {
       forumId: proposal.forumId,
       deliberationEndsAt: proposal.deliberationEndsAt?.toISOString() ?? null,
       electionId: proposal.electionId,
+      electionStatus,
       conclusion: proposal.conclusion,
       objections: proposal.objections,
       hiddenReason: topicInfo?.reason ?? null,
@@ -176,6 +185,8 @@ export class DeliberationService {
       // Lo calcula ForumsService (Tarea 4/5); este servicio no conoce los permisos de moderación.
       canModerate: false,
     };
+
+    return proposal.hidden ? redactHiddenTopic(detail) : detail;
   }
 
   async updateProposalStatus(
@@ -194,6 +205,9 @@ export class DeliberationService {
       throw new ForbiddenException('Only the author can change the proposal status');
     }
 
+    // Una persona suspendida pierde sus membresías: ya no gestiona sus temas.
+    await this.requireMembership(proposal.groupId, profileId);
+
     this.requireNotHidden(proposal.hidden);
 
     if ((proposal.status as string) === 'closed') {
@@ -202,6 +216,16 @@ export class DeliberationService {
 
     if ((dto.status as string) === 'closed') {
       throw new BadRequestException('Para cerrar un tema usa «Cerrar con consenso».');
+    }
+
+    if ((dto.status as string) === 'archived' && (proposal.kind as string) === 'propuesta') {
+      const election = proposal.electionId
+        ? await this.prisma.election.findUnique({ where: { id: proposal.electionId }, select: { status: true } })
+        : null;
+      const contada = election !== null && ['tallied', 'cancelled'].includes(election.status as string);
+      if (!contada) {
+        throw new BadRequestException('Una propuesta formal no se archiva antes de que se cuente su votación.');
+      }
     }
 
     const newStatus = dto.status as string as never;
@@ -393,6 +417,24 @@ export class DeliberationService {
 }
 
 // ─── Utilidades ───────────────────────────────────────────────────────────────
+
+/**
+ * Único lugar donde se borra todo lo que un tema oculto podría revelar. Todo campo nuevo
+ * con texto del tema (o que apunte a él) debe vaciarse aquí. La mesa ve el original en
+ * la cola de apelaciones.
+ */
+function redactHiddenTopic(detail: ProposalDetail): ProposalDetail {
+  return {
+    ...detail,
+    title: HIDDEN_TOPIC_TITLE,
+    body: '',
+    conclusion: null,
+    objections: null,
+    electionId: null,
+    electionStatus: null,
+    comments: [],
+  };
+}
 
 function computeSignalCounts(signals: string[]): SignalCounts {
   const counts = { support: 0, neutral: 0, object: 0 };

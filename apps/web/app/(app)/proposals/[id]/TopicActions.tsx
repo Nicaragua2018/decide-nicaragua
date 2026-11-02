@@ -31,10 +31,16 @@ export function TopicActions({ proposal }: { proposal: ProposalDetail }) {
     });
   }
 
-  const showAnything =
-    proposal.kind === 'propuesta' ||
-    (canAct && isOpen) ||
-    (proposal.canModerate && !proposal.hidden);
+  // Una propuesta formal se cierra con consenso solo cuando su votación ya fue contada (o cancelada).
+  const isPropuesta = proposal.kind === 'propuesta';
+  const voteDone = proposal.electionStatus === 'tallied' || proposal.electionStatus === 'cancelled';
+  const canClose = !isPropuesta || voteDone;
+  const canOpenVote = !proposal.electionId || proposal.electionStatus === 'cancelled';
+
+  // De un tema oculto no se muestra nada: ni la propuesta, ni su votación, ni acciones.
+  if (proposal.hidden) return null;
+
+  const showAnything = isPropuesta || (canAct && isOpen) || proposal.canModerate;
   if (!showAnything) return null;
 
   return (
@@ -47,7 +53,7 @@ export function TopicActions({ proposal }: { proposal: ProposalDetail }) {
               La deliberación termina el {endsAt.toLocaleDateString('es-NI')}
             </p>
           )}
-          {deliberationOver && !proposal.electionId && canAct && (
+          {deliberationOver && canOpenVote && isOpen && canAct && (
             <button
               type="button"
               className="btn btn-primary btn-sm mt-2"
@@ -84,7 +90,11 @@ export function TopicActions({ proposal }: { proposal: ProposalDetail }) {
         </div>
       )}
 
-      {isOpen && canAct && (
+      {isOpen && canAct && !canClose && proposal.electionId && (
+        <p className="text-sm text-muted mb-3">Podrás cerrar con consenso cuando se cuente la votación.</p>
+      )}
+
+      {isOpen && canAct && canClose && (
         <form action={closeAction} className="form mb-3">
           <p className="card-title">Cerrar con consenso</p>
           <input type="hidden" name="topicId" value={proposal.id} />
