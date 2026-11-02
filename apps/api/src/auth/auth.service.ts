@@ -22,7 +22,8 @@ import { LoginDto } from './dto/login.dto';
 import { UpdateProfileDto } from './dto/update-profile.dto';
 import {
   AccountStatus,
-  ACTIVE_STATUSES,
+  LOGIN_STATUSES,
+  MAX_PENDING_INVITES,
   INVITE_TOKEN_TTL_HOURS,
   type JwtPayload,
   type AuthResponse,
@@ -80,6 +81,27 @@ export class AuthService {
       throw new ConflictException('An account with this email already exists');
     }
 
+    const esAdministrador = await this.prisma.boardSeat.findFirst({
+      where: { role: 'administrador', profile: { userId: actorId } },
+    });
+    if (!esAdministrador) {
+      // Una invitación vencida ya no está pendiente: no bloquea invitar a otra persona.
+      const pendientes = await this.prisma.user.count({
+        where: {
+          invitedById: actorId,
+          OR: [
+            { status: 'pending_verification' },
+            { status: 'invited', inviteExpiresAt: { gt: new Date() } },
+          ],
+        },
+      });
+      if (pendientes >= MAX_PENDING_INVITES) {
+        throw new ForbiddenException(
+          `Ya tienes ${MAX_PENDING_INVITES.toString()} invitaciones pendientes. Podrás invitar a más cuando esas personas se registren y se verifiquen.`,
+        );
+      }
+    }
+
     const inviteToken = randomUUID();
     const inviteExpiresAt = new Date(
       Date.now() + INVITE_TOKEN_TTL_HOURS * 60 * 60 * 1000,
@@ -126,7 +148,7 @@ export class AuthService {
 
   /**
    * El usuario acepta la invitación: establece contraseña y crea su perfil.
-   * El estado queda en 'pending_verification' hasta revisión manual.
+   * El estado queda en 'pending_verification' hasta reunir sus dos referencias (VerificationService). Las membresías se crean al verificarse.
    */
   async acceptInvite(dto: AcceptInviteDto, ip: string): Promise<void> {
     const user = await this.prisma.user.findUnique({
@@ -159,14 +181,10 @@ export class AuthService {
           displayName: dto.displayName,
           birthDepartment: dto.birthDepartment ?? null,
           currentCountry: dto.currentCountry ?? null,
+          currentRegion: dto.currentCountry === 'US' ? (dto.currentRegion ?? null) : null,
         },
       }),
     ]);
-
-    // Sincronizar membresías de grupos (idempotente, no bloquea el flujo)
-    void this.groups
-      .syncMemberships(user.id, dto.birthDepartment ?? null, dto.currentCountry ?? null)
-      .catch((err: unknown) => this.logger.error('Group sync failed after registration', err));
 
     void this.audit
       .log({
@@ -205,7 +223,7 @@ export class AuthService {
 
     const status = user.status as unknown as AccountStatus;
 
-    if (!ACTIVE_STATUSES.includes(status)) {
+    if (!LOGIN_STATUSES.includes(status)) {
       throw new ForbiddenException(`Account not active (status: ${user.status as string})`);
     }
 
@@ -247,6 +265,7 @@ export class AuthService {
         displayName: user.profile?.displayName ?? null,
         birthDepartment: user.profile?.birthDepartment ?? null,
         currentCountry: user.profile?.currentCountry ?? null,
+        currentRegion: user.profile?.currentRegion ?? null,
       },
       accessToken,
       refreshTokenId,
@@ -273,7 +292,7 @@ export class AuthService {
 
     const status = user?.status as unknown as AccountStatus | undefined;
 
-    if (!user || !status || !ACTIVE_STATUSES.includes(status)) {
+    if (!user || !status || !LOGIN_STATUSES.includes(status)) {
       // Revocar el token aunque el usuario no sea válido
       await this.redis.del(`${RT_PREFIX}${refreshTokenId}`);
       throw new UnauthorizedException('Session invalid');
@@ -288,7 +307,12 @@ export class AuthService {
       REFRESH_TOKEN_TTL_SECONDS,
     );
 
-    const payload: JwtPayload = { sub: user.id, email: user.email, status };
+    const payload: JwtPayload = {
+      sub: user.id,
+      email: user.email,
+      status,
+      ...(user.profile?.id ? { profileId: user.profile.id } : {}),
+    };
     const accessToken = this.jwt.sign(payload);
 
     void this.audit
@@ -308,6 +332,7 @@ export class AuthService {
         displayName: user.profile?.displayName ?? null,
         birthDepartment: user.profile?.birthDepartment ?? null,
         currentCountry: user.profile?.currentCountry ?? null,
+        currentRegion: user.profile?.currentRegion ?? null,
       },
       accessToken,
       refreshTokenId: newRefreshTokenId,
@@ -334,12 +359,23 @@ export class AuthService {
       throw new BadRequestException('Profile not found');
     }
 
+    if (
+      dto.birthDepartment !== undefined &&
+      user.profile.birthDepartment !== null &&
+      dto.birthDepartment !== user.profile.birthDepartment
+    ) {
+      throw new BadRequestException(
+        'El territorio de origen solo puede cambiarse con la aprobación de la mesa directiva.',
+      );
+    }
+
     const updated = await this.prisma.profile.update({
       where: { userId },
       data: {
         ...(dto.displayName !== undefined && { displayName: dto.displayName }),
         ...(dto.birthDepartment !== undefined && { birthDepartment: dto.birthDepartment }),
         ...(dto.currentCountry !== undefined && { currentCountry: dto.currentCountry }),
+        ...(dto.currentRegion !== undefined && { currentRegion: dto.currentRegion }),
         ...(dto.isPublic !== undefined && { isPublic: dto.isPublic }),
       },
     });
@@ -347,9 +383,12 @@ export class AuthService {
     const newBirthDept = dto.birthDepartment !== undefined ? dto.birthDepartment : user.profile.birthDepartment;
     const newCountry = dto.currentCountry !== undefined ? dto.currentCountry : user.profile.currentCountry;
 
-    void this.groups
-      .syncMemberships(userId, newBirthDept, newCountry)
-      .catch((err: unknown) => this.logger.error('Group sync failed after profile update', err));
+    const newRegion = dto.currentRegion !== undefined ? dto.currentRegion : user.profile.currentRegion;
+    if ((user.status as string) === AccountStatus.verified_citizen) {
+      void this.groups
+        .syncMemberships(userId, newBirthDept, newCountry, newRegion)
+        .catch((err: unknown) => this.logger.error('Group sync failed after profile update', err));
+    }
 
     void this.audit
       .log({
@@ -368,6 +407,7 @@ export class AuthService {
       displayName: updated.displayName,
       birthDepartment: updated.birthDepartment,
       currentCountry: updated.currentCountry,
+      currentRegion: updated.currentRegion,
     };
   }
 

@@ -296,3 +296,44 @@ export async function updateUserStatus(
   revalidatePath('/admin/users');
   return { success: true };
 }
+
+// ─── Verificación y mesa ──────────────────────────────────────────────────────
+
+export async function confirmReference(userId: string): Promise<ActionResult> {
+  const res = await actionFetch(`/api/verifications/${userId}/confirm`, { method: 'POST' });
+  if (!res.ok) return { error: await parseError(res) };
+  revalidatePath('/verificaciones');
+  return { success: true };
+}
+
+export async function assignSeat(_prev: ActionResult | null, formData: FormData): Promise<ActionResult> {
+  const res = await actionFetch('/api/board/seats', {
+    method: 'POST',
+    body: JSON.stringify({ role: formData.get('role'), profileId: formData.get('profileId') }),
+  });
+  if (!res.ok) return { error: await parseError(res) };
+  revalidatePath('/admin/mesa');
+  return { success: true };
+}
+
+export async function proposeBoardAction(_prev: ActionResult | null, formData: FormData): Promise<ActionResult> {
+  const type = formData.get('type');
+  const params = type === 'change_origin' ? { birthDepartment: formData.get('birthDepartment') } : {};
+  const res = await actionFetch('/api/board/actions', {
+    method: 'POST',
+    body: JSON.stringify({ type, targetUserId: formData.get('targetUserId'), reason: formData.get('reason'), params }),
+  });
+  if (!res.ok) return { error: await parseError(res) };
+  revalidatePath('/admin/mesa');
+  return { success: true };
+}
+
+export async function voteBoardAction(actionId: string, approve: boolean): Promise<ActionResult> {
+  const res = await actionFetch(`/api/board/actions/${actionId}/vote`, {
+    method: 'POST',
+    body: JSON.stringify({ approve }),
+  });
+  if (!res.ok) return { error: await parseError(res) };
+  revalidatePath('/admin/mesa');
+  return { success: true };
+}

@@ -37,4 +37,8 @@ export class UpdateProfileDto {
   @IsOptional()
   @IsBoolean()
   isPublic?: boolean;
+
+  @IsOptional()
+  @Matches(/^[A-Z]{2}$/, { message: 'El estado debe ser un código de 2 letras (por ejemplo, FL)' })
+  currentRegion?: string;
 }

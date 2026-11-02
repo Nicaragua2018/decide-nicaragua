@@ -40,18 +40,32 @@ export default function NavBar({ displayName, email, status }: NavBarProps) {
             Grupos
           </Link>
           <Link
+            href="/verificaciones"
+            className={`navbar-link${isActive('/verificaciones') ? ' navbar-link-active' : ''}`}
+          >
+            Verificaciones
+          </Link>
+          <Link
             href="/audit"
             className={`navbar-link${isActive('/audit') ? ' navbar-link-active' : ''}`}
           >
             Auditoría
           </Link>
           {status === 'verified_citizen' && (
-            <Link
-              href="/admin/users"
-              className={`navbar-link${isActive('/admin') ? ' navbar-link-active' : ''}`}
-            >
-              Admin
-            </Link>
+            <>
+              <Link
+                href="/admin/mesa"
+                className={`navbar-link${isActive('/admin/mesa') ? ' navbar-link-active' : ''}`}
+              >
+                Mesa
+              </Link>
+              <Link
+                href="/admin/users"
+                className={`navbar-link${isActive('/admin/users') ? ' navbar-link-active' : ''}`}
+              >
+                Admin
+              </Link>
+            </>
           )}
           <Link
             href="/me"

@@ -16,6 +16,22 @@ El repositorio contiene un MVP funcional con Fases 0–7 implementadas y 155 tes
 
 ---
 
+## Primeros 200 — Plan 1 (base): COMPLETO
+
+Base del diseño «Primeros 200» entregada en las tareas 1 a 9:
+
+- [x] Constantes de comunidades y tipos de la mesa
+- [x] Base de datos: `board_seats`, `verification_references`, `board_actions`, `board_approvals`, `profiles.currentRegion`
+- [x] Pendientes pueden iniciar sesión; límite de 5 invitaciones; origen protegido; `profileId` al renovar sesión
+- [x] Comunidades de acogida por país o estado; activación con 7 miembros
+- [x] Mesa directiva con acciones que requieren 2 de 3
+- [x] Verificación por dos referencias, atómica, con fundación
+- [x] Panel de usuarios solo para el administrador
+- [x] Semilla del administrador fundador
+- [x] Web: registro con comunidad de acogida, «Tu verificación», «Verificaciones» y «Mesa»
+
+---
+
 ## Fase 0 — Fundamentos del sistema
 
 **Estado: COMPLETA**

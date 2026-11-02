@@ -35,3 +35,5 @@ export const MIN_PASSWORD_LENGTH = 12;
 
 /** Prefijo de todas las rutas del API */
 export const API_PREFIX = 'api';
+
+export * from './communities.js';

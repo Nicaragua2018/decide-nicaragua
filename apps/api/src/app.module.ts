@@ -13,6 +13,8 @@ import { DeliberationModule } from './deliberation/deliberation.module';
 import { VotingModule } from './voting/voting.module';
 import { SortitionModule } from './sortition/sortition.module';
 import { UsersModule } from './users/users.module';
+import { BoardModule } from './board/board.module';
+import { VerificationModule } from './verification/verification.module';
 import { NewsletterModule } from './newsletter/newsletter.module';
 
 @Module({
@@ -46,6 +48,8 @@ import { NewsletterModule } from './newsletter/newsletter.module';
     VotingModule,
     SortitionModule,
     UsersModule,
+    BoardModule,
+    VerificationModule,
     NewsletterModule,
   ],
   providers: [

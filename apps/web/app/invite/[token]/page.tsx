@@ -2,7 +2,7 @@
 
 import { use, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { NICARAGUA_DEPARTMENTS, MIN_PASSWORD_LENGTH } from '@decide/shared';
+import { NICARAGUA_DEPARTMENTS, MIN_PASSWORD_LENGTH, HOST_COUNTRIES, US_STATES } from '@decide/shared';
 
 export default function AcceptInvitePage({
   params,
@@ -13,6 +13,7 @@ export default function AcceptInvitePage({
   const router = useRouter();
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [country, setCountry] = useState('');
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -24,7 +25,10 @@ export default function AcceptInvitePage({
     const passwordConfirm = (form.elements.namedItem('passwordConfirm') as HTMLInputElement).value;
     const displayName     = (form.elements.namedItem('displayName') as HTMLInputElement).value;
     const birthDepartment = (form.elements.namedItem('birthDepartment') as HTMLSelectElement).value;
-    const currentCountry  = (form.elements.namedItem('currentCountry') as HTMLInputElement).value;
+    const countrySelect   = (form.elements.namedItem('currentCountry') as HTMLSelectElement).value;
+    const otherCountry    = (form.elements.namedItem('otherCountry') as HTMLInputElement | null)?.value ?? '';
+    const currentRegion   = (form.elements.namedItem('currentRegion') as HTMLSelectElement | null)?.value ?? '';
+    const currentCountry  = countrySelect === 'OTRO' ? otherCountry : countrySelect;
 
     if (password !== passwordConfirm) {
       setError('Las contraseñas no coinciden.');
@@ -45,6 +49,7 @@ export default function AcceptInvitePage({
       };
       if (birthDepartment) body['birthDepartment'] = birthDepartment;
       if (currentCountry)  body['currentCountry']  = currentCountry.toUpperCase();
+      if (currentCountry.toUpperCase() === 'US' && currentRegion) body['currentRegion'] = currentRegion;
 
       const res = await fetch('/api/auth/accept-invite', {
         method: 'POST',
@@ -96,10 +101,8 @@ export default function AcceptInvitePage({
           </div>
 
           <div className="form-field">
-            <label className="form-label" htmlFor="birthDepartment">
-              Departamento de nacimiento <span className="text-muted">(opcional)</span>
-            </label>
-            <select id="birthDepartment" name="birthDepartment" className="form-select">
+            <label className="form-label" htmlFor="birthDepartment">Territorio de origen</label>
+            <select id="birthDepartment" name="birthDepartment" required className="form-select">
               <option value="">— Seleccionar —</option>
               {NICARAGUA_DEPARTMENTS.map((d) => (
                 <option key={d} value={d}>{d}</option>
@@ -108,13 +111,38 @@ export default function AcceptInvitePage({
           </div>
 
           <div className="form-field">
-            <label className="form-label" htmlFor="currentCountry">
-              País de residencia actual <span className="text-muted">(opcional, código ISO: CR, MX, US…)</span>
-            </label>
-            <input id="currentCountry" name="currentCountry" type="text"
-              maxLength={2} pattern="[A-Za-z]{2}" className="form-input"
-              style={{ maxWidth: 80 }} />
+            <label className="form-label" htmlFor="currentCountry">País donde vives</label>
+            <select id="currentCountry" name="currentCountry" required className="form-select"
+              value={country} onChange={(e) => setCountry(e.target.value)}>
+              <option value="">— Seleccionar —</option>
+              {HOST_COUNTRIES.map((c) => (
+                <option key={c.code} value={c.code}>{c.name}</option>
+              ))}
+              <option value="OTRO">Otro país</option>
+            </select>
+            <span className="form-hint">Será tu comunidad de acogida, para colaborar con quienes viven en el mismo lugar.</span>
           </div>
+
+          {country === 'US' && (
+            <div className="form-field">
+              <label className="form-label" htmlFor="currentRegion">Estado</label>
+              <select id="currentRegion" name="currentRegion" required className="form-select">
+                <option value="">— Seleccionar —</option>
+                {US_STATES.map((s) => (
+                  <option key={s.code} value={s.code}>{s.name}</option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          {country === 'OTRO' && (
+            <div className="form-field">
+              <label className="form-label" htmlFor="otherCountry">Código del país</label>
+              <input id="otherCountry" name="otherCountry" type="text" required
+                maxLength={2} pattern="[A-Za-z]{2}" className="form-input" style={{ maxWidth: 80 }} />
+              <span className="form-hint">Dos letras, por ejemplo DE para Alemania.</span>
+            </div>
+          )}
 
           <button type="submit" className="btn btn-primary w-full" disabled={loading}>
             {loading ? 'Registrando…' : 'Completar registro'}

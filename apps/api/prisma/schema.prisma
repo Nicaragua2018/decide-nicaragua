@@ -66,6 +66,34 @@ enum AccountStatus {
   suspended
 }
 
+enum BoardRole {
+  administrador
+  coordinador_general
+  secretario
+}
+
+enum SeatSource {
+  fundador // asignado durante el arranque, antes de la primera elección
+  eleccion // resultado de una elección (plan 3)
+}
+
+enum ReferenceKind {
+  invitador // quien invitó a la persona
+  segunda   // administrador u otro miembro del mismo territorio o comunidad de acogida
+}
+
+enum BoardActionType {
+  suspend_user
+  change_origin
+}
+
+enum BoardActionStatus {
+  pending
+  approved
+  rejected
+  executed
+}
+
 // ─── Tablas principales ───────────────────────────────────────────────────────
 
 /**
@@ -98,6 +126,7 @@ model User {
   // Relaciones
   profile         Profile?
   auditEvents     AuditEvent[]  @relation("AuditEventActor")
+  referencesReceived VerificationReference[] @relation("ReferencesReceived")
 
   @@index([email])
   @@index([inviteToken])
@@ -119,6 +148,7 @@ model Profile {
   displayName      String
   birthDepartment  String?  // Departamento de Nicaragua de origen
   currentCountry   String?  // País de residencia actual (ISO 3166-1 alpha-2)
+  currentRegion    String?  // En EE. UU.: estado (código de 2 letras). Null fuera de EE. UU.
 
   // Si el perfil es visible para otros usuarios de la plataforma
   isPublic         Boolean  @default(false)
@@ -134,6 +164,10 @@ model Profile {
   ballots               Ballot[]
   sortitionDrawsCreated SortitionDraw[]   @relation("SortitionCreator")
   sortitionSelections   SortitionMember[]
+  boardSeats            BoardSeat[]
+  referencesGiven       VerificationReference[] @relation("ReferencesGiven")
+  boardApprovals        BoardApproval[]
+  boardActionsProposed  BoardAction[]           @relation("BoardActionProposer")
 
   @@map("profiles")
 }
@@ -456,13 +490,86 @@ model SortitionMember {
  * Rate limiting estricto en el controlador (5 req / hora por IP).
  */
 model NewsletterSubscription {
-  id          String    @id @default(uuid()) @db.Uuid
+  id          String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   email       String    @unique
   name        String?
   country     String?   // ISO 3166-1 alpha-2 (país de residencia)
   createdAt   DateTime  @default(now()) @db.Timestamptz
 
+  @@index([email])
+
   @@map("newsletter_subscriptions")
+}
+
+/**
+ * BoardSeat — cargo de la mesa directiva. Un cargo, una persona.
+ * Una persona no puede ocupar dos cargos (lo valida BoardService).
+ */
+model BoardSeat {
+  id        String     @id @default(uuid()) @db.Uuid
+  role      BoardRole  @unique
+  profileId String     @db.Uuid
+  profile   Profile    @relation(fields: [profileId], references: [id])
+  source    SeatSource
+  since     DateTime   @default(now()) @db.Timestamptz
+
+  @@index([profileId])
+  @@map("board_seats")
+}
+
+/**
+ * VerificationReference — una de las dos referencias que verifican a una persona.
+ * Una referencia por tipo y una por referente.
+ */
+model VerificationReference {
+  id               String        @id @default(uuid()) @db.Uuid
+  subjectUserId    String        @db.Uuid
+  subject          User          @relation("ReferencesReceived", fields: [subjectUserId], references: [id], onDelete: Cascade)
+  refereeProfileId String        @db.Uuid
+  referee          Profile       @relation("ReferencesGiven", fields: [refereeProfileId], references: [id])
+  kind             ReferenceKind
+  createdAt        DateTime      @default(now()) @db.Timestamptz
+
+  @@unique([subjectUserId, kind])
+  @@unique([subjectUserId, refereeProfileId])
+  @@index([refereeProfileId])
+  @@map("verification_references")
+}
+
+/**
+ * BoardAction — acción delicada propuesta por un cargo de la mesa.
+ * Se ejecuta con 2 aprobaciones de personas distintas; se rechaza con 2 rechazos.
+ */
+model BoardAction {
+  id                  String            @id @default(uuid()) @db.Uuid
+  type                BoardActionType
+  targetUserId        String            @db.Uuid
+  params              Json
+  reason              String            @db.VarChar(500)
+  status              BoardActionStatus @default(pending)
+  proposedByProfileId String            @db.Uuid
+  proposedBy          Profile           @relation("BoardActionProposer", fields: [proposedByProfileId], references: [id])
+  createdAt           DateTime          @default(now()) @db.Timestamptz
+  resolvedAt          DateTime?         @db.Timestamptz
+
+  approvals           BoardApproval[]
+
+  @@index([status])
+  @@map("board_actions")
+}
+
+model BoardApproval {
+  id        String      @id @default(uuid()) @db.Uuid
+  actionId  String      @db.Uuid
+  action    BoardAction @relation(fields: [actionId], references: [id], onDelete: Cascade)
+  profileId String      @db.Uuid
+  profile   Profile     @relation(fields: [profileId], references: [id])
+  role      BoardRole
+  approve   Boolean
+  createdAt DateTime    @default(now()) @db.Timestamptz
+
+  @@unique([actionId, profileId])
+  @@map("board_approvals")
 }
 
 /**

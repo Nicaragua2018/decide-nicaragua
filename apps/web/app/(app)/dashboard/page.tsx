@@ -1,7 +1,12 @@
 import Link from 'next/link';
 import type { Metadata } from 'next';
 import { serverFetch } from '@/lib/api';
-import type { GroupListResponse, GroupType, AuthResponse } from '@decide/shared';
+import type {
+  GroupListResponse,
+  GroupType,
+  AuthResponse,
+  VerificationStatus,
+} from '@decide/shared';
 
 export const metadata: Metadata = { title: 'Panel — Decide Nicaragua' };
 
@@ -20,6 +25,44 @@ const PIPELINE_STEPS = [
 ];
 
 export default async function DashboardPage() {
+  // Plan 1: quien aún no está verificado ve su estado de verificación en lugar de los grupos.
+  const vRes = await serverFetch('/api/verifications/me');
+  const verif = vRes.ok ? ((await vRes.json()) as VerificationStatus) : null;
+  if (verif && verif.status === 'pending_verification') {
+    return (
+      <>
+        <div className="dash-welcome">
+          <div>
+            <h1 className="page-title">Tu verificación</h1>
+            <p className="page-sub">
+              Para participar necesitas dos confirmaciones: la de quien te invitó y la del administrador u otro
+              miembro de tu territorio o de tu comunidad de acogida.
+            </p>
+          </div>
+        </div>
+
+        <div className="dash-section-header">
+          <h2 className="dash-section-title">Confirmaciones</h2>
+          <span className="dash-section-count">{verif.references.length} de 2</span>
+        </div>
+
+        <div className="card">
+          <p className="card-title">{verif.references.length} de 2 confirmaciones</p>
+          {verif.references.map((r) => (
+            <div key={r.kind} className="alert alert-success">
+              ✓ {r.kind === 'invitador' ? 'Quien te invitó' : 'Segunda referencia'}: {r.displayName}
+            </div>
+          ))}
+          {verif.missing.map((k) => (
+            <div key={k} className="alert alert-warning">
+              … Falta: {k === 'invitador' ? 'quien te invitó' : 'una segunda referencia'}
+            </div>
+          ))}
+        </div>
+      </>
+    );
+  }
+
   const [groupsRes, meRes] = await Promise.all([
     serverFetch('/api/groups'),
     serverFetch('/api/auth/me'),
@@ -101,9 +144,7 @@ export default async function DashboardPage() {
                 <p className="group-card-desc">{group.description}</p>
               )}
               <div className="group-card-footer">
-                <span className="group-card-members">
-                  {group.memberCount} miembro{group.memberCount !== 1 ? 's' : ''}
-                </span>
+                <span className="group-card-members">Comunidad</span>
                 <span className="group-card-cta">Ver grupo →</span>
               </div>
             </Link>

@@ -22,6 +22,9 @@ export interface GroupSummary {
 export interface GroupDetail extends GroupSummary {
   memberCount: number;
   isMember: boolean;
+  /** La comunidad tiene los miembros mínimos para elegir coordinadores. */
+  activated: boolean;
+  minActiveMembers: number;
 }
 
 export interface GroupListResponse {

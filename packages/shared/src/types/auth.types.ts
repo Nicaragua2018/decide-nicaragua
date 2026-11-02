@@ -19,6 +19,7 @@ export interface AuthResponse {
     displayName: string | null;
     birthDepartment: string | null;
     currentCountry: string | null;
+    currentRegion: string | null;
   };
 }
 

@@ -1,29 +1,29 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { AuditService } from '../audit/audit.service';
 import { AccountStatus } from '@decide/shared';
 import type { UserSummary, UserListResponse } from '@decide/shared';
 import type { User, Profile } from '@prisma/client';
 
 export type UserWithProfile = User & { profile: Profile | null };
 
-/** Estados a los que se puede transicionar desde el panel de admin */
+/**
+ * Lo único que el panel de usuarios puede hacer (spec §3): rechazar a quien
+ * aún no está verificado. Verificar va por dos referencias; suspender,
+ * reactivar o dar estatus de observador o colaborador externo son decisiones
+ * de la mesa (2 de 3) o de una elección.
+ */
 const ALLOWED_STATUS_TRANSITIONS: Partial<Record<AccountStatus, AccountStatus[]>> = {
-  [AccountStatus.invited]:               [AccountStatus.rejected],
-  [AccountStatus.pending_verification]:  [
-    AccountStatus.verified_citizen,
-    AccountStatus.observer,
-    AccountStatus.external_collaborator,
-    AccountStatus.rejected,
-  ],
-  [AccountStatus.verified_citizen]:      [AccountStatus.suspended],
-  [AccountStatus.observer]:              [AccountStatus.verified_citizen, AccountStatus.suspended],
-  [AccountStatus.external_collaborator]: [AccountStatus.verified_citizen, AccountStatus.suspended],
-  [AccountStatus.suspended]:             [AccountStatus.observer, AccountStatus.verified_citizen],
+  [AccountStatus.invited]:              [AccountStatus.rejected],
+  [AccountStatus.pending_verification]: [AccountStatus.rejected],
 };
 
 @Injectable()
 export class UsersService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly audit: AuditService,
+  ) {}
 
   async findById(id: string): Promise<UserWithProfile> {
     const user = await this.prisma.user.findUnique({
@@ -73,6 +73,7 @@ export class UsersService {
         email: u.email,
         status: u.status as AccountStatus,
         displayName: u.profile?.displayName ?? null,
+        profileId: u.profile?.id ?? null,
         createdAt: u.createdAt.toISOString(),
         lastLoginAt: u.lastLoginAt?.toISOString() ?? null,
       })),
@@ -84,7 +85,14 @@ export class UsersService {
    * Cambia el estado de un usuario.
    * Valida que la transición sea permitida según el flujo del ciclo de vida.
    */
-  async updateStatus(userId: string, newStatus: AccountStatus): Promise<UserSummary> {
+  async updateStatus(userId: string, newStatus: AccountStatus, actorId: string, ip: string): Promise<UserSummary> {
+    if (newStatus === AccountStatus.verified_citizen) {
+      throw new BadRequestException('La verificación se hace con dos referencias, no desde el panel.');
+    }
+    if (newStatus === AccountStatus.suspended) {
+      throw new BadRequestException('Suspender una cuenta requiere la aprobación de 2 de los 3 cargos de la mesa.');
+    }
+
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
       include: { profile: true },
@@ -99,7 +107,8 @@ export class UsersService {
 
     if (!allowed.includes(newStatus)) {
       throw new BadRequestException(
-        `Transition from '${currentStatus}' to '${newStatus}' is not allowed`,
+        'Desde el panel solo se puede rechazar una cuenta invitada o pendiente de verificación. ' +
+          'Cualquier otro cambio necesita una decisión de la mesa directiva (2 de 3) o una elección.',
       );
     }
 
@@ -112,8 +121,16 @@ export class UsersService {
         status: true,
         createdAt: true,
         lastLoginAt: true,
-        profile: { select: { displayName: true } },
+        profile: { select: { id: true, displayName: true } },
       },
+    });
+
+    void this.audit.log({
+      actorId,
+      action: 'user.status_changed',
+      resource: `user:${userId}`,
+      ip,
+      metadata: { from: currentStatus, to: newStatus },
     });
 
     return {
@@ -121,6 +138,7 @@ export class UsersService {
       email: updated.email,
       status: updated.status as AccountStatus,
       displayName: updated.profile?.displayName ?? null,
+      profileId: updated.profile?.id ?? null,
       createdAt: updated.createdAt.toISOString(),
       lastLoginAt: updated.lastLoginAt?.toISOString() ?? null,
     };
