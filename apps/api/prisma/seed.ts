@@ -62,36 +62,47 @@ async function main(): Promise<void> {
 
   const existing = await prisma.user.findUnique({ where: { email: adminEmail } });
 
+  let user: NonNullable<typeof existing>;
+
   if (existing) {
-    console.log(`Admin user ${adminEmail} already exists. Skipping.`);
-    return;
-  }
+    console.log(`Admin user ${adminEmail} already exists. Skipping user creation.`);
+    user = existing;
+  } else {
+    const passwordHash = await bcrypt.hash(adminPassword, 12);
 
-  const passwordHash = await bcrypt.hash(adminPassword, 12);
-
-  const user = await prisma.user.create({
-    data: {
-      email: adminEmail,
-      passwordHash,
-      // Valor directo del string para evitar dependencia de tipos de @prisma/client en seed
-      status: 'verified_citizen',
-      profile: {
-        create: {
-          displayName: 'Administrador',
-          isPublic: false,
+    user = await prisma.user.create({
+      data: {
+        email: adminEmail,
+        passwordHash,
+        // Valor directo del string para evitar dependencia de tipos de @prisma/client en seed
+        status: 'verified_citizen',
+        profile: {
+          create: {
+            displayName: 'Administrador',
+            isPublic: false,
+          },
         },
       },
-    },
-  });
+    });
 
-  console.log('');
-  console.log('Admin user created successfully:');
-  console.log(`  Email: ${user.email}`);
-  console.log(`  ID:    ${user.id}`);
-  console.log(`  Status: ${user.status}`);
-  console.log('');
-  console.log('IMPORTANT: Change the password after your first login.');
-  console.log('');
+    console.log('');
+    console.log('Admin user created successfully:');
+    console.log(`  Email: ${user.email}`);
+    console.log(`  ID:    ${user.id}`);
+    console.log(`  Status: ${user.status}`);
+    console.log('');
+    console.log('IMPORTANT: Change the password after your first login.');
+    console.log('');
+  }
+
+  // Cargo de administrador fundador (spec §3, arranque).
+  const adminProfile = await prisma.profile.findUniqueOrThrow({ where: { userId: user.id } });
+  await prisma.boardSeat.upsert({
+    where: { role: 'administrador' },
+    create: { role: 'administrador', profileId: adminProfile.id, source: 'fundador' },
+    update: {},
+  });
+  console.log('Cargo de administrador fundador asignado.');
 
   // Seed Nicaragua department groups (territorial_origin)
   let seeded = 0;
