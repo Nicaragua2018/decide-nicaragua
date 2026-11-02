@@ -12,6 +12,7 @@ import {
   type ForumDetail,
   type ForumSummary,
   type ModerationAppeal,
+  type PublicConsensus,
   type ProposalSummary,
 } from '@decide/shared';
 import { PrismaService } from '../prisma/prisma.service';
@@ -383,5 +384,45 @@ export class ForumsService {
       return t ? `${t.title}\n\n${t.body}` : '';
     }
     return (await this.prisma.proposalComment.findUnique({ where: { id } }))?.body ?? '';
+  }
+
+  /** Consensos publicados para cualquier visitante (spec §3 y §7). Sin nombres. */
+  async publicConsensus(): Promise<PublicConsensus[]> {
+    const topics = await this.prisma.proposal.findMany({
+      where: { status: 'closed', hidden: false, conclusion: { not: null } },
+      select: {
+        id: true, title: true, kind: true, conclusion: true, objections: true, closedAt: true, electionId: true,
+        group: { select: { name: true } },
+        signals: { select: { signal: true } },
+      },
+      orderBy: { closedAt: 'desc' },
+      take: 100,
+    });
+    const result: PublicConsensus[] = [];
+    for (const t of topics) {
+      const counts = { support: 0, neutral: 0, object: 0 };
+      for (const s of t.signals) counts[s.signal as keyof typeof counts] += 1;
+      let winningOption: string | null = null;
+      if (t.electionId) {
+        const res = await this.prisma.electionResult.findUnique({ where: { electionId: t.electionId } });
+        const winners = (res?.winners as string[] | undefined) ?? [];
+        const winnerId = winners[0];
+        if (winners.length === 1 && winnerId) {
+          winningOption = (await this.prisma.electionCandidate.findUnique({ where: { id: winnerId } }))?.title ?? null;
+        }
+      }
+      result.push({
+        id: t.id,
+        title: t.title,
+        communityName: t.group.name,
+        kind: t.kind as unknown as PublicConsensus['kind'],
+        conclusion: t.conclusion ?? '',
+        objections: t.objections,
+        signalCounts: counts,
+        closedAt: (t.closedAt ?? new Date(0)).toISOString(),
+        winningOption,
+      });
+    }
+    return result;
   }
 }

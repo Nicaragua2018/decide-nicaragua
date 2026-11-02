@@ -12,6 +12,8 @@ function buildPrisma() {
     proposal: { findUnique: vi.fn(), findMany: vi.fn(), update: vi.fn(), updateMany: vi.fn() },
     proposalComment: { findUnique: vi.fn(), update: vi.fn() },
     election: { create: vi.fn() },
+    electionResult: { findUnique: vi.fn() },
+    electionCandidate: { findUnique: vi.fn() },
     moderationAction: { create: vi.fn(), findUnique: vi.fn(), findMany: vi.fn(), update: vi.fn() },
     profile: { findUnique: vi.fn() },
     $transaction: vi.fn(),
@@ -44,6 +46,46 @@ describe('ForumsService', () => {
       expect(await service.canModerate(YO, 'g1')).toBe(true);
       board.roleOf.mockResolvedValueOnce(null);
       expect(await service.canModerate(YO, 'g1')).toBe(false);
+    });
+  });
+
+  describe('publicConsensus()', () => {
+    it('solo temas cerrados con conclusión y no ocultos, sin nombres de personas', async () => {
+      prisma.proposal.findMany.mockResolvedValue([
+        {
+          id: 't1', title: 'Mesa de salud', kind: 'tema', conclusion: 'Crear una mesa de salud.', objections: null,
+          closedAt: new Date('2026-11-20T00:00:00Z'), electionId: null,
+          group: { name: 'León' }, signals: [{ signal: 'support' }, { signal: 'object' }],
+        },
+      ]);
+      const r = await service.publicConsensus();
+      expect(prisma.proposal.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { status: 'closed', hidden: false, conclusion: { not: null } },
+        }),
+      );
+      expect(r).toEqual([
+        {
+          id: 't1', title: 'Mesa de salud', communityName: 'León', kind: 'tema',
+          conclusion: 'Crear una mesa de salud.', objections: null,
+          signalCounts: { support: 1, neutral: 0, object: 1 },
+          closedAt: '2026-11-20T00:00:00.000Z', winningOption: null,
+        },
+      ]);
+      expect(JSON.stringify(r)).not.toMatch(/author|displayName|email/);
+    });
+
+    it('si hubo votación contada, incluye la opción ganadora', async () => {
+      prisma.proposal.findMany.mockResolvedValue([
+        {
+          id: 't2', title: 'Fondo', kind: 'propuesta', conclusion: 'Se aprueba el fondo.', objections: 'Algunos dudan.',
+          closedAt: new Date('2026-11-21T00:00:00Z'), electionId: 'e1', group: { name: 'Costa Rica' }, signals: [],
+        },
+      ]);
+      prisma.electionResult.findUnique.mockResolvedValue({ winners: ['c1'] });
+      prisma.electionCandidate.findUnique.mockResolvedValue({ title: 'A favor' });
+      const r = await service.publicConsensus();
+      expect(r[0]?.winningOption).toBe('A favor');
     });
   });
 
