@@ -370,6 +370,30 @@ El diseño «Primeros 200» (docs/superpowers/specs/2026-11-01-primeros-200-desi
 
 ---
 
+## ADR-017: Foros sobre la deliberación existente (2026-11-02)
+**Fecha:** 2026-11-02
+**Estado:** Aceptado
+
+### Contexto
+El diseño «Primeros 200» (spec §7) pide foros por comunidad y uno general, propuestas formales con votación y consensos visibles para cualquier visitante.
+
+### Decisión
+- Los foros (`forums`) son contenedores de los temas de deliberación que ya existían (`proposals`). Cada grupo tiene un foro por defecto, creado al vuelo y único por grupo (índice único parcial `forums_groupId_default_key`).
+- Comunidad general: grupo `custom` con slug `general` («Toda la comunidad»). Toda persona verificada entra al verificarse.
+- Los foros de julio de 2026 (marcadores de pol.is) no se reutilizan.
+- Crear foros y moderar es de la mesa directiva, incluido el administrador del sitio (decisión de Carlos), hasta que el plan 3 agregue a los coordinadores en `ForumsService.canModerate`.
+- Un tema se convierte en propuesta formal: 7 días de deliberación y luego una votación de 7 días con «A favor», «En contra» y «Abstención». La votación se abre una sola vez (actualización condicional dentro de la transacción).
+- Cerrar exige una conclusión; las objeciones de la minoría son opcionales y sin nombres. Un tema cerrado ya no cambia de estado.
+- `GET /api/public/consensos` publica, sin sesión, los temas cerrados con conclusión y no ocultos, sin nombres de personas.
+- Moderación: ocultar exige motivo; la persona autora apela una vez; la mesa restaura o mantiene. El contenido oculto nunca se devuelve, salvo a la mesa en la cola de apelaciones.
+
+### Consecuencias
+- `PATCH /proposals/:id/status` ya no cierra temas; solo publica borradores o archiva temas abiertos.
+- La portada pública con los consensos llega en el plan 4; los plazos pasan a reglas votables en el plan 3.
+- Quien es autor pero ya no es miembro del grupo (por ejemplo, suspendido) no puede formalizar, abrir votaciones, cerrar ni apelar.
+
+---
+
 ## Decisiones pendientes
 
 | ID | Pregunta | Prioridad |
