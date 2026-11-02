@@ -27,9 +27,13 @@ export default function NavBar({ displayName, email, status }: NavBarProps) {
 
         <div className="navbar-links">
           <Link href="/dashboard" className="navbar-link">Grupos</Link>
+          <Link href="/verificaciones" className="navbar-link">Verificaciones</Link>
           <Link href="/audit" className="navbar-link">Auditoría</Link>
           {status === 'verified_citizen' && (
-            <Link href="/admin/users" className="navbar-link">Admin</Link>
+            <>
+              <Link href="/admin/mesa" className="navbar-link">Mesa</Link>
+              <Link href="/admin/users" className="navbar-link">Admin</Link>
+            </>
           )}
           <Link href="/me" className="navbar-link">Mi perfil</Link>
 
