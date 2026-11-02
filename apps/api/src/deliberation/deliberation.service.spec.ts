@@ -282,6 +282,22 @@ describe('DeliberationService', () => {
       );
     });
 
+    it('no cambia el estado de un tema oculto', async () => {
+      prisma.proposal.findUnique.mockResolvedValue({ ...mockProposal, hidden: true });
+      await expect(
+        service.updateProposalStatus(PROPOSAL_ID, { status: ProposalStatus.archived }, PROFILE_ID, IP),
+      ).rejects.toThrow(BadRequestException);
+      expect(prisma.proposal.update).not.toHaveBeenCalled();
+    });
+
+    it('un tema cerrado con consenso no se reabre ni se archiva', async () => {
+      prisma.proposal.findUnique.mockResolvedValue({ ...mockProposal, status: 'closed' });
+      await expect(
+        service.updateProposalStatus(PROPOSAL_ID, { status: ProposalStatus.open }, PROFILE_ID, IP),
+      ).rejects.toThrow(BadRequestException);
+      expect(prisma.proposal.update).not.toHaveBeenCalled();
+    });
+
     it('PATCH status ya no cierra: el cierre necesita conclusión', async () => {
       prisma.proposal.findUnique.mockResolvedValue(mockProposal);
       await expect(
@@ -353,6 +369,22 @@ describe('DeliberationService', () => {
       await expect(
         service.addComment(PROPOSAL_ID, { ...dto, parentId: COMMENT_ID }, PROFILE_ID, IP),
       ).rejects.toThrow(BadRequestException);
+    });
+
+    it('lanza BadRequestException al responder a un comentario oculto', async () => {
+      prisma.proposal.findUnique.mockResolvedValue(mockProposal);
+      prisma.groupMembership.findUnique.mockResolvedValue(mockMembership);
+      prisma.proposalComment.findUnique.mockResolvedValue({
+        id: COMMENT_ID,
+        proposalId: PROPOSAL_ID,
+        parentId: null,
+        hidden: true,
+      });
+
+      await expect(
+        service.addComment(PROPOSAL_ID, { ...dto, parentId: COMMENT_ID }, PROFILE_ID, IP),
+      ).rejects.toThrow(BadRequestException);
+      expect(prisma.proposalComment.create).not.toHaveBeenCalled();
     });
 
     it('lanza BadRequestException al intentar responder a una respuesta (threading > 1 nivel)', async () => {

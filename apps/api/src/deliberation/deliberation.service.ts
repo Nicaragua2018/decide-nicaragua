@@ -188,6 +188,12 @@ export class DeliberationService {
       throw new ForbiddenException('Only the author can change the proposal status');
     }
 
+    this.requireNotHidden(proposal.hidden);
+
+    if ((proposal.status as string) === 'closed') {
+      throw new BadRequestException('Un tema cerrado con consenso ya no cambia de estado.');
+    }
+
     if ((dto.status as string) === 'closed') {
       throw new BadRequestException('Para cerrar un tema usa «Cerrar con consenso».');
     }
@@ -231,6 +237,10 @@ export class DeliberationService {
 
       if (!parent || parent.proposalId !== proposalId) {
         throw new BadRequestException('Parent comment not found in this proposal');
+      }
+
+      if (parent.hidden) {
+        throw new BadRequestException('No se puede responder a una respuesta oculta.');
       }
 
       // Solo un nivel de threading — no se permite responder a una respuesta
