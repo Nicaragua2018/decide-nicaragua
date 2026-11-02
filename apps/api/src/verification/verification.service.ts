@@ -3,8 +3,10 @@ import {
   ConflictException,
   ForbiddenException,
   Injectable,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import {
   AccountStatus,
   BOOTSTRAP_VERIFIED_LIMIT,
@@ -21,6 +23,8 @@ type Kind = 'invitador' | 'segunda';
 
 @Injectable()
 export class VerificationService {
+  private readonly logger = new Logger(VerificationService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
@@ -55,7 +59,10 @@ export class VerificationService {
     const esAdministrador = !!(await this.prisma.boardSeat.findFirst({
       where: { role: 'administrador', profileId: referee.profileId },
     }));
-    const verificados = await this.prisma.user.count({ where: { status: 'verified_citizen' } });
+    // Los suspendidos cuentan: la ventana de fundación no se reabre si baja el número de verificados.
+    const verificados = await this.prisma.user.count({
+      where: { status: { in: ['verified_citizen', 'suspended'] } },
+    });
     const fundacion = esAdministrador && verificados < BOOTSTRAP_VERIFIED_LIMIT;
 
     let kind: Kind;
@@ -77,9 +84,29 @@ export class VerificationService {
       );
     }
 
-    await this.prisma.verificationReference.create({
-      data: { subjectUserId, refereeProfileId: referee.profileId, kind },
+    const profileId = referee.profileId;
+    // Insertar, releer y decidir en una sola transacción: confirmaciones
+    // simultáneas no pueden dejar a nadie sin verificar.
+    const outcome = await this.prisma.$transaction(async (tx) => {
+      try {
+        await tx.verificationReference.create({ data: { subjectUserId, refereeProfileId: profileId, kind } });
+      } catch (err) {
+        if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
+          throw new ConflictException('Esta persona ya tiene esa referencia.');
+        }
+        throw err;
+      }
+      const tipos = new Set<string>(
+        (await tx.verificationReference.findMany({ where: { subjectUserId }, select: { kind: true } })).map(
+          (r) => r.kind as string,
+        ),
+      );
+      const completa = tipos.has('invitador') && tipos.has('segunda');
+      if (!completa && !fundacion) return { verified: false as const };
+      await tx.user.update({ where: { id: subjectUserId }, data: { status: 'verified_citizen' } });
+      return { verified: true as const, via: completa ? 'dos_referencias' : 'fundacion' };
     });
+
     void this.audit.log({
       actorId: referee.sub,
       action: 'verification.reference',
@@ -87,23 +114,25 @@ export class VerificationService {
       ip,
       metadata: { kind },
     });
+    if (!outcome.verified) return;
 
-    const tipos = new Set<string>([...subject.referencesReceived.map((r) => r.kind as string), kind]);
-    if (!(tipos.has('invitador') && tipos.has('segunda')) && !fundacion) return;
-
-    await this.prisma.user.update({ where: { id: subjectUserId }, data: { status: 'verified_citizen' } });
-    await this.groups.syncMemberships(
-      subjectUserId,
-      subject.profile.birthDepartment,
-      subject.profile.currentCountry,
-      subject.profile.currentRegion,
-    );
+    try {
+      await this.groups.syncMemberships(
+        subjectUserId,
+        subject.profile.birthDepartment,
+        subject.profile.currentCountry,
+        subject.profile.currentRegion,
+      );
+    } catch (err) {
+      // La persona ya está verificada; una próxima actualización de perfil vuelve a sincronizar.
+      this.logger.error(`syncMemberships falló para ${subjectUserId}: ${(err as Error).message}`);
+    }
     void this.audit.log({
       actorId: referee.sub,
       action: 'user.verified',
       resource: `user:${subjectUserId}`,
       ip,
-      metadata: { via: fundacion && !(tipos.has('invitador') && tipos.has('segunda')) ? 'fundacion' : 'dos_referencias' },
+      metadata: { via: outcome.via },
     });
   }
 
