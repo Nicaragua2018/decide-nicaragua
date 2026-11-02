@@ -57,7 +57,8 @@ const baseUser = {
     userId: USER_ID,
     displayName: 'Test User',
     birthDepartment: null,
-    currentCountry: null,
+    currentCountry: 'US',
+    currentRegion: 'FL',
     isPublic: false,
     createdAt: new Date(),
     updatedAt: new Date(),
@@ -315,6 +316,7 @@ describe('AuthService', () => {
       );
       expect(result.user.email).toBe(baseUser.email);
       expect(result.user.status).toBe(AccountStatus.verified_citizen);
+      expect(result.user.currentRegion).toBe('FL');
     });
 
     it('almacena el refresh token en Redis con TTL de 30 días', async () => {

@@ -16,7 +16,7 @@ export default function EditProfileForm({ current }: Props) {
   const initialIsOther = initialCountry !== '' && !HOST_COUNTRIES.some((c) => c.code === initialCountry);
   const [country, setCountry] = useState(initialIsOther ? 'OTRO' : initialCountry);
   const [otherCountry, setOtherCountry] = useState(initialIsOther ? initialCountry : '');
-  const [region, setRegion] = useState('');
+  const [region, setRegion] = useState(current.currentRegion ?? '');
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
   const [loading, setLoading] = useState(false);

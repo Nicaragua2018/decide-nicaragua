@@ -261,6 +261,7 @@ export class AuthService {
         displayName: user.profile?.displayName ?? null,
         birthDepartment: user.profile?.birthDepartment ?? null,
         currentCountry: user.profile?.currentCountry ?? null,
+        currentRegion: user.profile?.currentRegion ?? null,
       },
       accessToken,
       refreshTokenId,
@@ -327,6 +328,7 @@ export class AuthService {
         displayName: user.profile?.displayName ?? null,
         birthDepartment: user.profile?.birthDepartment ?? null,
         currentCountry: user.profile?.currentCountry ?? null,
+        currentRegion: user.profile?.currentRegion ?? null,
       },
       accessToken,
       refreshTokenId: newRefreshTokenId,
@@ -401,6 +403,7 @@ export class AuthService {
       displayName: updated.displayName,
       birthDepartment: updated.birthDepartment,
       currentCountry: updated.currentCountry,
+      currentRegion: updated.currentRegion,
     };
   }
 

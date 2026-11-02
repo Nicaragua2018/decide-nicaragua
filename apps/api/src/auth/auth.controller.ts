@@ -67,6 +67,7 @@ export class AuthController {
         displayName: user.profile?.displayName ?? null,
         birthDepartment: user.profile?.birthDepartment ?? null,
         currentCountry: user.profile?.currentCountry ?? null,
+        currentRegion: user.profile?.currentRegion ?? null,
       },
     };
   }
