@@ -344,7 +344,7 @@ Usar **Resend** como proveedor de email transaccional.
 
 ---
 
-## ADR-014: Verificación por dos referencias y mesa directiva (2026-11-01)
+## ADR-016: Verificación por dos referencias y mesa directiva (2026-11-01)
 
 **Fecha:** 2026-11-01
 **Estado:** Aceptado
