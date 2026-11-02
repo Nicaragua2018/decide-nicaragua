@@ -1,4 +1,4 @@
-import { IsString, IsEnum, IsOptional, MinLength, MaxLength } from 'class-validator';
+import { IsString, IsEnum, IsOptional, IsUUID, MinLength, MaxLength } from 'class-validator';
 import { ProposalStatus } from '@decide/shared';
 
 export class CreateProposalDto {
@@ -16,4 +16,9 @@ export class CreateProposalDto {
   @IsOptional()
   @IsEnum([ProposalStatus.draft, ProposalStatus.open])
   status?: ProposalStatus.draft | ProposalStatus.open;
+
+  /** Foro donde se abre el tema; por defecto, el foro por defecto del grupo. */
+  @IsOptional()
+  @IsUUID('4')
+  forumId?: string;
 }

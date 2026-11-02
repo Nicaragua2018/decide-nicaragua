@@ -1,7 +1,9 @@
-import { IsEnum } from 'class-validator';
+import { IsIn } from 'class-validator';
 import { ProposalStatus } from '@decide/shared';
 
 export class UpdateProposalStatusDto {
-  @IsEnum([ProposalStatus.closed, ProposalStatus.archived])
-  status!: ProposalStatus.closed | ProposalStatus.archived;
+  @IsIn([ProposalStatus.open, ProposalStatus.archived], {
+    message: 'Para cerrar un tema usa «Cerrar con consenso».',
+  })
+  status!: ProposalStatus.open | ProposalStatus.archived;
 }

@@ -24,6 +24,8 @@ import { UpdateProposalStatusDto } from './dto/update-proposal-status.dto';
 /** Estados que aceptan nuevos comentarios y señales */
 const MUTABLE_STATUSES: string[] = [ProposalStatus.open];
 
+const HIDDEN_TOPIC_TITLE = 'Tema oculto por moderación';
+
 @Injectable()
 export class DeliberationService {
   private readonly logger = new Logger(DeliberationService.name);
@@ -43,9 +45,22 @@ export class DeliberationService {
   ): Promise<{ id: string }> {
     await this.requireMembership(groupId, profileId);
 
+    let forumId: string;
+    if (dto.forumId) {
+      const forum = await this.prisma.forum.findUnique({ where: { id: dto.forumId } });
+      if (!forum || forum.groupId !== groupId) {
+        throw new BadRequestException('Ese foro no pertenece a esta comunidad.');
+      }
+      forumId = forum.id;
+    } else {
+      forumId = (await this.defaultForum(groupId)).id;
+    }
+
     const proposal = await this.prisma.proposal.create({
       data: {
         groupId,
+        forumId,
+        kind: 'tema',
         authorProfileId: profileId,
         title: dto.title,
         body: dto.body,
@@ -79,7 +94,7 @@ export class DeliberationService {
       proposals: proposals.map((p) => ({
         id: p.id,
         groupId: p.groupId,
-        title: p.title,
+        title: p.hidden ? HIDDEN_TOPIC_TITLE : p.title,
         status: p.status as unknown as ProposalStatus,
         authorDisplayName: p.author.displayName,
         signalCounts: computeSignalCounts(p.signals.map((s) => s.signal as string)),
@@ -114,21 +129,27 @@ export class DeliberationService {
 
     const userSignalRow = proposal.signals.find((s) => s.profileId === profileId);
 
-    const comments: CommentItem[] = proposal.comments.map((c) => ({
-      id: c.id,
-      authorDisplayName: c.author.displayName,
-      body: c.body,
-      parentId: c.parentId,
-      createdAt: c.createdAt.toISOString(),
-      hidden: c.hidden,
-      hiddenReason: null,
-    }));
+    // Una consulta por comentario oculto (la escala es pequeña).
+    const comments: CommentItem[] = [];
+    for (const c of proposal.comments) {
+      comments.push({
+        id: c.id,
+        authorDisplayName: c.author.displayName,
+        body: c.hidden ? '' : c.body,
+        parentId: c.parentId,
+        createdAt: c.createdAt.toISOString(),
+        hidden: c.hidden,
+        hiddenReason: c.hidden ? await this.hiddenReason('respuesta', c.id) : null,
+      });
+    }
+
+    const topicReason = proposal.hidden ? await this.hiddenReason('tema', proposal.id) : null;
 
     return {
       id: proposal.id,
       groupId: proposal.groupId,
-      title: proposal.title,
-      body: proposal.body,
+      title: proposal.hidden ? HIDDEN_TOPIC_TITLE : proposal.title,
+      body: proposal.hidden ? '' : proposal.body,
       status: proposal.status as unknown as ProposalStatus,
       authorDisplayName: proposal.author.displayName,
       authorProfileId: proposal.authorProfileId,
@@ -145,7 +166,8 @@ export class DeliberationService {
       electionId: proposal.electionId,
       conclusion: proposal.conclusion,
       objections: proposal.objections,
-      hiddenReason: null,
+      hiddenReason: topicReason,
+      // Lo calcula ForumsService (Tarea 4/5); este servicio no conoce los permisos de moderación.
       canModerate: false,
     };
   }
@@ -166,14 +188,15 @@ export class DeliberationService {
       throw new ForbiddenException('Only the author can change the proposal status');
     }
 
+    if ((dto.status as string) === 'closed') {
+      throw new BadRequestException('Para cerrar un tema usa «Cerrar con consenso».');
+    }
+
     const newStatus = dto.status as string as never;
 
     await this.prisma.proposal.update({
       where: { id: proposalId },
-      data: {
-        status: newStatus,
-        ...(dto.status === 'closed' && { closedAt: new Date() }),
-      },
+      data: { status: newStatus },
     });
 
     void this.auditBase(profileId).then((base) =>
@@ -198,6 +221,7 @@ export class DeliberationService {
     }
 
     await this.requireMembership(proposal.groupId, profileId);
+    this.requireNotHidden(proposal.hidden);
     this.requireMutableStatus(proposal.status as string);
 
     if (dto.parentId) {
@@ -248,6 +272,7 @@ export class DeliberationService {
     }
 
     await this.requireMembership(proposal.groupId, profileId);
+    this.requireNotHidden(proposal.hidden);
     this.requireMutableStatus(proposal.status as string);
 
     await this.prisma.consensusSignal.upsert({
@@ -279,6 +304,32 @@ export class DeliberationService {
     if (!membership) {
       throw new ForbiddenException('You must be a member of this group to participate');
     }
+  }
+
+  private requireNotHidden(hidden: boolean): void {
+    if (hidden) {
+      throw new BadRequestException('Este tema está oculto por moderación.');
+    }
+  }
+
+  /** Foro por defecto del grupo; se crea al vuelo la primera vez. */
+  private async defaultForum(groupId: string): Promise<{ id: string }> {
+    const existing = await this.prisma.forum.findFirst({ where: { groupId, isDefault: true } });
+    if (existing) return existing;
+    const group = await this.prisma.group.findUnique({ where: { id: groupId } });
+    return this.prisma.forum.create({
+      data: { groupId, title: `Foro de ${group?.name ?? 'la comunidad'}`, isDefault: true },
+    });
+  }
+
+  /** Motivo de la acción de moderación más reciente sobre un tema o respuesta. */
+  private async hiddenReason(target: 'tema' | 'respuesta', targetId: string): Promise<string | null> {
+    const action = await this.prisma.moderationAction.findFirst({
+      where: { target, targetId },
+      orderBy: { createdAt: 'desc' },
+      select: { reason: true },
+    });
+    return action?.reason ?? null;
   }
 
   private requireMutableStatus(status: string): void {

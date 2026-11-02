@@ -71,6 +71,17 @@ function buildPrismaMock() {
     profile: {
       findUnique: vi.fn(),
     },
+    forum: {
+      findUnique: vi.fn(),
+      findFirst: vi.fn(),
+      create: vi.fn(),
+    },
+    group: {
+      findUnique: vi.fn(),
+    },
+    moderationAction: {
+      findFirst: vi.fn(),
+    },
   };
 }
 
@@ -104,6 +115,10 @@ describe('DeliberationService', () => {
       title: 'Propuesta de prueba suficientemente larga',
       body: 'Cuerpo de la propuesta con suficiente texto para pasar la validación.',
     };
+
+    beforeEach(() => {
+      prisma.forum.findFirst.mockResolvedValue({ id: 'forum-uuid-1', groupId: GROUP_ID });
+    });
 
     it('crea una propuesta cuando el usuario es miembro del grupo', async () => {
       prisma.groupMembership.findUnique.mockResolvedValue(mockMembership);
@@ -249,22 +264,30 @@ describe('DeliberationService', () => {
   // ─── updateProposalStatus ─────────────────────────────────────────────────
 
   describe('updateProposalStatus', () => {
-    it('el autor puede cerrar su propuesta', async () => {
+    it('el autor puede archivar su propuesta', async () => {
       prisma.proposal.findUnique.mockResolvedValue(mockProposal);
       prisma.proposal.update.mockResolvedValue({});
 
       await service.updateProposalStatus(
         PROPOSAL_ID,
-        { status: ProposalStatus.closed },
+        { status: ProposalStatus.archived },
         PROFILE_ID,
         IP,
       );
 
       expect(prisma.proposal.update).toHaveBeenCalledWith(
         expect.objectContaining({
-          data: expect.objectContaining({ status: ProposalStatus.closed }),
+          data: expect.objectContaining({ status: ProposalStatus.archived }),
         }),
       );
+    });
+
+    it('PATCH status ya no cierra: el cierre necesita conclusión', async () => {
+      prisma.proposal.findUnique.mockResolvedValue(mockProposal);
+      await expect(
+        service.updateProposalStatus(PROPOSAL_ID, { status: 'closed' } as never, PROFILE_ID, IP),
+      ).rejects.toThrow(BadRequestException);
+      expect(prisma.proposal.update).not.toHaveBeenCalled();
     });
 
     it('lanza ForbiddenException si quien cierra no es el autor', async () => {
@@ -273,7 +296,7 @@ describe('DeliberationService', () => {
       await expect(
         service.updateProposalStatus(
           PROPOSAL_ID,
-          { status: ProposalStatus.closed },
+          { status: ProposalStatus.archived },
           OTHER_PROFILE_ID,
           IP,
         ),
@@ -286,7 +309,7 @@ describe('DeliberationService', () => {
       await expect(
         service.updateProposalStatus(
           PROPOSAL_ID,
-          { status: ProposalStatus.closed },
+          { status: ProposalStatus.archived },
           PROFILE_ID,
           IP,
         ),
@@ -390,6 +413,117 @@ describe('DeliberationService', () => {
       await expect(
         service.setSignal(PROPOSAL_ID, { signal: SignalType.object }, PROFILE_ID, IP),
       ).rejects.toThrow(NotFoundException);
+    });
+  });
+
+  // ─── Foros y contenido oculto ─────────────────────────────────────────────
+
+  describe('temas dentro de foros', () => {
+    it('rechaza un forumId de otro grupo', async () => {
+      prisma.groupMembership.findUnique.mockResolvedValue(mockMembership);
+      prisma.forum.findUnique.mockResolvedValue({ id: 'f-otro', groupId: 'g-otro' });
+      await expect(
+        service.createProposal(
+          GROUP_ID,
+          { title: 'Tema de prueba', body: 'Cuerpo del tema', forumId: 'f-otro' } as never,
+          PROFILE_ID,
+          IP,
+        ),
+      ).rejects.toThrow(BadRequestException);
+      expect(prisma.proposal.create).not.toHaveBeenCalled();
+    });
+
+    it('sin forumId usa el foro por defecto del grupo', async () => {
+      prisma.groupMembership.findUnique.mockResolvedValue(mockMembership);
+      prisma.forum.findFirst.mockResolvedValue({ id: 'f-def', groupId: GROUP_ID });
+      prisma.proposal.create.mockResolvedValue({ id: 't1' });
+      await service.createProposal(
+        GROUP_ID,
+        { title: 'Tema de prueba', body: 'Cuerpo del tema' } as never,
+        PROFILE_ID,
+        IP,
+      );
+      expect(prisma.proposal.create).toHaveBeenCalledWith(
+        expect.objectContaining({ data: expect.objectContaining({ forumId: 'f-def', kind: 'tema' }) }),
+      );
+    });
+
+    it('crea el foro por defecto si todavía no existe', async () => {
+      prisma.groupMembership.findUnique.mockResolvedValue(mockMembership);
+      prisma.forum.findFirst.mockResolvedValue(null);
+      prisma.group.findUnique.mockResolvedValue({ name: 'Mi comunidad' });
+      prisma.forum.create.mockResolvedValue({ id: 'f-nuevo' });
+      prisma.proposal.create.mockResolvedValue({ id: 't1' });
+      await service.createProposal(
+        GROUP_ID,
+        { title: 'Tema de prueba', body: 'Cuerpo del tema' } as never,
+        PROFILE_ID,
+        IP,
+      );
+      expect(prisma.forum.create).toHaveBeenCalledWith({
+        data: { groupId: GROUP_ID, title: 'Foro de Mi comunidad', isDefault: true },
+      });
+      expect(prisma.proposal.create).toHaveBeenCalledWith(
+        expect.objectContaining({ data: expect.objectContaining({ forumId: 'f-nuevo' }) }),
+      );
+    });
+  });
+
+  describe('contenido oculto', () => {
+    const base = {
+      id: 't1', groupId: GROUP_ID, title: 'Título', body: 'texto secreto', status: 'open', kind: 'tema',
+      hidden: false, forumId: 'f1', deliberationEndsAt: null, electionId: null, conclusion: null,
+      objections: null, authorProfileId: OTHER_PROFILE_ID, author: { displayName: 'X' }, signals: [],
+      comments: [], _count: { comments: 0 }, createdAt: new Date('2026-01-01T00:00:00Z'),
+    };
+
+    it('el detalle de un tema oculto no devuelve su texto', async () => {
+      prisma.proposal.findUnique.mockResolvedValue({ ...base, hidden: true });
+      prisma.groupMembership.findUnique.mockResolvedValue(mockMembership);
+      prisma.moderationAction.findFirst.mockResolvedValue({ reason: 'Insultos' });
+      const d = await service.getProposalById('t1', PROFILE_ID);
+      expect(d.body).toBe('');
+      expect(d.title).toBe('Tema oculto por moderación');
+      expect(d.hidden).toBe(true);
+      expect(d.hiddenReason).toBe('Insultos');
+      expect(prisma.moderationAction.findFirst).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { target: 'tema', targetId: 't1' },
+          orderBy: { createdAt: 'desc' },
+        }),
+      );
+    });
+
+    it('un comentario oculto no devuelve su texto', async () => {
+      prisma.proposal.findUnique.mockResolvedValue({
+        ...base,
+        comments: [
+          { id: 'c1', body: 'ofensa', hidden: true, parentId: null, createdAt: new Date(), author: { displayName: 'Y' } },
+          { id: 'c2', body: 'bien', hidden: false, parentId: null, createdAt: new Date(), author: { displayName: 'Z' } },
+        ],
+        _count: { comments: 2 },
+      });
+      prisma.groupMembership.findUnique.mockResolvedValue(mockMembership);
+      prisma.moderationAction.findFirst.mockResolvedValue({ reason: 'Ofensa' });
+      const d = await service.getProposalById('t1', PROFILE_ID);
+      expect(d.comments[0]).toEqual(expect.objectContaining({ body: '', hidden: true, hiddenReason: 'Ofensa' }));
+      expect(d.comments[1]).toEqual(expect.objectContaining({ body: 'bien', hidden: false, hiddenReason: null }));
+      expect(prisma.moderationAction.findFirst).toHaveBeenCalledTimes(1);
+    });
+
+    it('la lista muestra un título neutro para un tema oculto', async () => {
+      prisma.groupMembership.findUnique.mockResolvedValue(mockMembership);
+      prisma.proposal.findMany.mockResolvedValue([{ ...base, hidden: true }]);
+      const r = await service.listGroupProposals(GROUP_ID, PROFILE_ID);
+      expect(r.proposals[0]?.title).toBe('Tema oculto por moderación');
+      expect(r.proposals[0]?.hidden).toBe(true);
+    });
+
+    it('no se comenta ni se señala un tema oculto', async () => {
+      prisma.proposal.findUnique.mockResolvedValue({ id: 't1', groupId: GROUP_ID, status: 'open', hidden: true });
+      prisma.groupMembership.findUnique.mockResolvedValue(mockMembership);
+      await expect(service.addComment('t1', { body: 'hola hola' } as never, PROFILE_ID, IP)).rejects.toThrow(BadRequestException);
+      await expect(service.setSignal('t1', { signal: 'support' } as never, PROFILE_ID, IP)).rejects.toThrow(BadRequestException);
     });
   });
 });
