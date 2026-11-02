@@ -189,6 +189,21 @@ describe('VotingService', () => {
       expect(result.userHasVoted).toBe(true);
     });
 
+    it('informa la propuesta del foro a la que pertenece la votación (o null)', async () => {
+      prisma.election.findUnique.mockResolvedValue(mockElectionOpen);
+      prisma.groupMembership.findUnique.mockResolvedValue(mockMembership);
+      prisma.ballot.findUnique.mockResolvedValue(null);
+
+      expect((await service.getElectionById(ELECTION_ID, PROFILE_ID)).proposalId).toBeNull();
+
+      prisma.proposal.findUnique.mockResolvedValue({ id: 'proposal-1' });
+      expect((await service.getElectionById(ELECTION_ID, PROFILE_ID)).proposalId).toBe('proposal-1');
+      expect(prisma.proposal.findUnique).toHaveBeenCalledWith({
+        where: { electionId: ELECTION_ID },
+        select: { id: true },
+      });
+    });
+
     it('lanza NotFoundException si la elección no existe', async () => {
       prisma.election.findUnique.mockResolvedValue(null);
 

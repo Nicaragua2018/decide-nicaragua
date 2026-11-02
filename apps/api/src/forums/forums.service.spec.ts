@@ -169,6 +169,11 @@ describe('ForumsService', () => {
         where: { id: 't1', electionId: 'e-vieja', status: 'open', hidden: false },
         data: { electionId: 'e2' },
       });
+      // La votación vieja queda huérfana: no debe conservar el título del tema.
+      expect(prisma.election.update).toHaveBeenCalledWith({
+        where: { id: 'e-vieja' },
+        data: { title: 'Votación anterior (cancelada)' },
+      });
     });
 
     it('un tema que no es propuesta formal no se vota', async () => {
@@ -284,8 +289,9 @@ describe('ForumsService', () => {
 
     it('ocultar un tema con votación abierta la cancela y le quita el título, en la misma transacción', async () => {
       board.roleOf.mockResolvedValue('administrador');
-      prisma.proposal.findUnique.mockResolvedValue({ id: 't1', groupId: 'g1', hidden: false, electionId: 'e1', title: 'Título delicado' });
-      prisma.proposal.update.mockResolvedValue({});
+      // La lectura previa aún no ve la votación: se abrió entre esa lectura y la transacción.
+      prisma.proposal.findUnique.mockResolvedValue({ id: 't1', groupId: 'g1', hidden: false, electionId: null, title: 'Título delicado' });
+      prisma.proposal.update.mockResolvedValue({ id: 't1', electionId: 'e1' });
       prisma.election.findUnique.mockResolvedValue({ status: 'open' });
       prisma.election.update.mockResolvedValue({});
       prisma.moderationAction.create.mockResolvedValue({ id: 'ma1' });
@@ -299,8 +305,9 @@ describe('ForumsService', () => {
 
     it('ocultar un tema con votación ya contada solo le quita el título', async () => {
       board.roleOf.mockResolvedValue('administrador');
-      prisma.proposal.findUnique.mockResolvedValue({ id: 't1', groupId: 'g1', hidden: false, electionId: 'e1', title: 'Título delicado' });
-      prisma.proposal.update.mockResolvedValue({});
+      // La lectura previa aún no ve la votación: se abrió entre esa lectura y la transacción.
+      prisma.proposal.findUnique.mockResolvedValue({ id: 't1', groupId: 'g1', hidden: false, electionId: null, title: 'Título delicado' });
+      prisma.proposal.update.mockResolvedValue({ id: 't1', electionId: 'e1' });
       prisma.election.findUnique.mockResolvedValue({ status: 'tallied' });
       prisma.election.update.mockResolvedValue({});
       prisma.moderationAction.create.mockResolvedValue({ id: 'ma1' });

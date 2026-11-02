@@ -31,6 +31,8 @@ export interface ElectionDetail extends ElectionSummary {
   candidates: CandidateSummary[];
   /** Si el usuario autenticado ya ha votado en esta elección. */
   userHasVoted: boolean;
+  /** Propuesta del foro a la que pertenece esta votación, o null si es una elección independiente. */
+  proposalId: string | null;
 }
 
 export interface ElectionListResponse {

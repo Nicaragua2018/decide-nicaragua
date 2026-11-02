@@ -109,11 +109,12 @@ export class VotingService {
     if (!election) throw new NotFoundException('Election not found');
 
     // Membresía y voto previo en paralelo — ambos dependen solo de IDs conocidos
-    const [, userBallot] = await Promise.all([
+    const [, userBallot, proposal] = await Promise.all([
       this.requireMembership(election.groupId, profileId),
       this.prisma.ballot.findUnique({
         where: { electionId_profileId: { electionId, profileId } },
       }),
+      this.prisma.proposal.findUnique({ where: { electionId }, select: { id: true } }),
     ]);
 
     return {
@@ -121,6 +122,7 @@ export class VotingService {
       description: election.description,
       candidates: election.candidates.map(toCandidateSummary),
       userHasVoted: userBallot !== null,
+      proposalId: proposal?.id ?? null,
     };
   }
 

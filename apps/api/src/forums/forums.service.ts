@@ -27,6 +27,9 @@ const DIA_MS = 86_400_000;
 /** Título que toma la votación de un tema oculto, para que no repita el título del tema. */
 const HIDDEN_VOTE_TITLE = 'Votación de un tema oculto';
 
+/** Título neutro de una votación cancelada que queda huérfana al abrir otra. */
+const ORPHAN_VOTE_TITLE = 'Votación anterior (cancelada)';
+
 const voteTitle = (topicTitle: string): string => `Votación: ${topicTitle}`.slice(0, 200);
 
 @Injectable()
@@ -243,6 +246,10 @@ export class ForumsService {
         data: { electionId: e.id },
       });
       if (vinculada.count === 0) throw new ConflictException('La votación de esta propuesta ya está abierta.');
+      if (topic.electionId) {
+        // La votación cancelada queda sin tema: que no conserve su título.
+        await tx.election.update({ where: { id: topic.electionId }, data: { title: ORPHAN_VOTE_TITLE } });
+      }
       return e;
     });
     void this.audit.log({
@@ -282,13 +289,11 @@ export class ForumsService {
 
   async hide(profileId: string, dto: ModerateDto, ip: string): Promise<{ id: string }> {
     let groupId: string;
-    let electionId: string | null = null;
     if (dto.target === 'tema') {
       const t = await this.prisma.proposal.findUnique({ where: { id: dto.targetId } });
       if (!t) throw new NotFoundException('Tema no encontrado');
       if (t.hidden) throw new ConflictException('Este contenido ya está oculto.');
       groupId = t.groupId;
-      electionId = t.electionId ?? null;
     } else {
       const c = await this.prisma.proposalComment.findUnique({
         where: { id: dto.targetId },
@@ -303,7 +308,9 @@ export class ForumsService {
     }
     const action = await this.prisma.$transaction(async (tx) => {
       if (dto.target === 'tema') {
-        await tx.proposal.update({ where: { id: dto.targetId }, data: { hidden: true } });
+        // electionId se relee dentro de la transacción: así se ve una votación abierta justo antes.
+        const t = await tx.proposal.update({ where: { id: dto.targetId }, data: { hidden: true } });
+        const electionId = t?.electionId ?? null;
         if (electionId) {
           // La votación repetía el título del tema: se le quita y, si sigue activa, se cancela.
           const e = await tx.election.findUnique({ where: { id: electionId }, select: { status: true } });
