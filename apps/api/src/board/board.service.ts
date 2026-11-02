@@ -69,6 +69,12 @@ export class BoardService {
     if ((await this.prisma.boardSeat.count({ where: { source: 'eleccion' } })) > 0) {
       throw new ForbiddenException('Los cargos de la mesa ya se eligen por votaciÃ³n.');
     }
+    if ((role as string) === 'administrador') {
+      throw new BadRequestException('El cargo de administrador no se asigna desde aquí.');
+    }
+    if (await this.prisma.boardSeat.findUnique({ where: { role } })) {
+      throw new BadRequestException('Ese cargo ya está ocupado. Para reemplazar a alguien hace falta una decisión de la mesa.');
+    }
     const target = await this.prisma.profile.findUnique({
       where: { id: targetProfileId },
       include: { user: { select: { status: true } } },
@@ -81,10 +87,8 @@ export class BoardService {
     });
     if (otroCargo) throw new BadRequestException('Esa persona ya ocupa otro cargo de la mesa.');
 
-    await this.prisma.boardSeat.upsert({
-      where: { role },
-      create: { role, profileId: targetProfileId, source: 'fundador' },
-      update: { profileId: targetProfileId, source: 'fundador', since: new Date() },
+    await this.prisma.boardSeat.create({
+      data: { role, profileId: targetProfileId, source: 'fundador' },
     });
 
     void this.audit.log({
@@ -208,6 +212,10 @@ export class BoardService {
       where: { userId: targetUserId },
       data: { birthDepartment },
     });
-    await this.groups.syncMemberships(targetUserId, birthDepartment, profile.currentCountry, profile.currentRegion);
+    // Membresías solo al verificarse: a un no verificado se le corrige el origen sin unirlo a comunidades.
+    const user = await this.prisma.user.findUnique({ where: { id: targetUserId }, select: { status: true } });
+    if ((user?.status as string | undefined) === 'verified_citizen') {
+      await this.groups.syncMemberships(targetUserId, birthDepartment, profile.currentCountry, profile.currentRegion);
+    }
   }
 }

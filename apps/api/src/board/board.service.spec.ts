@@ -5,7 +5,7 @@ import { BoardService } from './board.service';
 
 function buildPrisma() {
   return {
-    boardSeat: { findFirst: vi.fn(), findMany: vi.fn(), count: vi.fn(), upsert: vi.fn() },
+    boardSeat: { findFirst: vi.fn(), findUnique: vi.fn(), findMany: vi.fn(), count: vi.fn(), upsert: vi.fn(), create: vi.fn() },
     profile: { findUnique: vi.fn(), update: vi.fn() },
     user: { findUnique: vi.fn(), update: vi.fn() },
     boardAction: { create: vi.fn(), findUnique: vi.fn(), findMany: vi.fn(), update: vi.fn() },
@@ -50,19 +50,35 @@ describe('BoardService', () => {
       await expect(service.assignFounderSeat(ADMIN, 'secretario' as never, 'p-x', 'ip')).rejects.toThrow(BadRequestException);
     });
 
+    it('el cargo de administrador no se asigna desde aquí', async () => {
+      prisma.boardSeat.findFirst.mockResolvedValue({ role: 'administrador' });
+      prisma.boardSeat.count.mockResolvedValue(0);
+      await expect(service.assignFounderSeat(ADMIN, 'administrador' as never, 'p-x', 'ip')).rejects.toThrow('no se asigna desde aquí');
+      expect(prisma.boardSeat.create).not.toHaveBeenCalled();
+    });
+
+    it('no reemplaza un cargo ya ocupado', async () => {
+      prisma.boardSeat.findFirst.mockResolvedValue({ role: 'administrador' });
+      prisma.boardSeat.count.mockResolvedValue(0);
+      prisma.boardSeat.findUnique.mockResolvedValue({ role: 'secretario', profileId: 'p-sec' });
+      await expect(service.assignFounderSeat(ADMIN, 'secretario' as never, 'p-x', 'ip')).rejects.toThrow('ya está ocupado');
+      expect(prisma.boardSeat.create).not.toHaveBeenCalled();
+    });
+
     it('asigna el cargo y lo audita', async () => {
       prisma.boardSeat.findFirst
         .mockResolvedValueOnce({ role: 'administrador' })
         .mockResolvedValueOnce(null);
       prisma.boardSeat.count.mockResolvedValue(0);
       prisma.profile.findUnique.mockResolvedValue({ id: 'p-x', user: { status: 'verified_citizen' } });
-      prisma.boardSeat.upsert.mockResolvedValue({});
+      prisma.boardSeat.findUnique.mockResolvedValue(null);
+      prisma.boardSeat.create.mockResolvedValue({});
 
       await service.assignFounderSeat(ADMIN, 'secretario' as never, 'p-x', 'ip');
 
-      expect(prisma.boardSeat.upsert).toHaveBeenCalledWith(
-        expect.objectContaining({ where: { role: 'secretario' } }),
-      );
+      expect(prisma.boardSeat.create).toHaveBeenCalledWith({
+        data: { role: 'secretario', profileId: 'p-x', source: 'fundador' },
+      });
       expect(audit.log).toHaveBeenCalledWith(expect.objectContaining({ action: 'board.seat_assigned' }));
     });
   });
@@ -151,6 +167,7 @@ describe('BoardService', () => {
       });
       prisma.boardApproval.create.mockResolvedValue({});
       prisma.profile.update.mockResolvedValue({ currentCountry: 'CR', currentRegion: null });
+      prisma.user.findUnique.mockResolvedValue({ status: 'verified_citizen' });
       prisma.boardAction.update.mockResolvedValue({});
 
       await service.voteAction(ADMIN, 'a1', true, 'ip');
@@ -159,6 +176,25 @@ describe('BoardService', () => {
         expect.objectContaining({ where: { userId: 'u-t' }, data: { birthDepartment: 'Managua' } }),
       );
       expect(groups.syncMemberships).toHaveBeenCalledWith('u-t', 'Managua', 'CR', null);
+    });
+
+    it('el cambio de origen de alguien no verificado no le da comunidades', async () => {
+      prisma.boardSeat.findFirst.mockResolvedValue({ role: 'administrador' });
+      prisma.boardAction.findUnique.mockResolvedValue({
+        ...accion,
+        type: 'change_origin',
+        params: { birthDepartment: 'Managua' },
+        approvals: [{ profileId: 'p-sec', approve: true }],
+      });
+      prisma.boardApproval.create.mockResolvedValue({});
+      prisma.profile.update.mockResolvedValue({ currentCountry: 'CR', currentRegion: null });
+      prisma.user.findUnique.mockResolvedValue({ status: 'pending_verification' });
+      prisma.boardAction.update.mockResolvedValue({});
+
+      await service.voteAction(ADMIN, 'a1', true, 'ip');
+
+      expect(prisma.profile.update).toHaveBeenCalled();
+      expect(groups.syncMemberships).not.toHaveBeenCalled();
     });
   });
 });
