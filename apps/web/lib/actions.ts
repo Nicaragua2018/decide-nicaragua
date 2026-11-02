@@ -337,3 +337,76 @@ export async function voteBoardAction(actionId: string, approve: boolean): Promi
   revalidatePath('/admin/mesa');
   return { success: true };
 }
+
+// ─── Foros ────────────────────────────────────────────────────────────────────
+
+export async function createForum(_prev: ActionResult | null, formData: FormData): Promise<ActionResult> {
+  const res = await actionFetch('/api/forums', {
+    method: 'POST',
+    body: JSON.stringify({
+      groupId: formData.get('groupId'),
+      title: formData.get('title'),
+      description: formData.get('description') || undefined,
+    }),
+  });
+  if (!res.ok) return { error: await parseError(res) };
+  revalidatePath('/foros');
+  return { success: true };
+}
+
+export async function createTopic(_prev: ActionResult | null, formData: FormData): Promise<ActionResult> {
+  const groupId = String(formData.get('groupId'));
+  const forumId = String(formData.get('forumId'));
+  const res = await actionFetch(`/api/deliberation/groups/${groupId}/proposals`, {
+    method: 'POST',
+    body: JSON.stringify({ title: formData.get('title'), body: formData.get('body'), forumId }),
+  });
+  if (!res.ok) return { error: await parseError(res) };
+  revalidatePath(`/foros/${forumId}`);
+  return { success: true };
+}
+
+export async function formalizeTopic(topicId: string): Promise<ActionResult> {
+  const res = await actionFetch(`/api/forums/topics/${topicId}/formalize`, { method: 'POST' });
+  if (!res.ok) return { error: await parseError(res) };
+  revalidatePath(`/proposals/${topicId}`);
+  return { success: true };
+}
+
+export async function openTopicVote(topicId: string): Promise<ActionResult> {
+  const res = await actionFetch(`/api/forums/topics/${topicId}/open-vote`, { method: 'POST' });
+  if (!res.ok) return { error: await parseError(res) };
+  revalidatePath(`/proposals/${topicId}`);
+  return { success: true };
+}
+
+export async function closeTopic(_prev: ActionResult | null, formData: FormData): Promise<ActionResult> {
+  const topicId = String(formData.get('topicId'));
+  const res = await actionFetch(`/api/forums/topics/${topicId}/close`, {
+    method: 'POST',
+    body: JSON.stringify({ conclusion: formData.get('conclusion'), objections: formData.get('objections') || undefined }),
+  });
+  if (!res.ok) return { error: await parseError(res) };
+  revalidatePath(`/proposals/${topicId}`);
+  return { success: true };
+}
+
+export async function hideContent(_prev: ActionResult | null, formData: FormData): Promise<ActionResult> {
+  const res = await actionFetch('/api/forums/moderation/hide', {
+    method: 'POST',
+    body: JSON.stringify({ target: formData.get('target'), targetId: formData.get('targetId'), reason: formData.get('reason') }),
+  });
+  if (!res.ok) return { error: await parseError(res) };
+  revalidatePath(`/proposals/${String(formData.get('topicId'))}`);
+  return { success: true };
+}
+
+export async function resolveAppeal(moderationId: string, restore: boolean): Promise<ActionResult> {
+  const res = await actionFetch(`/api/forums/moderation/${moderationId}/resolve`, {
+    method: 'POST',
+    body: JSON.stringify({ restore }),
+  });
+  if (!res.ok) return { error: await parseError(res) };
+  revalidatePath('/admin/mesa');
+  return { success: true };
+}

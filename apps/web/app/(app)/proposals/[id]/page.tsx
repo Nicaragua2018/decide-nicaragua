@@ -3,6 +3,7 @@ import type { Metadata } from 'next';
 import { serverFetch } from '@/lib/api';
 import SignalForm from '@/components/SignalForm';
 import { CommentsSection } from './CommentsSection';
+import { TopicActions } from './TopicActions';
 import { updateProposalStatusDirect } from '@/lib/actions';
 import { ProposalStatus } from '@decide/shared';
 import type { ProposalDetail, SignalCounts } from '@decide/shared';
@@ -15,8 +16,6 @@ const STATUS_LABEL: Record<ProposalStatus, string> = {
 };
 const NEXT_STATUS: Partial<Record<ProposalStatus, ProposalStatus[]>> = {
   [ProposalStatus.draft]:   [ProposalStatus.open],
-  [ProposalStatus.open]:    [ProposalStatus.closed],
-  [ProposalStatus.closed]:  [ProposalStatus.archived],
 };
 const NEXT_STATUS_LABEL: Partial<Record<ProposalStatus, string>> = {
   [ProposalStatus.open]:     'Abrir para debate',
@@ -89,6 +88,14 @@ export default async function ProposalPage({
         <Link href={`/groups/${proposal.groupId}?tab=proposals`} className="text-sm text-muted">
           ← Volver al grupo
         </Link>
+        {proposal.forumId && (
+          <>
+            {' · '}
+            <Link href={`/foros/${proposal.forumId}`} className="text-sm text-muted">
+              Volver al foro
+            </Link>
+          </>
+        )}
         <div className="flex justify-between items-center mt-2">
           <h1 className="page-title">{proposal.title}</h1>
           <span className={`badge badge-${proposal.status}`}>
@@ -103,8 +110,28 @@ export default async function ProposalPage({
 
       {/* Cuerpo de la propuesta */}
       <div className="card mb-4">
-        <p style={{ whiteSpace: 'pre-wrap', lineHeight: 1.75 }}>{proposal.body}</p>
+        {proposal.hidden ? (
+          <p className="alert alert-warning">
+            Este tema fue ocultado por la moderación. Motivo: {proposal.hiddenReason}.
+          </p>
+        ) : (
+          <p style={{ whiteSpace: 'pre-wrap', lineHeight: 1.75 }}>{proposal.body}</p>
+        )}
       </div>
+
+      {/* Consenso alcanzado */}
+      {proposal.conclusion && (
+        <div className="card mb-4">
+          <p className="card-title">Consenso</p>
+          <p className="mt-2" style={{ whiteSpace: 'pre-wrap', lineHeight: 1.75 }}>{proposal.conclusion}</p>
+          {proposal.objections && (
+            <>
+              <p className="text-sm font-medium mt-3">Objeciones de la minoría</p>
+              <p style={{ whiteSpace: 'pre-wrap', lineHeight: 1.75 }}>{proposal.objections}</p>
+            </>
+          )}
+        </div>
+      )}
 
       {/* Señales de consenso */}
       <div className="card mb-4">
@@ -119,6 +146,8 @@ export default async function ProposalPage({
           />
         </div>
       </div>
+
+      <TopicActions proposal={proposal} />
 
       {/* Gestión del autor — solo visible si el usuario es el autor */}
       {proposal.isAuthor && nextStatuses.length > 0 && (
@@ -151,6 +180,7 @@ export default async function ProposalPage({
           proposalId={id}
           comments={proposal.comments}
           isOpen={isOpen}
+          canModerate={proposal.canModerate}
         />
       </div>
     </>
