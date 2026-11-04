@@ -17,6 +17,7 @@ import { BoardModule } from './board/board.module';
 import { VerificationModule } from './verification/verification.module';
 import { ForumsModule } from './forums/forums.module';
 import { NewsletterModule } from './newsletter/newsletter.module';
+import { RulesModule } from './rules/rules.module';
 
 @Module({
   imports: [
@@ -53,6 +54,7 @@ import { NewsletterModule } from './newsletter/newsletter.module';
     VerificationModule,
     ForumsModule,
     NewsletterModule,
+    RulesModule,
   ],
   providers: [
     // ThrottlerGuard aplicado globalmente a todos los endpoints
