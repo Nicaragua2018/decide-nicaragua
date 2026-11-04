@@ -1,10 +1,20 @@
-import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  ForbiddenException,
+  Injectable,
+  Logger,
+  NotFoundException,
+} from '@nestjs/common';
 import type { InquietudDetail, InquietudStatusValue, InquietudSummary } from '@decide/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { RulesService } from '../rules/rules.service';
+import { ForumsService } from '../forums/forums.service';
+import { DeliberationService } from '../deliberation/deliberation.service';
 
 const DIA_MS = 86_400_000;
+const ESTADOS_ABIERTOS = ['abierta', 'en_plazo'] as const;
 const HIDDEN_TITLE = 'Inquietud oculta por moderación';
 
 interface InquietudRow {
@@ -25,10 +35,14 @@ interface InquietudRow {
 
 @Injectable()
 export class InquietudesService {
+  private readonly logger = new Logger(InquietudesService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
     private readonly rules: RulesService,
+    private readonly forums: ForumsService,
+    private readonly deliberation: DeliberationService,
   ) {}
 
   private async requireMembership(groupId: string, profileId: string): Promise<void> {
@@ -144,7 +158,7 @@ export class InquietudesService {
       body: row.hidden ? '' : row.body,
       response: row.hidden ? null : row.response,
       respondedAt: row.respondedAt ? row.respondedAt.toISOString() : null,
-      canOrganize: false, // Task 5 lo completa con ForumsService.canOrganize.
+      canOrganize: await this.forums.canOrganize(profileId, row.groupId),
       isAuthor,
       hiddenReason,
       moderationId,
@@ -196,5 +210,151 @@ export class InquietudesService {
         metadata: { inquietudId: id },
       });
     }
+  }
+  private async requireOrganizer(profileId: string, groupId: string): Promise<void> {
+    if (!(await this.forums.canOrganize(profileId, groupId))) {
+      throw new ForbiddenException('Solo quien organiza la agenda puede hacer esto.');
+    }
+  }
+
+  /** Inquietudes que la mesa debe atender: en plazo, o abiertas con al menos un apoyo. */
+  async agenda(profileId: string): Promise<InquietudSummary[]> {
+    // Con la regla actual (mesa directiva) organizar no depende de la comunidad.
+    if (!(await this.forums.canOrganize(profileId, ''))) {
+      throw new ForbiddenException('Solo quien organiza la agenda puede verla.');
+    }
+    const rows = (await this.prisma.inquietud.findMany({
+      where: {
+        hidden: false,
+        OR: [{ status: 'en_plazo' }, { status: 'abierta', apoyos: { some: {} } }],
+      },
+      include: { author: { select: { displayName: true } } },
+    })) as InquietudRow[];
+    const organiza = new Map<string, boolean>();
+    const thresholds = new Map<string, number>();
+    const result: InquietudSummary[] = [];
+    for (const r of rows) {
+      if (!organiza.has(r.groupId)) organiza.set(r.groupId, await this.forums.canOrganize(profileId, r.groupId));
+      if (!organiza.get(r.groupId)) continue;
+      if (!thresholds.has(r.groupId)) thresholds.set(r.groupId, await this.threshold(r.groupId));
+      const s = await this.summary(r, profileId, thresholds.get(r.groupId) ?? 0);
+      if (s.status === 'abierta' && s.supportCount < 1) continue;
+      result.push(s);
+    }
+    return result.sort((a, b) => {
+      if (a.deadlineAt === b.deadlineAt) return 0;
+      if (a.deadlineAt === null) return 1;
+      if (b.deadlineAt === null) return -1;
+      return a.deadlineAt.localeCompare(b.deadlineAt);
+    });
+  }
+
+  async openDebate(
+    profileId: string,
+    dto: { groupId: string; inquietudIds: string[]; title: string; body: string },
+    ip: string,
+  ): Promise<{ proposalId: string }> {
+    await this.requireOrganizer(profileId, dto.groupId);
+    const ids = [...new Set(dto.inquietudIds)];
+    const rows = await this.prisma.inquietud.findMany({
+      where: { id: { in: ids } },
+      select: { id: true, groupId: true, status: true, hidden: true },
+    });
+    if (rows.length !== ids.length) throw new BadRequestException('Alguna inquietud no existe.');
+    if (rows.some((r) => r.groupId !== dto.groupId)) {
+      throw new BadRequestException('Todas las inquietudes deben ser de la misma comunidad.');
+    }
+    if (rows.some((r) => r.hidden || !(ESTADOS_ABIERTOS as readonly string[]).includes(r.status as string))) {
+      throw new BadRequestException('Solo se pueden juntar inquietudes abiertas o en plazo.');
+    }
+
+    const proposalId = await this.prisma.$transaction(async (tx) => {
+      const res = await tx.inquietud.updateMany({
+        where: { id: { in: ids }, groupId: dto.groupId, hidden: false, status: { in: [...ESTADOS_ABIERTOS] } },
+        data: { status: 'en_debate' },
+      });
+      if (res.count !== ids.length) throw new ConflictException('Alguna inquietud ya cambió de estado.');
+      const topic = await this.deliberation.createTopicInDefaultForum(tx, {
+        groupId: dto.groupId,
+        authorProfileId: profileId,
+        title: dto.title,
+        body: dto.body,
+        abiertoPorComunidad: false,
+      });
+      await tx.inquietud.updateMany({ where: { id: { in: ids } }, data: { proposalId: topic.id } });
+      return topic.id;
+    });
+
+    void this.audit.log({
+      ...(await this.actorId(profileId)),
+      action: 'inquietud.debate_opened',
+      resource: `proposal:${proposalId}`,
+      ip,
+      metadata: { proposalId, count: ids.length },
+    });
+    return { proposalId };
+  }
+
+  async respond(profileId: string, id: string, text: string, ip: string): Promise<void> {
+    const row = await this.prisma.inquietud.findUnique({
+      where: { id },
+      select: { id: true, groupId: true, status: true, hidden: true },
+    });
+    if (!row) throw new NotFoundException('Inquietud no encontrada');
+    await this.requireOrganizer(profileId, row.groupId);
+    if (row.hidden || !(ESTADOS_ABIERTOS as readonly string[]).includes(row.status as string)) {
+      throw new BadRequestException('Esta inquietud ya no admite respuesta.');
+    }
+    const res = await this.prisma.inquietud.updateMany({
+      where: { id, hidden: false, status: { in: [...ESTADOS_ABIERTOS] } },
+      data: { status: 'respondida', response: text, respondedAt: new Date(), respondedByProfileId: profileId },
+    });
+    if (res.count === 0) throw new ConflictException('Esta inquietud ya cambió de estado.');
+    void this.audit.log({
+      ...(await this.actorId(profileId)),
+      action: 'inquietud.responded',
+      resource: `inquietud:${id}`,
+      ip,
+      metadata: { inquietudId: id },
+    });
+  }
+
+  /** Abre como debate las inquietudes en plazo vencido sin respuesta. Devuelve cuántas abrió. */
+  async processDeadlines(now: Date): Promise<number> {
+    const due = await this.prisma.inquietud.findMany({
+      where: { status: 'en_plazo', hidden: false, deadlineAt: { lte: now } },
+      select: { id: true, groupId: true, authorProfileId: true, title: true, body: true },
+    });
+    let opened = 0;
+    for (const i of due) {
+      try {
+        const proposalId = await this.prisma.$transaction(async (tx) => {
+          const res = await tx.inquietud.updateMany({
+            where: { id: i.id, status: 'en_plazo', hidden: false, deadlineAt: { lte: now } },
+            data: { status: 'abierta_por_la_comunidad' },
+          });
+          if (res.count !== 1) return null;
+          const topic = await this.deliberation.createTopicInDefaultForum(tx, {
+            groupId: i.groupId,
+            authorProfileId: i.authorProfileId,
+            title: i.title,
+            body: i.body,
+            abiertoPorComunidad: true,
+          });
+          await tx.inquietud.updateMany({ where: { id: i.id }, data: { proposalId: topic.id } });
+          return topic.id;
+        });
+        if (!proposalId) continue;
+        opened += 1;
+        void this.audit.log({
+          action: 'inquietud.opened_by_community',
+          resource: `inquietud:${i.id}`,
+          metadata: { inquietudId: i.id, proposalId },
+        });
+      } catch (err) {
+        this.logger.error(`No se pudo abrir la inquietud ${i.id}: ${err instanceof Error ? err.name : 'error'}`);
+      }
+    }
+    return opened;
   }
 }

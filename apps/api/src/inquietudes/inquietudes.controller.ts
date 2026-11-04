@@ -20,6 +20,8 @@ import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { extractIp } from '../common/utils/ip.util';
 import { InquietudesService } from './inquietudes.service';
 import { CreateInquietudDto } from './dto/create-inquietud.dto';
+import { OpenDebateDto } from './dto/open-debate.dto';
+import { RespondDto } from './dto/respond.dto';
 
 @Controller('inquietudes')
 @UseGuards(JwtAuthGuard)
@@ -41,9 +43,26 @@ export class InquietudesController {
     return this.inquietudes.list(this.perfil(user), groupId);
   }
 
+  @Get('agenda')
+  async agenda(@CurrentUser() user: JwtPayload): Promise<InquietudSummary[]> {
+    return this.inquietudes.agenda(this.perfil(user));
+  }
+
+  @Post('debates')
+  async openDebate(@Body() dto: OpenDebateDto, @CurrentUser() user: JwtPayload, @Req() req: Request): Promise<{ proposalId: string }> {
+    return this.inquietudes.openDebate(this.perfil(user), dto, extractIp(req));
+  }
+
   @Get(':id')
   async one(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() user: JwtPayload): Promise<InquietudDetail> {
     return this.inquietudes.get(this.perfil(user), id);
+  }
+
+  @Post(':id/respuesta')
+  @HttpCode(HttpStatus.OK)
+  async respond(@Param('id', ParseUUIDPipe) id: string, @Body() dto: RespondDto, @CurrentUser() user: JwtPayload, @Req() req: Request): Promise<{ ok: true }> {
+    await this.inquietudes.respond(this.perfil(user), id, dto.text, extractIp(req));
+    return { ok: true };
   }
 
   @Post(':id/apoyo')

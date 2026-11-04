@@ -609,6 +609,27 @@ describe('DeliberationService', () => {
       expect(JSON.stringify(d)).not.toMatch(/secret|respuesta visible|Título/);
     });
 
+    it('el detalle lista las inquietudes de origen no ocultas y un tema oculto no las devuelve', async () => {
+      prisma.groupMembership.findUnique.mockResolvedValue(mockMembership);
+      prisma.proposal.findUnique.mockResolvedValue({ ...base, inquietudes: [{ id: 'i1', title: 'Arreglar el local' }] });
+      const d = await service.getProposalById('t1', PROFILE_ID);
+      expect(d.inquietudes).toEqual([{ id: 'i1', title: 'Arreglar el local' }]);
+      expect(prisma.proposal.findUnique).toHaveBeenCalledWith(
+        expect.objectContaining({
+          include: expect.objectContaining({
+            inquietudes: { where: { hidden: false }, select: { id: true, title: true } },
+          }),
+        }),
+      );
+      prisma.proposal.findUnique.mockResolvedValue({
+        ...base,
+        hidden: true,
+        inquietudes: [{ id: 'i1', title: 'Arreglar el local' }],
+      });
+      prisma.moderationAction.findFirst.mockResolvedValue({ reason: 'x' });
+      expect((await service.getProposalById('t1', PROFILE_ID)).inquietudes).toEqual([]);
+    });
+
     it('el detalle informa el estado de la votación vinculada', async () => {
       prisma.groupMembership.findUnique.mockResolvedValue(mockMembership);
       prisma.proposal.findUnique.mockResolvedValue({ ...base, kind: 'propuesta', electionId: 'e1' });
@@ -686,6 +707,38 @@ describe('DeliberationService', () => {
       prisma.groupMembership.findUnique.mockResolvedValue(mockMembership);
       await expect(service.addComment('t1', { body: 'hola hola' } as never, PROFILE_ID, IP)).rejects.toThrow(BadRequestException);
       await expect(service.setSignal('t1', { signal: 'support' } as never, PROFILE_ID, IP)).rejects.toThrow(BadRequestException);
+    });
+  });
+  describe('createTopicInDefaultForum', () => {
+    it('usa el foro por defecto existente dentro de la transacción y crea el tema abierto', async () => {
+      const tx = {
+        forum: { findFirst: vi.fn().mockResolvedValue({ id: 'f-def' }), create: vi.fn() },
+        group: { findUnique: vi.fn() },
+        proposal: { create: vi.fn().mockResolvedValue({ id: 'nuevo' }) },
+      };
+      const r = await service.createTopicInDefaultForum(tx as never, {
+        groupId: 'g1',
+        authorProfileId: 'p1',
+        title: 'T',
+        body: 'B',
+        abiertoPorComunidad: true,
+      });
+      expect(r).toEqual({ id: 'nuevo' });
+      expect(tx.forum.findFirst).toHaveBeenCalledWith({ where: { groupId: 'g1', isDefault: true } });
+      expect(tx.forum.create).not.toHaveBeenCalled();
+      expect(prisma.forum.findFirst).not.toHaveBeenCalled();
+      expect(tx.proposal.create).toHaveBeenCalledWith({
+        data: {
+          groupId: 'g1',
+          forumId: 'f-def',
+          kind: 'tema',
+          authorProfileId: 'p1',
+          title: 'T',
+          body: 'B',
+          status: 'open',
+          abiertoPorComunidad: true,
+        },
+      });
     });
   });
 });

@@ -78,6 +78,30 @@ export class DeliberationService {
     return { id: proposal.id };
   }
 
+  /**
+   * Crea un tema abierto en el foro por defecto del grupo, dentro de la transacción de quien llama.
+   * No audita ni exige membresía: quien llama ya validó permisos.
+   */
+  async createTopicInDefaultForum(
+    tx: Prisma.TransactionClient,
+    input: { groupId: string; authorProfileId: string; title: string; body: string; abiertoPorComunidad: boolean },
+  ): Promise<{ id: string }> {
+    const forum = await this.defaultForum(input.groupId, tx);
+    const created = await tx.proposal.create({
+      data: {
+        groupId: input.groupId,
+        forumId: forum.id,
+        kind: 'tema',
+        authorProfileId: input.authorProfileId,
+        title: input.title,
+        body: input.body,
+        status: 'open',
+        abiertoPorComunidad: input.abiertoPorComunidad,
+      },
+    });
+    return { id: created.id };
+  }
+
   async listGroupProposals(groupId: string, profileId: string): Promise<ProposalListResponse> {
     await this.requireMembership(groupId, profileId);
 
@@ -119,6 +143,7 @@ export class DeliberationService {
           orderBy: { createdAt: 'asc' },
         },
         _count: { select: { comments: true } },
+        inquietudes: { where: { hidden: false }, select: { id: true, title: true } },
       },
     });
 
@@ -185,7 +210,7 @@ export class DeliberationService {
       // Lo calcula ForumsService (Tarea 4/5); este servicio no conoce los permisos de moderación.
       canModerate: false,
       abiertoPorComunidad: proposal.abiertoPorComunidad,
-      inquietudes: [],
+      inquietudes: (proposal.inquietudes ?? []).map((i) => ({ id: i.id, title: i.title })),
     };
 
     return proposal.hidden ? redactHiddenTopic(detail) : detail;
@@ -355,18 +380,21 @@ export class DeliberationService {
   }
 
   /** Foro por defecto del grupo; se crea al vuelo la primera vez. */
-  private async defaultForum(groupId: string): Promise<{ id: string }> {
-    const existing = await this.prisma.forum.findFirst({ where: { groupId, isDefault: true } });
+  private async defaultForum(
+    groupId: string,
+    db: Prisma.TransactionClient | PrismaService = this.prisma,
+  ): Promise<{ id: string }> {
+    const existing = await db.forum.findFirst({ where: { groupId, isDefault: true } });
     if (existing) return existing;
-    const group = await this.prisma.group.findUnique({ where: { id: groupId } });
+    const group = await db.group.findUnique({ where: { id: groupId } });
     try {
-      return await this.prisma.forum.create({
+      return await db.forum.create({
         data: { groupId, title: `Foro de ${group?.name ?? 'la comunidad'}`, isDefault: true },
       });
     } catch (err) {
       // Otra petición lo creó a la vez (índice único parcial): se relee.
       if (!(err instanceof Prisma.PrismaClientKnownRequestError) || err.code !== 'P2002') throw err;
-      const creado = await this.prisma.forum.findFirst({ where: { groupId, isDefault: true } });
+      const creado = await db.forum.findFirst({ where: { groupId, isDefault: true } });
       if (!creado) throw err;
       return creado;
     }
@@ -435,6 +463,7 @@ function redactHiddenTopic(detail: ProposalDetail): ProposalDetail {
     electionId: null,
     electionStatus: null,
     comments: [],
+    inquietudes: [],
   };
 }
 

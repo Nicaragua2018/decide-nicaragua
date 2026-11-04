@@ -1,9 +1,11 @@
 import 'reflect-metadata';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { BadRequestException, ForbiddenException } from '@nestjs/common';
+import { BadRequestException, ConflictException, ForbiddenException } from '@nestjs/common';
 import { validate } from 'class-validator';
 import { InquietudesService } from './inquietudes.service';
 import { CreateInquietudDto } from './dto/create-inquietud.dto';
+import { OpenDebateDto } from './dto/open-debate.dto';
+import { RespondDto } from './dto/respond.dto';
 
 function buildPrisma() {
   return {
@@ -12,6 +14,7 @@ function buildPrisma() {
     inquietudApoyo: { upsert: vi.fn(), deleteMany: vi.fn(), count: vi.fn(), findUnique: vi.fn(), findMany: vi.fn() },
     moderationAction: { findFirst: vi.fn() },
     profile: { findUnique: vi.fn() },
+    $transaction: vi.fn(),
   };
 }
 
@@ -44,6 +47,9 @@ describe('InquietudesService', () => {
   let audit: { log: ReturnType<typeof vi.fn> };
   let rules: { getInt: ReturnType<typeof vi.fn> };
   let service: InquietudesService;
+  let forums: { canOrganize: ReturnType<typeof vi.fn> };
+  let deliberation: { createTopicInDefaultForum: ReturnType<typeof vi.fn> };
+  let tx: { inquietud: { updateMany: ReturnType<typeof vi.fn> } };
 
   beforeEach(() => {
     prisma = buildPrisma();
@@ -53,7 +59,17 @@ describe('InquietudesService', () => {
         key === 'inquietud.apoyo_minimo_personas' ? 3 : key === 'inquietud.apoyo_minimo_porcentaje' ? 10 : 7,
       ),
     };
-    service = new InquietudesService(prisma as never, audit as never, rules as never);
+    forums = { canOrganize: vi.fn().mockResolvedValue(false) };
+    deliberation = { createTopicInDefaultForum: vi.fn().mockResolvedValue({ id: 'tema1' }) };
+    tx = { inquietud: { updateMany: vi.fn().mockResolvedValue({ count: 1 }) } };
+    prisma.$transaction.mockImplementation(async (fn: (t: unknown) => unknown) => fn(tx));
+    service = new InquietudesService(
+      prisma as never,
+      audit as never,
+      rules as never,
+      forums as never,
+      deliberation as never,
+    );
     prisma.profile.findUnique.mockResolvedValue({ userId: 'u-yo' });
     prisma.groupMembership.findUnique.mockResolvedValue({ id: 'm1' });
     prisma.groupMembership.count.mockResolvedValue(5);
@@ -259,6 +275,204 @@ describe('InquietudesService', () => {
 
       prisma.moderationAction.findFirst.mockResolvedValue({ id: 'mod1', reason: 'Insultos', status: 'apelado' });
       expect((await service.get(YO, 'i1')).moderationId).toBeNull();
+    });
+  });
+  describe('agenda: abrir debate, responder, apertura automática', () => {
+    const ID1 = '3f2b8c1e-5d4a-4b6c-9e7f-1a2b3c4d5e61';
+    const ID2 = '3f2b8c1e-5d4a-4b6c-9e7f-1a2b3c4d5e62';
+    const dto = { groupId: G, inquietudIds: [ID1, ID2], title: 'Debate sobre el local', body: 'Texto del debate con detalle suficiente.' };
+    const filas = (over: Record<string, unknown> = {}) => [
+      { id: ID1, groupId: G, status: 'en_plazo', hidden: false, ...over },
+      { id: ID2, groupId: G, status: 'abierta', hidden: false },
+    ];
+
+    it('un miembro común no abre debate ni responde', async () => {
+      await expect(service.openDebate(YO, dto, '1.1.1.1')).rejects.toBeInstanceOf(ForbiddenException);
+      prisma.inquietud.findUnique.mockResolvedValue({ id: 'i1', groupId: G, status: 'abierta', hidden: false });
+      await expect(service.respond(YO, 'i1', 'x'.repeat(50), '1.1.1.1')).rejects.toBeInstanceOf(ForbiddenException);
+      expect(prisma.$transaction).not.toHaveBeenCalled();
+    });
+
+    it('juntar inquietudes de dos grupos se rechaza', async () => {
+      forums.canOrganize.mockResolvedValue(true);
+      prisma.inquietud.findMany.mockResolvedValue(filas({ groupId: 'otro' }));
+      await expect(service.openDebate(YO, dto, 'ip')).rejects.toThrow('Todas las inquietudes deben ser de la misma comunidad.');
+      expect(prisma.$transaction).not.toHaveBeenCalled();
+    });
+
+    it('juntar una respondida, una oculta o una inexistente se rechaza', async () => {
+      forums.canOrganize.mockResolvedValue(true);
+      prisma.inquietud.findMany.mockResolvedValue(filas({ status: 'respondida' }));
+      await expect(service.openDebate(YO, dto, 'ip')).rejects.toBeInstanceOf(BadRequestException);
+      prisma.inquietud.findMany.mockResolvedValue(filas({ hidden: true }));
+      await expect(service.openDebate(YO, dto, 'ip')).rejects.toBeInstanceOf(BadRequestException);
+      prisma.inquietud.findMany.mockResolvedValue([filas()[0]]);
+      await expect(service.openDebate(YO, dto, 'ip')).rejects.toBeInstanceOf(BadRequestException);
+      expect(prisma.$transaction).not.toHaveBeenCalled();
+    });
+
+    it('si el conteo no coincide lanza Conflict y no crea el tema', async () => {
+      forums.canOrganize.mockResolvedValue(true);
+      prisma.inquietud.findMany.mockResolvedValue(filas());
+      tx.inquietud.updateMany.mockResolvedValue({ count: 1 });
+      await expect(service.openDebate(YO, dto, 'ip')).rejects.toThrow('Alguna inquietud ya cambió de estado.');
+      await expect(service.openDebate(YO, dto, 'ip')).rejects.toBeInstanceOf(ConflictException);
+      expect(deliberation.createTopicInDefaultForum).not.toHaveBeenCalled();
+      expect(audit.log).not.toHaveBeenCalled();
+    });
+
+    it('abre el debate: pasa a en_debate, crea el tema, vincula y audita solo ids y conteo', async () => {
+      forums.canOrganize.mockResolvedValue(true);
+      prisma.inquietud.findMany.mockResolvedValue(filas());
+      tx.inquietud.updateMany.mockResolvedValueOnce({ count: 2 }).mockResolvedValueOnce({ count: 2 });
+      const r = await service.openDebate(YO, { ...dto, inquietudIds: [ID1, ID2, ID1] }, 'ip');
+      expect(r).toEqual({ proposalId: 'tema1' });
+      expect(tx.inquietud.updateMany).toHaveBeenNthCalledWith(1, {
+        where: { id: { in: [ID1, ID2] }, groupId: G, hidden: false, status: { in: ['abierta', 'en_plazo'] } },
+        data: { status: 'en_debate' },
+      });
+      expect(deliberation.createTopicInDefaultForum).toHaveBeenCalledWith(tx, {
+        groupId: G,
+        authorProfileId: YO,
+        title: dto.title,
+        body: dto.body,
+        abiertoPorComunidad: false,
+      });
+      expect(tx.inquietud.updateMany).toHaveBeenNthCalledWith(2, {
+        where: { id: { in: [ID1, ID2] } },
+        data: { proposalId: 'tema1' },
+      });
+      expect(audit.log).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action: 'inquietud.debate_opened',
+          resource: 'proposal:tema1',
+          metadata: { proposalId: 'tema1', count: 2 },
+        }),
+      );
+    });
+
+    it('respond: 49 caracteres lo rechaza el DTO y 50 pasa', async () => {
+      const mal = await validate(Object.assign(new RespondDto(), { text: 'x'.repeat(49) }));
+      expect(mal[0]?.constraints).toEqual(
+        expect.objectContaining({ minLength: 'La respuesta necesita entre 50 y 2000 caracteres.' }),
+      );
+      expect(await validate(Object.assign(new RespondDto(), { text: 'x'.repeat(50) }))).toHaveLength(0);
+    });
+
+    it('el DTO de debate limita 1-10 inquietudes', async () => {
+      const base = { groupId: ID1, title: 'Un título válido', body: 'x'.repeat(20) };
+      expect(await validate(Object.assign(new OpenDebateDto(), { ...base, inquietudIds: [] }))).not.toHaveLength(0);
+      expect(
+        await validate(Object.assign(new OpenDebateDto(), { ...base, inquietudIds: Array(11).fill(ID1) })),
+      ).not.toHaveLength(0);
+      expect(await validate(Object.assign(new OpenDebateDto(), { ...base, inquietudIds: [ID1] }))).toHaveLength(0);
+    });
+
+    it('respond: guarda la respuesta con updateMany condicionado y audita solo el id', async () => {
+      forums.canOrganize.mockResolvedValue(true);
+      prisma.inquietud.findUnique.mockResolvedValue({ id: 'i1', groupId: G, status: 'en_plazo', hidden: false });
+      const texto = 'r'.repeat(60);
+      await service.respond(YO, 'i1', texto, 'ip');
+      expect(prisma.inquietud.updateMany).toHaveBeenCalledWith({
+        where: { id: 'i1', hidden: false, status: { in: ['abierta', 'en_plazo'] } },
+        data: expect.objectContaining({ status: 'respondida', response: texto, respondedByProfileId: YO }),
+      });
+      expect(audit.log).toHaveBeenCalledWith(
+        expect.objectContaining({ action: 'inquietud.responded', metadata: { inquietudId: 'i1' } }),
+      );
+      expect(JSON.stringify(audit.log.mock.calls)).not.toContain(texto);
+    });
+
+    it('respond: si cambió de estado (conteo 0) lanza Conflict', async () => {
+      forums.canOrganize.mockResolvedValue(true);
+      prisma.inquietud.findUnique.mockResolvedValue({ id: 'i1', groupId: G, status: 'abierta', hidden: false });
+      prisma.inquietud.updateMany.mockResolvedValue({ count: 0 });
+      await expect(service.respond(YO, 'i1', 'r'.repeat(60), 'ip')).rejects.toThrow('Esta inquietud ya cambió de estado.');
+      expect(audit.log).not.toHaveBeenCalled();
+    });
+
+    it('respond: rechaza una ya respondida o una oculta', async () => {
+      forums.canOrganize.mockResolvedValue(true);
+      prisma.inquietud.findUnique.mockResolvedValue({ id: 'i1', groupId: G, status: 'respondida', hidden: false });
+      await expect(service.respond(YO, 'i1', 'r'.repeat(60), 'ip')).rejects.toBeInstanceOf(BadRequestException);
+      prisma.inquietud.findUnique.mockResolvedValue({ id: 'i1', groupId: G, status: 'abierta', hidden: true });
+      await expect(service.respond(YO, 'i1', 'r'.repeat(60), 'ip')).rejects.toBeInstanceOf(BadRequestException);
+    });
+
+    it('processDeadlines abre solo las vencidas no ocultas, con tema abiertoPorComunidad y título de la inquietud', async () => {
+      const now = new Date('2026-11-20T00:00:00Z');
+      prisma.inquietud.findMany.mockResolvedValue([
+        { id: 'i1', groupId: G, authorProfileId: 'p-autor', title: 'Arreglar el local', body: 'Explicación' },
+      ]);
+      tx.inquietud.updateMany.mockResolvedValue({ count: 1 });
+      const n = await service.processDeadlines(now);
+      expect(n).toBe(1);
+      expect(prisma.inquietud.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({ where: { status: 'en_plazo', hidden: false, deadlineAt: { lte: now } } }),
+      );
+      expect(tx.inquietud.updateMany).toHaveBeenNthCalledWith(1, {
+        where: { id: 'i1', status: 'en_plazo', hidden: false, deadlineAt: { lte: now } },
+        data: { status: 'abierta_por_la_comunidad' },
+      });
+      expect(deliberation.createTopicInDefaultForum).toHaveBeenCalledWith(tx, {
+        groupId: G,
+        authorProfileId: 'p-autor',
+        title: 'Arreglar el local',
+        body: 'Explicación',
+        abiertoPorComunidad: true,
+      });
+      expect(tx.inquietud.updateMany).toHaveBeenNthCalledWith(2, {
+        where: { id: 'i1' },
+        data: { proposalId: 'tema1' },
+      });
+      expect(audit.log).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action: 'inquietud.opened_by_community',
+          metadata: { inquietudId: 'i1', proposalId: 'tema1' },
+        }),
+      );
+    });
+
+    it('processDeadlines no crea tema si otra instancia ya la abrió (conteo 0)', async () => {
+      prisma.inquietud.findMany.mockResolvedValue([
+        { id: 'i1', groupId: G, authorProfileId: 'p-autor', title: 'T', body: 'B' },
+      ]);
+      tx.inquietud.updateMany.mockResolvedValue({ count: 0 });
+      expect(await service.processDeadlines(new Date())).toBe(0);
+      expect(deliberation.createTopicInDefaultForum).not.toHaveBeenCalled();
+      expect(audit.log).not.toHaveBeenCalled();
+    });
+
+    it('processDeadlines: el fallo de una no detiene a las demás', async () => {
+      prisma.inquietud.findMany.mockResolvedValue([
+        { id: 'i1', groupId: G, authorProfileId: 'a', title: 'T1', body: 'B' },
+        { id: 'i2', groupId: G, authorProfileId: 'a', title: 'T2', body: 'B' },
+      ]);
+      deliberation.createTopicInDefaultForum.mockRejectedValueOnce(new Error('boom')).mockResolvedValueOnce({ id: 'tema2' });
+      expect(await service.processDeadlines(new Date())).toBe(1);
+    });
+
+    it('agenda: 403 si no organiza; si organiza, ordena por plazo y deja fuera abiertas sin apoyo', async () => {
+      await expect(service.agenda(YO)).rejects.toThrow('Solo quien organiza la agenda puede verla.');
+      forums.canOrganize.mockResolvedValue(true);
+      const f = (id: string, deadlineAt: Date | null, status: string) => fila({ id, status, deadlineAt });
+      prisma.inquietud.findMany.mockResolvedValue([
+        f('tarde', new Date('2026-12-01T00:00:00Z'), 'en_plazo'),
+        f('sin-plazo', null, 'abierta'),
+        f('pronto', new Date('2026-11-10T00:00:00Z'), 'en_plazo'),
+        f('abierta-sin-apoyo', null, 'abierta'),
+      ]);
+      prisma.inquietudApoyo.count.mockImplementation(async (a: { where: { inquietudId: string } }) =>
+        a.where.inquietudId === 'abierta-sin-apoyo' ? 0 : 2,
+      );
+      const r = await service.agenda(YO);
+      expect(r.map((x) => x.id)).toEqual(['pronto', 'tarde', 'sin-plazo']);
+    });
+
+    it('get() informa canOrganize real', async () => {
+      forums.canOrganize.mockResolvedValue(true);
+      prisma.inquietud.findUnique.mockResolvedValue(fila());
+      expect((await service.get(YO, 'i1')).canOrganize).toBe(true);
     });
   });
 });

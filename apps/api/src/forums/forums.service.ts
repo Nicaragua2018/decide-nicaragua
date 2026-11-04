@@ -51,6 +51,11 @@ export class ForumsService {
     return (await this.board.roleOf(profileId)) !== null;
   }
 
+  /** Organizar la agenda de inquietudes; igual a canModerate hasta que existan los roles de 3C. */
+  async canOrganize(profileId: string, groupId: string): Promise<boolean> {
+    return this.canModerate(profileId, groupId);
+  }
+
   private async esMesa(profileId: string): Promise<boolean> {
     return (await this.board.roleOf(profileId)) !== null;
   }
