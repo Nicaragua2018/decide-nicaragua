@@ -30,6 +30,14 @@ const HIDDEN_VOTE_TITLE = 'Votación de un tema oculto';
 /** Título neutro de una votación cancelada que queda huérfana al abrir otra. */
 const ORPHAN_VOTE_TITLE = 'Votación anterior (cancelada)';
 
+type ModTarget = 'tema' | 'respuesta' | 'inquietud';
+
+/** Cada tipo de contenido tiene su propia rama: ninguno cae en otro por descarte. */
+function checkTarget(target: string): ModTarget {
+  if (target === 'tema' || target === 'respuesta' || target === 'inquietud') return target;
+  throw new BadRequestException('Tipo de contenido no válido.');
+}
+
 const voteTitle = (topicTitle: string): string => `Votación: ${topicTitle}`.slice(0, 200);
 
 @Injectable()
@@ -293,12 +301,18 @@ export class ForumsService {
   // ─── Moderación ───────────────────────────────────────────────────────────
 
   async hide(profileId: string, dto: ModerateDto, ip: string): Promise<{ id: string }> {
+    const target = checkTarget(dto.target);
     let groupId: string;
-    if (dto.target === 'tema') {
+    if (target === 'tema') {
       const t = await this.prisma.proposal.findUnique({ where: { id: dto.targetId } });
       if (!t) throw new NotFoundException('Tema no encontrado');
       if (t.hidden) throw new ConflictException('Este contenido ya está oculto.');
       groupId = t.groupId;
+    } else if (target === 'inquietud') {
+      const q = await this.prisma.inquietud.findUnique({ where: { id: dto.targetId } });
+      if (!q) throw new NotFoundException('Inquietud no encontrada');
+      if (q.hidden) throw new ConflictException('Este contenido ya está oculto.');
+      groupId = q.groupId;
     } else {
       const c = await this.prisma.proposalComment.findUnique({
         where: { id: dto.targetId },
@@ -312,7 +326,7 @@ export class ForumsService {
       throw new ForbiddenException('No tienes permiso para moderar en esta comunidad.');
     }
     const action = await this.prisma.$transaction(async (tx) => {
-      if (dto.target === 'tema') {
+      if (target === 'tema') {
         // electionId se relee dentro de la transacción: así se ve una votación abierta justo antes.
         const t = await tx.proposal.update({ where: { id: dto.targetId }, data: { hidden: true } });
         const electionId = t?.electionId ?? null;
@@ -325,17 +339,19 @@ export class ForumsService {
             data: activa ? { title: HIDDEN_VOTE_TITLE, status: 'cancelled' } : { title: HIDDEN_VOTE_TITLE },
           });
         }
+      } else if (target === 'inquietud') {
+        await tx.inquietud.update({ where: { id: dto.targetId }, data: { hidden: true } });
       } else {
         await tx.proposalComment.update({ where: { id: dto.targetId }, data: { hidden: true } });
       }
       return tx.moderationAction.create({
-        data: { target: dto.target, targetId: dto.targetId, reason: dto.reason, moderatorProfileId: profileId },
+        data: { target, targetId: dto.targetId, reason: dto.reason, moderatorProfileId: profileId },
       });
     });
     void this.audit.log({
       ...(await this.actorId(profileId)),
       action: 'moderation.hidden',
-      resource: `${dto.target}:${dto.targetId}`,
+      resource: `${target}:${dto.targetId}`,
       ip,
       metadata: { moderationId: action.id },
     });
@@ -345,7 +361,7 @@ export class ForumsService {
   async appeal(profileId: string, moderationId: string, text: string, ip: string): Promise<void> {
     const action = await this.prisma.moderationAction.findUnique({ where: { id: moderationId } });
     if (!action) throw new NotFoundException('Moderación no encontrada');
-    const contenido = await this.authorOf(action.target as 'tema' | 'respuesta', action.targetId);
+    const contenido = await this.authorOf(checkTarget(action.target), action.targetId);
     if (!contenido || contenido.authorProfileId !== profileId) {
       throw new ForbiddenException('Solo quien escribió el contenido puede apelar.');
     }
@@ -368,11 +384,11 @@ export class ForumsService {
     for (const a of actions) {
       result.push({
         id: a.id,
-        target: a.target as 'tema' | 'respuesta',
+        target: checkTarget(a.target),
         targetId: a.targetId,
         reason: a.reason,
         appealText: a.appealText ?? '',
-        originalText: await this.textOf(a.target as 'tema' | 'respuesta', a.targetId),
+        originalText: await this.textOf(checkTarget(a.target), a.targetId),
         appealedAt: (a.appealedAt ?? a.createdAt).toISOString(),
       });
     }
@@ -384,14 +400,18 @@ export class ForumsService {
     const action = await this.prisma.moderationAction.findUnique({ where: { id: moderationId } });
     if (!action) throw new NotFoundException('Moderación no encontrada');
     if ((action.status as string) !== 'apelado') throw new BadRequestException('Esta moderación no tiene una apelación pendiente.');
+    const target = checkTarget(action.target);
     await this.prisma.$transaction(async (tx) => {
       if (restore) {
-        if ((action.target as string) === 'tema') {
+        if (target === 'tema') {
           const t = await tx.proposal.update({ where: { id: action.targetId }, data: { hidden: false } });
           if (t?.electionId) {
             // Recupera el título, pero una votación cancelada no se reabre.
             await tx.election.update({ where: { id: t.electionId }, data: { title: voteTitle(t.title) } });
           }
+        } else if (target === 'inquietud') {
+          // El estado y el umbral los reevalúa InquietudesService al leerla (sin ciclo entre módulos).
+          await tx.inquietud.update({ where: { id: action.targetId }, data: { hidden: false } });
         } else {
           await tx.proposalComment.update({ where: { id: action.targetId }, data: { hidden: false } });
         }
@@ -410,12 +430,16 @@ export class ForumsService {
   }
 
   private async authorOf(
-    target: 'tema' | 'respuesta',
+    target: ModTarget,
     id: string,
   ): Promise<{ authorProfileId: string; groupId: string } | null> {
     if (target === 'tema') {
       const t = await this.prisma.proposal.findUnique({ where: { id } });
       return t ? { authorProfileId: t.authorProfileId, groupId: t.groupId } : null;
+    }
+    if (target === 'inquietud') {
+      const q = await this.prisma.inquietud.findUnique({ where: { id } });
+      return q ? { authorProfileId: q.authorProfileId, groupId: q.groupId } : null;
     }
     const c = await this.prisma.proposalComment.findUnique({
       where: { id },
@@ -424,10 +448,14 @@ export class ForumsService {
     return c ? { authorProfileId: c.authorProfileId, groupId: c.proposal.groupId } : null;
   }
 
-  private async textOf(target: 'tema' | 'respuesta', id: string): Promise<string> {
+  private async textOf(target: ModTarget, id: string): Promise<string> {
     if (target === 'tema') {
       const t = await this.prisma.proposal.findUnique({ where: { id } });
       return t ? `${t.title}\n\n${t.body}` : '';
+    }
+    if (target === 'inquietud') {
+      const q = await this.prisma.inquietud.findUnique({ where: { id } });
+      return q ? `${q.title}\n\n${q.body}` : '';
     }
     return (await this.prisma.proposalComment.findUnique({ where: { id } }))?.body ?? '';
   }

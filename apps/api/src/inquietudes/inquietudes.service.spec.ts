@@ -284,6 +284,36 @@ describe('InquietudesService', () => {
       expect((await service.get(YO, 'i1')).moderationId).toBeNull();
     });
   });
+  describe('reevaluación del umbral al leer', () => {
+    it('el detalle reevalúa el umbral: una restaurada con apoyos suficientes entra en plazo', async () => {
+      prisma.inquietud.findUnique.mockResolvedValue(fila());
+      prisma.inquietudApoyo.count.mockResolvedValue(3);
+      prisma.inquietud.updateMany.mockResolvedValue({ count: 1 });
+      await service.get(YO, 'i1');
+      expect(prisma.inquietud.updateMany).toHaveBeenCalledWith(
+        expect.objectContaining({ where: { id: 'i1', status: 'abierta', hidden: false, thresholdReachedAt: null } }),
+      );
+    });
+
+    it('la lista reevalúa cada inquietud abierta y visible, y no las ocultas', async () => {
+      prisma.inquietud.findMany.mockResolvedValue([fila({ id: 'a' }), fila({ id: 'b', hidden: true }), fila({ id: 'c', status: 'respondida' })]);
+      const porId: Record<string, Record<string, unknown>> = { a: {}, b: { hidden: true }, c: { status: 'respondida' } };
+      prisma.inquietud.findUnique.mockImplementation(async ({ where }: { where: { id: string } }) => fila({ id: where.id, ...porId[where.id] }));
+      prisma.inquietudApoyo.count.mockResolvedValue(3);
+      prisma.inquietud.updateMany.mockResolvedValue({ count: 1 });
+      await service.list(YO, G);
+      expect(prisma.inquietud.updateMany).toHaveBeenCalledTimes(1);
+      expect(prisma.inquietud.updateMany.mock.calls[0]![0].where.id).toBe('a');
+    });
+
+    it('una oculta en en_plazo no se abre por leerla', async () => {
+      prisma.inquietud.findUnique.mockResolvedValue(fila({ hidden: true, status: 'en_plazo', deadlineAt: new Date('2026-01-01T00:00:00Z') }));
+      prisma.moderationAction.findFirst.mockResolvedValue(null);
+      await service.get(YO, 'i1');
+      expect(prisma.inquietud.updateMany).not.toHaveBeenCalled();
+    });
+  });
+
   describe('agenda: abrir debate, responder, apertura automática', () => {
     const ID1 = '3f2b8c1e-5d4a-4b6c-9e7f-1a2b3c4d5e61';
     const ID2 = '3f2b8c1e-5d4a-4b6c-9e7f-1a2b3c4d5e62';

@@ -1,7 +1,7 @@
 import 'reflect-metadata';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { Prisma } from '@prisma/client';
-import { BadRequestException, ConflictException, ForbiddenException } from '@nestjs/common';
+import { BadRequestException, ConflictException, ForbiddenException, NotFoundException } from '@nestjs/common';
 import { ForumsService } from './forums.service';
 
 function buildPrisma() {
@@ -11,6 +11,7 @@ function buildPrisma() {
     forum: { findFirst: vi.fn(), findUnique: vi.fn(), findMany: vi.fn(), create: vi.fn() },
     proposal: { findUnique: vi.fn(), findMany: vi.fn(), update: vi.fn(), updateMany: vi.fn() },
     proposalComment: { findUnique: vi.fn(), update: vi.fn() },
+    inquietud: { findUnique: vi.fn(), update: vi.fn() },
     election: { create: vi.fn(), findUnique: vi.fn(), update: vi.fn() },
     electionResult: { findUnique: vi.fn() },
     electionCandidate: { findUnique: vi.fn() },
@@ -372,6 +373,94 @@ describe('ForumsService', () => {
     it('resolver apelaciones es solo de la mesa', async () => {
       board.roleOf.mockResolvedValue(null);
       await expect(service.resolveAppeal(YO, 'ma1', true, 'ip')).rejects.toThrow(ForbiddenException);
+    });
+
+    describe('inquietudes', () => {
+      const inq = (over: Record<string, unknown> = {}) => ({
+        id: 'q1', groupId: 'g1', authorProfileId: YO, title: 'Arreglar el local', body: 'Explicación larga', hidden: false, ...over,
+      });
+
+      it('ocultar una inquietud la marca oculta y registra el motivo, en una transacción', async () => {
+        board.roleOf.mockResolvedValue('administrador');
+        prisma.inquietud.findUnique.mockResolvedValue(inq());
+        prisma.inquietud.update.mockResolvedValue({});
+        prisma.moderationAction.create.mockResolvedValue({ id: 'ma1' });
+        await service.hide(YO, { target: 'inquietud', targetId: 'q1', reason: 'Lenguaje ofensivo' }, 'ip');
+        expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+        expect(prisma.inquietud.update).toHaveBeenCalledWith({ where: { id: 'q1' }, data: { hidden: true } });
+        expect(prisma.moderationAction.create).toHaveBeenCalledWith({
+          data: { target: 'inquietud', targetId: 'q1', reason: 'Lenguaje ofensivo', moderatorProfileId: YO },
+        });
+        expect(prisma.proposalComment.update).not.toHaveBeenCalled();
+      });
+
+      it('ocultar dos veces falla; un no moderador no oculta', async () => {
+        board.roleOf.mockResolvedValue('administrador');
+        prisma.inquietud.findUnique.mockResolvedValue(inq({ hidden: true }));
+        await expect(service.hide(YO, { target: 'inquietud', targetId: 'q1', reason: 'Lenguaje ofensivo' }, 'ip'))
+          .rejects.toThrow('Este contenido ya está oculto.');
+        board.roleOf.mockResolvedValue(null);
+        prisma.inquietud.findUnique.mockResolvedValue(inq());
+        await expect(service.hide(YO, { target: 'inquietud', targetId: 'q1', reason: 'Lenguaje ofensivo' }, 'ip'))
+          .rejects.toThrow(ForbiddenException);
+      });
+
+      it('el objetivo inquietud con el id de un comentario NO oculta el comentario', async () => {
+        board.roleOf.mockResolvedValue('administrador');
+        prisma.inquietud.findUnique.mockResolvedValue(null);
+        prisma.proposalComment.findUnique.mockResolvedValue({ id: 'c1', proposal: { groupId: 'g1' } });
+        const p = service.hide(YO, { target: 'inquietud', targetId: 'c1', reason: 'Lenguaje ofensivo' }, 'ip');
+        await expect(p).rejects.toThrow(NotFoundException);
+        await expect(p).rejects.toThrow('Inquietud no encontrada');
+        expect(prisma.proposalComment.update).not.toHaveBeenCalled();
+        expect(prisma.moderationAction.create).not.toHaveBeenCalled();
+      });
+
+      it('un tipo de contenido desconocido se rechaza', async () => {
+        await expect(service.hide(YO, { target: 'otro' as never, targetId: 'x', reason: 'Lenguaje ofensivo' }, 'ip'))
+          .rejects.toThrow('Tipo de contenido no válido.');
+        prisma.moderationAction.findUnique.mockResolvedValue({ id: 'ma1', target: 'otro', targetId: 'x', status: 'oculto' });
+        await expect(service.appeal(YO, 'ma1', 'No fue mi intención ofender', 'ip')).rejects.toThrow(BadRequestException);
+      });
+
+      it('un no autor no apela; el autor sí, una vez', async () => {
+        prisma.moderationAction.findUnique.mockResolvedValue({ id: 'ma1', target: 'inquietud', targetId: 'q1', status: 'oculto' });
+        prisma.inquietud.findUnique.mockResolvedValue(inq({ authorProfileId: 'p-otro' }));
+        await expect(service.appeal(YO, 'ma1', 'No fue mi intención ofender', 'ip')).rejects.toThrow(ForbiddenException);
+        prisma.inquietud.findUnique.mockResolvedValue(inq());
+        await service.appeal(YO, 'ma1', 'No fue mi intención ofender', 'ip');
+        expect(prisma.moderationAction.update).toHaveBeenCalledWith({
+          where: { id: 'ma1' },
+          data: expect.objectContaining({ status: 'apelado' }),
+        });
+      });
+
+      it('el autor que ya no es miembro no apela', async () => {
+        prisma.groupMembership.findUnique.mockResolvedValue(null);
+        prisma.moderationAction.findUnique.mockResolvedValue({ id: 'ma1', target: 'inquietud', targetId: 'q1', status: 'oculto' });
+        prisma.inquietud.findUnique.mockResolvedValue(inq());
+        await expect(service.appeal(YO, 'ma1', 'No fue mi intención ofender', 'ip')).rejects.toThrow(ForbiddenException);
+      });
+
+      it('restaurar la deja visible y no toca comentarios', async () => {
+        board.roleOf.mockResolvedValue('secretario');
+        prisma.moderationAction.findUnique.mockResolvedValue({ id: 'ma1', target: 'inquietud', targetId: 'q1', status: 'apelado' });
+        prisma.inquietud.update.mockResolvedValue({});
+        prisma.moderationAction.update.mockResolvedValue({});
+        await service.resolveAppeal(YO, 'ma1', true, 'ip');
+        expect(prisma.inquietud.update).toHaveBeenCalledWith({ where: { id: 'q1' }, data: { hidden: false } });
+        expect(prisma.proposalComment.update).not.toHaveBeenCalled();
+      });
+
+      it('la cola de la mesa muestra título y explicación de la inquietud', async () => {
+        board.roleOf.mockResolvedValue('secretario');
+        prisma.moderationAction.findMany.mockResolvedValue([
+          { id: 'ma1', target: 'inquietud', targetId: 'q1', reason: 'Motivo', appealText: 'Apelo', appealedAt: new Date('2026-11-04T00:00:00Z'), createdAt: new Date('2026-11-03T00:00:00Z') },
+        ]);
+        prisma.inquietud.findUnique.mockResolvedValue(inq());
+        const r = await service.listAppeals(YO);
+        expect(r[0]).toEqual(expect.objectContaining({ target: 'inquietud', originalText: 'Arreglar el local\n\nExplicación larga' }));
+      });
     });
   });
 });

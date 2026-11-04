@@ -121,6 +121,12 @@ export class InquietudesService {
 
   async list(profileId: string, groupId: string): Promise<InquietudSummary[]> {
     await this.requireMembership(groupId, profileId);
+    // Reevaluación perezosa: una restaurada o con apoyos nuevos entra en plazo al leer (barata e idempotente).
+    const pendientes = await this.prisma.inquietud.findMany({
+      where: { groupId, status: 'abierta', hidden: false },
+      select: { id: true },
+    });
+    for (const p of pendientes) await this.evaluateThreshold(p.id);
     const rows = (await this.prisma.inquietud.findMany({
       where: { groupId },
       include: { author: { select: { displayName: true } } },
@@ -132,6 +138,7 @@ export class InquietudesService {
   }
 
   async get(profileId: string, id: string): Promise<InquietudDetail> {
+    await this.evaluateThreshold(id);
     const row = (await this.prisma.inquietud.findUnique({
       where: { id },
       include: { author: { select: { displayName: true } } },
