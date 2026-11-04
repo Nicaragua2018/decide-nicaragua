@@ -6,6 +6,7 @@ import {
   Logger,
   NotFoundException,
 } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import type { InquietudDetail, InquietudStatusValue, InquietudSummary } from '@decide/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
@@ -94,7 +95,8 @@ export class InquietudesService {
       supportedByMe: await this.supportedBy(row.id, viewerProfileId),
       threshold,
       deadlineAt: row.deadlineAt ? row.deadlineAt.toISOString() : null,
-      proposalId: row.proposalId,
+      // Oculta, ni siquiera el enlace al debate: ese tema puede repetir su texto.
+      proposalId: row.hidden ? null : row.proposalId,
       authorDisplayName: row.author.displayName,
       createdAt: row.createdAt.toISOString(),
     };
@@ -138,13 +140,19 @@ export class InquietudesService {
   }
 
   async get(profileId: string, id: string): Promise<InquietudDetail> {
+    const read = async (): Promise<InquietudRow | null> =>
+      (await this.prisma.inquietud.findUnique({
+        where: { id },
+        include: { author: { select: { displayName: true } } },
+      })) as InquietudRow | null;
+    const first = await read();
+    if (!first) throw new NotFoundException('Inquietud no encontrada');
+    // Miembros, y quien organiza la agenda aunque no sea miembro (para leer y responder).
+    const organiza = await this.forums.canOrganize(profileId, first.groupId);
+    if (!organiza) await this.requireMembership(first.groupId, profileId);
+    // Solo después de los permisos: un extraño no debe poder mover el estado al leer.
     await this.evaluateThreshold(id);
-    const row = (await this.prisma.inquietud.findUnique({
-      where: { id },
-      include: { author: { select: { displayName: true } } },
-    })) as InquietudRow | null;
-    if (!row) throw new NotFoundException('Inquietud no encontrada');
-    await this.requireMembership(row.groupId, profileId);
+    const row = (await read()) ?? first;
     const base = await this.summary(row, profileId, await this.threshold(row.groupId));
     const isAuthor = row.authorProfileId === profileId;
 
@@ -165,7 +173,7 @@ export class InquietudesService {
       body: row.hidden ? '' : row.body,
       response: row.hidden ? null : row.response,
       respondedAt: row.respondedAt ? row.respondedAt.toISOString() : null,
-      canOrganize: await this.forums.canOrganize(profileId, row.groupId),
+      canOrganize: organiza,
       isAuthor,
       hiddenReason,
       moderationId,
@@ -180,11 +188,16 @@ export class InquietudesService {
     if (!row) throw new NotFoundException('Inquietud no encontrada');
     await this.requireMembership(row.groupId, profileId);
     if (row.hidden) throw new BadRequestException('Esta inquietud está oculta por moderación.');
-    await this.prisma.inquietudApoyo.upsert({
-      where: { inquietudId_profileId: { inquietudId: id, profileId } },
-      create: { inquietudId: id, profileId },
-      update: {},
-    });
+    try {
+      await this.prisma.inquietudApoyo.upsert({
+        where: { inquietudId_profileId: { inquietudId: id, profileId } },
+        create: { inquietudId: id, profileId },
+        update: {},
+      });
+    } catch (err) {
+      // Dos peticiones a la vez: la otra ya creó el apoyo, que es justo lo que se pedía.
+      if (!(err instanceof Prisma.PrismaClientKnownRequestError) || err.code !== 'P2002') throw err;
+    }
     // Apoyar y retirar el apoyo no se audita: la hora exacta podría delatar a quien apoyó.
     await this.evaluateThreshold(id);
   }

@@ -1,15 +1,20 @@
 'use client';
 
 import { useActionState } from 'react';
+import type { InquietudStatusValue } from '@decide/shared';
 import { hideContent, respondInquietud, type ActionResult } from '@/lib/actions';
+
+/** Solo una inquietud abierta o en plazo admite respuesta (igual que en la API). */
+const RESPONDIBLES: readonly InquietudStatusValue[] = ['abierta', 'en_plazo'];
 
 export function OrganizerActions({
   inquietudId,
-  canRespond,
+  status,
 }: {
   inquietudId: string;
-  canRespond: boolean;
+  status: InquietudStatusValue;
 }) {
+  const canRespond = RESPONDIBLES.includes(status);
   const [respState, respAction, responding] = useActionState<ActionResult | null, FormData>(respondInquietud, null);
   const [hideState, hideAction, hiding] = useActionState<ActionResult | null, FormData>(hideContent, null);
 

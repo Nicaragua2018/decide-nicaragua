@@ -240,6 +240,11 @@ export class DeliberationService {
 
     this.requireNotHidden(proposal.hidden);
 
+    // Lo abrió la comunidad al vencer el plazo: quien aparece como autor no puede archivarlo.
+    if (proposal.abiertoPorComunidad === true) {
+      throw new BadRequestException('Este debate lo abrió la comunidad y no se archiva desde aquí.');
+    }
+
     if ((proposal.status as string) === 'closed') {
       throw new BadRequestException('Un tema cerrado con consenso ya no cambia de estado.');
     }

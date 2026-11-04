@@ -15,7 +15,7 @@ function buildPrisma() {
     election: { create: vi.fn(), findUnique: vi.fn(), update: vi.fn() },
     electionResult: { findUnique: vi.fn() },
     electionCandidate: { findUnique: vi.fn() },
-    moderationAction: { create: vi.fn(), findUnique: vi.fn(), findMany: vi.fn(), update: vi.fn() },
+    moderationAction: { create: vi.fn(), findUnique: vi.fn(), findFirst: vi.fn(), findMany: vi.fn(), update: vi.fn() },
     profile: { findUnique: vi.fn() },
     $transaction: vi.fn(),
   };
@@ -450,6 +450,81 @@ describe('ForumsService', () => {
         await service.resolveAppeal(YO, 'ma1', true, 'ip');
         expect(prisma.inquietud.update).toHaveBeenCalledWith({ where: { id: 'q1' }, data: { hidden: false } });
         expect(prisma.proposalComment.update).not.toHaveBeenCalled();
+      });
+
+      describe('debate abierto por la comunidad desde la inquietud', () => {
+        const LINKED = 'Oculto junto con la inquietud de origen.';
+
+        it('ocultar una inquietud abierta_por_la_comunidad oculta su tema y registra la moderación vinculada', async () => {
+          board.roleOf.mockResolvedValue('administrador');
+          prisma.inquietud.findUnique.mockResolvedValue(inq({ status: 'abierta_por_la_comunidad', proposalId: 't1' }));
+          prisma.inquietud.update.mockResolvedValue(inq({ hidden: true, proposalId: 't1' }));
+          prisma.proposal.findUnique.mockResolvedValue({ id: 't1', abiertoPorComunidad: true, hidden: false });
+          prisma.proposal.update.mockResolvedValue({ id: 't1', electionId: 'e1' });
+          prisma.election.findUnique.mockResolvedValue({ status: 'open' });
+          prisma.election.update.mockResolvedValue({});
+          prisma.moderationAction.create.mockResolvedValueOnce({ id: 'ma1' }).mockResolvedValueOnce({ id: 'ma2' });
+          const r = await service.hide(YO, { target: 'inquietud', targetId: 'q1', reason: 'Lenguaje ofensivo' }, 'ip');
+          expect(r).toEqual({ id: 'ma1' });
+          expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+          expect(prisma.proposal.update).toHaveBeenCalledWith({ where: { id: 't1' }, data: { hidden: true } });
+          expect(prisma.election.update).toHaveBeenCalledWith({
+            where: { id: 'e1' },
+            data: { title: 'Votación de un tema oculto', status: 'cancelled' },
+          });
+          expect(prisma.moderationAction.create).toHaveBeenCalledWith({
+            data: { target: 'tema', targetId: 't1', reason: LINKED, moderatorProfileId: YO },
+          });
+        });
+
+        it('un debate abierto a mano (abiertoPorComunidad false) NO se oculta al ocultar una de sus inquietudes', async () => {
+          board.roleOf.mockResolvedValue('administrador');
+          prisma.inquietud.findUnique.mockResolvedValue(inq({ status: 'en_debate', proposalId: 't1' }));
+          prisma.inquietud.update.mockResolvedValue(inq({ hidden: true, proposalId: 't1' }));
+          prisma.proposal.findUnique.mockResolvedValue({ id: 't1', abiertoPorComunidad: false, hidden: false });
+          prisma.moderationAction.create.mockResolvedValue({ id: 'ma1' });
+          await service.hide(YO, { target: 'inquietud', targetId: 'q1', reason: 'Lenguaje ofensivo' }, 'ip');
+          expect(prisma.proposal.update).not.toHaveBeenCalled();
+          expect(prisma.moderationAction.create).toHaveBeenCalledTimes(1);
+        });
+
+        it('restaurar la inquietud restaura también el tema ocultado junto con ella', async () => {
+          board.roleOf.mockResolvedValue('secretario');
+          prisma.moderationAction.findUnique.mockResolvedValue({ id: 'ma1', target: 'inquietud', targetId: 'q1', status: 'apelado' });
+          prisma.inquietud.update.mockResolvedValue(inq({ proposalId: 't1' }));
+          prisma.proposal.findUnique.mockResolvedValue({ id: 't1', abiertoPorComunidad: true, hidden: true });
+          prisma.moderationAction.findFirst.mockResolvedValue({ id: 'ma2', reason: LINKED, status: 'oculto' });
+          prisma.proposal.update.mockResolvedValue({ id: 't1', title: 'Arreglar el local', electionId: 'e1' });
+          prisma.election.update.mockResolvedValue({});
+          prisma.moderationAction.update.mockResolvedValue({});
+          await service.resolveAppeal(YO, 'ma1', true, 'ip');
+          expect(prisma.moderationAction.findFirst).toHaveBeenCalledWith(
+            expect.objectContaining({ where: { target: 'tema', targetId: 't1' }, orderBy: { createdAt: 'desc' } }),
+          );
+          expect(prisma.inquietud.update).toHaveBeenCalledWith({ where: { id: 'q1' }, data: { hidden: false } });
+          expect(prisma.proposal.update).toHaveBeenCalledWith({ where: { id: 't1' }, data: { hidden: false } });
+          expect(prisma.election.update).toHaveBeenCalledWith({ where: { id: 'e1' }, data: { title: 'Votación: Arreglar el local' } });
+          expect(prisma.moderationAction.update).toHaveBeenCalledWith({
+            where: { id: 'ma2' },
+            data: expect.objectContaining({ status: 'restaurado' }),
+          });
+        });
+
+        it('un tema oculto por su propio motivo sigue oculto al restaurar la inquietud', async () => {
+          board.roleOf.mockResolvedValue('secretario');
+          prisma.moderationAction.findUnique.mockResolvedValue({ id: 'ma1', target: 'inquietud', targetId: 'q1', status: 'apelado' });
+          prisma.inquietud.update.mockResolvedValue(inq({ proposalId: 't1' }));
+          prisma.proposal.findUnique.mockResolvedValue({ id: 't1', abiertoPorComunidad: true, hidden: true });
+          prisma.moderationAction.findFirst.mockResolvedValue({ id: 'ma3', reason: 'Datos personales', status: 'oculto' });
+          prisma.moderationAction.update.mockResolvedValue({});
+          await service.resolveAppeal(YO, 'ma1', true, 'ip');
+          expect(prisma.proposal.update).not.toHaveBeenCalled();
+          expect(prisma.moderationAction.update).toHaveBeenCalledTimes(1);
+          expect(prisma.moderationAction.update).toHaveBeenCalledWith({
+            where: { id: 'ma1' },
+            data: expect.objectContaining({ status: 'restaurado' }),
+          });
+        });
       });
 
       it('la cola de la mesa muestra título y explicación de la inquietud', async () => {

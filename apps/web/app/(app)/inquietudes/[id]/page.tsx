@@ -12,6 +12,7 @@ export const metadata: Metadata = { title: 'Inquietud — Decide Nicaragua' };
 export default async function InquietudPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const res = await serverFetch(`/api/inquietudes/${id}`);
+  if (res.status === 403) return <p className="empty-state">No tienes acceso a esta inquietud.</p>;
   if (!res.ok) return <p className="empty-state">Inquietud no encontrada.</p>;
   const q = (await res.json()) as InquietudDetail;
 
@@ -67,7 +68,7 @@ export default async function InquietudPage({ params }: { params: Promise<{ id: 
       )}
 
       {q.canOrganize && !q.hidden && (
-        <OrganizerActions inquietudId={q.id} canRespond={q.status !== 'en_debate'} />
+        <OrganizerActions inquietudId={q.id} status={q.status} />
       )}
     </>
   );

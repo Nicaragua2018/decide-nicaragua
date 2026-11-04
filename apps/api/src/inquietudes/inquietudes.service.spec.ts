@@ -1,6 +1,7 @@
 import 'reflect-metadata';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { BadRequestException, ConflictException, ForbiddenException } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { validate } from 'class-validator';
 import { InquietudesService } from './inquietudes.service';
 import { CreateInquietudDto } from './dto/create-inquietud.dto';
@@ -159,6 +160,15 @@ describe('InquietudesService', () => {
       expect(prisma.inquietudApoyo.upsert).toHaveBeenCalledWith(
         expect.objectContaining({ where: { inquietudId_profileId: { inquietudId: 'i1', profileId: YO } }, update: {} }),
       );
+    });
+
+    it('support simultáneo: si el upsert choca con el índice único (P2002) se trata como éxito', async () => {
+      prisma.inquietudApoyo.upsert.mockRejectedValueOnce(
+        new Prisma.PrismaClientKnownRequestError('dup', { code: 'P2002', clientVersion: 'x' }),
+      );
+      await expect(service.support(YO, 'i1', '1.1.1.1')).resolves.toBeUndefined();
+      prisma.inquietudApoyo.upsert.mockRejectedValueOnce(new Error('otra cosa'));
+      await expect(service.support(YO, 'i1', '1.1.1.1')).rejects.toThrow('otra cosa');
     });
 
     it('support sobre una oculta se rechaza', async () => {
@@ -526,6 +536,37 @@ describe('InquietudesService', () => {
       forums.canOrganize.mockResolvedValue(true);
       prisma.inquietud.findUnique.mockResolvedValue(fila());
       expect((await service.get(YO, 'i1')).canOrganize).toBe(true);
+    });
+
+    it('get(): quien organiza sin ser miembro ve el detalle con canOrganize true', async () => {
+      prisma.groupMembership.findUnique.mockResolvedValue(null);
+      forums.canOrganize.mockResolvedValue(true);
+      prisma.inquietud.findUnique.mockResolvedValue(fila());
+      const d = await service.get(YO, 'i1');
+      expect(d.canOrganize).toBe(true);
+      expect(d.body).toBe('Texto de la explicación');
+    });
+
+    it('get(): un no miembro que no organiza recibe 403 y no se reevalúa el umbral', async () => {
+      prisma.groupMembership.findUnique.mockResolvedValue(null);
+      forums.canOrganize.mockResolvedValue(false);
+      prisma.inquietud.findUnique.mockResolvedValue(fila());
+      prisma.inquietudApoyo.count.mockResolvedValue(3);
+      const spy = vi.spyOn(service, 'evaluateThreshold');
+      await expect(service.get(YO, 'i1')).rejects.toThrow(ForbiddenException);
+      expect(spy).not.toHaveBeenCalled();
+      expect(prisma.inquietud.updateMany).not.toHaveBeenCalled();
+    });
+
+    it('get()/list(): una inquietud oculta no expone el id de su debate', async () => {
+      prisma.inquietud.findUnique.mockResolvedValue(fila({ hidden: true, status: 'abierta_por_la_comunidad', proposalId: 'tema1' }));
+      prisma.moderationAction.findFirst.mockResolvedValue(null);
+      expect((await service.get(YO, 'i1')).proposalId).toBeNull();
+      prisma.inquietud.findMany.mockResolvedValue([fila({ hidden: true, proposalId: 'tema1' }), fila({ id: 'i2', proposalId: 'tema2' })]);
+      const lista = await service.list(YO, G);
+      expect(lista.find((x) => x.id === 'i1')?.proposalId).toBeNull();
+      expect(lista.find((x) => x.id === 'i2')?.proposalId).toBe('tema2');
+      expect(JSON.stringify(lista)).not.toContain('tema1');
     });
   });
 });

@@ -290,6 +290,15 @@ describe('DeliberationService', () => {
       );
     });
 
+    it('un debate abierto por la comunidad no cambia de estado desde aquí', async () => {
+      prisma.proposal.findUnique.mockResolvedValue({ ...mockProposal, abiertoPorComunidad: true });
+      prisma.groupMembership.findUnique.mockResolvedValue(mockMembership);
+      const p = service.updateProposalStatus(PROPOSAL_ID, { status: ProposalStatus.archived }, PROFILE_ID, IP);
+      await expect(p).rejects.toThrow(BadRequestException);
+      await expect(p).rejects.toThrow('Este debate lo abrió la comunidad y no se archiva desde aquí.');
+      expect(prisma.proposal.update).not.toHaveBeenCalled();
+    });
+
     it('un autor sin membresía (suspendido) no cambia el estado', async () => {
       prisma.proposal.findUnique.mockResolvedValue(mockProposal);
       prisma.groupMembership.findUnique.mockResolvedValue(null);

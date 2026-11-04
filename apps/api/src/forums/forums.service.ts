@@ -40,6 +40,11 @@ function checkTarget(target: string): ModTarget {
 
 const voteTitle = (topicTitle: string): string => `Votación: ${topicTitle}`.slice(0, 200);
 
+/** Motivo de la moderación que oculta el debate abierto por la comunidad junto con su inquietud. */
+const LINKED_TOPIC_REASON = 'Oculto junto con la inquietud de origen.';
+
+type Tx = Prisma.TransactionClient;
+
 @Injectable()
 export class ForumsService {
   constructor(
@@ -326,27 +331,36 @@ export class ForumsService {
       throw new ForbiddenException('No tienes permiso para moderar en esta comunidad.');
     }
     const action = await this.prisma.$transaction(async (tx) => {
+      let linkedTopicId: string | null = null;
       if (target === 'tema') {
-        // electionId se relee dentro de la transacción: así se ve una votación abierta justo antes.
-        const t = await tx.proposal.update({ where: { id: dto.targetId }, data: { hidden: true } });
-        const electionId = t?.electionId ?? null;
-        if (electionId) {
-          // La votación repetía el título del tema: se le quita y, si sigue activa, se cancela.
-          const e = await tx.election.findUnique({ where: { id: electionId }, select: { status: true } });
-          const activa = ['draft', 'open'].includes((e?.status as string | undefined) ?? '');
-          await tx.election.update({
-            where: { id: electionId },
-            data: activa ? { title: HIDDEN_VOTE_TITLE, status: 'cancelled' } : { title: HIDDEN_VOTE_TITLE },
-          });
-        }
+        await this.hideTopicTx(tx, dto.targetId);
       } else if (target === 'inquietud') {
-        await tx.inquietud.update({ where: { id: dto.targetId }, data: { hidden: true } });
+        const q = await tx.inquietud.update({ where: { id: dto.targetId }, data: { hidden: true } });
+        // El debate que abrió la comunidad copia el título y el texto de la inquietud: se oculta con ella.
+        // Un debate abierto a mano por quien organiza tiene su propio texto y no se toca.
+        const proposalId = (q as { proposalId?: string | null } | undefined)?.proposalId ?? null;
+        if (proposalId) {
+          const p = await tx.proposal.findUnique({
+            where: { id: proposalId },
+            select: { abiertoPorComunidad: true, hidden: true },
+          });
+          if (p?.abiertoPorComunidad === true && p.hidden === false) {
+            await this.hideTopicTx(tx, proposalId);
+            linkedTopicId = proposalId;
+          }
+        }
       } else {
         await tx.proposalComment.update({ where: { id: dto.targetId }, data: { hidden: true } });
       }
-      return tx.moderationAction.create({
+      const created = await tx.moderationAction.create({
         data: { target, targetId: dto.targetId, reason: dto.reason, moderatorProfileId: profileId },
       });
+      if (linkedTopicId) {
+        await tx.moderationAction.create({
+          data: { target: 'tema', targetId: linkedTopicId, reason: LINKED_TOPIC_REASON, moderatorProfileId: profileId },
+        });
+      }
+      return created;
     });
     void this.audit.log({
       ...(await this.actorId(profileId)),
@@ -404,14 +418,12 @@ export class ForumsService {
     await this.prisma.$transaction(async (tx) => {
       if (restore) {
         if (target === 'tema') {
-          const t = await tx.proposal.update({ where: { id: action.targetId }, data: { hidden: false } });
-          if (t?.electionId) {
-            // Recupera el título, pero una votación cancelada no se reabre.
-            await tx.election.update({ where: { id: t.electionId }, data: { title: voteTitle(t.title) } });
-          }
+          await this.restoreTopicTx(tx, action.targetId);
         } else if (target === 'inquietud') {
           // El estado y el umbral los reevalúa InquietudesService al leerla (sin ciclo entre módulos).
-          await tx.inquietud.update({ where: { id: action.targetId }, data: { hidden: false } });
+          const q = await tx.inquietud.update({ where: { id: action.targetId }, data: { hidden: false } });
+          const proposalId = (q as { proposalId?: string | null } | undefined)?.proposalId ?? null;
+          if (proposalId) await this.restoreLinkedTopicTx(tx, proposalId);
         } else {
           await tx.proposalComment.update({ where: { id: action.targetId }, data: { hidden: false } });
         }
@@ -427,6 +439,54 @@ export class ForumsService {
       resource: `moderation:${moderationId}`,
       ip,
     });
+  }
+
+  /** Oculta un tema; su votación pierde el título y, si sigue activa, se cancela. */
+  private async hideTopicTx(tx: Tx, topicId: string): Promise<void> {
+    // electionId se relee dentro de la transacción: así se ve una votación abierta justo antes.
+    const t = await tx.proposal.update({ where: { id: topicId }, data: { hidden: true } });
+    const electionId = t?.electionId ?? null;
+    if (electionId) {
+      // La votación repetía el título del tema: se le quita y, si sigue activa, se cancela.
+      const e = await tx.election.findUnique({ where: { id: electionId }, select: { status: true } });
+      const activa = ['draft', 'open'].includes((e?.status as string | undefined) ?? '');
+      await tx.election.update({
+        where: { id: electionId },
+        data: activa ? { title: HIDDEN_VOTE_TITLE, status: 'cancelled' } : { title: HIDDEN_VOTE_TITLE },
+      });
+    }
+  }
+
+  /** Vuelve a mostrar un tema; su votación recupera el título, pero una cancelada no se reabre. */
+  private async restoreTopicTx(tx: Tx, topicId: string): Promise<void> {
+    const t = await tx.proposal.update({ where: { id: topicId }, data: { hidden: false } });
+    if (t?.electionId) {
+      await tx.election.update({ where: { id: t.electionId }, data: { title: voteTitle(t.title) } });
+    }
+  }
+
+  /**
+   * Al restaurar una inquietud, su debate abierto por la comunidad vuelve solo si se ocultó
+   * junto con ella (última moderación del tema = la vinculada, aún en «oculto»). Si se ocultó
+   * por su propio motivo, sigue oculto.
+   */
+  private async restoreLinkedTopicTx(tx: Tx, topicId: string): Promise<void> {
+    const p = await tx.proposal.findUnique({
+      where: { id: topicId },
+      select: { abiertoPorComunidad: true, hidden: true },
+    });
+    if (p?.abiertoPorComunidad !== true || p.hidden !== true) return;
+    const latest = await tx.moderationAction.findFirst({
+      where: { target: 'tema', targetId: topicId },
+      orderBy: { createdAt: 'desc' },
+      select: { id: true, reason: true, status: true },
+    });
+    if (!latest || latest.reason !== LINKED_TOPIC_REASON || (latest.status as string) !== 'oculto') return;
+    await tx.moderationAction.update({
+      where: { id: latest.id },
+      data: { status: 'restaurado', resolvedAt: new Date() },
+    });
+    await this.restoreTopicTx(tx, topicId);
   }
 
   private async authorOf(
