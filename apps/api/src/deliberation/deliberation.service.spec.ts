@@ -710,6 +710,23 @@ describe('DeliberationService', () => {
     });
   });
   describe('createTopicInDefaultForum', () => {
+    it('ensureDefaultForum crea el foro con el manejo de P2002 sobre el cliente normal', async () => {
+      prisma.forum.findFirst.mockResolvedValueOnce(null).mockResolvedValueOnce({ id: 'f-otro' });
+      prisma.group.findUnique.mockResolvedValue({ name: 'G' });
+      prisma.forum.create.mockRejectedValue(
+        new Prisma.PrismaClientKnownRequestError('dup', { code: 'P2002', clientVersion: 'x' }),
+      );
+      expect(await service.ensureDefaultForum('g1')).toEqual({ id: 'f-otro' });
+    });
+
+    it('lanza si el foro por defecto no existe dentro de la transacción', async () => {
+      const tx = { forum: { findFirst: vi.fn().mockResolvedValue(null) }, proposal: { create: vi.fn() } };
+      await expect(
+        service.createTopicInDefaultForum(tx as never, { groupId: 'g1', authorProfileId: 'p', title: 't', body: 'b', abiertoPorComunidad: false }),
+      ).rejects.toThrow();
+      expect(tx.proposal.create).not.toHaveBeenCalled();
+    });
+
     it('usa el foro por defecto existente dentro de la transacción y crea el tema abierto', async () => {
       const tx = {
         forum: { findFirst: vi.fn().mockResolvedValue({ id: 'f-def' }), create: vi.fn() },
@@ -727,6 +744,7 @@ describe('DeliberationService', () => {
       expect(tx.forum.findFirst).toHaveBeenCalledWith({ where: { groupId: 'g1', isDefault: true } });
       expect(tx.forum.create).not.toHaveBeenCalled();
       expect(prisma.forum.findFirst).not.toHaveBeenCalled();
+      expect(tx.group.findUnique).not.toHaveBeenCalled();
       expect(tx.proposal.create).toHaveBeenCalledWith({
         data: {
           groupId: 'g1',

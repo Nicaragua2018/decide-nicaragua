@@ -9,7 +9,7 @@ import { RespondDto } from './dto/respond.dto';
 
 function buildPrisma() {
   return {
-    groupMembership: { findUnique: vi.fn(), count: vi.fn() },
+    groupMembership: { findUnique: vi.fn(), count: vi.fn(), findMany: vi.fn() },
     inquietud: { create: vi.fn(), findMany: vi.fn(), findUnique: vi.fn(), updateMany: vi.fn() },
     inquietudApoyo: { upsert: vi.fn(), deleteMany: vi.fn(), count: vi.fn(), findUnique: vi.fn(), findMany: vi.fn() },
     moderationAction: { findFirst: vi.fn() },
@@ -48,7 +48,10 @@ describe('InquietudesService', () => {
   let rules: { getInt: ReturnType<typeof vi.fn> };
   let service: InquietudesService;
   let forums: { canOrganize: ReturnType<typeof vi.fn> };
-  let deliberation: { createTopicInDefaultForum: ReturnType<typeof vi.fn> };
+  let deliberation: {
+    createTopicInDefaultForum: ReturnType<typeof vi.fn>;
+    ensureDefaultForum: ReturnType<typeof vi.fn>;
+  };
   let tx: { inquietud: { updateMany: ReturnType<typeof vi.fn> } };
 
   beforeEach(() => {
@@ -60,7 +63,11 @@ describe('InquietudesService', () => {
       ),
     };
     forums = { canOrganize: vi.fn().mockResolvedValue(false) };
-    deliberation = { createTopicInDefaultForum: vi.fn().mockResolvedValue({ id: 'tema1' }) };
+    deliberation = {
+      createTopicInDefaultForum: vi.fn().mockResolvedValue({ id: 'tema1' }),
+      ensureDefaultForum: vi.fn().mockResolvedValue({ id: 'f1' }),
+    };
+    prisma.groupMembership.findMany.mockResolvedValue([]);
     tx = { inquietud: { updateMany: vi.fn().mockResolvedValue({ count: 1 }) } };
     prisma.$transaction.mockImplementation(async (fn: (t: unknown) => unknown) => fn(tx));
     service = new InquietudesService(
@@ -327,6 +334,10 @@ describe('InquietudesService', () => {
       tx.inquietud.updateMany.mockResolvedValueOnce({ count: 2 }).mockResolvedValueOnce({ count: 2 });
       const r = await service.openDebate(YO, { ...dto, inquietudIds: [ID1, ID2, ID1] }, 'ip');
       expect(r).toEqual({ proposalId: 'tema1' });
+      expect(deliberation.ensureDefaultForum).toHaveBeenCalledWith(G);
+      expect(deliberation.ensureDefaultForum.mock.invocationCallOrder[0]).toBeLessThan(
+        prisma.$transaction.mock.invocationCallOrder[0] ?? 0,
+      );
       expect(tx.inquietud.updateMany).toHaveBeenNthCalledWith(1, {
         where: { id: { in: [ID1, ID2] }, groupId: G, hidden: false, status: { in: ['abierta', 'en_plazo'] } },
         data: { status: 'en_debate' },
@@ -407,6 +418,10 @@ describe('InquietudesService', () => {
       tx.inquietud.updateMany.mockResolvedValue({ count: 1 });
       const n = await service.processDeadlines(now);
       expect(n).toBe(1);
+      expect(deliberation.ensureDefaultForum).toHaveBeenCalledWith(G);
+      expect(deliberation.ensureDefaultForum.mock.invocationCallOrder[0]).toBeLessThan(
+        prisma.$transaction.mock.invocationCallOrder[0] ?? 0,
+      );
       expect(prisma.inquietud.findMany).toHaveBeenCalledWith(
         expect.objectContaining({ where: { status: 'en_plazo', hidden: false, deadlineAt: { lte: now } } }),
       );
@@ -453,7 +468,15 @@ describe('InquietudesService', () => {
     });
 
     it('agenda: 403 si no organiza; si organiza, ordena por plazo y deja fuera abiertas sin apoyo', async () => {
+      prisma.inquietud.findMany.mockResolvedValue([fila({ status: 'en_plazo' })]);
       await expect(service.agenda(YO)).rejects.toThrow('Solo quien organiza la agenda puede verla.');
+      prisma.inquietud.findMany.mockResolvedValue([]);
+      await expect(service.agenda(YO)).rejects.toBeInstanceOf(ForbiddenException);
+      // Organiza solo una comunidad (3C): sin candidatas ahí, la agenda llega vacía, no 403.
+      prisma.groupMembership.findMany.mockResolvedValue([{ groupId: 'g-suya' }]);
+      forums.canOrganize.mockImplementation(async (_p: string, g: string) => g === 'g-suya');
+      expect(await service.agenda(YO)).toEqual([]);
+      forums.canOrganize.mockReset();
       forums.canOrganize.mockResolvedValue(true);
       const f = (id: string, deadlineAt: Date | null, status: string) => fila({ id, status, deadlineAt });
       prisma.inquietud.findMany.mockResolvedValue([

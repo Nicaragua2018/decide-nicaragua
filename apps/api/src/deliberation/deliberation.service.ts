@@ -80,13 +80,16 @@ export class DeliberationService {
 
   /**
    * Crea un tema abierto en el foro por defecto del grupo, dentro de la transacción de quien llama.
+   * El foro debe existir ya: quien llama invoca antes ensureDefaultForum fuera de la transacción
+   * (una violación de unicidad dentro de una transacción de Postgres la aborta).
    * No audita ni exige membresía: quien llama ya validó permisos.
    */
   async createTopicInDefaultForum(
     tx: Prisma.TransactionClient,
     input: { groupId: string; authorProfileId: string; title: string; body: string; abiertoPorComunidad: boolean },
   ): Promise<{ id: string }> {
-    const forum = await this.defaultForum(input.groupId, tx);
+    const forum = await tx.forum.findFirst({ where: { groupId: input.groupId, isDefault: true } });
+    if (!forum) throw new Error('El foro por defecto no existe; falta llamar a ensureDefaultForum.');
     const created = await tx.proposal.create({
       data: {
         groupId: input.groupId,
@@ -379,22 +382,24 @@ export class DeliberationService {
     }
   }
 
+  /** Garantiza el foro por defecto del grupo (fuera de toda transacción) para quien abrirá temas en una. */
+  async ensureDefaultForum(groupId: string): Promise<{ id: string }> {
+    return this.defaultForum(groupId);
+  }
+
   /** Foro por defecto del grupo; se crea al vuelo la primera vez. */
-  private async defaultForum(
-    groupId: string,
-    db: Prisma.TransactionClient | PrismaService = this.prisma,
-  ): Promise<{ id: string }> {
-    const existing = await db.forum.findFirst({ where: { groupId, isDefault: true } });
+  private async defaultForum(groupId: string): Promise<{ id: string }> {
+    const existing = await this.prisma.forum.findFirst({ where: { groupId, isDefault: true } });
     if (existing) return existing;
-    const group = await db.group.findUnique({ where: { id: groupId } });
+    const group = await this.prisma.group.findUnique({ where: { id: groupId } });
     try {
-      return await db.forum.create({
+      return await this.prisma.forum.create({
         data: { groupId, title: `Foro de ${group?.name ?? 'la comunidad'}`, isDefault: true },
       });
     } catch (err) {
       // Otra petición lo creó a la vez (índice único parcial): se relee.
       if (!(err instanceof Prisma.PrismaClientKnownRequestError) || err.code !== 'P2002') throw err;
-      const creado = await db.forum.findFirst({ where: { groupId, isDefault: true } });
+      const creado = await this.prisma.forum.findFirst({ where: { groupId, isDefault: true } });
       if (!creado) throw err;
       return creado;
     }

@@ -8,6 +8,7 @@ const HORA_MS = 3_600_000;
 export class InquietudesScheduler implements OnApplicationBootstrap, OnModuleDestroy {
   private readonly logger = new Logger(InquietudesScheduler.name);
   private timer: NodeJS.Timeout | null = null;
+  private running = false;
 
   constructor(private readonly inquietudes: InquietudesService) {}
 
@@ -24,11 +25,15 @@ export class InquietudesScheduler implements OnApplicationBootstrap, OnModuleDes
   }
 
   async run(): Promise<void> {
+    if (this.running) return;
+    this.running = true;
     try {
       const n = await this.inquietudes.processDeadlines(new Date());
       if (n > 0) this.logger.log(`Inquietudes abiertas por la comunidad: ${n}`);
     } catch (err) {
       this.logger.error(`Falló la revisión de plazos: ${err instanceof Error ? err.name : 'error'}`);
+    } finally {
+      this.running = false;
     }
   }
 }

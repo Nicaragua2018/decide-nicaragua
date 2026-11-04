@@ -219,10 +219,6 @@ export class InquietudesService {
 
   /** Inquietudes que la mesa debe atender: en plazo, o abiertas con al menos un apoyo. */
   async agenda(profileId: string): Promise<InquietudSummary[]> {
-    // Con la regla actual (mesa directiva) organizar no depende de la comunidad.
-    if (!(await this.forums.canOrganize(profileId, ''))) {
-      throw new ForbiddenException('Solo quien organiza la agenda puede verla.');
-    }
     const rows = (await this.prisma.inquietud.findMany({
       where: {
         hidden: false,
@@ -231,15 +227,21 @@ export class InquietudesService {
       include: { author: { select: { displayName: true } } },
     })) as InquietudRow[];
     const organiza = new Map<string, boolean>();
+    const puede = async (groupId: string): Promise<boolean> => {
+      if (!organiza.has(groupId)) organiza.set(groupId, await this.forums.canOrganize(profileId, groupId));
+      return organiza.get(groupId) === true;
+    };
     const thresholds = new Map<string, number>();
     const result: InquietudSummary[] = [];
     for (const r of rows) {
-      if (!organiza.has(r.groupId)) organiza.set(r.groupId, await this.forums.canOrganize(profileId, r.groupId));
-      if (!organiza.get(r.groupId)) continue;
+      if (!(await puede(r.groupId))) continue;
       if (!thresholds.has(r.groupId)) thresholds.set(r.groupId, await this.threshold(r.groupId));
       const s = await this.summary(r, profileId, thresholds.get(r.groupId) ?? 0);
       if (s.status === 'abierta' && s.supportCount < 1) continue;
       result.push(s);
+    }
+    if (result.length === 0 && !(await this.organizaAlgunaComunidad(profileId, puede))) {
+      throw new ForbiddenException('Solo quien organiza la agenda puede verla.');
     }
     return result.sort((a, b) => {
       if (a.deadlineAt === b.deadlineAt) return 0;
@@ -247,6 +249,16 @@ export class InquietudesService {
       if (b.deadlineAt === null) return -1;
       return a.deadlineAt.localeCompare(b.deadlineAt);
     });
+  }
+
+  /** Quien organiza alguna comunidad de la que es miembro (o por regla general) puede ver la agenda. */
+  private async organizaAlgunaComunidad(
+    profileId: string,
+    puede: (groupId: string) => Promise<boolean>,
+  ): Promise<boolean> {
+    const mine = await this.prisma.groupMembership.findMany({ where: { profileId }, select: { groupId: true } });
+    for (const m of mine ?? []) if (await puede(m.groupId)) return true;
+    return false;
   }
 
   async openDebate(
@@ -268,6 +280,8 @@ export class InquietudesService {
       throw new BadRequestException('Solo se pueden juntar inquietudes abiertas o en plazo.');
     }
 
+    const actor = await this.actorId(profileId);
+    await this.deliberation.ensureDefaultForum(dto.groupId);
     const proposalId = await this.prisma.$transaction(async (tx) => {
       const res = await tx.inquietud.updateMany({
         where: { id: { in: ids }, groupId: dto.groupId, hidden: false, status: { in: [...ESTADOS_ABIERTOS] } },
@@ -286,7 +300,7 @@ export class InquietudesService {
     });
 
     void this.audit.log({
-      ...(await this.actorId(profileId)),
+      ...actor,
       action: 'inquietud.debate_opened',
       resource: `proposal:${proposalId}`,
       ip,
@@ -305,13 +319,14 @@ export class InquietudesService {
     if (row.hidden || !(ESTADOS_ABIERTOS as readonly string[]).includes(row.status as string)) {
       throw new BadRequestException('Esta inquietud ya no admite respuesta.');
     }
+    const actor = await this.actorId(profileId);
     const res = await this.prisma.inquietud.updateMany({
       where: { id, hidden: false, status: { in: [...ESTADOS_ABIERTOS] } },
       data: { status: 'respondida', response: text, respondedAt: new Date(), respondedByProfileId: profileId },
     });
     if (res.count === 0) throw new ConflictException('Esta inquietud ya cambió de estado.');
     void this.audit.log({
-      ...(await this.actorId(profileId)),
+      ...actor,
       action: 'inquietud.responded',
       resource: `inquietud:${id}`,
       ip,
@@ -328,6 +343,7 @@ export class InquietudesService {
     let opened = 0;
     for (const i of due) {
       try {
+        await this.deliberation.ensureDefaultForum(i.groupId);
         const proposalId = await this.prisma.$transaction(async (tx) => {
           const res = await tx.inquietud.updateMany({
             where: { id: i.id, status: 'en_plazo', hidden: false, deadlineAt: { lte: now } },
