@@ -47,6 +47,20 @@ export default function NavBar({ displayName, email, status }: NavBarProps) {
               Foros
             </Link>
           )}
+          {status === 'verified_citizen' && (
+            <Link
+              href="/inquietudes"
+              className={`navbar-link${isActive('/inquietudes') ? ' navbar-link-active' : ''}`}
+            >
+              Inquietudes
+            </Link>
+          )}
+          <Link
+            href="/reglas"
+            className={`navbar-link${isActive('/reglas') ? ' navbar-link-active' : ''}`}
+          >
+            Reglas
+          </Link>
           <Link
             href="/verificaciones"
             className={`navbar-link${isActive('/verificaciones') ? ' navbar-link-active' : ''}`}

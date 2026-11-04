@@ -109,6 +109,25 @@ export default async function ProposalPage({
         </p>
       </div>
 
+      {proposal.abiertoPorComunidad && (
+        <p className="mb-4">
+          <span className="badge badge-open">Abierto por la comunidad: no hubo respuesta en el plazo</span>
+        </p>
+      )}
+
+      {proposal.inquietudes.length > 0 && (
+        <div className="card mb-4">
+          <p className="card-title">Nace de estas inquietudes</p>
+          <ul className="mt-2">
+            {proposal.inquietudes.map((q) => (
+              <li key={q.id}>
+                <Link href={`/inquietudes/${q.id}`}>{q.title}</Link>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
       {/* Cuerpo de la propuesta */}
       <div className="card mb-4">
         {proposal.hidden ? (
