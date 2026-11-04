@@ -394,6 +394,29 @@ El diseño «Primeros 200» (spec §7) pide foros por comunidad y uno general, p
 
 ---
 
+## ADR-018: Ciclo de la comunidad: inquietudes, agenda y reglas en dos niveles (2026-11-04)
+**Fecha:** 2026-11-04
+**Estado:** Aceptado
+
+### Contexto
+El diseño del plan 3A (`docs/superpowers/specs/2026-11-04-plan-3a-ciclo-comunitario-design.md`) pone a los cargos al servicio de la conversación de la comunidad. Lo que la gente plantea debe llegar a debate o recibir una respuesta pública.
+
+### Decisión
+- Cualquier miembro plantea una **inquietud** en una de sus comunidades y los demás la apoyan. Se muestra cuántos apoyan, nunca quiénes.
+- **Garantía de respuesta:** al llegar al umbral (el mayor entre 3 personas y el 10 % de los miembros, reglas locales), quien organiza la agenda tiene 7 días (regla local, máximo 30) para abrir un debate o responder en público. Si no responde, un proceso horario abre el debate solo, con la etiqueta «Abierto por la comunidad».
+- Quien organiza puede juntar varias inquietudes de la misma comunidad en un solo debate.
+- Organizar la agenda es `ForumsService.canOrganize`, que hoy equivale a la mesa. El plan 3C suma a los coordinadores de cada comunidad.
+- **Reglas en dos niveles:** reglas de la colmena y reglas locales de cada comunidad, con valores por defecto y límites fijados por la colmena. Se guardan en `rule_values` solo cuando cambian, y la página «Reglas» las muestra.
+- Los apoyos se cuentan solo si la persona sigue siendo miembro, y **no se registran en la auditoría**: la hora exacta podría delatar quién apoyó.
+- Las inquietudes se moderan igual que los temas y las respuestas, con motivo, apelación y resolución de la mesa.
+
+### Consecuencias
+- Cambiar una regla por votación llega en el plan 3A-3, junto con la votación de soluciones, las bifurcaciones y las comisiones. El debate con frases al estilo Pol.is llega en 3A-2 y el agente asistente en 3B.
+- Las reglas de la colmena se muestran pero todavía no las lee el código existente. El plan 3C las conecta.
+- No hay rastro de auditoría de los apoyos, a cambio de proteger a quien apoya.
+
+---
+
 ## Decisiones pendientes
 
 | ID | Pregunta | Prioridad |

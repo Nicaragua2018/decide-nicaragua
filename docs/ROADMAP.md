@@ -32,6 +32,18 @@ Base del diseño «Primeros 200» entregada en las tareas 1 a 9:
 
 ---
 
+## Primeros 200 — Plan 3A-1 (reglas e inquietudes): COMPLETO
+
+Primera entrega del ciclo de la comunidad (ADR-018):
+
+- [x] Reglas en dos niveles (colmena y locales) con valores por defecto, límites y página «Reglas» (también pública para las de la colmena)
+- [x] Inquietudes con apoyo anónimo, umbral y plazo de respuesta
+- [x] Agenda: abrir debates (juntando inquietudes), responder en público y apertura automática al vencer el plazo
+- [x] Moderación de inquietudes con apelación
+- [x] Web: «Inquietudes», detalle, «Agenda», «Reglas» y origen del debate en cada tema
+
+---
+
 ## Primeros 200 — Plan 2 (foros): COMPLETO
 
 Foros, propuestas formales, consensos públicos y moderación (ADR-017):
