@@ -63,6 +63,13 @@ enum ModerationTarget {
   tema
   respuesta
   inquietud
+  frase
+}
+
+enum FraseVotoValor {
+  de_acuerdo
+  en_desacuerdo
+  paso
 }
 
 enum InquietudStatus {
@@ -194,6 +201,8 @@ model Profile {
   moderationsDone       ModerationAction[]      @relation("Moderator")
   inquietudes           Inquietud[]
   inquietudApoyos       InquietudApoyo[]
+  frases                Frase[]
+  frasesVotos           FraseVoto[]
 
   @@map("profiles")
 }
@@ -279,6 +288,7 @@ model Proposal {
   comments    ProposalComment[]
   signals     ConsensusSignal[]
   inquietudes Inquietud[]
+  frases      Frase[]
 
   @@index([forumId])
   @@index([groupId, status])
@@ -747,4 +757,39 @@ model InquietudApoyo {
 
   @@unique([inquietudId, profileId])
   @@map("inquietud_apoyos")
+}
+
+/**
+ * Frase — afirmación corta escrita por un miembro sobre una propuesta;
+ * el grupo vota de acuerdo / en desacuerdo / paso.
+ */
+model Frase {
+  id              String   @id @default(uuid()) @db.Uuid
+  proposalId      String   @db.Uuid
+  proposal        Proposal @relation(fields: [proposalId], references: [id], onDelete: Cascade)
+  authorProfileId String   @db.Uuid
+  author          Profile  @relation(fields: [authorProfileId], references: [id])
+  text            String   @db.VarChar(140)
+  hidden          Boolean  @default(false)
+  createdAt       DateTime @default(now()) @db.Timestamptz
+
+  votos FraseVoto[]
+
+  @@index([proposalId])
+  @@map("frases")
+}
+
+model FraseVoto {
+  id        String         @id @default(uuid()) @db.Uuid
+  fraseId   String         @db.Uuid
+  frase     Frase          @relation(fields: [fraseId], references: [id], onDelete: Cascade)
+  profileId String         @db.Uuid
+  profile   Profile        @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  value     FraseVotoValor
+  createdAt DateTime       @default(now()) @db.Timestamptz
+  updatedAt DateTime       @updatedAt @db.Timestamptz
+
+  @@unique([fraseId, profileId])
+  @@index([profileId])
+  @@map("frase_votos")
 }
