@@ -18,6 +18,7 @@ import { VerificationModule } from './verification/verification.module';
 import { ForumsModule } from './forums/forums.module';
 import { NewsletterModule } from './newsletter/newsletter.module';
 import { RulesModule } from './rules/rules.module';
+import { InquietudesModule } from './inquietudes/inquietudes.module';
 
 @Module({
   imports: [
@@ -55,6 +56,7 @@ import { RulesModule } from './rules/rules.module';
     ForumsModule,
     NewsletterModule,
     RulesModule,
+    InquietudesModule,
   ],
   providers: [
     // ThrottlerGuard aplicado globalmente a todos los endpoints
