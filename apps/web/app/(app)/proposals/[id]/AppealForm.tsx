@@ -3,7 +3,7 @@
 import { useActionState } from 'react';
 import { appealModeration, type ActionResult } from '@/lib/actions';
 
-export function AppealForm({ moderationId, topicId }: { moderationId: string; topicId: string }) {
+export function AppealForm({ moderationId, topicId, inquietudId }: { moderationId: string; topicId?: string; inquietudId?: string }) {
   const [state, action, pending] = useActionState<ActionResult | null, FormData>(appealModeration, null);
 
   if (state && 'success' in state) {
@@ -13,7 +13,8 @@ export function AppealForm({ moderationId, topicId }: { moderationId: string; to
   return (
     <form action={action} className="form">
       <input type="hidden" name="moderationId" value={moderationId} />
-      <input type="hidden" name="topicId" value={topicId} />
+      {topicId && <input type="hidden" name="topicId" value={topicId} />}
+      {inquietudId && <input type="hidden" name="inquietudId" value={inquietudId} />}
       <textarea
         name="text"
         className="form-textarea"

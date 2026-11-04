@@ -78,6 +78,33 @@ export class DeliberationService {
     return { id: proposal.id };
   }
 
+  /**
+   * Crea un tema abierto en el foro por defecto del grupo, dentro de la transacción de quien llama.
+   * El foro debe existir ya: quien llama invoca antes ensureDefaultForum fuera de la transacción
+   * (una violación de unicidad dentro de una transacción de Postgres la aborta).
+   * No audita ni exige membresía: quien llama ya validó permisos.
+   */
+  async createTopicInDefaultForum(
+    tx: Prisma.TransactionClient,
+    input: { groupId: string; authorProfileId: string; title: string; body: string; abiertoPorComunidad: boolean },
+  ): Promise<{ id: string }> {
+    const forum = await tx.forum.findFirst({ where: { groupId: input.groupId, isDefault: true } });
+    if (!forum) throw new Error('El foro por defecto no existe; falta llamar a ensureDefaultForum.');
+    const created = await tx.proposal.create({
+      data: {
+        groupId: input.groupId,
+        forumId: forum.id,
+        kind: 'tema',
+        authorProfileId: input.authorProfileId,
+        title: input.title,
+        body: input.body,
+        status: 'open',
+        abiertoPorComunidad: input.abiertoPorComunidad,
+      },
+    });
+    return { id: created.id };
+  }
+
   async listGroupProposals(groupId: string, profileId: string): Promise<ProposalListResponse> {
     await this.requireMembership(groupId, profileId);
 
@@ -119,6 +146,7 @@ export class DeliberationService {
           orderBy: { createdAt: 'asc' },
         },
         _count: { select: { comments: true } },
+        inquietudes: { where: { hidden: false }, select: { id: true, title: true } },
       },
     });
 
@@ -184,6 +212,8 @@ export class DeliberationService {
       moderationId: topicInfo?.moderationId ?? null,
       // Lo calcula ForumsService (Tarea 4/5); este servicio no conoce los permisos de moderación.
       canModerate: false,
+      abiertoPorComunidad: proposal.abiertoPorComunidad,
+      inquietudes: (proposal.inquietudes ?? []).map((i) => ({ id: i.id, title: i.title })),
     };
 
     return proposal.hidden ? redactHiddenTopic(detail) : detail;
@@ -209,6 +239,11 @@ export class DeliberationService {
     await this.requireMembership(proposal.groupId, profileId);
 
     this.requireNotHidden(proposal.hidden);
+
+    // Lo abrió la comunidad al vencer el plazo: quien aparece como autor no puede archivarlo.
+    if (proposal.abiertoPorComunidad === true) {
+      throw new BadRequestException('Este debate lo abrió la comunidad y no se archiva desde aquí.');
+    }
 
     if ((proposal.status as string) === 'closed') {
       throw new BadRequestException('Un tema cerrado con consenso ya no cambia de estado.');
@@ -352,6 +387,11 @@ export class DeliberationService {
     }
   }
 
+  /** Garantiza el foro por defecto del grupo (fuera de toda transacción) para quien abrirá temas en una. */
+  async ensureDefaultForum(groupId: string): Promise<{ id: string }> {
+    return this.defaultForum(groupId);
+  }
+
   /** Foro por defecto del grupo; se crea al vuelo la primera vez. */
   private async defaultForum(groupId: string): Promise<{ id: string }> {
     const existing = await this.prisma.forum.findFirst({ where: { groupId, isDefault: true } });
@@ -433,6 +473,7 @@ function redactHiddenTopic(detail: ProposalDetail): ProposalDetail {
     electionId: null,
     electionStatus: null,
     comments: [],
+    inquietudes: [],
   };
 }
 

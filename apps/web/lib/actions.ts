@@ -391,23 +391,39 @@ export async function closeTopic(_prev: ActionResult | null, formData: FormData)
   return { success: true };
 }
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const isUuid = (v: unknown): v is string => typeof v === 'string' && UUID_RE.test(v);
+const INVALID: ActionResult = { error: 'Solicitud no válida.' };
+
+/** Refresca la pantalla del contenido moderado: un tema o una inquietud. */
+function revalidateContent(formData: FormData): void {
+  const topicId = formData.get('topicId');
+  const inquietudId = formData.get('inquietudId');
+  if (isUuid(topicId)) revalidatePath(`/proposals/${topicId}`);
+  if (isUuid(inquietudId)) {
+    revalidatePath(`/inquietudes/${inquietudId}`);
+    revalidatePath('/inquietudes');
+  }
+}
+
 export async function hideContent(_prev: ActionResult | null, formData: FormData): Promise<ActionResult> {
   const res = await actionFetch('/api/forums/moderation/hide', {
     method: 'POST',
     body: JSON.stringify({ target: formData.get('target'), targetId: formData.get('targetId'), reason: formData.get('reason') }),
   });
   if (!res.ok) return { error: await parseError(res) };
-  revalidatePath(`/proposals/${String(formData.get('topicId'))}`);
+  revalidateContent(formData);
   return { success: true };
 }
 
 export async function appealModeration(_prev: ActionResult | null, formData: FormData): Promise<ActionResult> {
+  if (!isUuid(formData.get('moderationId'))) return INVALID;
   const res = await actionFetch(`/api/forums/moderation/${String(formData.get('moderationId'))}/appeal`, {
     method: 'POST',
     body: JSON.stringify({ text: formData.get('text') }),
   });
   if (!res.ok) return { error: await parseError(res) };
-  revalidatePath(`/proposals/${String(formData.get('topicId'))}`);
+  revalidateContent(formData);
   return { success: true };
 }
 
@@ -418,5 +434,71 @@ export async function resolveAppeal(moderationId: string, restore: boolean): Pro
   });
   if (!res.ok) return { error: await parseError(res) };
   revalidatePath('/admin/mesa');
+  return { success: true };
+}
+
+// ─── Inquietudes y reglas ─────────────────────────────────────────────────────
+
+export async function createInquietud(_prev: ActionResult | null, formData: FormData): Promise<ActionResult> {
+  const groupId = formData.get('groupId');
+  if (!isUuid(groupId)) return INVALID;
+  const res = await actionFetch('/api/inquietudes', {
+    method: 'POST',
+    body: JSON.stringify({ groupId, title: formData.get('title'), body: formData.get('body') }),
+  });
+  if (!res.ok) return { error: await parseError(res) };
+  revalidatePath('/inquietudes');
+  return { success: true };
+}
+
+export async function supportInquietud(id: string): Promise<ActionResult> {
+  if (!isUuid(id)) return INVALID;
+  const res = await actionFetch(`/api/inquietudes/${id}/apoyo`, { method: 'POST' });
+  if (!res.ok) return { error: await parseError(res) };
+  revalidatePath('/inquietudes');
+  revalidatePath(`/inquietudes/${id}`);
+  return { success: true };
+}
+
+export async function unsupportInquietud(id: string): Promise<ActionResult> {
+  if (!isUuid(id)) return INVALID;
+  const res = await actionFetch(`/api/inquietudes/${id}/apoyo`, { method: 'DELETE' });
+  if (!res.ok) return { error: await parseError(res) };
+  revalidatePath('/inquietudes');
+  revalidatePath(`/inquietudes/${id}`);
+  return { success: true };
+}
+
+export async function openDebate(_prev: ActionResult | null, formData: FormData): Promise<ActionResult> {
+  const groupId = formData.get('groupId');
+  const inquietudIds = formData.getAll('inquietudIds').map(String);
+  if (!isUuid(groupId) || inquietudIds.length === 0 || !inquietudIds.every(isUuid)) return INVALID;
+  const res = await actionFetch('/api/inquietudes/debates', {
+    method: 'POST',
+    body: JSON.stringify({
+      groupId,
+      inquietudIds,
+      title: formData.get('title'),
+      body: formData.get('body'),
+    }),
+  });
+  if (!res.ok) return { error: await parseError(res) };
+  const data = (await res.json()) as { proposalId: string };
+  revalidatePath('/inquietudes');
+  revalidatePath('/inquietudes/agenda');
+  redirect(`/proposals/${data.proposalId}`);
+}
+
+export async function respondInquietud(_prev: ActionResult | null, formData: FormData): Promise<ActionResult> {
+  const id = formData.get('inquietudId');
+  if (!isUuid(id)) return INVALID;
+  const res = await actionFetch(`/api/inquietudes/${id}/respuesta`, {
+    method: 'POST',
+    body: JSON.stringify({ text: formData.get('text') }),
+  });
+  if (!res.ok) return { error: await parseError(res) };
+  revalidatePath(`/inquietudes/${id}`);
+  revalidatePath('/inquietudes');
+  revalidatePath('/inquietudes/agenda');
   return { success: true };
 }

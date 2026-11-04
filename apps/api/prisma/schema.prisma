@@ -15,60 +15,67 @@ datasource db {
 
 /**
  * AccountStatus — ciclo de vida de una cuenta de usuario.
- *
  * Flujo:
- *   invited → pending_verification → verified_citizen | observer | external_collaborator
- *                                  → rejected
- *   (estado activo) → suspended
- *
+ * invited → pending_verification → verified_citizen | observer | external_collaborator
+ * → rejected
+ * (estado activo) → suspended
  * Nota: combina estado del ciclo de vida y nivel de acceso para MVP.
  * Ver docs/DECISIONS.md ADR-009.
  */
 enum GroupType {
-  territorial_origin    // Agrupado por departamento de Nicaragua de nacimiento
+  territorial_origin // Agrupado por departamento de Nicaragua de nacimiento
   territorial_residence // Agrupado por país de residencia
-  custom                // Creado manualmente por un administrador
+  custom // Creado manualmente por un administrador
 }
 
 enum SortitionStatus {
-  pending    // Creado, pendiente de ejecución
-  completed  // Ejecutado — resultado y semilla disponibles
-  cancelled  // Cancelado por el creador
+  pending // Creado, pendiente de ejecución
+  completed // Ejecutado — resultado y semilla disponibles
+  cancelled // Cancelado por el creador
 }
 
 enum ElectionStatus {
-  draft     // Borrador — no acepta votos
-  open      // Abierta — acepta votos hasta endsAt
-  tallied   // Contada — resultado disponible
+  draft // Borrador — no acepta votos
+  open // Abierta — acepta votos hasta endsAt
+  tallied // Contada — resultado disponible
   cancelled // Cancelada por el creador
 }
 
 enum ProposalStatus {
-  draft    // Borrador visible solo para el autor
-  open     // Abierta a comentarios y señales
-  closed   // Cerrada por el autor; no acepta nuevas señales ni comentarios
+  draft // Borrador visible solo para el autor
+  open // Abierta a comentarios y señales
+  closed // Cerrada por el autor; no acepta nuevas señales ni comentarios
   archived // Archivada; solo lectura
 }
 
 enum SignalType {
-  support  // Apoya la propuesta
-  neutral  // Neutral / necesita más información
-  object   // Objeta la propuesta
+  support // Apoya la propuesta
+  neutral // Neutral / necesita más información
+  object // Objeta la propuesta
 }
 
 enum ProposalKind {
-  tema      // debate abierto
+  tema // debate abierto
   propuesta // propuesta formal: plazo de deliberación y luego votación
 }
 
 enum ModerationTarget {
   tema
   respuesta
+  inquietud
+}
+
+enum InquietudStatus {
+  abierta
+  en_plazo
+  en_debate
+  respondida
+  abierta_por_la_comunidad
 }
 
 enum ModerationStatus {
-  oculto     // ocultado por la moderación
-  apelado    // el autor apeló
+  oculto // ocultado por la moderación
+  apelado // el autor apeló
   restaurado // la mesa lo devolvió a la vista
   confirmado // la mesa mantuvo la moderación tras la apelación
 }
@@ -96,7 +103,7 @@ enum SeatSource {
 
 enum ReferenceKind {
   invitador // quien invitó a la persona
-  segunda   // administrador u otro miembro del mismo territorio o comunidad de acogida
+  segunda // administrador u otro miembro del mismo territorio o comunidad de acogida
 }
 
 enum BoardActionType {
@@ -115,34 +122,33 @@ enum BoardActionStatus {
 
 /**
  * User — identidad privada del usuario.
- *
  * Esta tabla contiene PII (email, hash de contraseña).
  * Los módulos de negocio deben operar con Profile, no con User directamente.
  * Solo AuthModule y UsersModule acceden a esta tabla.
  */
 model User {
-  id              String        @id @default(uuid()) @db.Uuid
-  email           String        @unique
-  passwordHash    String?       // Null mientras la invitación no ha sido aceptada
+  id           String  @id @default(uuid()) @db.Uuid
+  email        String  @unique
+  passwordHash String? // Null mientras la invitación no ha sido aceptada
 
-  status          AccountStatus @default(invited)
+  status AccountStatus @default(invited)
 
   // Trazabilidad de invitación
-  invitedById     String?       @db.Uuid
-  invitedBy       User?         @relation("UserInvitations", fields: [invitedById], references: [id])
-  invitations     User[]        @relation("UserInvitations")
+  invitedById String? @db.Uuid
+  invitedBy   User?   @relation("UserInvitations", fields: [invitedById], references: [id])
+  invitations User[]  @relation("UserInvitations")
 
   // Token de invitación (one-time, expira en 72h)
-  inviteToken     String?       @unique
-  inviteExpiresAt DateTime?     @db.Timestamptz
+  inviteToken     String?   @unique
+  inviteExpiresAt DateTime? @db.Timestamptz
 
-  createdAt       DateTime      @default(now()) @db.Timestamptz
-  updatedAt       DateTime      @updatedAt @db.Timestamptz
-  lastLoginAt     DateTime?     @db.Timestamptz
+  createdAt   DateTime  @default(now()) @db.Timestamptz
+  updatedAt   DateTime  @updatedAt @db.Timestamptz
+  lastLoginAt DateTime? @db.Timestamptz
 
   // Relaciones
-  profile         Profile?
-  auditEvents     AuditEvent[]  @relation("AuditEventActor")
+  profile            Profile?
+  auditEvents        AuditEvent[]            @relation("AuditEventActor")
   referencesReceived VerificationReference[] @relation("ReferencesReceived")
 
   @@index([email])
@@ -153,40 +159,41 @@ model User {
 
 /**
  * Profile — perfil operativo público/semi-público.
- *
  * Separado de User para permitir anonimización parcial.
  * Los módulos de deliberación, votación y grupos usan profile_id.
  */
 model Profile {
-  id               String   @id @default(uuid()) @db.Uuid
-  userId           String   @unique @db.Uuid
-  user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id     String @id @default(uuid()) @db.Uuid
+  userId String @unique @db.Uuid
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  displayName      String
-  birthDepartment  String?  // Departamento de Nicaragua de origen
-  currentCountry   String?  // País de residencia actual (ISO 3166-1 alpha-2)
-  currentRegion    String?  // En EE. UU.: estado (código de 2 letras). Null fuera de EE. UU.
+  displayName     String
+  birthDepartment String? // Departamento de Nicaragua de origen
+  currentCountry  String? // País de residencia actual (ISO 3166-1 alpha-2)
+  currentRegion   String? // En EE. UU.: estado (código de 2 letras). Null fuera de EE. UU.
 
   // Si el perfil es visible para otros usuarios de la plataforma
-  isPublic         Boolean  @default(false)
+  isPublic Boolean @default(false)
 
-  createdAt        DateTime          @default(now()) @db.Timestamptz
-  updatedAt        DateTime          @updatedAt @db.Timestamptz
+  createdAt DateTime @default(now()) @db.Timestamptz
+  updatedAt DateTime @updatedAt @db.Timestamptz
 
-  memberships      GroupMembership[]
-  proposals        Proposal[]
-  comments         ProposalComment[]
-  signals          ConsensusSignal[]
-  electionsCreated      Election[]        @relation("ElectionCreator")
+  memberships           GroupMembership[]
+  proposals             Proposal[]
+  comments              ProposalComment[]
+  signals               ConsensusSignal[]
+  electionsCreated      Election[]              @relation("ElectionCreator")
   ballots               Ballot[]
-  sortitionDrawsCreated SortitionDraw[]   @relation("SortitionCreator")
+  sortitionDrawsCreated SortitionDraw[]         @relation("SortitionCreator")
   sortitionSelections   SortitionMember[]
   boardSeats            BoardSeat[]
   referencesGiven       VerificationReference[] @relation("ReferencesGiven")
   boardApprovals        BoardApproval[]
   boardActionsProposed  BoardAction[]           @relation("BoardActionProposer")
-  forumsCreated    Forum[]            @relation("ForumCreator")
-  moderationsDone  ModerationAction[] @relation("Moderator")
+  forumsCreated         Forum[]                 @relation("ForumCreator")
+  moderationsDone       ModerationAction[]      @relation("Moderator")
+  inquietudes           Inquietud[]
+  inquietudApoyos       InquietudApoyo[]
 
   @@map("profiles")
 }
@@ -198,19 +205,21 @@ model Profile {
 model Group {
   id          String    @id @default(uuid()) @db.Uuid
   name        String
-  slug        String    @unique  // ej: "managua", "country-cr"
+  slug        String    @unique // ej: "managua", "country-cr"
   type        GroupType
   description String?
   isActive    Boolean   @default(true)
 
-  createdAt   DateTime  @default(now()) @db.Timestamptz
-  updatedAt   DateTime  @updatedAt @db.Timestamptz
+  createdAt DateTime @default(now()) @db.Timestamptz
+  updatedAt DateTime @updatedAt @db.Timestamptz
 
   memberships    GroupMembership[]
   proposals      Proposal[]
   elections      Election[]
   sortitionDraws SortitionDraw[]
   forums         Forum[]
+  ruleValues     RuleValue[]
+  inquietudes    Inquietud[]
 
   @@index([type])
   @@index([isActive])
@@ -237,38 +246,39 @@ model GroupMembership {
 
 /**
  * Proposal — propuesta de deliberación dentro de un grupo.
- *
  * Solo los miembros del grupo pueden crear propuestas.
  * El autor puede cerrar o archivar su propia propuesta.
  * Los borradores (draft) son visibles para todos los miembros pero
  * no aceptan señales hasta que pasan a estado open.
  */
 model Proposal {
-  id              String         @id @default(uuid()) @db.Uuid
-  groupId         String         @db.Uuid
-  group           Group          @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  id      String @id @default(uuid()) @db.Uuid
+  groupId String @db.Uuid
+  group   Group  @relation(fields: [groupId], references: [id], onDelete: Cascade)
 
-  authorProfileId String         @db.Uuid
-  author          Profile        @relation(fields: [authorProfileId], references: [id])
+  authorProfileId String  @db.Uuid
+  author          Profile @relation(fields: [authorProfileId], references: [id])
 
-  title           String         @db.VarChar(200)
-  body            String
-  status          ProposalStatus @default(open)
-  forumId            String?        @db.Uuid
-  forum              Forum?         @relation(fields: [forumId], references: [id])
-  kind               ProposalKind   @default(tema)
-  deliberationEndsAt DateTime?      @db.Timestamptz
-  electionId         String?        @unique @db.Uuid
-  conclusion         String?        @db.VarChar(2000)
-  objections         String?        @db.VarChar(2000)
-  hidden             Boolean        @default(false)
+  title               String         @db.VarChar(200)
+  body                String
+  status              ProposalStatus @default(open)
+  forumId             String?        @db.Uuid
+  forum               Forum?         @relation(fields: [forumId], references: [id])
+  kind                ProposalKind   @default(tema)
+  deliberationEndsAt  DateTime?      @db.Timestamptz
+  electionId          String?        @unique @db.Uuid
+  conclusion          String?        @db.VarChar(2000)
+  objections          String?        @db.VarChar(2000)
+  hidden              Boolean        @default(false)
+  abiertoPorComunidad Boolean        @default(false)
 
-  createdAt       DateTime       @default(now()) @db.Timestamptz
-  updatedAt       DateTime       @updatedAt @db.Timestamptz
-  closedAt        DateTime?      @db.Timestamptz
+  createdAt DateTime  @default(now()) @db.Timestamptz
+  updatedAt DateTime  @updatedAt @db.Timestamptz
+  closedAt  DateTime? @db.Timestamptz
 
-  comments        ProposalComment[]
-  signals         ConsensusSignal[]
+  comments    ProposalComment[]
+  signals     ConsensusSignal[]
+  inquietudes Inquietud[]
 
   @@index([forumId])
   @@index([groupId, status])
@@ -278,27 +288,26 @@ model Proposal {
 
 /**
  * ProposalComment — comentario sobre una propuesta.
- *
  * Soporta threading de un nivel (parentId apunta a otro comentario raíz).
  * Solo los miembros del grupo pueden comentar.
  * No se permiten nuevos comentarios en propuestas closed/archived.
  */
 model ProposalComment {
-  id              String    @id @default(uuid()) @db.Uuid
-  proposalId      String    @db.Uuid
-  proposal        Proposal  @relation(fields: [proposalId], references: [id], onDelete: Cascade)
+  id         String   @id @default(uuid()) @db.Uuid
+  proposalId String   @db.Uuid
+  proposal   Proposal @relation(fields: [proposalId], references: [id], onDelete: Cascade)
 
-  authorProfileId String    @db.Uuid
-  author          Profile   @relation(fields: [authorProfileId], references: [id])
+  authorProfileId String  @db.Uuid
+  author          Profile @relation(fields: [authorProfileId], references: [id])
 
-  body            String    @db.VarChar(2000)
-  parentId        String?   @db.Uuid
-  parent          ProposalComment?  @relation("CommentReplies", fields: [parentId], references: [id])
-  replies         ProposalComment[] @relation("CommentReplies")
-  hidden          Boolean   @default(false)
+  body     String            @db.VarChar(2000)
+  parentId String?           @db.Uuid
+  parent   ProposalComment?  @relation("CommentReplies", fields: [parentId], references: [id])
+  replies  ProposalComment[] @relation("CommentReplies")
+  hidden   Boolean           @default(false)
 
-  createdAt       DateTime  @default(now()) @db.Timestamptz
-  updatedAt       DateTime  @updatedAt @db.Timestamptz
+  createdAt DateTime @default(now()) @db.Timestamptz
+  updatedAt DateTime @updatedAt @db.Timestamptz
 
   @@index([proposalId])
   @@index([parentId])
@@ -307,22 +316,21 @@ model ProposalComment {
 
 /**
  * ConsensusSignal — señal de posición de un miembro sobre una propuesta.
- *
  * Única por (proposalId, profileId) — un miembro, una señal.
  * Se puede actualizar (upsert). Solo en propuestas en estado open.
  */
 model ConsensusSignal {
-  id         String     @id @default(uuid()) @db.Uuid
-  proposalId String     @db.Uuid
-  proposal   Proposal   @relation(fields: [proposalId], references: [id], onDelete: Cascade)
+  id         String   @id @default(uuid()) @db.Uuid
+  proposalId String   @db.Uuid
+  proposal   Proposal @relation(fields: [proposalId], references: [id], onDelete: Cascade)
 
-  profileId  String     @db.Uuid
-  profile    Profile    @relation(fields: [profileId], references: [id])
+  profileId String  @db.Uuid
+  profile   Profile @relation(fields: [profileId], references: [id])
 
-  signal     SignalType
+  signal SignalType
 
-  createdAt  DateTime   @default(now()) @db.Timestamptz
-  updatedAt  DateTime   @updatedAt @db.Timestamptz
+  createdAt DateTime @default(now()) @db.Timestamptz
+  updatedAt DateTime @updatedAt @db.Timestamptz
 
   @@unique([proposalId, profileId])
   @@index([proposalId])
@@ -331,33 +339,32 @@ model ConsensusSignal {
 
 /**
  * Election — elección con método Condorcet-Schulze.
- *
  * Solo los miembros del grupo pueden crear y votar en elecciones.
  * Las papeletas se cuentan al llamar a POST /tally una vez cerrada.
  * El resultado completo (matrices) se almacena en ElectionResult para
  * verificación independiente.
  */
 model Election {
-  id                 String         @id @default(uuid()) @db.Uuid
-  groupId            String         @db.Uuid
-  group              Group          @relation(fields: [groupId], references: [id])
+  id      String @id @default(uuid()) @db.Uuid
+  groupId String @db.Uuid
+  group   Group  @relation(fields: [groupId], references: [id])
 
-  createdByProfileId String         @db.Uuid
-  createdBy          Profile        @relation("ElectionCreator", fields: [createdByProfileId], references: [id])
+  createdByProfileId String  @db.Uuid
+  createdBy          Profile @relation("ElectionCreator", fields: [createdByProfileId], references: [id])
 
-  title              String         @db.VarChar(200)
-  description        String?
-  status             ElectionStatus @default(draft)
+  title       String         @db.VarChar(200)
+  description String?
+  status      ElectionStatus @default(draft)
 
-  startsAt           DateTime       @db.Timestamptz
-  endsAt             DateTime       @db.Timestamptz
+  startsAt DateTime @db.Timestamptz
+  endsAt   DateTime @db.Timestamptz
 
-  createdAt          DateTime       @default(now()) @db.Timestamptz
-  updatedAt          DateTime       @updatedAt @db.Timestamptz
+  createdAt DateTime @default(now()) @db.Timestamptz
+  updatedAt DateTime @updatedAt @db.Timestamptz
 
-  candidates         ElectionCandidate[]
-  ballots            Ballot[]
-  result             ElectionResult?
+  candidates ElectionCandidate[]
+  ballots    Ballot[]
+  result     ElectionResult?
 
   @@index([groupId, status])
   @@index([createdByProfileId])
@@ -369,15 +376,15 @@ model Election {
  * `position` determina el orden de visualización y el orden de las matrices.
  */
 model ElectionCandidate {
-  id          String    @id @default(uuid()) @db.Uuid
-  electionId  String    @db.Uuid
-  election    Election  @relation(fields: [electionId], references: [id], onDelete: Cascade)
+  id         String   @id @default(uuid()) @db.Uuid
+  electionId String   @db.Uuid
+  election   Election @relation(fields: [electionId], references: [id], onDelete: Cascade)
 
-  title       String    @db.VarChar(200)
+  title       String  @db.VarChar(200)
   description String?
-  position    Int       // Orden de presentación (1-based, ascendente)
+  position    Int // Orden de presentación (1-based, ascendente)
 
-  rankings    BallotRanking[]
+  rankings BallotRanking[]
 
   @@index([electionId])
   @@map("election_candidates")
@@ -389,16 +396,16 @@ model ElectionCandidate {
  * El voto final es el registrado cuando se ejecuta el conteo.
  */
 model Ballot {
-  id          String    @id @default(uuid()) @db.Uuid
-  electionId  String    @db.Uuid
-  election    Election  @relation(fields: [electionId], references: [id], onDelete: Cascade)
+  id         String   @id @default(uuid()) @db.Uuid
+  electionId String   @db.Uuid
+  election   Election @relation(fields: [electionId], references: [id], onDelete: Cascade)
 
-  profileId   String    @db.Uuid
-  profile     Profile   @relation(fields: [profileId], references: [id])
+  profileId String  @db.Uuid
+  profile   Profile @relation(fields: [profileId], references: [id])
 
-  submittedAt DateTime  @default(now()) @db.Timestamptz
+  submittedAt DateTime @default(now()) @db.Timestamptz
 
-  rankings    BallotRanking[]
+  rankings BallotRanking[]
 
   @@unique([electionId, profileId])
   @@index([electionId])
@@ -411,14 +418,14 @@ model Ballot {
  * se consideran en último lugar (empatados) durante el conteo.
  */
 model BallotRanking {
-  id          String            @id @default(uuid()) @db.Uuid
-  ballotId    String            @db.Uuid
-  ballot      Ballot            @relation(fields: [ballotId], references: [id], onDelete: Cascade)
+  id       String @id @default(uuid()) @db.Uuid
+  ballotId String @db.Uuid
+  ballot   Ballot @relation(fields: [ballotId], references: [id], onDelete: Cascade)
 
   candidateId String            @db.Uuid
   candidate   ElectionCandidate @relation(fields: [candidateId], references: [id], onDelete: Cascade)
 
-  rank        Int               // 1 = más preferido
+  rank Int // 1 = más preferido
 
   @@unique([ballotId, candidateId])
   @@index([ballotId])
@@ -427,67 +434,72 @@ model BallotRanking {
 
 /**
  * ElectionResult — resultado computado de una elección.
- *
  * Almacena las matrices completas para verificación independiente.
  * Una vez creado, no debe modificarse (append-only semántico, aunque no
  * hay trigger en esta tabla — el status 'tallied' de Election lo protege).
  */
 model ElectionResult {
-  id             String   @id @default(uuid()) @db.Uuid
-  electionId     String   @unique @db.Uuid
-  election       Election @relation(fields: [electionId], references: [id])
+  id         String   @id @default(uuid()) @db.Uuid
+  electionId String   @unique @db.Uuid
+  election   Election @relation(fields: [electionId], references: [id])
 
-  /** IDs de los candidatos ganadores (puede ser más de uno en empate exacto). */
+  /**
+   * IDs de los candidatos ganadores (puede ser más de uno en empate exacto).
+   */
   winners        Json
-  /** IDs de los candidatos en el orden de las matrices (por position ASC). */
+  /**
+   * IDs de los candidatos en el orden de las matrices (por position ASC).
+   */
   candidateOrder Json
-  /** Matriz de preferencias pairwise: d[i][j] = votos que prefieren i sobre j. */
+  /**
+   * Matriz de preferencias pairwise: d[i][j] = votos que prefieren i sobre j.
+   */
   pairwiseMatrix Json
-  /** Matriz de rutas más fuertes (Schulze): p[i][j] = fuerza de ruta i→j. */
+  /**
+   * Matriz de rutas más fuertes (Schulze): p[i][j] = fuerza de ruta i→j.
+   */
   schulzeMatrix  Json
 
-  totalBallots   Int
-  computedAt     DateTime @db.Timestamptz
+  totalBallots Int
+  computedAt   DateTime @db.Timestamptz
 
   @@map("election_results")
 }
 
 /**
  * SortitionDraw — sorteo de selección aleatoria verificable.
- *
  * Flujo:
- *   1. Crear (pending) — define grupo, título y tamaño de selección.
- *   2. Ejecutar (completed) — captura el snapshot del pool, genera seed,
- *      aplica Fisher-Yates con SHA-256 y guarda los seleccionados.
- *   3. Verificar — cualquier miembro puede recomputar con la seed almacenada.
- *
+ * 1. Crear (pending) — define grupo, título y tamaño de selección.
+ * 2. Ejecutar (completed) — captura el snapshot del pool, genera seed,
+ * aplica Fisher-Yates con SHA-256 y guarda los seleccionados.
+ * 3. Verificar — cualquier miembro puede recomputar con la seed almacenada.
  * Limitación MVP: la seed es generada por el servidor.
  * Para mayor confianza ver docs/DECISIONS.md ADR-011.
  */
 model SortitionDraw {
-  id                 String          @id @default(uuid()) @db.Uuid
-  groupId            String          @db.Uuid
-  group              Group           @relation(fields: [groupId], references: [id])
+  id      String @id @default(uuid()) @db.Uuid
+  groupId String @db.Uuid
+  group   Group  @relation(fields: [groupId], references: [id])
 
-  createdByProfileId String          @db.Uuid
-  createdBy          Profile         @relation("SortitionCreator", fields: [createdByProfileId], references: [id])
+  createdByProfileId String  @db.Uuid
+  createdBy          Profile @relation("SortitionCreator", fields: [createdByProfileId], references: [id])
 
-  title              String          @db.VarChar(200)
-  description        String?
-  selectionSize      Int
+  title         String  @db.VarChar(200)
+  description   String?
+  selectionSize Int
 
-  status             SortitionStatus @default(pending)
+  status SortitionStatus @default(pending)
 
   // Establecidos al ejecutar el sorteo
-  seed               String?         // 32 bytes en hex — pública para verificación independiente
-  algorithm          String?         // e.g. "fisher-yates-sha256-v1"
-  poolSnapshot       Json?           // String[] — profileIds ordenados lexicográficamente
+  seed         String? // 32 bytes en hex — pública para verificación independiente
+  algorithm    String? // e.g. "fisher-yates-sha256-v1"
+  poolSnapshot Json? // String[] — profileIds ordenados lexicográficamente
 
-  executedAt         DateTime?       @db.Timestamptz
-  createdAt          DateTime        @default(now()) @db.Timestamptz
-  updatedAt          DateTime        @updatedAt @db.Timestamptz
+  executedAt DateTime? @db.Timestamptz
+  createdAt  DateTime  @default(now()) @db.Timestamptz
+  updatedAt  DateTime  @updatedAt @db.Timestamptz
 
-  selectedMembers    SortitionMember[]
+  selectedMembers SortitionMember[]
 
   @@index([groupId, status])
   @@index([createdByProfileId])
@@ -499,12 +511,12 @@ model SortitionDraw {
  * selectionOrder indica la posición en la selección (1-based).
  */
 model SortitionMember {
-  id             String        @id @default(uuid()) @db.Uuid
-  drawId         String        @db.Uuid
-  draw           SortitionDraw @relation(fields: [drawId], references: [id], onDelete: Cascade)
+  id     String        @id @default(uuid()) @db.Uuid
+  drawId String        @db.Uuid
+  draw   SortitionDraw @relation(fields: [drawId], references: [id], onDelete: Cascade)
 
-  profileId      String        @db.Uuid
-  profile        Profile       @relation(fields: [profileId], references: [id])
+  profileId String  @db.Uuid
+  profile   Profile @relation(fields: [profileId], references: [id])
 
   selectionOrder Int
 
@@ -515,19 +527,17 @@ model SortitionMember {
 
 /**
  * NewsletterSubscription — suscripción al boletín informativo.
- *
  * Endpoint público: no requiere cuenta. Almacena email y datos opcionales.
  * Rate limiting estricto en el controlador (5 req / hora por IP).
  */
 model NewsletterSubscription {
-  id          String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  email       String    @unique
-  name        String?
-  country     String?   // ISO 3166-1 alpha-2 (país de residencia)
-  createdAt   DateTime  @default(now()) @db.Timestamptz
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  email     String   @unique
+  name      String?
+  country   String? // ISO 3166-1 alpha-2 (país de residencia)
+  createdAt DateTime @default(now()) @db.Timestamptz
 
   @@index([email])
-
   @@map("newsletter_subscriptions")
 }
 
@@ -582,7 +592,7 @@ model BoardAction {
   createdAt           DateTime          @default(now()) @db.Timestamptz
   resolvedAt          DateTime?         @db.Timestamptz
 
-  approvals           BoardApproval[]
+  approvals BoardApproval[]
 
   @@index([status])
   @@map("board_actions")
@@ -607,17 +617,17 @@ model BoardApproval {
  * Cada grupo tiene uno por defecto (isDefault), creado al vuelo.
  */
 model Forum {
-  id                 String    @id @default(uuid()) @db.Uuid
-  groupId            String    @db.Uuid
-  group              Group     @relation(fields: [groupId], references: [id], onDelete: Cascade)
-  title              String    @db.VarChar(200)
-  description        String?   @db.VarChar(1000)
-  isDefault          Boolean   @default(false)
-  createdByProfileId String?   @db.Uuid
-  createdBy          Profile?  @relation("ForumCreator", fields: [createdByProfileId], references: [id])
-  createdAt          DateTime  @default(now()) @db.Timestamptz
+  id                 String   @id @default(uuid()) @db.Uuid
+  groupId            String   @db.Uuid
+  group              Group    @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  title              String   @db.VarChar(200)
+  description        String?  @db.VarChar(1000)
+  isDefault          Boolean  @default(false)
+  createdByProfileId String?  @db.Uuid
+  createdBy          Profile? @relation("ForumCreator", fields: [createdByProfileId], references: [id])
+  createdAt          DateTime @default(now()) @db.Timestamptz
 
-  proposals          Proposal[]
+  proposals Proposal[]
 
   @@index([groupId])
   @@map("forums")
@@ -646,38 +656,95 @@ model ModerationAction {
 
 /**
  * AuditEvent — log append-only de eventos críticos.
- *
  * IMPORTANTE: Esta tabla nunca debe recibir UPDATE ni DELETE.
  * Un trigger de PostgreSQL lo enforza a nivel de base de datos.
  * Ver: prisma/sql/01_audit_append_only.sql
- *
  * Los campos de PII (IP) se almacenan como hash, no en texto plano.
  */
 model AuditEvent {
-  id          String   @id @default(uuid()) @db.Uuid
-  createdAt   DateTime @default(now()) @db.Timestamptz
+  id        String   @id @default(uuid()) @db.Uuid
+  createdAt DateTime @default(now()) @db.Timestamptz
 
   // Actor del evento (null para eventos de sistema)
-  actorId     String?  @db.Uuid
-  actor       User?    @relation("AuditEventActor", fields: [actorId], references: [id])
+  actorId String? @db.Uuid
+  actor   User?   @relation("AuditEventActor", fields: [actorId], references: [id])
 
   // Tipo de evento (ej: "user.invited", "user.login", "vote.cast")
-  action      String
+  action String
 
   // Recurso afectado (ej: "user:uuid", "proposal:uuid")
-  resource    String?
+  resource String?
 
   // Hash de la IP del cliente (SHA-256 + salt; no la IP directa)
-  ipHash      String?
+  ipHash String?
 
   // Hash del payload completo para verificación de integridad
   payloadHash String?
 
   // Metadatos no sensibles del contexto
-  metadata    Json?
+  metadata Json?
 
   @@index([action])
   @@index([actorId])
   @@index([createdAt])
   @@map("audit_events")
+}
+
+/**
+ * RuleValue — valor vigente de una regla votable. groupId nulo = valor de colmena.
+ * La unicidad va en SQL con índices parciales (ver migración).
+ */
+model RuleValue {
+  id        String   @id @default(uuid()) @db.Uuid
+  key       String   @db.VarChar(80)
+  groupId   String?  @db.Uuid
+  group     Group?   @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  value     String   @db.VarChar(40)
+  updatedAt DateTime @updatedAt @db.Timestamptz
+
+  @@map("rule_values")
+}
+
+/**
+ * Inquietud — preocupación planteada por un miembro; con apoyo suficiente
+ * entra en plazo de respuesta. respondedByProfileId es columna simple (sin relación).
+ */
+model Inquietud {
+  id                   String          @id @default(uuid()) @db.Uuid
+  groupId              String          @db.Uuid
+  group                Group           @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  authorProfileId      String          @db.Uuid
+  author               Profile         @relation(fields: [authorProfileId], references: [id])
+  title                String          @db.VarChar(140)
+  body                 String          @db.VarChar(2000)
+  status               InquietudStatus @default(abierta)
+  hidden               Boolean         @default(false)
+  thresholdReachedAt   DateTime?       @db.Timestamptz
+  deadlineAt           DateTime?       @db.Timestamptz
+  response             String?         @db.VarChar(2000)
+  respondedByProfileId String?         @db.Uuid
+  respondedAt          DateTime?       @db.Timestamptz
+  proposalId           String?         @db.Uuid
+  proposal             Proposal?       @relation(fields: [proposalId], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now()) @db.Timestamptz
+  updatedAt DateTime @updatedAt @db.Timestamptz
+
+  apoyos InquietudApoyo[]
+
+  @@index([groupId, status])
+  @@index([status, deadlineAt])
+  @@map("inquietudes")
+}
+
+model InquietudApoyo {
+  id          String    @id @default(uuid()) @db.Uuid
+  inquietudId String    @db.Uuid
+  inquietud   Inquietud @relation(fields: [inquietudId], references: [id], onDelete: Cascade)
+  profileId   String    @db.Uuid
+  profile     Profile   @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  createdAt   DateTime  @default(now()) @db.Timestamptz
+
+  @@unique([inquietudId, profileId])
+  @@map("inquietud_apoyos")
 }

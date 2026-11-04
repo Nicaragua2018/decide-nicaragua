@@ -30,7 +30,27 @@ const HIDDEN_VOTE_TITLE = 'Votación de un tema oculto';
 /** Título neutro de una votación cancelada que queda huérfana al abrir otra. */
 const ORPHAN_VOTE_TITLE = 'Votación anterior (cancelada)';
 
+type ModTarget = 'tema' | 'respuesta' | 'inquietud';
+
+/** Cada tipo de contenido tiene su propia rama: ninguno cae en otro por descarte. */
+function checkTarget(target: string): ModTarget {
+  if (target === 'tema' || target === 'respuesta' || target === 'inquietud') return target;
+  throw new BadRequestException('Tipo de contenido no válido.');
+}
+
 const voteTitle = (topicTitle: string): string => `Votación: ${topicTitle}`.slice(0, 200);
+
+/** Motivo de la moderación que oculta el debate abierto por la comunidad junto con su inquietud. */
+const LINKED_TOPIC_REASON = 'Oculto junto con la inquietud de origen.';
+
+/** Una ocultación vinculada sigue a su inquietud: no se apela ni se resuelve por separado. */
+function rejectLinkedTopicAction(action: { target: string; reason: string }): void {
+  if (action.target === 'tema' && action.reason === LINKED_TOPIC_REASON) {
+    throw new BadRequestException('Esta ocultación se apela desde la inquietud de origen.');
+  }
+}
+
+type Tx = Prisma.TransactionClient;
 
 @Injectable()
 export class ForumsService {
@@ -49,6 +69,11 @@ export class ForumsService {
    */
   async canModerate(profileId: string, _groupId: string): Promise<boolean> {
     return (await this.board.roleOf(profileId)) !== null;
+  }
+
+  /** Organizar la agenda de inquietudes; igual a canModerate hasta que existan los roles de 3C. */
+  async canOrganize(profileId: string, groupId: string): Promise<boolean> {
+    return this.canModerate(profileId, groupId);
   }
 
   private async esMesa(profileId: string): Promise<boolean> {
@@ -288,12 +313,18 @@ export class ForumsService {
   // ─── Moderación ───────────────────────────────────────────────────────────
 
   async hide(profileId: string, dto: ModerateDto, ip: string): Promise<{ id: string }> {
+    const target = checkTarget(dto.target);
     let groupId: string;
-    if (dto.target === 'tema') {
+    if (target === 'tema') {
       const t = await this.prisma.proposal.findUnique({ where: { id: dto.targetId } });
       if (!t) throw new NotFoundException('Tema no encontrado');
       if (t.hidden) throw new ConflictException('Este contenido ya está oculto.');
       groupId = t.groupId;
+    } else if (target === 'inquietud') {
+      const q = await this.prisma.inquietud.findUnique({ where: { id: dto.targetId } });
+      if (!q) throw new NotFoundException('Inquietud no encontrada');
+      if (q.hidden) throw new ConflictException('Este contenido ya está oculto.');
+      groupId = q.groupId;
     } else {
       const c = await this.prisma.proposalComment.findUnique({
         where: { id: dto.targetId },
@@ -307,30 +338,41 @@ export class ForumsService {
       throw new ForbiddenException('No tienes permiso para moderar en esta comunidad.');
     }
     const action = await this.prisma.$transaction(async (tx) => {
-      if (dto.target === 'tema') {
-        // electionId se relee dentro de la transacción: así se ve una votación abierta justo antes.
-        const t = await tx.proposal.update({ where: { id: dto.targetId }, data: { hidden: true } });
-        const electionId = t?.electionId ?? null;
-        if (electionId) {
-          // La votación repetía el título del tema: se le quita y, si sigue activa, se cancela.
-          const e = await tx.election.findUnique({ where: { id: electionId }, select: { status: true } });
-          const activa = ['draft', 'open'].includes((e?.status as string | undefined) ?? '');
-          await tx.election.update({
-            where: { id: electionId },
-            data: activa ? { title: HIDDEN_VOTE_TITLE, status: 'cancelled' } : { title: HIDDEN_VOTE_TITLE },
+      let linkedTopicId: string | null = null;
+      if (target === 'tema') {
+        await this.hideTopicTx(tx, dto.targetId);
+      } else if (target === 'inquietud') {
+        const q = await tx.inquietud.update({ where: { id: dto.targetId }, data: { hidden: true } });
+        // El debate que abrió la comunidad copia el título y el texto de la inquietud: se oculta con ella.
+        // Un debate abierto a mano por quien organiza tiene su propio texto y no se toca.
+        const proposalId = (q as { proposalId?: string | null } | undefined)?.proposalId ?? null;
+        if (proposalId) {
+          const p = await tx.proposal.findUnique({
+            where: { id: proposalId },
+            select: { abiertoPorComunidad: true, hidden: true },
           });
+          if (p?.abiertoPorComunidad === true && p.hidden === false) {
+            await this.hideTopicTx(tx, proposalId);
+            linkedTopicId = proposalId;
+          }
         }
       } else {
         await tx.proposalComment.update({ where: { id: dto.targetId }, data: { hidden: true } });
       }
-      return tx.moderationAction.create({
-        data: { target: dto.target, targetId: dto.targetId, reason: dto.reason, moderatorProfileId: profileId },
+      const created = await tx.moderationAction.create({
+        data: { target, targetId: dto.targetId, reason: dto.reason, moderatorProfileId: profileId },
       });
+      if (linkedTopicId) {
+        await tx.moderationAction.create({
+          data: { target: 'tema', targetId: linkedTopicId, reason: LINKED_TOPIC_REASON, moderatorProfileId: profileId },
+        });
+      }
+      return created;
     });
     void this.audit.log({
       ...(await this.actorId(profileId)),
       action: 'moderation.hidden',
-      resource: `${dto.target}:${dto.targetId}`,
+      resource: `${target}:${dto.targetId}`,
       ip,
       metadata: { moderationId: action.id },
     });
@@ -340,7 +382,8 @@ export class ForumsService {
   async appeal(profileId: string, moderationId: string, text: string, ip: string): Promise<void> {
     const action = await this.prisma.moderationAction.findUnique({ where: { id: moderationId } });
     if (!action) throw new NotFoundException('Moderación no encontrada');
-    const contenido = await this.authorOf(action.target as 'tema' | 'respuesta', action.targetId);
+    rejectLinkedTopicAction(action);
+    const contenido = await this.authorOf(checkTarget(action.target), action.targetId);
     if (!contenido || contenido.authorProfileId !== profileId) {
       throw new ForbiddenException('Solo quien escribió el contenido puede apelar.');
     }
@@ -363,11 +406,11 @@ export class ForumsService {
     for (const a of actions) {
       result.push({
         id: a.id,
-        target: a.target as 'tema' | 'respuesta',
+        target: checkTarget(a.target),
         targetId: a.targetId,
         reason: a.reason,
         appealText: a.appealText ?? '',
-        originalText: await this.textOf(a.target as 'tema' | 'respuesta', a.targetId),
+        originalText: await this.textOf(checkTarget(a.target), a.targetId),
         appealedAt: (a.appealedAt ?? a.createdAt).toISOString(),
       });
     }
@@ -379,14 +422,17 @@ export class ForumsService {
     const action = await this.prisma.moderationAction.findUnique({ where: { id: moderationId } });
     if (!action) throw new NotFoundException('Moderación no encontrada');
     if ((action.status as string) !== 'apelado') throw new BadRequestException('Esta moderación no tiene una apelación pendiente.');
+    rejectLinkedTopicAction(action);
+    const target = checkTarget(action.target);
     await this.prisma.$transaction(async (tx) => {
       if (restore) {
-        if ((action.target as string) === 'tema') {
-          const t = await tx.proposal.update({ where: { id: action.targetId }, data: { hidden: false } });
-          if (t?.electionId) {
-            // Recupera el título, pero una votación cancelada no se reabre.
-            await tx.election.update({ where: { id: t.electionId }, data: { title: voteTitle(t.title) } });
-          }
+        if (target === 'tema') {
+          await this.restoreTopicTx(tx, action.targetId);
+        } else if (target === 'inquietud') {
+          // El estado y el umbral los reevalúa InquietudesService al leerla (sin ciclo entre módulos).
+          const q = await tx.inquietud.update({ where: { id: action.targetId }, data: { hidden: false } });
+          const proposalId = (q as { proposalId?: string | null } | undefined)?.proposalId ?? null;
+          if (proposalId) await this.restoreLinkedTopicTx(tx, proposalId);
         } else {
           await tx.proposalComment.update({ where: { id: action.targetId }, data: { hidden: false } });
         }
@@ -404,13 +450,65 @@ export class ForumsService {
     });
   }
 
+  /** Oculta un tema; su votación pierde el título y, si sigue activa, se cancela. */
+  private async hideTopicTx(tx: Tx, topicId: string): Promise<void> {
+    // electionId se relee dentro de la transacción: así se ve una votación abierta justo antes.
+    const t = await tx.proposal.update({ where: { id: topicId }, data: { hidden: true } });
+    const electionId = t?.electionId ?? null;
+    if (electionId) {
+      // La votación repetía el título del tema: se le quita y, si sigue activa, se cancela.
+      const e = await tx.election.findUnique({ where: { id: electionId }, select: { status: true } });
+      const activa = ['draft', 'open'].includes((e?.status as string | undefined) ?? '');
+      await tx.election.update({
+        where: { id: electionId },
+        data: activa ? { title: HIDDEN_VOTE_TITLE, status: 'cancelled' } : { title: HIDDEN_VOTE_TITLE },
+      });
+    }
+  }
+
+  /** Vuelve a mostrar un tema; su votación recupera el título, pero una cancelada no se reabre. */
+  private async restoreTopicTx(tx: Tx, topicId: string): Promise<void> {
+    const t = await tx.proposal.update({ where: { id: topicId }, data: { hidden: false } });
+    if (t?.electionId) {
+      await tx.election.update({ where: { id: t.electionId }, data: { title: voteTitle(t.title) } });
+    }
+  }
+
+  /**
+   * Al restaurar una inquietud, su debate abierto por la comunidad vuelve solo si se ocultó
+   * junto con ella (última moderación del tema = la vinculada, aún en «oculto»). Si se ocultó
+   * por su propio motivo, sigue oculto.
+   */
+  private async restoreLinkedTopicTx(tx: Tx, topicId: string): Promise<void> {
+    const p = await tx.proposal.findUnique({
+      where: { id: topicId },
+      select: { abiertoPorComunidad: true, hidden: true },
+    });
+    if (p?.abiertoPorComunidad !== true || p.hidden !== true) return;
+    const latest = await tx.moderationAction.findFirst({
+      where: { target: 'tema', targetId: topicId },
+      orderBy: { createdAt: 'desc' },
+      select: { id: true, reason: true, status: true },
+    });
+    if (!latest || latest.reason !== LINKED_TOPIC_REASON || (latest.status as string) !== 'oculto') return;
+    await tx.moderationAction.update({
+      where: { id: latest.id },
+      data: { status: 'restaurado', resolvedAt: new Date() },
+    });
+    await this.restoreTopicTx(tx, topicId);
+  }
+
   private async authorOf(
-    target: 'tema' | 'respuesta',
+    target: ModTarget,
     id: string,
   ): Promise<{ authorProfileId: string; groupId: string } | null> {
     if (target === 'tema') {
       const t = await this.prisma.proposal.findUnique({ where: { id } });
       return t ? { authorProfileId: t.authorProfileId, groupId: t.groupId } : null;
+    }
+    if (target === 'inquietud') {
+      const q = await this.prisma.inquietud.findUnique({ where: { id } });
+      return q ? { authorProfileId: q.authorProfileId, groupId: q.groupId } : null;
     }
     const c = await this.prisma.proposalComment.findUnique({
       where: { id },
@@ -419,10 +517,14 @@ export class ForumsService {
     return c ? { authorProfileId: c.authorProfileId, groupId: c.proposal.groupId } : null;
   }
 
-  private async textOf(target: 'tema' | 'respuesta', id: string): Promise<string> {
+  private async textOf(target: ModTarget, id: string): Promise<string> {
     if (target === 'tema') {
       const t = await this.prisma.proposal.findUnique({ where: { id } });
       return t ? `${t.title}\n\n${t.body}` : '';
+    }
+    if (target === 'inquietud') {
+      const q = await this.prisma.inquietud.findUnique({ where: { id } });
+      return q ? `${q.title}\n\n${q.body}` : '';
     }
     return (await this.prisma.proposalComment.findUnique({ where: { id } }))?.body ?? '';
   }

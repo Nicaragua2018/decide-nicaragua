@@ -1,8 +1,8 @@
 import { IsIn, IsString, IsUUID, MaxLength, MinLength } from 'class-validator';
 
 export class ModerateDto {
-  @IsIn(['tema', 'respuesta'])
-  target!: 'tema' | 'respuesta';
+  @IsIn(['tema', 'respuesta', 'inquietud'])
+  target!: 'tema' | 'respuesta' | 'inquietud';
 
   @IsUUID('4')
   targetId!: string;
