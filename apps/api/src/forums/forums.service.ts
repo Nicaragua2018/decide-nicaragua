@@ -43,6 +43,13 @@ const voteTitle = (topicTitle: string): string => `Votación: ${topicTitle}`.sli
 /** Motivo de la moderación que oculta el debate abierto por la comunidad junto con su inquietud. */
 const LINKED_TOPIC_REASON = 'Oculto junto con la inquietud de origen.';
 
+/** Una ocultación vinculada sigue a su inquietud: no se apela ni se resuelve por separado. */
+function rejectLinkedTopicAction(action: { target: string; reason: string }): void {
+  if (action.target === 'tema' && action.reason === LINKED_TOPIC_REASON) {
+    throw new BadRequestException('Esta ocultación se apela desde la inquietud de origen.');
+  }
+}
+
 type Tx = Prisma.TransactionClient;
 
 @Injectable()
@@ -375,6 +382,7 @@ export class ForumsService {
   async appeal(profileId: string, moderationId: string, text: string, ip: string): Promise<void> {
     const action = await this.prisma.moderationAction.findUnique({ where: { id: moderationId } });
     if (!action) throw new NotFoundException('Moderación no encontrada');
+    rejectLinkedTopicAction(action);
     const contenido = await this.authorOf(checkTarget(action.target), action.targetId);
     if (!contenido || contenido.authorProfileId !== profileId) {
       throw new ForbiddenException('Solo quien escribió el contenido puede apelar.');
@@ -414,6 +422,7 @@ export class ForumsService {
     const action = await this.prisma.moderationAction.findUnique({ where: { id: moderationId } });
     if (!action) throw new NotFoundException('Moderación no encontrada');
     if ((action.status as string) !== 'apelado') throw new BadRequestException('Esta moderación no tiene una apelación pendiente.');
+    rejectLinkedTopicAction(action);
     const target = checkTarget(action.target);
     await this.prisma.$transaction(async (tx) => {
       if (restore) {

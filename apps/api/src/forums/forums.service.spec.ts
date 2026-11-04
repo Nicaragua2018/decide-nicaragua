@@ -525,6 +525,25 @@ describe('ForumsService', () => {
             data: expect.objectContaining({ status: 'restaurado' }),
           });
         });
+
+        it('la ocultación vinculada del tema no se apela por separado', async () => {
+          prisma.moderationAction.findUnique.mockResolvedValue({ id: 'ma2', target: 'tema', targetId: 't1', reason: LINKED, status: 'oculto' });
+          prisma.proposal.findUnique.mockResolvedValue({ id: 't1', groupId: 'g1', authorProfileId: YO });
+          const p = service.appeal(YO, 'ma2', 'No fue mi intención ofender', 'ip');
+          await expect(p).rejects.toThrow(BadRequestException);
+          await expect(p).rejects.toThrow('Esta ocultación se apela desde la inquietud de origen.');
+          expect(prisma.moderationAction.update).not.toHaveBeenCalled();
+        });
+
+        it('una ocultación vinculada ya apelada no se resuelve directamente', async () => {
+          board.roleOf.mockResolvedValue('secretario');
+          prisma.moderationAction.findUnique.mockResolvedValue({ id: 'ma2', target: 'tema', targetId: 't1', reason: LINKED, status: 'apelado' });
+          const p = service.resolveAppeal(YO, 'ma2', true, 'ip');
+          await expect(p).rejects.toThrow(BadRequestException);
+          await expect(p).rejects.toThrow('Esta ocultación se apela desde la inquietud de origen.');
+          expect(prisma.$transaction).not.toHaveBeenCalled();
+          expect(prisma.proposal.update).not.toHaveBeenCalled();
+        });
       });
 
       it('la cola de la mesa muestra título y explicación de la inquietud', async () => {
