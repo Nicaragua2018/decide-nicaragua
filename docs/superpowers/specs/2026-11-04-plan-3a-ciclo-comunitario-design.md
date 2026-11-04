@@ -73,23 +73,29 @@ Mientras no existan coordinadores elegidos (3C), **la mesa organiza la agenda de
 - Si se oponen al menos un tercio de las personas que participaron en el debate (regla local `debate.fraccion_objecion_modo`, 1/3), se usa el otro modo. Participar significa haber comentado, señalado, escrito o votado frases, o propuesto una solución.
 - Con una sola solución, el modo es `compatibles` y no hay fase de objeción.
 
-**Papeleta**
-- La votación incluye las soluciones más la opción fija **«Ninguna por ahora»**.
-- Cada persona ordena las opciones (empates permitidos) y marca una **línea de aprobación**: las opciones arriba de la línea son las que aprueba. Puede cambiar su papeleta mientras la votación esté abierta.
+**Papeleta** (decisión de Carlos, 2026-11-04)
+- **Una sola solución:** tres botones, **Apruebo**, **No apruebo** y **Me abstengo**.
+- **Varias soluciones:** cada persona **ordena solo las que acepta**, de la más preferida a la menos (sin empates). **Las que deja fuera, las rechaza.** También puede elegir **Rechazo todas** o **Me abstengo**.
+- **Me abstengo** cuenta para el quórum, pero no entra en ningún cálculo de aprobación ni de preferencia.
+- Se puede cambiar la papeleta mientras la votación esté abierta.
 - Dura 7 días (regla local `votacion.plazo_dias`).
-- **Quórum:** han votado al menos el 20 % de los miembros de la comunidad (regla local `votacion.quorum_porcentaje`; la colmena exige al menos un 10 %).
+- **Quórum:** votaron al menos el 20 % de los miembros de la comunidad, contando abstenciones (regla local `votacion.quorum_porcentaje`; la colmena exige al menos un 10 %).
 
-**Resultado** (al cerrar el plazo, automático)
+**Resultado** (al cerrar el plazo, automático). Las papeletas válidas son las que no son abstención.
 - **Sin quórum:** «Sin decisión: no se alcanzó la participación mínima».
-- **Excluyentes:** gana la opción Schulze. Si gana «Ninguna por ahora», no se aprueba nada. Si hay empate entre soluciones, se usa el desempate que ya tiene el módulo de votación; si no lo resuelve, queda «Empate», sin decisión.
-- **Compatibles:** se aprueban todas las soluciones que más de la mitad de las papeletas pone arriba de su línea.
-- **Publicación:** se publican las ganadoras, las cifras de aprobación de cada opción, la matriz por pares y la de rutas de Schulze, y el número de papeletas. El consenso público del plan 2 (`GET /api/public/consensos`) suma las soluciones aprobadas.
-- **Reemplazo del plan 2:** la propuesta formal con «A favor / En contra / Abstención» se sustituye por este flujo: una propuesta formal es un debate con una sola solución. Las votaciones del plan 2 que ya existan se cuentan como antes.
+- **Aprobada:** una solución está aprobada si más de la mitad de las papeletas válidas la incluye en su orden. Con una sola solución, «Apruebo» cuenta como incluirla y «No apruebo» como dejarla fuera.
+- **Excluyentes:** gana la solución preferida según Schulze, pero solo si está aprobada.
+  - Para el cálculo, cada papeleta pone sus soluciones ordenadas en ese orden, por encima de todas las que dejó fuera; las que dejó fuera quedan empatadas entre sí.
+  - Si la preferida no está aprobada, no se aprueba nada.
+  - Si hay empate entre soluciones aprobadas, se usa el desempate que ya tiene el módulo de votación; si no lo resuelve, queda «Empate», sin decisión.
+- **Compatibles:** se aprueban todas las soluciones aprobadas.
+- **Publicación:** las ganadoras, las cifras de aprobación de cada solución, las abstenciones, la matriz por pares y la de rutas de Schulze, y el número de papeletas. El consenso público del plan 2 (`GET /api/public/consensos`) suma las soluciones aprobadas.
+- **Reemplazo del plan 2:** la propuesta formal con «A favor / En contra / Abstención» pasa a este flujo. Una propuesta formal es un debate con una sola solución, que se vota con «Apruebo / No apruebo / Me abstengo». Las votaciones del plan 2 que ya existan se cuentan como antes.
 
 ## 6. Bifurcaciones
 
 - **Cuándo:** una solución puede bifurcarse si perdió en modo `excluyentes` o si la votación quedó sin quórum.
-- **Quién puede sumarse:** solo quienes la pusieron arriba de su línea de aprobación, durante 14 días (regla local `bifurcacion.plazo_dias`). El sistema lo comprueba con la papeleta y nunca lo revela.
+- **Quién puede sumarse:** solo quienes la incluyeron en su orden (o votaron «Apruebo»), durante 14 días (regla local `bifurcacion.plazo_dias`). El sistema lo comprueba con la papeleta y nunca lo revela.
 - **Nace** al sumarse 7 personas (regla local `bifurcacion.minimo_personas`). Tiene su propio foro, visible solo para sus miembros, y su propia comisión (§7), formada por esos miembros.
 - **Identidad pública:** aparece como «Iniciativa de un grupo», aparte de las decisiones de la comunidad. Fuera del grupo se ve cuántos se sumaron, nunca quiénes.
 - **Límites:** no puede hablar en nombre de la comunidad ni ir contra lo decidido. Quien organiza la agenda puede **pausarla** con un motivo de 10–500 caracteres. Sus miembros pueden apelar una vez y la mesa resuelve, igual que en la moderación del plan 2.
@@ -113,7 +119,7 @@ Mientras no existan coordinadores elegidos (3C), **la mesa organiza la agenda de
 - **Página «Reglas»:** cada parámetro con su valor vigente, su nivel (colmena o local), sus límites y su historial.
 - **Reglas de la colmena:** las de §8 del diseño general (observadores, activación, primera elección, períodos y plazos de cargos, revocación, invitaciones, participación mínima del 30 %), más los **límites** de cada regla local (mínimo y máximo) y el quórum mínimo de colmena para votaciones locales (10 %).
 - **Reglas locales**, por comunidad: todas las marcadas «regla local» en este documento. Cada comunidad arranca con el valor por defecto de la colmena.
-- **Cambiar una regla:** un miembro de la comunidad (o de la colmena) propone el cambio. Se vota con la papeleta de §5, con una sola solución más «Ninguna por ahora». Para valer, debe votar al menos el 30 % (regla de colmena `reglas.participacion_minima`, que también aplica a las locales).
+- **Cambiar una regla:** un miembro de la comunidad (o de la colmena) propone el cambio. Se vota con la papeleta de §5 para una sola solución: «Apruebo / No apruebo / Me abstengo». Para valer, debe votar al menos el 30 % (regla de colmena `reglas.participacion_minima`, que también aplica a las locales).
   - **Colmena:** si gana, la aplican el coordinador general y el secretario, 2 de 3 (acción de la mesa del plan 1).
   - **Local:** si gana, se aplica sola al publicarse el resultado. El valor propuesto debe estar dentro de los límites de la colmena, y se valida al proponer y de nuevo al aplicar.
 - **Auditoría:** cada propuesta, resultado y aplicación de regla, sin datos personales.
@@ -146,7 +152,7 @@ En la base de datos, cada texto que el agente pueda sugerir tiene un campo de or
 Se suman pruebas automáticas a las 283 actuales:
 - **Umbral y plazo:** cruzar el umbral, no reiniciar el plazo, apertura automática, respuesta pública.
 - **Frases:** el resultado queda oculto antes de votar, el cálculo de grupos es reproducible con su semilla y no hay grupos con menos de 7 participantes.
-- **Papeleta:** línea de aprobación, «Ninguna por ahora» ganadora, compatibles contra excluyentes, objeción de un tercio y sin quórum.
+- **Papeleta:** dejar fuera es rechazar, la preferida no aprobada no gana, «Rechazo todas», la abstención cuenta para el quórum pero no para aprobar, compatibles contra excluyentes, objeción de un tercio y sin quórum.
 - **Bifurcación:** solo se suma quien aprobó la solución, nace con el mínimo y no revela nombres.
 - **Comisiones:** sorteo verificable, renovación y falta de voluntarios.
 - **Reglas:** la regla local respeta los límites y se aplica sola; la de colmena requiere 2 de 3.
