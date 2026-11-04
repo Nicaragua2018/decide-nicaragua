@@ -21,6 +21,11 @@ function round5(n: number): number {
   return Math.round(n / 5) * 5;
 }
 
+/** Solo cuentan los votos de quienes siguen siendo miembros del grupo (la suspensión quita la membresía). */
+function currentMembers(groupId: string) {
+  return { profile: { memberships: { some: { groupId } } } };
+}
+
 function pct(parte: number, total: number): number {
   return total > 0 ? round5((100 * parte) / total) : 0;
 }
@@ -92,10 +97,21 @@ export class FrasesService {
   async list(profileId: string, proposalId: string): Promise<FrasesResponse> {
     const tema = await this.tema(profileId, proposalId);
     if (tema.hidden) return { items: [], pendientes: 0 };
+    // Una frase oculta solo la ve su autor (sin el texto); para los demás no existe.
     const frases = await this.prisma.frase.findMany({
-      where: { proposalId, hidden: false },
+      where: { proposalId, OR: [{ hidden: false }, { hidden: true, authorProfileId: profileId }] },
       orderBy: { createdAt: 'asc' },
     });
+    const ocultas = frases.filter((f) => f.hidden).map((f) => f.id);
+    const acciones = ocultas.length
+      ? await this.prisma.moderationAction.findMany({
+          where: { target: 'frase', targetId: { in: ocultas } },
+          orderBy: { createdAt: 'desc' },
+          select: { id: true, targetId: true, reason: true, status: true, createdAt: true },
+        })
+      : [];
+    const ultima = new Map<string, (typeof acciones)[number]>();
+    for (const a of acciones) if (!ultima.has(a.targetId)) ultima.set(a.targetId, a);
     const mios = await this.prisma.fraseVoto.findMany({
       where: { profileId, frase: { proposalId } },
       select: { fraseId: true, value: true },
@@ -104,7 +120,7 @@ export class FrasesService {
     // Recuentos solo de las frases que la persona ya votó (independencia).
     const votadas = frases.filter((f) => miVoto.has(f.id)).map((f) => f.id);
     const grupos = votadas.length
-      ? await this.prisma.fraseVoto.groupBy({ by: ['fraseId', 'value'], where: { fraseId: { in: votadas } }, _count: { _all: true } })
+      ? await this.prisma.fraseVoto.groupBy({ by: ['fraseId', 'value'], where: { fraseId: { in: votadas }, ...currentMembers(tema.groupId) }, _count: { _all: true } })
       : [];
     const conteo = new Map<string, { deAcuerdo: number; enDesacuerdo: number; paso: number }>();
     for (const g of grupos) {
@@ -115,6 +131,19 @@ export class FrasesService {
       conteo.set(g.fraseId, c);
     }
     const items: FraseItem[] = frases.map((f) => {
+      if (f.hidden) {
+        const a = ultima.get(f.id);
+        return {
+          id: f.id,
+          text: '',
+          hidden: true,
+          isAuthor: true,
+          myVote: null,
+          resultado: null,
+          hiddenReason: a?.reason ?? null,
+          moderationId: a && (a.status as string) === 'oculto' ? a.id : null,
+        };
+      }
       const mine = miVoto.get(f.id) ?? null;
       return {
         id: f.id,
@@ -127,7 +156,7 @@ export class FrasesService {
         moderationId: null,
       };
     });
-    return { items, pendientes: items.filter((i) => i.myVote === null).length };
+    return { items, pendientes: items.filter((i) => !i.hidden && i.myVote === null).length };
   }
 
   async next(profileId: string, proposalId: string): Promise<FraseParaVotar | null> {
@@ -140,7 +169,7 @@ export class FrasesService {
     if (candidatas.length === 0) return null;
     const cuentas = await this.prisma.fraseVoto.groupBy({
       by: ['fraseId'],
-      where: { fraseId: { in: candidatas.map((f) => f.id) } },
+      where: { fraseId: { in: candidatas.map((f) => f.id) }, ...currentMembers(tema.groupId) },
       _count: { _all: true },
     });
     const n = new Map(cuentas.map((c) => [c.fraseId, c._count._all]));
@@ -164,7 +193,7 @@ export class FrasesService {
       update: { value },
       create: { fraseId, profileId, value },
     });
-    const grupos = await this.prisma.fraseVoto.groupBy({ by: ['fraseId', 'value'], where: { fraseId }, _count: { _all: true } });
+    const grupos = await this.prisma.fraseVoto.groupBy({ by: ['fraseId', 'value'], where: { fraseId, ...currentMembers(frase.proposal.groupId) }, _count: { _all: true } });
     const c = { deAcuerdo: 0, enDesacuerdo: 0, paso: 0 };
     for (const g of grupos) {
       if (g.value === 'de_acuerdo') c.deAcuerdo = g._count._all;
@@ -182,7 +211,7 @@ export class FrasesService {
     const [frases, votos] = await Promise.all([
       this.prisma.frase.findMany({ where: { proposalId, hidden: false }, orderBy: { createdAt: 'asc' } }),
       this.prisma.fraseVoto.findMany({
-        where: { frase: { proposalId, hidden: false } },
+        where: { frase: { proposalId, hidden: false }, ...currentMembers(tema.groupId) },
         select: { profileId: true, fraseId: true, value: true },
       }),
     ]);
@@ -208,12 +237,15 @@ export class FrasesService {
 
     const puentesTodos = analizadas.filter((f) => isPuente(f));
     const puentes = puentesTodos.filter((f) => votadasPorMi.has(f.fraseId)).map(aAnalisis);
-    const puentesSinVer = puentesTodos.filter((f) => !votadasPorMi.has(f.fraseId)).length;
+    // Si quien consulta tiene pocas frases sin votar, el número de puentes pendientes
+    // delataría demasiado: solo se informa con 3 o más sin votar.
+    const sinVotar = frases.filter((f) => !votadasPorMi.has(f.id)).length;
+    const puentesSinVer = sinVotar >= MIN_GRUPO ? puentesTodos.filter((f) => !votadasPorMi.has(f.fraseId)).length : 0;
     const divisivas = analizadas.filter((f) => isDivisiva(f) && votadasPorMi.has(f.fraseId)).map(aAnalisis);
 
     return {
       available: true,
-      participants: result.participants,
+      participants: round5(result.participants),
       grupos: result.grupos
         .filter((g) => visibles.has(g.id))
         .map((g) => ({ id: g.id, size: Math.max(5, round5(g.size)) })),

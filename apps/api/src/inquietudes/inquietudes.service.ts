@@ -150,6 +150,13 @@ export class InquietudesService {
     // Miembros, y quien organiza la agenda aunque no sea miembro (para leer y responder).
     const organiza = await this.forums.canOrganize(profileId, first.groupId);
     if (!organiza) await this.requireMembership(first.groupId, profileId);
+    // Quien organiza sin ser miembro puede leer, pero no apoyar ni entrar al debate.
+    const isMember = organiza
+      ? (await this.prisma.groupMembership.findUnique({
+          where: { groupId_profileId: { groupId: first.groupId, profileId } },
+          select: { id: true },
+        })) !== null
+      : true;
     // Solo después de los permisos: un extraño no debe poder mover el estado al leer.
     await this.evaluateThreshold(id);
     const row = (await read()) ?? first;
@@ -174,6 +181,7 @@ export class InquietudesService {
       response: row.hidden ? null : row.response,
       respondedAt: row.respondedAt ? row.respondedAt.toISOString() : null,
       canOrganize: organiza,
+      isMember,
       isAuthor,
       hiddenReason,
       moderationId,

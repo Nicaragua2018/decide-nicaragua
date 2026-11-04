@@ -2,6 +2,7 @@ import 'reflect-metadata';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { BadRequestException, ForbiddenException } from '@nestjs/common';
 import { validate } from 'class-validator';
+import { plainToInstance } from 'class-transformer';
 import { FrasesService } from './frases.service';
 import { CreateFraseDto } from './dto/create-frase.dto';
 import { VoteFraseDto } from './dto/vote-frase.dto';
@@ -17,6 +18,7 @@ function buildPrisma() {
     frase: { create: vi.fn(), findMany: vi.fn(), findUnique: vi.fn() },
     fraseVoto: { upsert: vi.fn(), findMany: vi.fn(), groupBy: vi.fn() },
     profile: { findUnique: vi.fn() },
+    moderationAction: { findMany: vi.fn() },
   };
 }
 
@@ -50,6 +52,13 @@ describe('FrasesService', () => {
     it('acepta 10 y rechaza 141', async () => {
       expect(await validate(Object.assign(new CreateFraseDto(), { text: 'a'.repeat(10) }))).toHaveLength(0);
       expect(await validate(Object.assign(new CreateFraseDto(), { text: 'a'.repeat(141) }))).toHaveLength(1);
+    });
+    it('recorta los espacios antes de validar: 10 caracteres con relleno que recortan a 9 se rechazan', async () => {
+      const dto = plainToInstance(CreateFraseDto, { text: '  123456789  ' });
+      expect(dto.text).toBe('123456789');
+      expect(await validate(dto)).toHaveLength(1);
+      const ok = plainToInstance(CreateFraseDto, { text: '  1234567890  ' });
+      expect(await validate(ok)).toHaveLength(0);
     });
     it('rechaza un voto inválido', async () => {
       expect(await validate(Object.assign(new VoteFraseDto(), { value: 'quizas' }))).toHaveLength(1);
@@ -116,7 +125,56 @@ describe('FrasesService', () => {
       expect(r.items[0]).toMatchObject({ id: 'f1', isAuthor: true, myVote: 'de_acuerdo', hiddenReason: null, moderationId: null });
       expect(r.items[0]!.resultado).toEqual({ deAcuerdo: 7, enDesacuerdo: 2, paso: 1, total: 10, acuerdoPct: 70 });
       expect(r.items[1]).toMatchObject({ id: 'f22', isAuthor: false, myVote: null, resultado: null });
-      expect(prisma.frase.findMany.mock.calls[0]![0].where).toMatchObject({ hidden: false });
+      expect(prisma.frase.findMany.mock.calls[0]![0].where.OR).toContainEqual({ hidden: false });
+    });
+
+    it('list: solo cuentan los votos de miembros actuales del grupo del tema', async () => {
+      prisma.frase.findMany.mockResolvedValue([frase('f1')]);
+      prisma.fraseVoto.findMany.mockResolvedValue([{ fraseId: 'f1', value: 'paso' }]);
+      prisma.fraseVoto.groupBy.mockResolvedValue([]);
+      await service.list(YO, T);
+      expect(prisma.fraseVoto.groupBy.mock.calls[0]![0].where).toMatchObject({
+        profile: { memberships: { some: { groupId: G } } },
+      });
+    });
+
+    it('list: el autor ve su frase oculta con motivo y moderationId, sin el texto; los demás no la ven', async () => {
+      const oculta = frase('f9', 'Texto que no debe salir', { hidden: true, authorProfileId: YO });
+      prisma.frase.findMany.mockResolvedValue([frase('f1'), oculta]);
+      prisma.fraseVoto.findMany.mockResolvedValue([]);
+      prisma.moderationAction.findMany.mockResolvedValue([
+        { id: 'ma1', targetId: 'f9', reason: 'Lenguaje ofensivo', status: 'oculto', createdAt: new Date('2026-11-02') },
+      ]);
+      const r = await service.list(YO, T);
+      expect(prisma.frase.findMany.mock.calls[0]![0].where).toEqual({
+        proposalId: T,
+        OR: [{ hidden: false }, { hidden: true, authorProfileId: YO }],
+      });
+      const mia = r.items.find((i) => i.id === 'f9')!;
+      expect(mia).toMatchObject({ hidden: true, isAuthor: true, hiddenReason: 'Lenguaje ofensivo', moderationId: 'ma1', text: '', myVote: null, resultado: null });
+      expect(r.pendientes).toBe(1);
+      expect(JSON.stringify(r)).not.toContain('Texto que no debe salir');
+    });
+
+    it('list: tras apelar, el autor ve el motivo pero ya no el moderationId', async () => {
+      prisma.frase.findMany.mockResolvedValue([frase('f9', undefined, { hidden: true, authorProfileId: YO })]);
+      prisma.fraseVoto.findMany.mockResolvedValue([]);
+      prisma.moderationAction.findMany.mockResolvedValue([
+        { id: 'ma2', targetId: 'f9', reason: 'Otro motivo', status: 'apelado', createdAt: new Date('2026-11-03') },
+        { id: 'ma1', targetId: 'f9', reason: 'Viejo', status: 'restaurado', createdAt: new Date('2026-11-01') },
+      ]);
+      const r = await service.list(YO, T);
+      expect(r.items[0]).toMatchObject({ hiddenReason: 'Otro motivo', moderationId: null });
+    });
+
+    it('next: los recuentos solo consideran a miembros actuales', async () => {
+      prisma.frase.findMany.mockResolvedValue([frase('a')]);
+      prisma.fraseVoto.findMany.mockResolvedValue([]);
+      prisma.fraseVoto.groupBy.mockResolvedValue([]);
+      await service.next(YO, T);
+      expect(prisma.fraseVoto.groupBy.mock.calls[0]![0].where).toMatchObject({
+        profile: { memberships: { some: { groupId: G } } },
+      });
     });
 
     it('next no devuelve votadas y prefiere la de menos votos', async () => {
@@ -152,6 +210,16 @@ describe('FrasesService', () => {
       expect(r1).toEqual({ deAcuerdo: 3, enDesacuerdo: 1, paso: 0, total: 4, acuerdoPct: 75 });
       expect(audit.log).not.toHaveBeenCalled();
     });
+    it('vote: el resultado solo cuenta a miembros actuales', async () => {
+      prisma.frase.findUnique.mockResolvedValue({ ...frase('f1'), proposal: { groupId: G, status: 'open', hidden: false } });
+      prisma.fraseVoto.upsert.mockResolvedValue({});
+      prisma.fraseVoto.groupBy.mockResolvedValue([]);
+      await service.vote(YO, 'f1', 'paso');
+      expect(prisma.fraseVoto.groupBy.mock.calls[0]![0].where).toMatchObject({
+        fraseId: 'f1',
+        profile: { memberships: { some: { groupId: G } } },
+      });
+    });
   });
 
   describe('analysis', () => {
@@ -178,9 +246,37 @@ describe('FrasesService', () => {
       expect(await service.analysis(YO, T)).toEqual({ available: false, participants: 6, needed: 7 });
     });
 
-    it('con dos bandos de 6 y 6: 2 grupos y ningún profileId en la respuesta', async () => {
+    it('analysis: solo entran los votos de miembros actuales', async () => {
+      prisma.fraseVoto.findMany.mockResolvedValue([]);
+      await service.analysis(YO, T);
+      expect(prisma.fraseVoto.findMany.mock.calls[0]![0].where).toMatchObject({
+        profile: { memberships: { some: { groupId: G } } },
+      });
+    });
+
+    it('con 12 participantes: participants sale redondeado a múltiplo de 5', async () => {
       const rows = votosDosBandos();
       for (const f of ['f2', 'f3', 'f4']) rows.push({ profileId: YO, fraseId: f, value: 'de_acuerdo' });
+      prisma.fraseVoto.findMany.mockResolvedValue(rows);
+      const r = await service.analysis(YO, T);
+      expect(r.available).toBe(true);
+      // 13 participantes reales: 13 -> 15
+      expect(r.participants).toBe(15);
+    });
+
+    it('puentesSinVer es 0 si quien consulta tiene menos de 3 frases visibles sin votar', async () => {
+      const rows = votosDosBandos();
+      // YO votó f2 y f3: sin votar solo quedan f1 y f4 (2 < 3)
+      for (const f of ['f2', 'f3']) rows.push({ profileId: YO, fraseId: f, value: 'de_acuerdo' });
+      prisma.fraseVoto.findMany.mockResolvedValue(rows);
+      const r = await service.analysis(YO, T);
+      if (!r.available) throw new Error('debía estar disponible');
+      expect(r.puentesSinVer).toBe(0);
+    });
+
+    it('con dos bandos de 6 y 6: 2 grupos y ningún profileId en la respuesta', async () => {
+      const rows = votosDosBandos();
+      rows.push({ profileId: YO, fraseId: 'f2', value: 'de_acuerdo' });
       prisma.fraseVoto.findMany.mockResolvedValue(rows);
       const r = await service.analysis(YO, T);
       expect(r.available).toBe(true);
@@ -196,7 +292,7 @@ describe('FrasesService', () => {
       for (const f of [...r.puentes, ...r.divisivas]) {
         for (const a of f.acuerdoPorGrupo) expect(a.acuerdoPct % 5).toBe(0);
       }
-      expect(r.divisivas.map((d) => d.fraseId)).toContain('f3');
+      expect(r.divisivas.map((d) => d.fraseId)).toContain('f2');
       const json = JSON.stringify(r);
       expect(json).not.toContain('pid-secreto');
       expect(json).not.toContain(YO);

@@ -703,6 +703,15 @@ describe('DeliberationService', () => {
       expect((await service.getProposalById('t1', PROFILE_ID)).moderationId).toBeNull();
     });
 
+    it('la ocultación vinculada a una inquietud no da moderationId ni al autor', async () => {
+      prisma.groupMembership.findUnique.mockResolvedValue(mockMembership);
+      prisma.proposal.findUnique.mockResolvedValue({ ...base, hidden: true, authorProfileId: PROFILE_ID });
+      prisma.moderationAction.findFirst.mockResolvedValue({ id: 'ma3', reason: 'Oculto junto con la inquietud de origen.', status: 'oculto' });
+      const d = await service.getProposalById('t1', PROFILE_ID);
+      expect(d.moderationId).toBeNull();
+      expect(d.hiddenReason).toBe('Oculto junto con la inquietud de origen.');
+    });
+
     it('la lista muestra un título neutro para un tema oculto', async () => {
       prisma.groupMembership.findUnique.mockResolvedValue(mockMembership);
       prisma.proposal.findMany.mockResolvedValue([{ ...base, hidden: true }]);
