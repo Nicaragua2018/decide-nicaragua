@@ -61,6 +61,8 @@ export interface ProposalDetail extends ProposalSummary {
   hiddenReason: string | null;
   moderationId: string | null;
   canModerate: boolean;
+  abiertoPorComunidad: boolean;
+  inquietudes: { id: string; title: string }[];
 }
 
 export interface ProposalListResponse {

@@ -184,6 +184,8 @@ export class DeliberationService {
       moderationId: topicInfo?.moderationId ?? null,
       // Lo calcula ForumsService (Tarea 4/5); este servicio no conoce los permisos de moderación.
       canModerate: false,
+      abiertoPorComunidad: proposal.abiertoPorComunidad,
+      inquietudes: [],
     };
 
     return proposal.hidden ? redactHiddenTopic(detail) : detail;
