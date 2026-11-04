@@ -33,7 +33,7 @@ export interface PublicConsensus {
 /** Apelación pendiente, para la cola de la mesa. */
 export interface ModerationAppeal {
   id: string;
-  target: 'tema' | 'respuesta' | 'inquietud';
+  target: 'tema' | 'respuesta' | 'inquietud' | 'frase';
   targetId: string;
   reason: string;
   appealText: string;

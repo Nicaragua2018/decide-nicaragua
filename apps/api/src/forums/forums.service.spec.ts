@@ -423,6 +423,11 @@ describe('ForumsService', () => {
         await expect(service.appeal(YO, 'ma1', 'No fue mi intención ofender', 'ip')).rejects.toThrow(BadRequestException);
       });
 
+      it('hasta que se habilite la moderación de frases, el tipo frase se rechaza', async () => {
+        await expect(service.hide(YO, { target: 'frase', targetId: 'f1', reason: 'Lenguaje ofensivo' }, 'ip'))
+          .rejects.toThrow(new BadRequestException('Tipo de contenido no válido.'));
+      });
+
       it('un no autor no apela; el autor sí, una vez', async () => {
         prisma.moderationAction.findUnique.mockResolvedValue({ id: 'ma1', target: 'inquietud', targetId: 'q1', status: 'oculto' });
         prisma.inquietud.findUnique.mockResolvedValue(inq({ authorProfileId: 'p-otro' }));
