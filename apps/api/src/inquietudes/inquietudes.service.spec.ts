@@ -9,7 +9,7 @@ function buildPrisma() {
   return {
     groupMembership: { findUnique: vi.fn(), count: vi.fn() },
     inquietud: { create: vi.fn(), findMany: vi.fn(), findUnique: vi.fn(), updateMany: vi.fn() },
-    inquietudApoyo: { upsert: vi.fn(), deleteMany: vi.fn(), count: vi.fn(), findUnique: vi.fn() },
+    inquietudApoyo: { upsert: vi.fn(), deleteMany: vi.fn(), count: vi.fn(), findUnique: vi.fn(), findMany: vi.fn() },
     moderationAction: { findFirst: vi.fn() },
     profile: { findUnique: vi.fn() },
   };
@@ -59,6 +59,8 @@ describe('InquietudesService', () => {
     prisma.groupMembership.count.mockResolvedValue(5);
     prisma.inquietudApoyo.count.mockResolvedValue(0);
     prisma.inquietudApoyo.findUnique.mockResolvedValue(null);
+    // Si el servicio leyera filas de apoyos, aparecería OTRO: la prueba lo detectaría.
+    prisma.inquietudApoyo.findMany.mockResolvedValue([{ id: 'x', inquietudId: 'i1', profileId: OTRO }]);
     prisma.inquietud.updateMany.mockResolvedValue({ count: 1 });
   });
 
@@ -79,6 +81,14 @@ describe('InquietudesService', () => {
       const largo = await validate(Object.assign(new CreateInquietudDto(), { ...base, body: 'x'.repeat(2001) }));
       expect(largo[0]?.constraints?.maxLength).toBe('La explicación admite hasta 2000 caracteres.');
       expect(await validate(Object.assign(new CreateInquietudDto(), { ...base, body: 'x'.repeat(2000) }))).toEqual([]);
+    });
+  });
+
+  describe('DTO: mensajes en español', () => {
+    it('un groupId inválido y un título no texto traen mensaje en español', async () => {
+      const errors = await validate(Object.assign(new CreateInquietudDto(), { groupId: 'x', title: 5, body: 3 }));
+      const msgs = errors.flatMap((e) => Object.values(e.constraints ?? {}));
+      expect(msgs).toEqual(expect.arrayContaining(['Elige una comunidad válida.', 'El título debe ser texto.', 'La explicación debe ser texto.']));
     });
   });
 
@@ -146,18 +156,10 @@ describe('InquietudesService', () => {
       await expect(service.support(YO, 'i1', 'ip')).rejects.toBeInstanceOf(ForbiddenException);
     });
 
-    it('la auditoría de apoyar y retirar no lleva actorId ni ip', async () => {
+    it('apoyar y retirar el apoyo no escriben nada en la auditoría', async () => {
       await service.support(YO, 'i1', '9.9.9.9');
       await service.unsupport(YO, 'i1', '9.9.9.9');
-      const calls = audit.log.mock.calls.map((c) => c[0]);
-      for (const accion of ['inquietud.supported', 'inquietud.unsupported']) {
-        const c = calls.find((x) => x.action === accion);
-        expect(c).toBeDefined();
-        expect(c).not.toHaveProperty('actorId');
-        expect(c).not.toHaveProperty('ip');
-        expect(JSON.stringify(c)).not.toContain(YO);
-        expect(JSON.stringify(c)).not.toContain('u-yo');
-      }
+      expect(audit.log).not.toHaveBeenCalled();
     });
   });
 
@@ -171,7 +173,7 @@ describe('InquietudesService', () => {
       const antes = Date.now();
       await service.evaluateThreshold('i1');
       const arg = prisma.inquietud.updateMany.mock.calls[0]![0];
-      expect(arg.where).toEqual({ id: 'i1', status: 'abierta', hidden: false });
+      expect(arg.where).toEqual({ id: 'i1', status: 'abierta', hidden: false, thresholdReachedAt: null });
       expect(arg.data.status).toBe('en_plazo');
       const dias = (arg.data.deadlineAt.getTime() - arg.data.thresholdReachedAt.getTime()) / 86_400_000;
       expect(dias).toBe(7);
@@ -213,7 +215,7 @@ describe('InquietudesService', () => {
   describe('lectura sin revelar quién apoyó', () => {
     it('la lista ordena por apoyos y luego antigüedad, sin ids de quienes apoyaron', async () => {
       prisma.inquietud.findMany.mockResolvedValue([
-        fila({ id: 'a', createdAt: new Date('2026-11-02T00:00:00Z') }),
+        fila({ id: 'a', apoyos: [{ profileId: OTRO }], createdAt: new Date('2026-11-02T00:00:00Z') }),
         fila({ id: 'b', createdAt: new Date('2026-11-03T00:00:00Z') }),
         fila({ id: 'c', createdAt: new Date('2026-11-01T00:00:00Z') }),
       ]);
@@ -229,10 +231,11 @@ describe('InquietudesService', () => {
       expect(lista.map((i) => i.id)).toEqual(['b', 'c', 'a']);
       expect(lista[0]).toEqual(expect.objectContaining({ supportCount: 5, supportedByMe: true, threshold: 3 }));
       expect(JSON.stringify(lista)).not.toContain(OTRO);
+      expect(JSON.stringify(lista)).not.toContain('apoyos');
     });
 
     it('el detalle no contiene ids de quienes apoyaron y canOrganize es falso por ahora', async () => {
-      prisma.inquietud.findUnique.mockResolvedValue(fila());
+      prisma.inquietud.findUnique.mockResolvedValue(fila({ apoyos: [{ profileId: OTRO }] }));
       prisma.inquietudApoyo.count.mockResolvedValue(2);
       const d = await service.get(YO, 'i1');
       expect(d.supportCount).toBe(2);

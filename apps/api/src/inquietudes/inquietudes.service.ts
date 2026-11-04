@@ -164,8 +164,7 @@ export class InquietudesService {
       create: { inquietudId: id, profileId },
       update: {},
     });
-    // Sin actorId ni ip: el registro no debe revelar quién apoyó.
-    void this.audit.log({ action: 'inquietud.supported', resource: `inquietud:${id}`, metadata: { inquietudId: id } });
+    // Apoyar y retirar el apoyo no se audita: la hora exacta podría delatar a quien apoyó.
     await this.evaluateThreshold(id);
   }
 
@@ -174,7 +173,6 @@ export class InquietudesService {
     if (!row) throw new NotFoundException('Inquietud no encontrada');
     await this.requireMembership(row.groupId, profileId);
     await this.prisma.inquietudApoyo.deleteMany({ where: { inquietudId: id, profileId } });
-    void this.audit.log({ action: 'inquietud.unsupported', resource: `inquietud:${id}`, metadata: { inquietudId: id } });
   }
 
   async evaluateThreshold(id: string): Promise<void> {
@@ -188,7 +186,7 @@ export class InquietudesService {
     const days = await this.rules.getInt('inquietud.plazo_respuesta_dias', row.groupId);
     const now = new Date();
     const res = await this.prisma.inquietud.updateMany({
-      where: { id, status: 'abierta', hidden: false },
+      where: { id, status: 'abierta', hidden: false, thresholdReachedAt: null },
       data: { status: 'en_plazo', thresholdReachedAt: now, deadlineAt: new Date(now.getTime() + days * DIA_MS) },
     });
     if (res.count > 0) {
