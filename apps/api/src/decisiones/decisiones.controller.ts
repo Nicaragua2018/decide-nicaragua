@@ -1,6 +1,6 @@
 import { Body, Controller, ForbiddenException, Get, Param, ParseUUIDPipe, Post, Put, Req, UseGuards } from '@nestjs/common';
 import type { Request } from 'express';
-import type { DecisionTemaResponse, JwtPayload } from '@decide/shared';
+import type { DecisionTemaResponse, JwtPayload, PapeletaValue } from '@decide/shared';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { extractIp } from '../common/utils/ip.util';
@@ -9,6 +9,7 @@ import { CreateSolucionDto } from './dto/create-solucion.dto';
 import { MergeSolucionDto } from './dto/merge-solucion.dto';
 import { ProposeModoDto } from './dto/propose-modo.dto';
 import { ObjecionDto } from './dto/objecion.dto';
+import { PapeletaDto } from './dto/papeleta.dto';
 
 @Controller('decisiones')
 @UseGuards(JwtAuthGuard)
@@ -65,5 +66,14 @@ export class DecisionesController {
     @CurrentUser() user: JwtPayload,
   ): Promise<{ yoObjete: boolean }> {
     return this.decisiones.setObjecion(this.perfil(user), proposalId, dto.objeto);
+  }
+
+  @Put('temas/:proposalId/papeleta')
+  async castPapeleta(
+    @Param('proposalId', ParseUUIDPipe) proposalId: string,
+    @Body() dto: PapeletaDto,
+    @CurrentUser() user: JwtPayload,
+  ): Promise<PapeletaValue> {
+    return this.decisiones.castPapeleta(this.perfil(user), proposalId, { abstencion: dto.abstencion, orden: dto.orden });
   }
 }

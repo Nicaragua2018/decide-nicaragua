@@ -1,15 +1,26 @@
 import { Prisma } from '@prisma/client';
 import { BadRequestException, ForbiddenException, Injectable, Logger, NotFoundException } from '@nestjs/common';
-import type { DecisionModoValue, DecisionTemaResponse, DecisionView, SolucionItem } from '@decide/shared';
+import type {
+  DecisionModoValue,
+  DecisionResultadoView,
+  DecisionTemaResponse,
+  DecisionView,
+  PapeletaValue,
+  SolucionItem,
+} from '@decide/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { ForumsService } from '../forums/forums.service';
 import { RulesService } from '../rules/rules.service';
+import { tallyDecision } from './decision-tally';
 
 const OCULTA_TITULO = 'Solución oculta por moderación';
 const FIJAS = 'Las soluciones ya quedaron fijas.';
 const DIA_MS = 86_400_000;
 const OBJECION_CERRADA = 'El plazo para objetar el modo no está abierto.';
+const VOTACION_CERRADA = 'La votación no está abierta.';
+
+const matriz = (v: Prisma.JsonValue | null | undefined): number[][] => (Array.isArray(v) ? (v as number[][]) : []);
 
 /** El plazo del debate venció: las soluciones quedan fijas aunque el programador aún no haya pasado. */
 const debateVencido = (endsAt: Date | null, now: Date): boolean => endsAt !== null && endsAt.getTime() <= now.getTime();
@@ -194,23 +205,57 @@ export class DecisionesService {
 
     let vista: DecisionView | null = null;
     if (decision) {
+      const fase = decision.fase as DecisionView['fase'];
       const candidatas: DecisionView['candidatas'] = [];
       for (const id of decision.candidatas) {
         const s = porId.get(id);
         if (s) candidatas.push({ id: s.id, ...textoDe(s), hidden: s.hidden });
       }
+
+      // Solo la papeleta y la objeción propias, leídas por su clave única: nunca las de otra persona.
+      const clave = { decisionId_profileId: { decisionId: decision.id, profileId } };
+      const [papeleta, objecion] = await Promise.all([
+        fase === 'votacion' || fase === 'contada'
+          ? this.prisma.decisionPapeleta.findUnique({ where: clave, select: { abstencion: true, orden: true } })
+          : null,
+        this.prisma.objecionModo.findUnique({ where: clave, select: { id: true } }),
+      ]);
+      const puedoObjetar =
+        fase === 'objecion' &&
+        decision.objecionEndsAt !== null &&
+        Date.now() < decision.objecionEndsAt.getTime() &&
+        (await this.participantes(proposalId, tema.groupId)).has(profileId);
+
+      // Antes del conteo no sale ninguna cifra; después, el resultado congelado.
+      let resultado: DecisionResultadoView | null = null;
+      if (fase === 'contada' && decision.resultado) {
+        const total = decision.papeletasTotal ?? 0;
+        const abst = decision.abstenciones ?? 0;
+        resultado = {
+          resultado: decision.resultado as DecisionResultadoView['resultado'],
+          ganadoras: [...decision.ganadoras],
+          aprobaciones: decision.candidatas.map((solucionId, i) => ({ solucionId, incluyen: decision.aprobaciones[i] ?? 0 })),
+          papeletasTotal: total,
+          abstenciones: abst,
+          validas: total - abst,
+          miembros: decision.miembros ?? 0,
+          pairwiseMatrix: matriz(decision.pairwiseMatrix),
+          schulzeMatrix: matriz(decision.schulzeMatrix),
+          contadaAt: (decision.contadaAt ?? decision.updatedAt).toISOString(),
+        };
+      }
+
       vista = {
-        fase: decision.fase as DecisionView['fase'],
+        fase,
         modo: (decision.modo as DecisionView['modo']) ?? null,
         modoPropuesto: (decision.modoPropuesto as DecisionView['modoPropuesto']) ?? null,
         objecionEndsAt: decision.objecionEndsAt ? decision.objecionEndsAt.toISOString() : null,
         votacionEndsAt: decision.votacionEndsAt ? decision.votacionEndsAt.toISOString() : null,
         candidatas,
-        // Los completa la Task 5 (papeleta, objeción y resultado).
-        miPapeleta: null,
-        yoObjete: false,
-        puedoObjetar: false,
-        resultado: null,
+        miPapeleta: papeleta ? { abstencion: papeleta.abstencion, orden: [...papeleta.orden] } : null,
+        yoObjete: Boolean(objecion),
+        puedoObjetar,
+        resultado,
       };
     }
 
@@ -293,6 +338,50 @@ export class DecisionesService {
       }
     });
     return { yoObjete: objeto };
+  }
+
+  // ─── Papeleta ─────────────────────────────────────────────────────────────
+
+  /** Guarda o cambia la papeleta propia mientras la votación esté abierta. No se audita (como los votos). */
+  async castPapeleta(profileId: string, proposalId: string, p: PapeletaValue): Promise<PapeletaValue> {
+    const tema = await this.tema(profileId, proposalId);
+    if (tema.hidden) throw new BadRequestException('Este tema está oculto por moderación.');
+    const decision = await this.prisma.decision.findUnique({
+      where: { proposalId },
+      select: { id: true, fase: true, votacionEndsAt: true, candidatas: true },
+    });
+    if (
+      !decision ||
+      (decision.fase as string) !== 'votacion' ||
+      !decision.votacionEndsAt ||
+      Date.now() >= decision.votacionEndsAt.getTime()
+    ) {
+      throw new BadRequestException(VOTACION_CERRADA);
+    }
+    if (p.abstencion && p.orden.length > 0) {
+      throw new BadRequestException('Si te abstienes, no ordenes ninguna solución.');
+    }
+    if (new Set(p.orden).size !== p.orden.length) {
+      throw new BadRequestException('Cada solución puede aparecer una sola vez en tu orden.');
+    }
+    const candidatas = new Set(decision.candidatas);
+    if (p.orden.some((id) => !candidatas.has(id))) {
+      throw new BadRequestException('Tu orden incluye una solución que no está en esta votación.');
+    }
+    const valor: PapeletaValue = { abstencion: p.abstencion, orden: [...p.orden] };
+    await this.prisma.$transaction(async (tx) => {
+      // Relee con bloqueo: si el plazo venció, el programador ya contó o el tema se ocultó (cancelada), no se escribe.
+      const abierta = await tx.$queryRaw<{ id: string }[]>(
+        Prisma.sql`SELECT id FROM decisiones WHERE id = ${decision.id}::uuid AND fase = 'votacion' AND "votacionEndsAt" > ${new Date()} FOR UPDATE`,
+      );
+      if (abierta.length === 0) throw new BadRequestException(VOTACION_CERRADA);
+      await tx.decisionPapeleta.upsert({
+        where: { decisionId_profileId: { decisionId: decision.id, profileId } },
+        create: { decisionId: decision.id, profileId, abstencion: valor.abstencion, orden: valor.orden },
+        update: { abstencion: valor.abstencion, orden: valor.orden },
+      });
+    });
+    return valor;
   }
 
   /**
@@ -470,8 +559,71 @@ export class DecisionesService {
     return n;
   }
 
-  /** Cuenta las papeletas y congela el resultado. Lo implementa la Task 5. */
-  private async contar(_decisionId: string, _now: Date): Promise<boolean> {
-    return false;
+  /**
+   * Cuenta las papeletas de los miembros actuales y congela el resultado en la fila de la
+   * decisión, una sola vez: el `updateMany` condicionado a `votacion` no se repite.
+   */
+  async contar(decisionId: string, now: Date): Promise<boolean> {
+    const previa = await this.prisma.decision.findUnique({
+      where: { id: decisionId },
+      select: { proposalId: true, proposal: { select: { groupId: true } } },
+    });
+    if (!previa) return false;
+    const { proposalId } = previa;
+    const groupId = previa.proposal.groupId;
+    const quorumPct = await this.rules.getInt('votacion.quorum_porcentaje', groupId);
+
+    const resultado = await this.prisma.$transaction(async (tx) => {
+      // Un tema ocultado a la vez ya canceló la decisión (hideTopicTx): aquí no se cuenta.
+      if (!(await bloquearTema(tx, proposalId))) return null;
+      const d = await tx.decision.findUnique({
+        where: { id: decisionId },
+        select: { fase: true, modo: true, candidatas: true },
+      });
+      if (!d || (d.fase as string) !== 'votacion') return null;
+      const [filas, miembros] = await Promise.all([
+        // Solo cuentan quienes siguen siendo miembros (la suspensión quita la membresía).
+        tx.decisionPapeleta.findMany({
+          where: { decisionId, profile: { memberships: { some: { groupId } } } },
+          select: { abstencion: true, orden: true },
+        }),
+        tx.groupMembership.count({ where: { groupId } }),
+      ]);
+      // Las candidatas están congeladas y castPapeleta ya valida; por si acaso se descartan
+      // ids ajenos y repetidos de lo guardado.
+      const validas = new Set(d.candidatas);
+      const papeletas = filas.map((f) => ({
+        abstencion: f.abstencion,
+        orden: f.abstencion ? [] : [...new Set(f.orden)].filter((id) => validas.has(id)),
+      }));
+      let modo: DecisionModoValue;
+      if (d.candidatas.length === 1) modo = 'compatibles';
+      else if (d.modo) modo = d.modo as DecisionModoValue;
+      else throw new Error('Decisión en votación sin modo');
+      const t = tallyDecision({ candidatas: d.candidatas, modo, papeletas, miembros, quorumPct });
+      const r = await tx.decision.updateMany({
+        where: { id: decisionId, fase: 'votacion' },
+        data: {
+          fase: 'contada',
+          resultado: t.resultado,
+          ganadoras: t.ganadoras,
+          aprobaciones: t.aprobaciones,
+          pairwiseMatrix: t.pairwiseMatrix as Prisma.InputJsonValue,
+          schulzeMatrix: t.schulzeMatrix as Prisma.InputJsonValue,
+          papeletasTotal: t.papeletasTotal,
+          abstenciones: t.abstenciones,
+          miembros,
+          contadaAt: now,
+        },
+      });
+      return r.count === 0 ? null : t.resultado;
+    });
+    if (!resultado) return false;
+    void this.audit.log({
+      action: 'decision.counted',
+      resource: `decision:${decisionId}`,
+      metadata: { proposalId, resultado },
+    });
+    return true;
   }
 }

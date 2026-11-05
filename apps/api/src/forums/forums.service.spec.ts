@@ -14,11 +14,11 @@ function buildPrisma() {
     proposalComment: { findUnique: vi.fn(), update: vi.fn() },
     inquietud: { findUnique: vi.fn(), update: vi.fn() },
     frase: { findUnique: vi.fn(), update: vi.fn() },
-    solucion: { findUnique: vi.fn(), update: vi.fn(), count: vi.fn(), create: vi.fn() },
+    solucion: { findUnique: vi.fn(), findMany: vi.fn().mockResolvedValue([]), update: vi.fn(), count: vi.fn(), create: vi.fn() },
     election: { create: vi.fn(), findUnique: vi.fn(), update: vi.fn() },
     electionResult: { findUnique: vi.fn() },
     electionCandidate: { findUnique: vi.fn() },
-    decision: { findUnique: vi.fn(), updateMany: vi.fn() },
+    decision: { findUnique: vi.fn(), findMany: vi.fn().mockResolvedValue([]), updateMany: vi.fn() },
     moderationAction: { create: vi.fn(), findUnique: vi.fn(), findFirst: vi.fn(), findMany: vi.fn(), update: vi.fn() },
     profile: { findUnique: vi.fn() },
     $transaction: vi.fn(),
@@ -96,6 +96,32 @@ describe('ForumsService', () => {
       prisma.electionCandidate.findUnique.mockResolvedValue({ title: 'A favor' });
       const r = await service.publicConsensus();
       expect(r[0]?.winningOption).toBe('A favor');
+    });
+
+    it('con decisión de soluciones contada: muestra las ganadoras en orden y enmascara las ocultas', async () => {
+      prisma.proposal.findMany.mockResolvedValue([
+        {
+          id: 't3', title: 'Agua', kind: 'propuesta', conclusion: 'Se aprueban dos soluciones.', objections: null,
+          closedAt: new Date('2026-11-22T00:00:00Z'), electionId: null, group: { name: 'Estelí' }, signals: [],
+        },
+        {
+          id: 't4', title: 'Luz', kind: 'propuesta', conclusion: 'Sin acuerdo.', objections: null,
+          closedAt: new Date('2026-11-21T00:00:00Z'), electionId: null, group: { name: 'Estelí' }, signals: [],
+        },
+      ]);
+      prisma.decision.findMany.mockResolvedValue([{ proposalId: 't3', ganadoras: ['s2', 's1'] }]);
+      prisma.solucion.findMany.mockResolvedValue([
+        { id: 's1', title: 'Huerto comunitario', hidden: false },
+        { id: 's2', title: 'Texto secreto de s2', hidden: true },
+      ]);
+      const r = await service.publicConsensus();
+      expect(prisma.decision.findMany).toHaveBeenCalledWith(expect.objectContaining({
+        where: { proposalId: { in: ['t3', 't4'] }, fase: 'contada' },
+      }));
+      expect(r[0]?.approvedSolutions).toEqual(['Solución oculta por moderación', 'Huerto comunitario']);
+      expect(r[0]?.winningOption).toBeNull();
+      expect(r[1]?.approvedSolutions).toEqual([]);
+      expect(JSON.stringify(r)).not.toContain('secreto');
     });
   });
 

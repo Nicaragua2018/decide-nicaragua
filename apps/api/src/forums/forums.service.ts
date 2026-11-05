@@ -572,6 +572,26 @@ export class ForumsService {
       orderBy: { closedAt: 'desc' },
       take: 100,
     });
+    // Soluciones ganadoras de las decisiones contadas (plan 3), en dos consultas para toda la lista.
+    const decisiones = topics.length
+      ? await this.prisma.decision.findMany({
+          where: { proposalId: { in: topics.map((t) => t.id) }, fase: 'contada' },
+          select: { proposalId: true, ganadoras: true },
+        })
+      : [];
+    const ganadorasDe = new Map(decisiones.map((d) => [d.proposalId, d.ganadoras]));
+    const idsGanadoras = [...new Set(decisiones.flatMap((d) => d.ganadoras))];
+    const soluciones = idsGanadoras.length
+      ? await this.prisma.solucion.findMany({
+          where: { id: { in: idsGanadoras } },
+          select: { id: true, title: true, hidden: true },
+        })
+      : [];
+    // Una solución ocultada después del conteo sale enmascarada.
+    const tituloDe = new Map(
+      soluciones.map((s) => [s.id, s.hidden ? 'Solución oculta por moderación' : s.title]),
+    );
+
     const result: PublicConsensus[] = [];
     for (const t of topics) {
       const counts = { support: 0, neutral: 0, object: 0 };
@@ -595,7 +615,10 @@ export class ForumsService {
         signalCounts: counts,
         closedAt: (t.closedAt ?? new Date(0)).toISOString(),
         winningOption,
-        approvedSolutions: [],
+        approvedSolutions: (ganadorasDe.get(t.id) ?? []).flatMap((id) => {
+          const titulo = tituloDe.get(id);
+          return titulo === undefined ? [] : [titulo];
+        }),
       });
     }
     return result;

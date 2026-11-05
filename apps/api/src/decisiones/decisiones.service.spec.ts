@@ -9,6 +9,7 @@ import { CreateSolucionDto } from './dto/create-solucion.dto';
 import { MergeSolucionDto } from './dto/merge-solucion.dto';
 import { ProposeModoDto } from './dto/propose-modo.dto';
 import { ObjecionDto } from './dto/objecion.dto';
+import { PapeletaDto } from './dto/papeleta.dto';
 
 const YO = 'p-yo';
 const G = 'g1';
@@ -17,7 +18,7 @@ const T = 't1';
 function buildPrisma() {
   return {
     proposal: { findUnique: vi.fn(), findMany: vi.fn().mockResolvedValue([]) },
-    groupMembership: { findUnique: vi.fn(), findMany: vi.fn().mockResolvedValue([]) },
+    groupMembership: { findUnique: vi.fn(), findMany: vi.fn().mockResolvedValue([]), count: vi.fn().mockResolvedValue(0) },
     $transaction: vi.fn(),
     $queryRaw: vi.fn().mockResolvedValue([]),
     solucion: { create: vi.fn(), findMany: vi.fn().mockResolvedValue([]), findUnique: vi.fn(), updateMany: vi.fn() },
@@ -25,7 +26,10 @@ function buildPrisma() {
       findUnique: vi.fn(), findMany: vi.fn().mockResolvedValue([]), create: vi.fn().mockResolvedValue({ id: 'd1' }),
       updateMany: vi.fn().mockResolvedValue({ count: 1 }),
     },
-    objecionModo: { findMany: vi.fn().mockResolvedValue([]), upsert: vi.fn(), deleteMany: vi.fn() },
+    objecionModo: {
+      findMany: vi.fn().mockResolvedValue([]), findUnique: vi.fn().mockResolvedValue(null), upsert: vi.fn(), deleteMany: vi.fn(),
+    },
+    decisionPapeleta: { findUnique: vi.fn().mockResolvedValue(null), findMany: vi.fn().mockResolvedValue([]), upsert: vi.fn() },
     proposalComment: { findMany: vi.fn().mockResolvedValue([]) },
     consensusSignal: { findMany: vi.fn().mockResolvedValue([]) },
     frase: { findMany: vi.fn().mockResolvedValue([]) },
@@ -495,15 +499,92 @@ describe('DecisionesService', () => {
     });
   });
 
-  describe('processDeadlines() — fin de la votación', () => {
-    it('llama al conteo, que en esta etapa no hace transiciones', async () => {
-      const NOW = new Date('2026-11-20T12:00:00Z');
+  describe('processDeadlines() — fin de la votación (conteo)', () => {
+    const NOW = new Date('2026-11-20T12:00:00Z');
+    const MIEMBROS = ['a', 'b', 'c', 'd'];
+    const PAPELETAS = [
+      { profileId: 'a', abstencion: false, orden: ['s1', 's2'] },
+      // Guardada con un id ajeno y repetido: el conteo los descarta por si acaso.
+      { profileId: 'b', abstencion: false, orden: ['s1', 'zz', 's1'] },
+      { profileId: 'c', abstencion: true, orden: [] },
+      { profileId: 'ex-miembro', abstencion: false, orden: ['s2', 's1'] },
+    ];
+
+    beforeEach(() => {
       prisma.decision.findMany.mockImplementation(async ({ where }: { where: { fase: string } }) =>
-        where.fase === 'votacion' ? [{ id: 'd9', proposalId: T }] : []);
-      expect(await service.processDeadlines(NOW)).toBe(0);
+        where.fase === 'votacion' ? [{ id: 'd1' }] : []);
+      prisma.decision.findUnique.mockResolvedValue({
+        id: 'd1', proposalId: T, fase: 'votacion', modo: 'excluyentes', candidatas: ['s1', 's2'], proposal: { groupId: G },
+      });
+      prisma.$queryRaw.mockResolvedValue([{ id: T }]);
+      prisma.groupMembership.count.mockResolvedValue(MIEMBROS.length);
+      rules.getInt.mockImplementation(async (key: string) => (key === 'votacion.quorum_porcentaje' ? 50 : 7));
+      prisma.decisionPapeleta.findMany.mockImplementation(
+        async ({ where }: { where: { profile?: { memberships?: { some?: { groupId?: string } } } } }) =>
+          (where.profile?.memberships?.some?.groupId === G ? PAPELETAS.filter((p) => MIEMBROS.includes(p.profileId)) : PAPELETAS)
+            .map(({ abstencion, orden }) => ({ abstencion, orden })),
+      );
+    });
+
+    it('busca las votaciones vencidas', async () => {
+      await service.processDeadlines(NOW);
       expect(prisma.decision.findMany).toHaveBeenCalledWith(expect.objectContaining({
         where: { fase: 'votacion', votacionEndsAt: { lte: NOW } },
       }));
+    });
+
+    it('cuenta solo papeletas y miembros actuales, congela el resultado y audita decision.counted', async () => {
+      expect(await service.processDeadlines(NOW)).toBe(1);
+      expect(rules.getInt).toHaveBeenCalledWith('votacion.quorum_porcentaje', G);
+      expect(prisma.decisionPapeleta.findMany).toHaveBeenCalledWith(expect.objectContaining({
+        where: { decisionId: 'd1', profile: { memberships: { some: { groupId: G } } } },
+      }));
+      expect(prisma.groupMembership.count).toHaveBeenCalledWith({ where: { groupId: G } });
+      expect((prisma.$queryRaw.mock.calls[0]![0] as Prisma.Sql).sql).toContain('FOR UPDATE');
+      const arg = prisma.decision.updateMany.mock.calls[0]![0];
+      expect(arg.where).toEqual({ id: 'd1', fase: 'votacion' });
+      // La del ex miembro no cuenta: 3 papeletas, 1 abstención, s1 en 2 y s2 en 1.
+      expect(arg.data).toMatchObject({
+        fase: 'contada', resultado: 'aprobada', ganadoras: ['s1'], aprobaciones: [2, 1],
+        papeletasTotal: 3, abstenciones: 1, miembros: 4, contadaAt: NOW,
+      });
+      expect(arg.data.pairwiseMatrix).toEqual([[0, 2], [0, 0]]);
+      expect(Array.isArray(arg.data.schulzeMatrix)).toBe(true);
+      expect(audit.log).toHaveBeenCalledTimes(1);
+      expect(audit.log).toHaveBeenCalledWith(expect.objectContaining({
+        action: 'decision.counted', resource: 'decision:d1', metadata: { proposalId: T, resultado: 'aprobada' },
+      }));
+    });
+
+    it('ejecutado dos veces audita una sola vez (el segundo updateMany no toca nada)', async () => {
+      prisma.decision.updateMany.mockResolvedValueOnce({ count: 1 }).mockResolvedValueOnce({ count: 0 });
+      expect(await service.processDeadlines(NOW)).toBe(1);
+      expect(await service.processDeadlines(NOW)).toBe(0);
+      expect(audit.log).toHaveBeenCalledTimes(1);
+    });
+
+    it('con una sola candidata usa compatibles (aunque no haya modo guardado)', async () => {
+      prisma.decision.findUnique.mockResolvedValue({
+        id: 'd1', proposalId: T, fase: 'votacion', modo: null, candidatas: ['s1'], proposal: { groupId: G },
+      });
+      expect(await service.processDeadlines(NOW)).toBe(1);
+      expect(prisma.decision.updateMany.mock.calls[0]![0].data).toMatchObject({ resultado: 'aprobada', ganadoras: ['s1'] });
+    });
+
+    it('si el tema ya no está vivo al bloquearlo, no cuenta ni audita', async () => {
+      prisma.$queryRaw.mockResolvedValue([]);
+      expect(await service.processDeadlines(NOW)).toBe(0);
+      expect(prisma.decision.updateMany).not.toHaveBeenCalled();
+      expect(audit.log).not.toHaveBeenCalled();
+    });
+
+    it('si dentro de la transacción la decisión ya no está en votación, no cuenta', async () => {
+      prisma.decision.findUnique.mockResolvedValue({
+        id: 'd1', proposalId: T, fase: 'cancelada', modo: 'excluyentes', candidatas: ['s1', 's2'], proposal: { groupId: G },
+      });
+      expect(await service.processDeadlines(NOW)).toBe(0);
+      expect(prisma.decision.updateMany).not.toHaveBeenCalled();
+      expect(audit.log).not.toHaveBeenCalled();
     });
   });
 
@@ -610,6 +691,195 @@ describe('DecisionesService', () => {
       expect(await service.setObjecion(YO, T, false)).toEqual({ yoObjete: false });
       expect(prisma.objecionModo.deleteMany).toHaveBeenCalledWith({ where: { decisionId: 'd1', profileId: YO } });
       expect(audit.log).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('DTO de la papeleta', () => {
+    const U1 = '3f0f6a7e-5c1d-4b8a-9d2e-1a2b3c4d5e6f';
+    it('abstencion booleana, orden un arreglo de UUID de hasta 50', async () => {
+      expect(await validate(plainToInstance(PapeletaDto, { abstencion: false, orden: [U1] }))).toHaveLength(0);
+      expect(await validate(plainToInstance(PapeletaDto, { abstencion: true, orden: [] }))).toHaveLength(0);
+      expect(await validate(plainToInstance(PapeletaDto, { abstencion: 'no', orden: [] }))).toHaveLength(1);
+      expect(await validate(plainToInstance(PapeletaDto, { abstencion: false, orden: 'x' }))).not.toHaveLength(0);
+      expect(await validate(plainToInstance(PapeletaDto, { abstencion: false, orden: ['nada'] }))).toHaveLength(1);
+      expect(await validate(plainToInstance(PapeletaDto, { abstencion: false, orden: Array(51).fill(U1) }))).toHaveLength(1);
+    });
+  });
+
+  describe('castPapeleta()', () => {
+    const futuro = () => new Date(Date.now() + 86_400_000);
+    const enVotacion = (candidatas: string[]) => ({
+      id: 'd1', proposalId: T, fase: 'votacion', votacionEndsAt: futuro(), candidatas,
+    });
+    beforeEach(() => {
+      prisma.decision.findUnique.mockResolvedValue(enVotacion(['s1']));
+      prisma.$queryRaw.mockResolvedValue([{ id: 'd1' }]);
+      prisma.decisionPapeleta.upsert.mockResolvedValue({});
+    });
+
+    it.each([
+      ['Apruebo', { abstencion: false, orden: ['s1'] }],
+      ['No apruebo', { abstencion: false, orden: [] }],
+      ['Me abstengo', { abstencion: true, orden: [] }],
+    ])('con una sola candidata: «%s» se guarda con upsert y no se audita', async (_n, p) => {
+      expect(await service.castPapeleta(YO, T, p)).toEqual(p);
+      expect(prisma.decisionPapeleta.upsert).toHaveBeenCalledWith({
+        where: { decisionId_profileId: { decisionId: 'd1', profileId: YO } },
+        create: { decisionId: 'd1', profileId: YO, abstencion: p.abstencion, orden: p.orden },
+        update: { abstencion: p.abstencion, orden: p.orden },
+      });
+      expect(audit.log).not.toHaveBeenCalled();
+    });
+
+    it('orden parcial con varias candidatas', async () => {
+      prisma.decision.findUnique.mockResolvedValue(enVotacion(['s1', 's2', 's3']));
+      const p = { abstencion: false, orden: ['s3', 's1'] };
+      expect(await service.castPapeleta(YO, T, p)).toEqual(p);
+      expect(prisma.decisionPapeleta.upsert).toHaveBeenCalledTimes(1);
+    });
+
+    it('papeleta manipulada: id de otro tema, id repetido o abstención con orden → 400 sin guardar', async () => {
+      prisma.decision.findUnique.mockResolvedValue(enVotacion(['s1', 's2']));
+      await expect(service.castPapeleta(YO, T, { abstencion: false, orden: ['s1', 's-otro'] })).rejects.toThrow(BadRequestException);
+      await expect(service.castPapeleta(YO, T, { abstencion: false, orden: ['s1', 's1'] })).rejects.toThrow(BadRequestException);
+      await expect(service.castPapeleta(YO, T, { abstencion: true, orden: ['s1'] })).rejects.toThrow(BadRequestException);
+      expect(prisma.decisionPapeleta.upsert).not.toHaveBeenCalled();
+    });
+
+    it('fuera de la fase de votación o con el plazo vencido: 400', async () => {
+      prisma.decision.findUnique.mockResolvedValue({ ...enVotacion(['s1']), fase: 'objecion' });
+      await expect(service.castPapeleta(YO, T, { abstencion: true, orden: [] })).rejects.toThrow('La votación no está abierta.');
+      prisma.decision.findUnique.mockResolvedValue({ ...enVotacion(['s1']), votacionEndsAt: new Date(Date.now() - 1000) });
+      await expect(service.castPapeleta(YO, T, { abstencion: true, orden: [] })).rejects.toThrow('La votación no está abierta.');
+      prisma.decision.findUnique.mockResolvedValue(null);
+      await expect(service.castPapeleta(YO, T, { abstencion: true, orden: [] })).rejects.toThrow('La votación no está abierta.');
+      expect(prisma.decisionPapeleta.upsert).not.toHaveBeenCalled();
+    });
+
+    it('dentro de la transacción vuelve a comprobar la fase y el plazo; si cambiaron: 400 sin guardar', async () => {
+      prisma.$queryRaw.mockResolvedValue([]);
+      await expect(service.castPapeleta(YO, T, { abstencion: true, orden: [] })).rejects.toThrow('La votación no está abierta.');
+      const sql = (prisma.$queryRaw.mock.calls[0]![0] as Prisma.Sql).sql;
+      expect(sql).toContain("fase = 'votacion'");
+      expect(sql).toContain('"votacionEndsAt" >');
+      expect(sql).toContain('FOR UPDATE');
+      expect(prisma.decisionPapeleta.upsert).not.toHaveBeenCalled();
+    });
+
+    it('quien no es miembro recibe 403; tema oculto 400; tema inexistente 404', async () => {
+      prisma.groupMembership.findUnique.mockResolvedValue(null);
+      await expect(service.castPapeleta(YO, T, { abstencion: true, orden: [] })).rejects.toThrow(ForbiddenException);
+      prisma.groupMembership.findUnique.mockResolvedValue({ id: 'm1' });
+      prisma.proposal.findUnique.mockResolvedValue({ id: T, groupId: G, status: 'open', hidden: true, deliberationEndsAt: null });
+      await expect(service.castPapeleta(YO, T, { abstencion: true, orden: [] })).rejects.toThrow('Este tema está oculto por moderación.');
+      prisma.proposal.findUnique.mockResolvedValue(null);
+      await expect(service.castPapeleta(YO, T, { abstencion: true, orden: [] })).rejects.toThrow(NotFoundException);
+      expect(prisma.decisionPapeleta.upsert).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('getTema() — papeleta, objeción y resultado', () => {
+    const OTRO = 'p-otro-perfil';
+    beforeEach(() => {
+      prisma.solucion.findMany.mockResolvedValue([
+        sol('s1'),
+        sol('s2', { hidden: true, title: 'Texto secreto de s2', description: 'Detalle secreto' }),
+      ]);
+      // Si el servicio pidiera la papeleta de otra persona, la recibiría: la prueba lo detectaría.
+      prisma.decisionPapeleta.findUnique.mockImplementation(
+        async ({ where }: { where: { decisionId_profileId: { profileId: string } } }) =>
+          where.decisionId_profileId.profileId === YO
+            ? { id: 'pp1', profileId: YO, abstencion: false, orden: ['s1'] }
+            : { id: 'pp2', profileId: OTRO, abstencion: false, orden: ['s2', 's1'] },
+      );
+      prisma.decisionPapeleta.findMany.mockResolvedValue([
+        { id: 'pp2', profileId: OTRO, abstencion: false, orden: ['s2', 's1'] },
+      ]);
+      prisma.objecionModo.findUnique.mockImplementation(
+        async ({ where }: { where: { decisionId_profileId: { profileId: string } } }) =>
+          ({ id: where.decisionId_profileId.profileId === YO ? 'o1' : 'o2', profileId: where.decisionId_profileId.profileId }),
+      );
+      prisma.objecionModo.findMany.mockResolvedValue([{ profileId: OTRO }]);
+    });
+
+    it('en votación: devuelve solo mi papeleta, sin cifras ni la de otra persona', async () => {
+      prisma.decision.findUnique.mockResolvedValue({
+        id: 'd1', proposalId: T, fase: 'votacion', modo: 'excluyentes', modoPropuesto: 'excluyentes',
+        objecionEndsAt: null, votacionEndsAt: new Date('2099-01-01T00:00:00Z'), candidatas: ['s1', 's2'],
+        resultado: null, ganadoras: [], aprobaciones: [], papeletasTotal: null, abstenciones: null, miembros: null,
+      });
+      const r = await service.getTema(YO, T);
+      expect(r.decision!.miPapeleta).toEqual({ abstencion: false, orden: ['s1'] });
+      expect(r.decision!.resultado).toBeNull();
+      const json = JSON.stringify(r);
+      expect(json).not.toContain(OTRO);
+      expect(json).not.toContain('["s2","s1"]');
+      expect(json).not.toContain('pp1');
+    });
+
+    it('en objeción: yoObjete es mi objeción y puedoObjetar exige participar y plazo abierto', async () => {
+      prisma.decision.findUnique.mockResolvedValue({
+        id: 'd1', proposalId: T, fase: 'objecion', modo: null, modoPropuesto: 'excluyentes',
+        objecionEndsAt: new Date(Date.now() + 86_400_000), votacionEndsAt: null, candidatas: [],
+      });
+      prisma.proposalComment.findMany.mockResolvedValue([{ authorProfileId: YO }]);
+      prisma.groupMembership.findMany.mockImplementation(async ({ where }: { where: { profileId: { in: string[] } } }) =>
+        where.profileId.in.map((profileId) => ({ profileId })));
+      let r = await service.getTema(YO, T);
+      expect(r.decision).toMatchObject({ yoObjete: true, puedoObjetar: true, miPapeleta: null, resultado: null });
+      expect(JSON.stringify(r)).not.toContain(OTRO);
+
+      prisma.objecionModo.findUnique.mockResolvedValue(null);
+      prisma.proposalComment.findMany.mockResolvedValue([{ authorProfileId: 'p-otro' }]);
+      r = await service.getTema(YO, T);
+      expect(r.decision).toMatchObject({ yoObjete: false, puedoObjetar: false });
+
+      prisma.proposalComment.findMany.mockResolvedValue([{ authorProfileId: YO }]);
+      prisma.decision.findUnique.mockResolvedValue({
+        id: 'd1', proposalId: T, fase: 'objecion', modo: null, modoPropuesto: 'excluyentes',
+        objecionEndsAt: new Date(Date.now() - 1000), votacionEndsAt: null, candidatas: [],
+      });
+      r = await service.getTema(YO, T);
+      expect(r.decision!.puedoObjetar).toBe(false);
+    });
+
+    it('contada: arma el resultado con las ocultas enmascaradas en candidatas', async () => {
+      prisma.decision.findUnique.mockResolvedValue({
+        id: 'd1', proposalId: T, fase: 'contada', modo: 'excluyentes', modoPropuesto: 'excluyentes',
+        objecionEndsAt: null, votacionEndsAt: new Date('2026-11-20T00:00:00Z'), candidatas: ['s1', 's2'],
+        resultado: 'aprobada', ganadoras: ['s2'], aprobaciones: [1, 3],
+        pairwiseMatrix: [[0, 1], [3, 0]], schulzeMatrix: [[0, 0], [3, 0]],
+        papeletasTotal: 5, abstenciones: 1, miembros: 8, contadaAt: new Date('2026-11-20T00:05:00Z'),
+      });
+      const r = await service.getTema(YO, T);
+      expect(r.decision!.miPapeleta).toEqual({ abstencion: false, orden: ['s1'] });
+      expect(r.decision!.resultado).toEqual({
+        resultado: 'aprobada', ganadoras: ['s2'],
+        aprobaciones: [{ solucionId: 's1', incluyen: 1 }, { solucionId: 's2', incluyen: 3 }],
+        papeletasTotal: 5, abstenciones: 1, validas: 4, miembros: 8,
+        pairwiseMatrix: [[0, 1], [3, 0]], schulzeMatrix: [[0, 0], [3, 0]],
+        contadaAt: '2026-11-20T00:05:00.000Z',
+      });
+      expect(r.decision!.candidatas[1]).toEqual({ id: 's2', title: 'Solución oculta por moderación', description: '', hidden: true });
+      const json = JSON.stringify(r);
+      expect(json).not.toContain('secreto');
+      expect(json).not.toContain(OTRO);
+    });
+
+    it('contada sin soluciones: matrices vacías y ceros', async () => {
+      prisma.decision.findUnique.mockResolvedValue({
+        id: 'd1', proposalId: T, fase: 'contada', modo: null, modoPropuesto: null,
+        objecionEndsAt: null, votacionEndsAt: null, candidatas: [],
+        resultado: 'sin_soluciones', ganadoras: [], aprobaciones: [],
+        pairwiseMatrix: null, schulzeMatrix: null, papeletasTotal: null, abstenciones: null, miembros: null,
+        contadaAt: new Date('2026-11-20T00:05:00Z'),
+      });
+      const r = await service.getTema(YO, T);
+      expect(r.decision!.resultado).toEqual({
+        resultado: 'sin_soluciones', ganadoras: [], aprobaciones: [],
+        papeletasTotal: 0, abstenciones: 0, validas: 0, miembros: 0,
+        pairwiseMatrix: [], schulzeMatrix: [], contadaAt: '2026-11-20T00:05:00.000Z',
+      });
     });
   });
 });
