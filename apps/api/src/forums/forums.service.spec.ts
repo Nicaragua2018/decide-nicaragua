@@ -71,7 +71,7 @@ describe('ForumsService', () => {
           id: 't1', title: 'Mesa de salud', communityName: 'León', kind: 'tema',
           conclusion: 'Crear una mesa de salud.', objections: null,
           signalCounts: { support: 1, neutral: 0, object: 1 },
-          closedAt: '2026-11-20T00:00:00.000Z', winningOption: null,
+          closedAt: '2026-11-20T00:00:00.000Z', winningOption: null, approvedSolutions: [],
         },
       ]);
       expect(JSON.stringify(r)).not.toMatch(/author|displayName|email/);

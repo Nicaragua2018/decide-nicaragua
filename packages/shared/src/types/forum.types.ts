@@ -28,12 +28,14 @@ export interface PublicConsensus {
   signalCounts: SignalCounts;
   closedAt: string;
   winningOption: string | null;
+  /** Títulos de las soluciones aprobadas (vacío si no aplica). */
+  approvedSolutions: string[];
 }
 
 /** Apelación pendiente, para la cola de la mesa. */
 export interface ModerationAppeal {
   id: string;
-  target: 'tema' | 'respuesta' | 'inquietud' | 'frase';
+  target: 'tema' | 'respuesta' | 'inquietud' | 'frase' | 'solucion';
   targetId: string;
   reason: string;
   appealText: string;

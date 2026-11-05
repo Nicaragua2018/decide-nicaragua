@@ -586,6 +586,7 @@ export class ForumsService {
         signalCounts: counts,
         closedAt: (t.closedAt ?? new Date(0)).toISOString(),
         winningOption,
+        approvedSolutions: [],
       });
     }
     return result;

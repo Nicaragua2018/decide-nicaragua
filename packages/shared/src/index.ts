@@ -5,6 +5,7 @@ export * from './types/group.types.js';
 export * from './types/deliberation.types.js';
 export * from './types/forum.types.js';
 export * from './types/frase.types.js';
+export * from './types/decision.types.js';
 export * from './types/inquietud.types.js';
 export * from './types/voting.types.js';
 export * from './types/sortition.types.js';
