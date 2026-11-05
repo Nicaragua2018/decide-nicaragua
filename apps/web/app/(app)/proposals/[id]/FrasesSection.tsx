@@ -106,7 +106,7 @@ export async function FrasesSection({
               {item.hidden ? (
                 <>
                   <p className="comment-body text-muted">
-                    Tu frase fue ocultada por la moderación. Motivo: {item.hiddenReason}.
+                    Tu frase fue ocultada por la moderación.{item.hiddenReason ? ` Motivo: ${item.hiddenReason}.` : ''}
                   </p>
                   {item.moderationId && (
                     <AppealForm moderationId={item.moderationId} topicId={proposalId} />

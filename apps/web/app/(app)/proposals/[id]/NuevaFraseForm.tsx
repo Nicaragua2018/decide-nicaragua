@@ -1,6 +1,6 @@
 'use client';
 
-import { useActionState, useState } from 'react';
+import { useActionState, useEffect, useState } from 'react';
 import { createFrase, type ActionResult } from '@/lib/actions';
 
 export function NuevaFraseForm({ proposalId }: { proposalId: string }) {
@@ -10,14 +10,12 @@ export function NuevaFraseForm({ proposalId }: { proposalId: string }) {
   );
   const [text, setText] = useState('');
 
+  useEffect(() => {
+    if (state && 'success' in state) setText('');
+  }, [state]);
+
   return (
-    <form
-      action={(fd) => {
-        action(fd);
-        setText('');
-      }}
-      className="form"
-    >
+    <form action={action} className="form">
       <div className="form-field">
         <label className="form-label" htmlFor="frase-text">Escribe una frase</label>
         <textarea
@@ -35,6 +33,7 @@ export function NuevaFraseForm({ proposalId }: { proposalId: string }) {
       </div>
       <button type="submit" className="btn btn-primary btn-sm" disabled={pending}>Publicar frase</button>
       {state && 'error' in state && <p className="alert alert-error">{state.error}</p>}
+      {state && 'success' in state && <p className="alert alert-success">Tu frase quedó publicada.</p>}
     </form>
   );
 }
