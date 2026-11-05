@@ -11,6 +11,7 @@ import type {
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { RulesService } from '../rules/rules.service';
+import { motivoVisible } from '../forums/moderacion-motivo';
 import { analyzeOpinions, isDivisiva, isPuente, seedFromId, type VoteRow } from './opinion-groups';
 
 const VALOR: Record<FraseVotoValue, -1 | 0 | 1> = { de_acuerdo: 1, en_desacuerdo: -1, paso: 0 };
@@ -123,7 +124,7 @@ export class FrasesService {
       ? await this.prisma.moderationAction.findMany({
           where: { target: 'frase', targetId: { in: ocultas } },
           orderBy: { createdAt: 'desc' },
-          select: { id: true, targetId: true, reason: true, status: true, createdAt: true },
+          select: { id: true, targetId: true, causa: true, reason: true, status: true, createdAt: true },
         })
       : [];
     const ultima = new Map<string, (typeof acciones)[number]>();
@@ -156,7 +157,7 @@ export class FrasesService {
           isAuthor: true,
           myVote: null,
           resultado: null,
-          hiddenReason: a?.reason ?? null,
+          hiddenReason: motivoVisible(a),
           moderationId: a && (a.status as string) === 'oculto' ? a.id : null,
         };
       }

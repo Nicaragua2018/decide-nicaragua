@@ -1,6 +1,6 @@
 import { Body, Controller, ForbiddenException, Get, HttpCode, HttpStatus, Param, ParseUUIDPipe, Post, Req, UseGuards } from '@nestjs/common';
 import type { Request } from 'express';
-import type { ForumDetail, ForumSummary, JwtPayload, ModerationAppeal } from '@decide/shared';
+import type { ForumDetail, ForumSummary, JwtPayload, ModeracionPorConfirmar, ModerationAppeal } from '@decide/shared';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { extractIp } from '../common/utils/ip.util';
@@ -10,6 +10,7 @@ import { CloseTopicDto } from './dto/close-topic.dto';
 import { ModerateDto } from './dto/moderate.dto';
 import { AppealDto } from './dto/appeal.dto';
 import { ResolveAppealDto } from './dto/resolve-appeal.dto';
+import { ConfirmarModeracionDto } from './dto/confirmar-moderacion.dto';
 
 @Controller('forums')
 @UseGuards(JwtAuthGuard)
@@ -30,6 +31,11 @@ export class ForumsController {
   @Get('moderation/appeals')
   async appeals(@CurrentUser() user: JwtPayload): Promise<ModerationAppeal[]> {
     return this.forums.listAppeals(this.perfil(user));
+  }
+
+  @Get('moderation/por-confirmar')
+  async porConfirmar(@CurrentUser() user: JwtPayload): Promise<ModeracionPorConfirmar[]> {
+    return this.forums.listPorConfirmar(this.perfil(user));
   }
 
   @Get(':id')
@@ -57,8 +63,19 @@ export class ForumsController {
   }
 
   @Post('moderation/hide')
-  async hide(@Body() dto: ModerateDto, @CurrentUser() user: JwtPayload, @Req() req: Request): Promise<{ id: string }> {
+  async hide(
+    @Body() dto: ModerateDto,
+    @CurrentUser() user: JwtPayload,
+    @Req() req: Request,
+  ): Promise<{ id: string; estado: 'oculto' | 'provisional' | 'pendiente' }> {
     return this.forums.hide(this.perfil(user), dto, extractIp(req));
+  }
+
+  @Post('moderation/:id/confirmar')
+  @HttpCode(HttpStatus.OK)
+  async confirmar(@Param('id', ParseUUIDPipe) id: string, @Body() dto: ConfirmarModeracionDto, @CurrentUser() user: JwtPayload, @Req() req: Request): Promise<{ ok: true }> {
+    await this.forums.confirmar(this.perfil(user), id, dto.aprobar, extractIp(req));
+    return { ok: true };
   }
 
   @Post('moderation/:id/appeal')

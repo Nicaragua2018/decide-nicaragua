@@ -1,4 +1,5 @@
 import type { SignalCounts } from './deliberation.types.js';
+import type { ModeracionCausaValue } from '../constants/moderacion.js';
 
 export type ProposalKindValue = 'tema' | 'propuesta';
 
@@ -38,7 +39,26 @@ export interface ModerationAppeal {
   target: 'tema' | 'respuesta' | 'inquietud' | 'frase' | 'solucion';
   targetId: string;
   reason: string;
+  /** Null en las moderaciones anteriores a las causas cerradas. */
+  causa: ModeracionCausaValue | null;
   appealText: string;
   originalText: string;
   appealedAt: string;
+}
+
+/** Solicitud de moderación que espera la segunda firma de la mesa. Solo la ve la mesa. */
+export interface ModeracionPorConfirmar {
+  id: string;
+  target: 'tema' | 'respuesta' | 'inquietud' | 'frase' | 'solucion';
+  targetId: string;
+  causa: ModeracionCausaValue;
+  /** Detalle opcional de quien la pidió ('' si no escribió nada). */
+  detalle: string;
+  originalText: string;
+  /** pendiente: sigue visible; provisional: ya oculto por causa urgente. */
+  estado: 'pendiente' | 'provisional';
+  venceAt: string;
+  createdAt: string;
+  /** La pidió quien consulta: no puede confirmarla. */
+  esMia: boolean;
 }

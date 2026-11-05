@@ -601,6 +601,17 @@ describe('DeliberationService', () => {
       comments: [], _count: { comments: 0 }, createdAt: new Date('2026-01-01T00:00:00Z'),
     };
 
+    it('hiddenReason usa la etiqueta de la causa, más el detalle si lo hay', async () => {
+      prisma.proposal.findUnique.mockResolvedValue({ ...base, hidden: true });
+      prisma.groupMembership.findUnique.mockResolvedValue(mockMembership);
+      prisma.moderationAction.findFirst.mockResolvedValue({ id: 'ma1', causa: 'spam', reason: 'Vende celulares', status: 'oculto' });
+      const d = await service.getProposalById('t1', PROFILE_ID);
+      expect(d.hiddenReason).toBe('Correo basura o publicidad ajena al tema: Vende celulares');
+      expect(prisma.moderationAction.findFirst).toHaveBeenCalledWith(
+        expect.objectContaining({ select: expect.objectContaining({ causa: true, reason: true }) }),
+      );
+    });
+
     it('el detalle de un tema oculto no devuelve su texto', async () => {
       prisma.proposal.findUnique.mockResolvedValue({ ...base, hidden: true });
       prisma.groupMembership.findUnique.mockResolvedValue(mockMembership);

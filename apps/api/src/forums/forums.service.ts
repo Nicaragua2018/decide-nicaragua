@@ -7,8 +7,11 @@ import {
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import {
+  MODERACION_CAUSAS,
   type ForumDetail,
   type ForumSummary,
+  type ModeracionCausaValue,
+  type ModeracionPorConfirmar,
   type ModerationAppeal,
   type PublicConsensus,
   type ProposalSummary,
@@ -49,6 +52,22 @@ function rejectLinkedTopicAction(action: { target: string; reason: string }): vo
 }
 
 type Tx = Prisma.TransactionClient;
+
+/** Estado con el que queda una moderación al pedirse. */
+type EstadoSolicitud = 'oculto' | 'provisional' | 'pendiente';
+
+/** Solicitudes que esperan la segunda firma de la mesa. */
+const ABIERTAS = ['pendiente', 'provisional'] as const;
+
+/** Causa urgente: se oculta ya; si nadie confirma en 48 h, el contenido vuelve. */
+const PLAZO_PROVISIONAL_MS = 48 * 3_600_000;
+/** Causa no urgente: la solicitud espera la segunda firma 7 días; el contenido sigue visible. */
+const PLAZO_PENDIENTE_MS = 7 * DIA_MS;
+
+const SOLICITUD_ABIERTA = 'Ya hay una solicitud de moderación abierta para este contenido.';
+const YA_RESUELTA = 'Esta solicitud ya fue resuelta.';
+
+const esUrgente = (causa: string): boolean => MODERACION_CAUSAS.some((c) => c.value === causa && c.urgente);
 
 @Injectable()
 export class ForumsService {
@@ -280,7 +299,12 @@ export class ForumsService {
 
   // ─── Moderación ───────────────────────────────────────────────────────────
 
-  async hide(profileId: string, dto: ModerateDto, ip: string): Promise<{ id: string }> {
+  /**
+   * Oculta un contenido o pide ocultarlo. Soluciones y propuestas formales necesitan la segunda
+   * firma de otra persona de la mesa: con causa urgente se ocultan ya («provisional», 48 h); con
+   * otra causa queda una solicitud «pendiente» (7 días) y el contenido sigue visible.
+   */
+  async hide(profileId: string, dto: ModerateDto, ip: string): Promise<{ id: string; estado: EstadoSolicitud }> {
     const target = checkTarget(dto.target);
     let groupId: string;
     if (target === 'tema') {
@@ -321,60 +345,172 @@ export class ForumsService {
     if (!(await this.canModerate(profileId, groupId))) {
       throw new ForbiddenException('No tienes permiso para moderar en esta comunidad.');
     }
-    const canceladas: string[] = [];
-    const action = await this.prisma.$transaction(async (tx) => {
-      let linkedTopicId: string | null = null;
-      if (target === 'tema') {
-        if (await this.hideTopicTx(tx, dto.targetId)) canceladas.push(dto.targetId);
-      } else if (target === 'inquietud') {
-        const q = await tx.inquietud.update({ where: { id: dto.targetId }, data: { hidden: true } });
-        // El debate que abrió la comunidad copia el título y el texto de la inquietud: se oculta con ella.
-        // Un debate abierto a mano por quien organiza tiene su propio texto y no se toca.
-        const proposalId = (q as { proposalId?: string | null } | undefined)?.proposalId ?? null;
-        if (proposalId) {
-          const p = await tx.proposal.findUnique({
-            where: { id: proposalId },
-            select: { abiertoPorComunidad: true, hidden: true },
-          });
-          if (p?.abiertoPorComunidad === true && p.hidden === false) {
-            if (await this.hideTopicTx(tx, proposalId)) canceladas.push(proposalId);
-            linkedTopicId = proposalId;
-          }
-        }
-      } else if (target === 'frase') {
-        await tx.frase.update({ where: { id: dto.targetId }, data: { hidden: true } });
-      } else if (target === 'solucion') {
-        await tx.solucion.update({ where: { id: dto.targetId }, data: { hidden: true } });
-      } else {
-        await tx.proposalComment.update({ where: { id: dto.targetId }, data: { hidden: true } });
-      }
-      const created = await tx.moderationAction.create({
-        data: { target, targetId: dto.targetId, reason: dto.reason, moderatorProfileId: profileId },
-      });
-      if (linkedTopicId) {
-        await tx.moderationAction.create({
-          data: { target: 'tema', targetId: linkedTopicId, reason: LINKED_TOPIC_REASON, moderatorProfileId: profileId },
-        });
-      }
-      return created;
+    const abierta = await this.prisma.moderationAction.findFirst({
+      where: { target, targetId: dto.targetId, status: { in: [...ABIERTAS] } },
+      select: { id: true },
     });
+    if (abierta) throw new ConflictException(SOLICITUD_ABIERTA);
+
+    const causa = dto.causa;
+    const canceladas: string[] = [];
+    let resultado: { id: string; estado: EstadoSolicitud };
+    try {
+      resultado = await this.prisma.$transaction(async (tx) => {
+        // Se lee dentro de la transacción: un tema formalizado justo antes ya cuenta como propuesta.
+        const estado: EstadoSolicitud = (await this.requiereQuorumTx(tx, target, dto.targetId))
+          ? esUrgente(causa) ? 'provisional' : 'pendiente'
+          : 'oculto';
+        let linkedTopicId: string | null = null;
+        if (estado !== 'pendiente') {
+          const o = await this.aplicarOcultacion(tx, target, dto.targetId);
+          canceladas.push(...o.canceladas);
+          linkedTopicId = o.linkedTopicId;
+        }
+        const plazo = estado === 'provisional' ? PLAZO_PROVISIONAL_MS : estado === 'pendiente' ? PLAZO_PENDIENTE_MS : null;
+        const created = await tx.moderationAction.create({
+          data: {
+            target,
+            targetId: dto.targetId,
+            causa,
+            reason: dto.reason ?? '',
+            moderatorProfileId: profileId,
+            status: estado,
+            venceAt: plazo === null ? null : new Date(Date.now() + plazo),
+          },
+        });
+        if (linkedTopicId) await this.crearVinculadaTx(tx, linkedTopicId, causa, profileId);
+        return { id: created.id, estado };
+      });
+    } catch (err) {
+      // Otra solicitud abierta se registró a la vez (índice único parcial).
+      if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
+        throw new ConflictException(SOLICITUD_ABIERTA);
+      }
+      throw err;
+    }
+    const actor = await this.actorId(profileId);
     void this.audit.log({
-      ...(await this.actorId(profileId)),
-      action: 'moderation.hidden',
+      ...actor,
+      action: resultado.estado === 'pendiente' ? 'moderation.requested' : 'moderation.hidden',
       resource: `${target}:${dto.targetId}`,
       ip,
-      metadata: { moderationId: action.id },
+      metadata:
+        resultado.estado === 'pendiente'
+          ? { moderationId: resultado.id, causa }
+          : { moderationId: resultado.id, causa, estado: resultado.estado },
     });
-    for (const proposalId of canceladas) {
-      void this.audit.log({
-        ...(await this.actorId(profileId)),
-        action: 'decision.cancelled',
-        resource: `proposal:${proposalId}`,
-        ip,
-        metadata: { proposalId },
+    this.auditarCanceladas(canceladas, actor, ip);
+    return resultado;
+  }
+
+  /**
+   * Segunda firma de la mesa sobre una solicitud pendiente o provisional. La da otra persona
+   * de la mesa, nunca quien la pidió. Todo cambio pasa por un updateMany condicionado al estado:
+   * si el vencimiento u otra persona la resolvió antes, responde 409 sin tocar el contenido.
+   */
+  async confirmar(profileId: string, moderationId: string, aprobar: boolean, ip: string): Promise<void> {
+    if (!(await this.esMesa(profileId))) {
+      throw new ForbiddenException('Solo la mesa directiva confirma las solicitudes de moderación.');
+    }
+    const action = await this.prisma.moderationAction.findUnique({ where: { id: moderationId } });
+    if (!action) throw new NotFoundException('Moderación no encontrada');
+    const previo = action.status as string;
+    if (previo !== 'pendiente' && previo !== 'provisional') throw new ConflictException(YA_RESUELTA);
+    if (action.moderatorProfileId === profileId) throw new ForbiddenException('No puedes confirmar tu propia solicitud.');
+    const target = checkTarget(action.target);
+    const canceladas: string[] = [];
+    await this.prisma.$transaction(async (tx) => {
+      const r = await tx.moderationAction.updateMany({
+        where: { id: moderationId, status: previo },
+        data: aprobar
+          ? { status: 'oculto', confirmadorProfileId: profileId }
+          : { status: 'rechazado', confirmadorProfileId: profileId, resolvedAt: new Date() },
+      });
+      if (r.count === 0) throw new ConflictException(YA_RESUELTA);
+      if (aprobar && previo === 'pendiente') {
+        const o = await this.aplicarOcultacion(tx, target, action.targetId);
+        canceladas.push(...o.canceladas);
+        if (o.linkedTopicId) await this.crearVinculadaTx(tx, o.linkedTopicId, action.causa, action.moderatorProfileId);
+      } else if (!aprobar && previo === 'provisional') {
+        await this.aplicarRestauracion(tx, target, action.targetId);
+      }
+    });
+    const actor = await this.actorId(profileId);
+    void this.audit.log({
+      ...actor,
+      action: aprobar ? 'moderation.confirmed_by_board' : 'moderation.rejected_by_board',
+      resource: `moderation:${moderationId}`,
+      ip,
+      metadata: { moderationId, causa: action.causa },
+    });
+    this.auditarCanceladas(canceladas, actor, ip);
+  }
+
+  /** Cola de solicitudes que esperan la segunda firma. Solo la mesa la ve, con el texto original. */
+  async listPorConfirmar(profileId: string): Promise<ModeracionPorConfirmar[]> {
+    if (!(await this.esMesa(profileId))) {
+      throw new ForbiddenException('Solo la mesa directiva ve las solicitudes por confirmar.');
+    }
+    const actions = await this.prisma.moderationAction.findMany({
+      where: { status: { in: [...ABIERTAS] } },
+      orderBy: { createdAt: 'asc' },
+    });
+    const result: ModeracionPorConfirmar[] = [];
+    for (const a of actions) {
+      const estado = a.status as string;
+      // Toda solicitud abierta nace con causa; una fila sin ella no se puede mostrar bien.
+      if ((estado !== 'pendiente' && estado !== 'provisional') || !a.causa) continue;
+      const target = checkTarget(a.target);
+      result.push({
+        id: a.id,
+        target,
+        targetId: a.targetId,
+        causa: a.causa as ModeracionCausaValue,
+        detalle: a.reason,
+        originalText: await this.textOf(target, a.targetId),
+        estado,
+        venceAt: (a.venceAt ?? a.createdAt).toISOString(),
+        createdAt: a.createdAt.toISOString(),
+        esMia: a.moderatorProfileId === profileId,
       });
     }
-    return { id: action.id };
+    return result;
+  }
+
+  /**
+   * Cierra las solicitudes vencidas: una provisional vuelve a mostrar el contenido y una
+   * pendiente se cierra sin tocarlo; ambas quedan «rechazado». Si otra corrida o una firma
+   * llegó antes (updateMany sin filas), no restaura ni audita. Devuelve cuántas cerró.
+   */
+  async processModerationDeadlines(now: Date): Promise<number> {
+    const vencidas = await this.prisma.moderationAction.findMany({
+      where: { status: { in: [...ABIERTAS] }, venceAt: { lte: now } },
+      select: { id: true, target: true, targetId: true, causa: true, status: true },
+      orderBy: { venceAt: 'asc' },
+    });
+    let cerradas = 0;
+    for (const a of vencidas) {
+      const previo = a.status as string;
+      if (previo !== 'pendiente' && previo !== 'provisional') continue;
+      const target = checkTarget(a.target);
+      const hecho = await this.prisma.$transaction(async (tx) => {
+        const r = await tx.moderationAction.updateMany({
+          where: { id: a.id, status: previo },
+          data: { status: 'rechazado', resolvedAt: now },
+        });
+        if (r.count === 0) return false;
+        if (previo === 'provisional') await this.aplicarRestauracion(tx, target, a.targetId);
+        return true;
+      });
+      if (!hecho) continue;
+      cerradas += 1;
+      void this.audit.log({
+        action: 'moderation.expired',
+        resource: `moderation:${a.id}`,
+        metadata: { moderationId: a.id, causa: a.causa },
+      });
+    }
+    return cerradas;
   }
 
   async appeal(profileId: string, moderationId: string, text: string, ip: string): Promise<void> {
@@ -386,6 +522,7 @@ export class ForumsService {
       throw new ForbiddenException('Solo quien escribió el contenido puede apelar.');
     }
     await this.requireMembership(contenido.groupId, profileId);
+    // Solo se apela lo ya ocultado en firme: una solicitud pendiente o provisional aún no lo está.
     if ((action.status as string) !== 'oculto') throw new ConflictException('Esta moderación ya fue apelada o resuelta.');
     await this.prisma.moderationAction.update({
       where: { id: moderationId },
@@ -407,6 +544,7 @@ export class ForumsService {
         target: checkTarget(a.target),
         targetId: a.targetId,
         reason: a.reason,
+        causa: (a.causa ?? null) as ModeracionCausaValue | null,
         appealText: a.appealText ?? '',
         originalText: await this.textOf(checkTarget(a.target), a.targetId),
         appealedAt: (a.appealedAt ?? a.createdAt).toISOString(),
@@ -423,22 +561,7 @@ export class ForumsService {
     rejectLinkedTopicAction(action);
     const target = checkTarget(action.target);
     await this.prisma.$transaction(async (tx) => {
-      if (restore) {
-        if (target === 'tema') {
-          await this.restoreTopicTx(tx, action.targetId);
-        } else if (target === 'inquietud') {
-          // El estado y el umbral los reevalúa InquietudesService al leerla (sin ciclo entre módulos).
-          const q = await tx.inquietud.update({ where: { id: action.targetId }, data: { hidden: false } });
-          const proposalId = (q as { proposalId?: string | null } | undefined)?.proposalId ?? null;
-          if (proposalId) await this.restoreLinkedTopicTx(tx, proposalId);
-        } else if (target === 'frase') {
-          await tx.frase.update({ where: { id: action.targetId }, data: { hidden: false } });
-        } else if (target === 'solucion') {
-          await tx.solucion.update({ where: { id: action.targetId }, data: { hidden: false } });
-        } else {
-          await tx.proposalComment.update({ where: { id: action.targetId }, data: { hidden: false } });
-        }
-      }
+      if (restore) await this.aplicarRestauracion(tx, target, action.targetId);
       await tx.moderationAction.update({
         where: { id: moderationId },
         data: { status: restore ? 'restaurado' : 'confirmado', resolvedAt: new Date() },
@@ -450,6 +573,107 @@ export class ForumsService {
       resource: `moderation:${moderationId}`,
       ip,
     });
+  }
+
+  /** Soluciones y propuestas formales necesitan la segunda firma; el resto, una sola persona. */
+  private async requiereQuorumTx(tx: Tx, target: ModTarget, targetId: string): Promise<boolean> {
+    if (target === 'solucion') return true;
+    if (target !== 'tema') return false;
+    const t = await tx.proposal.findUnique({ where: { id: targetId }, select: { kind: true } });
+    return (t?.kind as string | undefined) === 'propuesta';
+  }
+
+  /**
+   * Oculta el contenido. Un tema cancela su votación y su decisión activas; una inquietud
+   * oculta también el debate que abrió la comunidad con su texto (devuelve su id para
+   * registrar la moderación vinculada).
+   */
+  private async aplicarOcultacion(
+    tx: Tx,
+    target: ModTarget,
+    targetId: string,
+  ): Promise<{ canceladas: string[]; linkedTopicId: string | null }> {
+    const canceladas: string[] = [];
+    let linkedTopicId: string | null = null;
+    if (target === 'tema') {
+      if (await this.hideTopicTx(tx, targetId)) canceladas.push(targetId);
+    } else if (target === 'inquietud') {
+      const q = await tx.inquietud.update({ where: { id: targetId }, data: { hidden: true } });
+      // El debate que abrió la comunidad copia el título y el texto de la inquietud: se oculta con ella.
+      // Un debate abierto a mano por quien organiza tiene su propio texto y no se toca.
+      const proposalId = (q as { proposalId?: string | null } | undefined)?.proposalId ?? null;
+      if (proposalId) {
+        const p = await tx.proposal.findUnique({
+          where: { id: proposalId },
+          select: { abiertoPorComunidad: true, hidden: true },
+        });
+        if (p?.abiertoPorComunidad === true && p.hidden === false) {
+          if (await this.hideTopicTx(tx, proposalId)) canceladas.push(proposalId);
+          linkedTopicId = proposalId;
+        }
+      }
+    } else if (target === 'frase') {
+      await tx.frase.update({ where: { id: targetId }, data: { hidden: true } });
+    } else if (target === 'solucion') {
+      await tx.solucion.update({ where: { id: targetId }, data: { hidden: true } });
+    } else {
+      await tx.proposalComment.update({ where: { id: targetId }, data: { hidden: true } });
+    }
+    return { canceladas, linkedTopicId };
+  }
+
+  /** Vuelve a mostrar el contenido. Una decisión o votación cancelada no se reabre. */
+  private async aplicarRestauracion(tx: Tx, target: ModTarget, targetId: string): Promise<void> {
+    if (target === 'tema') {
+      await this.restoreTopicTx(tx, targetId);
+    } else if (target === 'inquietud') {
+      // El estado y el umbral los reevalúa InquietudesService al leerla (sin ciclo entre módulos).
+      const q = await tx.inquietud.update({ where: { id: targetId }, data: { hidden: false } });
+      const proposalId = (q as { proposalId?: string | null } | undefined)?.proposalId ?? null;
+      if (proposalId) await this.restoreLinkedTopicTx(tx, proposalId);
+    } else if (target === 'frase') {
+      await tx.frase.update({ where: { id: targetId }, data: { hidden: false } });
+    } else if (target === 'solucion') {
+      await tx.solucion.update({ where: { id: targetId }, data: { hidden: false } });
+    } else {
+      await tx.proposalComment.update({ where: { id: targetId }, data: { hidden: false } });
+    }
+  }
+
+  /** Moderación del debate ocultado junto con su inquietud; copia la causa de la de origen. */
+  private async crearVinculadaTx(
+    tx: Tx,
+    topicId: string,
+    causa: ModeracionCausaValue | null,
+    moderatorProfileId: string,
+  ): Promise<void> {
+    await tx.moderationAction.create({
+      data: {
+        target: 'tema',
+        targetId: topicId,
+        causa,
+        reason: LINKED_TOPIC_REASON,
+        moderatorProfileId,
+        status: 'oculto',
+        venceAt: null,
+      },
+    });
+  }
+
+  private auditarCanceladas(
+    canceladas: string[],
+    actor: { actorId: string } | Record<never, never>,
+    ip: string,
+  ): void {
+    for (const proposalId of canceladas) {
+      void this.audit.log({
+        ...actor,
+        action: 'decision.cancelled',
+        resource: `proposal:${proposalId}`,
+        ip,
+        metadata: { proposalId },
+      });
+    }
   }
 
   /**

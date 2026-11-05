@@ -112,6 +112,17 @@ enum ModerationStatus {
   apelado // el autor apeló
   restaurado // la mesa lo devolvió a la vista
   confirmado // la mesa mantuvo la moderación tras la apelación
+  pendiente // solicitud que espera la segunda firma; el contenido sigue visible
+  provisional // causa urgente: oculto ya, a la espera de la segunda firma
+  rechazado // la mesa no dio la segunda firma o venció el plazo
+}
+
+enum ModeracionCausa {
+  datos_personales
+  insultos_amenazas
+  spam
+  ilegal_violencia
+  suplantacion
 }
 
 enum AccountStatus {
@@ -690,9 +701,16 @@ model ModerationAction {
   appealedAt         DateTime?        @db.Timestamptz
   resolvedAt         DateTime?        @db.Timestamptz
   createdAt          DateTime         @default(now()) @db.Timestamptz
+  /// Null en las moderaciones anteriores a las causas cerradas.
+  causa                ModeracionCausa?
+  /// Segunda persona de la mesa que confirmó o rechazó (columna simple, sin relación).
+  confirmadorProfileId String?          @db.Uuid
+  /// Plazo de una solicitud pendiente o provisional.
+  venceAt              DateTime?        @db.Timestamptz
 
   @@index([target, targetId])
   @@index([status])
+  @@index([status, venceAt])
   @@map("moderation_actions")
 }
 

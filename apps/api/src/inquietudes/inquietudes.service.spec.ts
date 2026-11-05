@@ -287,6 +287,13 @@ describe('InquietudesService', () => {
       expect(d.isMember).toBe(false);
     });
 
+    it('hiddenReason de una inquietud oculta usa la etiqueta de la causa', async () => {
+      prisma.inquietud.findUnique.mockResolvedValue(fila({ hidden: true, authorProfileId: YO }));
+      prisma.moderationAction.findFirst.mockResolvedValue({ id: 'mod1', causa: 'suplantacion', reason: 'Firma como la alcaldía', status: 'oculto' });
+      const d = await service.get(YO, 'i1');
+      expect(d.hiddenReason).toBe('Suplantación de una persona u organización: Firma como la alcaldía');
+    });
+
     it('el detalle de una oculta tiene texto neutro, motivo y moderationId solo para el autor', async () => {
       prisma.inquietud.findUnique.mockResolvedValue(fila({ hidden: true, authorProfileId: YO }));
       prisma.moderationAction.findFirst.mockResolvedValue({ id: 'mod1', reason: 'Insultos', status: 'oculto' });
