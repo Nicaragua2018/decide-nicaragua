@@ -47,7 +47,7 @@ export function NuevaSolucionForm({ proposalId }: { proposalId: string }) {
         />
       </div>
       <button type="submit" className="btn btn-primary btn-sm" disabled={pending}>Proponer solución</button>
-      {state && 'error' in state && <p className="alert alert-error">{state.error}</p>}
+      {state && 'error' in state && <p role="alert" className="alert alert-error">{state.error}</p>}
       {state && 'success' in state && <p className="alert alert-success">Tu solución quedó publicada.</p>}
     </form>
   );

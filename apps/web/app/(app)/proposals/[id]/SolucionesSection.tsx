@@ -9,6 +9,21 @@ function fecha(iso: string): string {
   return new Date(iso).toLocaleDateString('es-NI');
 }
 
+function Candidatas({ items }: { items: { id: string; title: string; description: string }[] }) {
+  if (items.length === 0) return null;
+  return (
+    <div className="mb-3">
+      <p className="text-sm font-medium">Soluciones que se deciden</p>
+      {items.map((c) => (
+        <div key={c.id} className="comment-thread">
+          <p className="font-medium">{c.title}</p>
+          {c.description && <p className="comment-body">{c.description}</p>}
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export function SolucionesSection({
   proposalId,
   data,
@@ -61,6 +76,7 @@ export function SolucionesSection({
 
       {decision?.fase === 'modo' && (
         <div className="mt-3">
+          <Candidatas items={decision.candidatas} />
           {data.canOrganize ? (
             <ProponerModo proposalId={proposalId} />
           ) : (
@@ -71,6 +87,7 @@ export function SolucionesSection({
 
       {decision?.fase === 'objecion' && (
         <div className="mt-3">
+          <Candidatas items={decision.candidatas} />
           <ObjecionPanel
             proposalId={proposalId}
             modoPropuesto={decision.modoPropuesto}

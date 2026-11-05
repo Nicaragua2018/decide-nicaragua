@@ -70,7 +70,8 @@ export function Papeleta({
 
       {unica && primera ? (
         <>
-          <p className="mb-2">{primera.title}</p>
+          <p className="font-medium">{primera.title}</p>
+          {primera.description && <p className="text-sm text-muted mb-2">{primera.description}</p>}
           <div className="flex gap-2 flex-wrap">
             <button
               type="button"
@@ -107,6 +108,7 @@ export function Papeleta({
                   <input type="checkbox" checked={orden.includes(c.id)} onChange={() => alternar(c.id)} />
                   <span>
                     {c.title} <span className="text-xs text-muted">La acepto</span>
+                    {c.description && <span className="text-sm text-muted" style={{ display: 'block' }}>{c.description}</span>}
                   </span>
                 </label>
               </li>
@@ -166,7 +168,7 @@ export function Papeleta({
           </div>
         </>
       )}
-      {error && <p className="alert alert-error mt-2">{error}</p>}
+      {error && <p role="alert" className="alert alert-error mt-2">{error}</p>}
     </div>
   );
 }

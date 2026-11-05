@@ -27,7 +27,7 @@ function Matriz({ nombre, m, candidatas }: { nombre: string; m: number[][]; cand
       <table className="text-xs">
         <thead>
           <tr>
-            <th />
+            <th><span style={{ position: 'absolute', width: 1, height: 1, overflow: 'hidden', clip: 'rect(0 0 0 0)' }}>Solución</span></th>
             {candidatas.map((c) => (
               <th key={c.id} scope="col" style={{ padding: '0.25rem 0.5rem', textAlign: 'left' }}>{c.title}</th>
             ))}

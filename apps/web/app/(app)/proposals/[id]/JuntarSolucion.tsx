@@ -55,7 +55,7 @@ export function JuntarSolucion({
         </button>
         <button type="button" className="btn btn-ghost btn-sm" onClick={() => setOpen(false)}>Cancelar</button>
       </div>
-      {error && <p className="alert alert-error">{error}</p>}
+      {error && <p role="alert" className="alert alert-error">{error}</p>}
     </div>
   );
 }

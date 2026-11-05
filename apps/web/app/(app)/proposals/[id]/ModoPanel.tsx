@@ -4,6 +4,11 @@ import { useState, useTransition } from 'react';
 import { proposeModo, setObjecion } from '@/lib/actions';
 import type { DecisionModoValue } from '@decide/shared';
 
+const MODO_TEXTO: Record<DecisionModoValue, string> = {
+  excluyentes: 'excluyentes: solo una puede llevarse a cabo',
+  compatibles: 'compatibles: pueden aprobarse varias',
+};
+
 export function ProponerModo({ proposalId }: { proposalId: string }) {
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
@@ -26,7 +31,7 @@ export function ProponerModo({ proposalId }: { proposalId: string }) {
           Compatibles: pueden aprobarse varias
         </button>
       </div>
-      {error && <p className="alert alert-error mt-2">{error}</p>}
+      {error && <p role="alert" className="alert alert-error mt-2">{error}</p>}
     </div>
   );
 }
@@ -55,7 +60,7 @@ export function ObjecionPanel({
 
   return (
     <div>
-      {modoPropuesto && <p>Se propone decidir como {modoPropuesto}</p>}
+      {modoPropuesto && <p>Se propone decidir como {MODO_TEXTO[modoPropuesto]}</p>}
       {puedoObjetar && (
         <p className="mt-2">
           <button
@@ -71,7 +76,7 @@ export function ObjecionPanel({
       <p className="text-xs text-muted mt-2">
         Si se opone al menos un tercio de quienes participaron, se usa el otro modo
       </p>
-      {error && <p className="alert alert-error mt-2">{error}</p>}
+      {error && <p role="alert" className="alert alert-error mt-2">{error}</p>}
     </div>
   );
 }
