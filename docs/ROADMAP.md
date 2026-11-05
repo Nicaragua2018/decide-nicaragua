@@ -32,6 +32,18 @@ Base del diseño «Primeros 200» entregada en las tareas 1 a 9:
 
 ---
 
+## Primeros 200 — Plan 3A-2 (frases): COMPLETO
+
+Debate con frases al estilo Pol.is (ADR-019):
+
+- [x] Frases cortas con «de acuerdo / en desacuerdo / paso» y resultado visible solo después de votar
+- [x] Cálculo reproducible de grupos de opinión, frases puente y frases que dividen, sin IA
+- [x] Privacidad: mínimo de 7, grupos de 3 o más, cifras redondeadas, nada sin votar
+- [x] Moderación de frases con apelación
+- [x] Web: sección «Frases» y «Mapa de opiniones» en cada tema
+
+---
+
 ## Primeros 200 — Plan 3A-1 (reglas e inquietudes): COMPLETO
 
 Primera entrega del ciclo de la comunidad (ADR-018):
