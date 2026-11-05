@@ -105,6 +105,7 @@ describe('DecisionesService', () => {
 
   describe('createSolucion()', () => {
     const dto = { title: 'Crear una mesa de salud', description: 'Con voluntarios.' };
+    beforeEach(() => prisma.$queryRaw.mockResolvedValue([{ id: T }]));
 
     it('crea la solución como persona y audita sin texto', async () => {
       prisma.solucion.create.mockResolvedValue({ id: 's1' });
@@ -137,6 +138,28 @@ describe('DecisionesService', () => {
       prisma.proposal.findUnique.mockResolvedValue(null);
       await expect(service.createSolucion(YO, T, dto, 'ip')).rejects.toThrow(NotFoundException);
     });
+    it('crea dentro de una transacción tras bloquear el tema con FOR SHARE (abierto, visible, plazo sin vencer)', async () => {
+      prisma.solucion.create.mockResolvedValue({ id: 's1' });
+      await service.createSolucion(YO, T, dto, 'ip');
+      expect(prisma.$transaction).toHaveBeenCalled();
+      const sql = (prisma.$queryRaw.mock.calls[0]![0] as Prisma.Sql).sql;
+      expect(sql).toContain('FROM proposals');
+      expect(sql).toContain('hidden = false');
+      expect(sql).toContain("status = 'open'");
+      expect(sql).toContain('"deliberationEndsAt" > now()');
+      expect(sql).toContain('FOR SHARE');
+      expect(prisma.$queryRaw.mock.invocationCallOrder[0]!).toBeLessThan(prisma.solucion.create.mock.invocationCallOrder[0]!);
+    });
+    it('carrera con el fin del debate: si al bloquear el tema ya no está vivo o ya tiene decisión, 400 fijas sin crear', async () => {
+      prisma.$queryRaw.mockResolvedValue([]);
+      await expect(service.createSolucion(YO, T, dto, 'ip')).rejects.toThrow('Las soluciones ya quedaron fijas.');
+      prisma.$queryRaw.mockResolvedValue([{ id: T }]);
+      // Fuera de la transacción aún no había decisión; dentro, el programador ya la creó.
+      prisma.decision.findUnique.mockResolvedValueOnce(null).mockResolvedValueOnce({ id: 'd1' });
+      await expect(service.createSolucion(YO, T, dto, 'ip')).rejects.toThrow('Las soluciones ya quedaron fijas.');
+      expect(prisma.solucion.create).not.toHaveBeenCalled();
+      expect(audit.log).not.toHaveBeenCalled();
+    });
     it('con el plazo del debate vencido (aunque el programador aún no pase): ya quedaron fijas', async () => {
       prisma.proposal.findUnique.mockResolvedValue({
         id: T, groupId: G, status: 'open', hidden: false, deliberationEndsAt: new Date(Date.now() - 1000),
@@ -155,6 +178,24 @@ describe('DecisionesService', () => {
         return null;
       });
       prisma.solucion.updateMany.mockResolvedValue({ count: 1 });
+      prisma.$queryRaw.mockResolvedValue([{ id: T }]);
+    });
+
+    it('quien organiza pero no es miembro del grupo: 403', async () => {
+      prisma.groupMembership.findUnique.mockResolvedValue(null);
+      await expect(service.mergeSolucion(YO, 's1', 's2', 'ip')).rejects.toThrow(ForbiddenException);
+      expect(prisma.solucion.updateMany).not.toHaveBeenCalled();
+    });
+    it('bloquea el tema con FOR SHARE antes que las soluciones; si ya no está vivo: 400 fijas sin juntar', async () => {
+      await service.mergeSolucion(YO, 's1', 's2', 'ip');
+      const sqls = prisma.$queryRaw.mock.calls.map(([q]) => (q as Prisma.Sql).sql);
+      expect(sqls[0]).toContain('FROM proposals');
+      expect(sqls[0]).toContain('FOR SHARE');
+      expect(sqls[1]).toContain('FROM soluciones');
+      prisma.solucion.updateMany.mockClear();
+      prisma.$queryRaw.mockResolvedValue([]);
+      await expect(service.mergeSolucion(YO, 's1', 's2', 'ip')).rejects.toThrow('Las soluciones ya quedaron fijas.');
+      expect(prisma.solucion.updateMany).not.toHaveBeenCalled();
     });
 
     it('sin canOrganize: 403', async () => {
@@ -214,7 +255,7 @@ describe('DecisionesService', () => {
         return lecturas === 1 ? sol('s2') : sol('s2', { mergedIntoId: 's3' });
       });
       await expect(service.mergeSolucion(YO, 's1', 's2', 'ip')).rejects.toThrow(BadRequestException);
-      expect(prisma.$queryRaw).toHaveBeenCalledTimes(1);
+      expect(prisma.$queryRaw).toHaveBeenCalledTimes(2);
       expect(prisma.solucion.updateMany).not.toHaveBeenCalled();
       expect(audit.log).not.toHaveBeenCalled();
     });
@@ -264,21 +305,31 @@ describe('DecisionesService', () => {
       expect(r.soluciones[1]).toMatchObject({ title: 'Texto secreto de s2', description: 'Detalle secreto', hidden: true });
       expect(r.soluciones[2]!.mergedIntoTitle).toBe('Texto secreto de s2');
     });
-    it('con decisión: no se puede proponer y se arma la vista sin papeleta ni resultado', async () => {
+    it('con decisión en modo: no se puede proponer; candidatas son las vivas (sin ocultas ni juntadas) aunque la fila aún no tenga', async () => {
+      rules.getInt.mockImplementation(async (key: string) => (key === 'debate.fraccion_objecion_modo' ? 33 : 7));
       prisma.decision.findUnique.mockResolvedValue({
         id: 'd1', proposalId: T, fase: 'modo', modo: null, modoPropuesto: null,
-        objecionEndsAt: null, votacionEndsAt: null, candidatas: ['s1', 's2'],
+        objecionEndsAt: null, votacionEndsAt: null, candidatas: [],
       });
       const r = await service.getTema(YO, T);
       expect(r.puedeProponer).toBe(false);
+      expect(rules.getInt).toHaveBeenCalledWith('debate.fraccion_objecion_modo', G);
       expect(r.decision).toEqual({
         fase: 'modo', modo: null, modoPropuesto: null, objecionEndsAt: null, votacionEndsAt: null,
-        candidatas: [
-          { id: 's1', title: 'Solución s1 de prueba', description: 'Descripción de s1', hidden: false },
-          { id: 's2', title: 'Solución oculta por moderación', description: '', hidden: true },
-        ],
-        miPapeleta: null, yoObjete: false, puedoObjetar: false, resultado: null,
+        candidatas: [{ id: 's1', title: 'Solución s1 de prueba', description: 'Descripción de s1', hidden: false }],
+        miPapeleta: null, yoObjete: false, puedoObjetar: false, resultado: null, fraccionObjecionPct: 33,
       });
+    });
+    it('en objeción también muestra las candidatas vivas en orden de llegada', async () => {
+      prisma.solucion.findMany.mockResolvedValue([
+        sol('s1'), sol('s4', { createdAt: new Date('2026-11-02T00:00:00Z') }), sol('s5', { hidden: true }),
+      ]);
+      prisma.decision.findUnique.mockResolvedValue({
+        id: 'd1', proposalId: T, fase: 'objecion', modo: null, modoPropuesto: 'excluyentes',
+        objecionEndsAt: new Date(Date.now() + 86_400_000), votacionEndsAt: null, candidatas: [],
+      });
+      const r = await service.getTema(YO, T);
+      expect(r.decision!.candidatas.map((c) => c.id)).toEqual(['s1', 's4']);
     });
     it('un tema cerrado no permite proponer', async () => {
       prisma.proposal.findUnique.mockResolvedValue({ id: T, groupId: G, status: 'closed', hidden: false, deliberationEndsAt: null });
@@ -388,6 +439,86 @@ describe('DecisionesService', () => {
         .mockResolvedValueOnce({ id: 'd2' });
       expect(await service.processDeadlines(NOW)).toBe(1);
       expect(prisma.decision.create).toHaveBeenCalledTimes(2);
+    });
+  });
+
+  describe('processDeadlines() — plazo para proponer el modo', () => {
+    const NOW = new Date('2026-11-20T12:00:00Z');
+    const DIA = 86_400_000;
+    const creada = (dias: number) => new Date(NOW.getTime() - dias * DIA);
+    const enModo = (createdAt: Date) => [{ id: 'd1', proposalId: T, createdAt, proposal: { groupId: G } }];
+
+    beforeEach(() => {
+      prisma.decision.findMany.mockImplementation(async ({ where }: { where: { fase: string } }) =>
+        (where.fase === 'modo' ? enModo(creada(7)) : []));
+      prisma.$queryRaw.mockResolvedValue([{ id: T }]);
+      prisma.solucion.findMany.mockResolvedValue([{ id: 's1' }, { id: 's2' }]);
+      rules.getInt.mockImplementation(async (key: string) => (key === 'debate.plazo_objecion_modo_dias' ? 7 : 5));
+    });
+
+    it('busca las decisiones en fase modo y lee el plazo del grupo', async () => {
+      await service.processDeadlines(NOW);
+      expect(prisma.decision.findMany).toHaveBeenCalledWith(expect.objectContaining({ where: { fase: 'modo' } }));
+      expect(rules.getInt).toHaveBeenCalledWith('debate.plazo_objecion_modo_dias', G);
+    });
+
+    it('antes del plazo no hace nada', async () => {
+      prisma.decision.findMany.mockImplementation(async ({ where }: { where: { fase: string } }) =>
+        (where.fase === 'modo' ? enModo(new Date(creada(7).getTime() + 1000)) : []));
+      expect(await service.processDeadlines(NOW)).toBe(0);
+      expect(prisma.decision.updateMany).not.toHaveBeenCalled();
+      expect(audit.log).not.toHaveBeenCalled();
+    });
+
+    it('con 2 o más vivas: propone excluyentes y abre la objeción; audita mode_proposed', async () => {
+      expect(await service.processDeadlines(NOW)).toBe(1);
+      expect((prisma.$queryRaw.mock.calls[0]![0] as Prisma.Sql).sql).toContain('FOR UPDATE');
+      expect(prisma.decision.updateMany).toHaveBeenCalledWith({
+        where: { id: 'd1', fase: 'modo' },
+        data: { fase: 'objecion', modoPropuesto: 'excluyentes', objecionEndsAt: new Date(NOW.getTime() + 7 * DIA) },
+      });
+      expect(audit.log).toHaveBeenCalledWith(expect.objectContaining({
+        action: 'decision.mode_proposed', resource: 'decision:d1', metadata: { proposalId: T, modo: 'excluyentes' },
+      }));
+    });
+
+    it('con 1 viva: votación compatible con el plazo de votación; audita vote_opened', async () => {
+      prisma.solucion.findMany.mockResolvedValue([{ id: 's1' }]);
+      expect(await service.processDeadlines(NOW)).toBe(1);
+      expect(rules.getInt).toHaveBeenCalledWith('votacion.plazo_dias', G);
+      expect(prisma.decision.updateMany).toHaveBeenCalledWith({
+        where: { id: 'd1', fase: 'modo' },
+        data: {
+          fase: 'votacion', modo: 'compatibles', candidatas: ['s1'],
+          votacionStartsAt: NOW, votacionEndsAt: new Date(NOW.getTime() + 5 * DIA),
+        },
+      });
+      expect(audit.log).toHaveBeenCalledWith(expect.objectContaining({ action: 'decision.vote_opened', metadata: { proposalId: T } }));
+    });
+
+    it('con 0 vivas: contada sin_soluciones; audita decision.counted', async () => {
+      prisma.solucion.findMany.mockResolvedValue([]);
+      expect(await service.processDeadlines(NOW)).toBe(1);
+      expect(prisma.decision.updateMany).toHaveBeenCalledWith({
+        where: { id: 'd1', fase: 'modo' },
+        data: { fase: 'contada', resultado: 'sin_soluciones', contadaAt: NOW, candidatas: [] },
+      });
+      expect(audit.log).toHaveBeenCalledWith(expect.objectContaining({
+        action: 'decision.counted', metadata: { proposalId: T, resultado: 'sin_soluciones' },
+      }));
+    });
+
+    it('si el tema ya no está vivo al bloquearlo, no toca nada', async () => {
+      prisma.$queryRaw.mockResolvedValue([]);
+      expect(await service.processDeadlines(NOW)).toBe(0);
+      expect(prisma.decision.updateMany).not.toHaveBeenCalled();
+      expect(audit.log).not.toHaveBeenCalled();
+    });
+
+    it('si el updateMany no toca nada (alguien propuso el modo a la vez), no audita ni cuenta', async () => {
+      prisma.decision.updateMany.mockResolvedValue({ count: 0 });
+      expect(await service.processDeadlines(NOW)).toBe(0);
+      expect(audit.log).not.toHaveBeenCalled();
     });
   });
 
@@ -583,6 +714,29 @@ describe('DecisionesService', () => {
       expect(prisma.decision.updateMany.mock.calls[0]![0].data).toMatchObject({ resultado: 'aprobada', ganadoras: ['s1'] });
     });
 
+    it('una candidata ocultada durante la votación no puede ganar (se lee dentro de la transacción)', async () => {
+      // s1 sería la ganadora; al estar oculta, en excluyentes no se aprueba ninguna.
+      prisma.solucion.findMany.mockImplementation(async ({ where }: { where: { hidden?: boolean } }) =>
+        (where.hidden === true ? [{ id: 's1' }] : []));
+      expect(await service.processDeadlines(NOW)).toBe(1);
+      expect(prisma.solucion.findMany).toHaveBeenCalledWith(expect.objectContaining({
+        where: { id: { in: ['s1', 's2'] }, hidden: true },
+      }));
+      const arg = prisma.decision.updateMany.mock.calls[0]![0];
+      expect(arg.data).toMatchObject({ resultado: 'ninguna', ganadoras: [], aprobaciones: [2, 1] });
+      expect(arg.data.pairwiseMatrix).toEqual([[0, 2], [0, 0]]);
+    });
+
+    it('compatibles: la oculta sale de las ganadoras y, si era la única, el resultado es ninguna', async () => {
+      prisma.decision.findUnique.mockResolvedValue({
+        id: 'd1', proposalId: T, fase: 'votacion', modo: 'compatibles', candidatas: ['s1', 's2'], proposal: { groupId: G },
+      });
+      prisma.solucion.findMany.mockImplementation(async ({ where }: { where: { hidden?: boolean } }) =>
+        (where.hidden === true ? [{ id: 's1' }] : []));
+      await service.processDeadlines(NOW);
+      expect(prisma.decision.updateMany.mock.calls[0]![0].data).toMatchObject({ resultado: 'ninguna', ganadoras: [] });
+    });
+
     it('si el tema ya no está vivo al bloquearlo, no cuenta ni audita', async () => {
       prisma.$queryRaw.mockResolvedValue([]);
       expect(await service.processDeadlines(NOW)).toBe(0);
@@ -604,6 +758,45 @@ describe('DecisionesService', () => {
     beforeEach(() => {
       forums.canOrganize.mockResolvedValue(true);
       prisma.decision.findUnique.mockResolvedValue({ id: 'd1', proposalId: T, fase: 'modo' });
+      prisma.$queryRaw.mockResolvedValue([{ id: T }]);
+      prisma.solucion.findMany.mockResolvedValue([{ id: 's1' }, { id: 's2' }]);
+    });
+
+    it('quien organiza pero no es miembro del grupo: 403', async () => {
+      prisma.groupMembership.findUnique.mockResolvedValue(null);
+      await expect(service.proposeModo(YO, T, 'excluyentes', 'ip')).rejects.toThrow(ForbiddenException);
+      expect(prisma.decision.updateMany).not.toHaveBeenCalled();
+    });
+
+    it('con una sola solución viva no hay objeción: abre la votación compatible y audita vote_opened', async () => {
+      prisma.solucion.findMany.mockResolvedValue([{ id: 's1' }]);
+      const antes = Date.now();
+      await service.proposeModo(YO, T, 'excluyentes', 'ip');
+      const arg = prisma.decision.updateMany.mock.calls[0]![0];
+      expect(arg.where).toEqual({ id: 'd1', fase: 'modo' });
+      expect(arg.data).toMatchObject({ fase: 'votacion', modo: 'compatibles', candidatas: ['s1'] });
+      expect(arg.data.votacionEndsAt.getTime()).toBeGreaterThanOrEqual(antes + 7 * 86_400_000);
+      expect(audit.log).toHaveBeenCalledWith(expect.objectContaining({ action: 'decision.vote_opened', metadata: { proposalId: T } }));
+      expect(audit.log).not.toHaveBeenCalledWith(expect.objectContaining({ action: 'decision.mode_proposed' }));
+    });
+
+    it('sin soluciones vivas: queda contada sin_soluciones y audita decision.counted', async () => {
+      prisma.solucion.findMany.mockResolvedValue([]);
+      await service.proposeModo(YO, T, 'compatibles', 'ip');
+      expect(prisma.decision.updateMany).toHaveBeenCalledWith({
+        where: { id: 'd1', fase: 'modo' },
+        data: expect.objectContaining({ fase: 'contada', resultado: 'sin_soluciones', candidatas: [] }),
+      });
+      expect(audit.log).toHaveBeenCalledWith(expect.objectContaining({
+        action: 'decision.counted', metadata: { proposalId: T, resultado: 'sin_soluciones' },
+      }));
+    });
+
+    it('si al bloquear el tema ya no está vivo: 400 sin tocar la decisión', async () => {
+      prisma.$queryRaw.mockResolvedValue([]);
+      await expect(service.proposeModo(YO, T, 'excluyentes', 'ip')).rejects.toThrow(BadRequestException);
+      expect((prisma.$queryRaw.mock.calls[0]![0] as Prisma.Sql).sql).toContain('FOR UPDATE');
+      expect(prisma.decision.updateMany).not.toHaveBeenCalled();
     });
 
     it('sin permiso de organizar: 403', async () => {

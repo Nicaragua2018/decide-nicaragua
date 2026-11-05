@@ -11,6 +11,9 @@
  * - Excluyentes: gana la ganadora de Schulze si está aprobada; entre varias
  *   ganadoras de Schulze solo cuentan las aprobadas (Ruling R1), y si quedan
  *   dos o más es un empate.
+ * - Excluidas (soluciones ocultas por moderación al contar): siguen en las
+ *   matrices y en las aprobaciones, pero no pueden quedar aprobadas; en
+ *   excluyentes se descartan antes de cruzar con las ganadoras de Schulze.
  *
  * No usa Nest ni Prisma: entra todo por parámetro y es determinista.
  */
@@ -28,6 +31,8 @@ export interface TallyInput {
   papeletas: PapeletaInput[];
   miembros: number;
   quorumPct: number;
+  /** Candidatas que no pueden ganar (ocultas por moderación al contar). */
+  excluidas?: string[];
 }
 
 export interface TallyOutput {
@@ -59,6 +64,7 @@ function aBallot(orden: string[]): BallotInput {
 /** Calcula el resultado completo de una decisión. */
 export function tallyDecision(input: TallyInput): TallyOutput {
   const { candidatas, modo, papeletas, miembros, quorumPct } = input;
+  const excluidas = new Set(input.excluidas ?? []);
 
   const papeletasTotal = papeletas.length;
   const validasList = papeletas.filter((p) => !p.abstencion);
@@ -86,7 +92,7 @@ export function tallyDecision(input: TallyInput): TallyOutput {
   }
 
   const aprobadas = new Set(
-    candidatas.filter((_, i) => estaAprobada(aprobaciones[i] ?? 0, validas)),
+    candidatas.filter((c, i) => !excluidas.has(c) && estaAprobada(aprobaciones[i] ?? 0, validas)),
   );
 
   if (modo === 'compatibles') {

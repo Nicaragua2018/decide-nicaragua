@@ -149,4 +149,49 @@ describe('tallyDecision', () => {
     expect(r.schulzeMatrix).toHaveLength(3);
     for (const fila of r.schulzeMatrix) expect(fila).toHaveLength(3);
   });
+
+  describe('excluidas (soluciones ocultas al contar)', () => {
+    it('compatibles: una excluida aprobada no gana; las demás aprobadas sí', () => {
+      const r = tallyDecision(
+        input({ candidatas: ['a', 'b'], papeletas: [p('a', 'b'), p('a', 'b'), p('b')], excluidas: ['a'] }),
+      );
+      expect(r.aprobaciones).toEqual([2, 3]);
+      expect(r.ganadoras).toEqual(['b']);
+      expect(r.resultado).toBe('aprobada');
+    });
+
+    it('compatibles: si la única aprobada está excluida, ninguna', () => {
+      const r = tallyDecision(input({ candidatas: ['a', 'b'], papeletas: [p('a'), p('a'), p('b')], excluidas: ['a'] }));
+      expect(r.ganadoras).toEqual([]);
+      expect(r.resultado).toBe('ninguna');
+    });
+
+    it('excluyentes: la ganadora de Schulze excluida no gana y no se pasa a la siguiente', () => {
+      const r = tallyDecision(
+        input({
+          candidatas: ['a', 'b'],
+          modo: 'excluyentes',
+          papeletas: [p('a', 'b'), p('a', 'b'), p('b', 'a')],
+          excluidas: ['a'],
+        }),
+      );
+      expect(r.resultado).toBe('ninguna');
+      expect(r.ganadoras).toEqual([]);
+      // Las matrices la siguen incluyendo.
+      expect(r.pairwiseMatrix).toHaveLength(2);
+    });
+
+    it('excluyentes: en un empate de Schulze con una excluida, gana la otra aprobada', () => {
+      const r = tallyDecision(
+        input({
+          candidatas: ['a', 'b'],
+          modo: 'excluyentes',
+          papeletas: [p('a', 'b'), p('b', 'a')],
+          excluidas: ['a'],
+        }),
+      );
+      expect(r.resultado).toBe('aprobada');
+      expect(r.ganadoras).toEqual(['b']);
+    });
+  });
 });

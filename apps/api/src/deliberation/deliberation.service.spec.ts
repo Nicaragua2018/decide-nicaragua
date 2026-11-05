@@ -86,6 +86,9 @@ function buildPrismaMock() {
     election: {
       findUnique: vi.fn(),
     },
+    decision: {
+      findUnique: vi.fn(),
+    },
   };
 }
 
@@ -317,6 +320,28 @@ describe('DeliberationService', () => {
 
       prisma.proposal.findUnique.mockResolvedValue({ ...mockProposal, kind: 'propuesta', electionId: 'e1' });
       prisma.election.findUnique.mockResolvedValue({ status: 'open' });
+      await expect(
+        service.updateProposalStatus(PROPOSAL_ID, { status: ProposalStatus.archived }, PROFILE_ID, IP),
+      ).rejects.toThrow(BadRequestException);
+      expect(prisma.proposal.update).not.toHaveBeenCalled();
+    });
+
+    it('una propuesta formal sin votación del plan 2 se archiva si su decisión quedó contada o cancelada', async () => {
+      prisma.groupMembership.findUnique.mockResolvedValue(mockMembership);
+      prisma.proposal.findUnique.mockResolvedValue({ ...mockProposal, kind: 'propuesta', electionId: null });
+      prisma.proposal.update.mockResolvedValue({});
+      for (const fase of ['contada', 'cancelada']) {
+        prisma.decision.findUnique.mockResolvedValue({ fase });
+        await service.updateProposalStatus(PROPOSAL_ID, { status: ProposalStatus.archived }, PROFILE_ID, IP);
+      }
+      expect(prisma.decision.findUnique).toHaveBeenCalledWith({ where: { proposalId: PROPOSAL_ID }, select: { fase: true } });
+      expect(prisma.proposal.update).toHaveBeenCalledTimes(2);
+    });
+
+    it('una propuesta formal con la decisión aún en curso no se archiva', async () => {
+      prisma.groupMembership.findUnique.mockResolvedValue(mockMembership);
+      prisma.proposal.findUnique.mockResolvedValue({ ...mockProposal, kind: 'propuesta', electionId: null });
+      prisma.decision.findUnique.mockResolvedValue({ fase: 'votacion' });
       await expect(
         service.updateProposalStatus(PROPOSAL_ID, { status: ProposalStatus.archived }, PROFILE_ID, IP),
       ).rejects.toThrow(BadRequestException);

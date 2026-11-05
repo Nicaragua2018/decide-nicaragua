@@ -46,6 +46,24 @@ async function bloquearTema(tx: Prisma.TransactionClient, proposalId: string): P
   return vivo.length > 0;
 }
 
+/**
+ * Para crear o juntar soluciones: bloquea el tema en modo compartido mientras siga abierto,
+ * visible y con el debate en plazo, y sin fila en `decisiones`. El FOR UPDATE de
+ * `bloquearTema` (fin del debate) choca con este FOR SHARE, así que una solución tardía
+ * o entra antes de fijar las candidatas o recibe «ya quedaron fijas».
+ */
+async function bloquearDebate(tx: Prisma.TransactionClient, proposalId: string): Promise<void> {
+  const vivo = await tx.$queryRaw<{ id: string }[]>(
+    Prisma.sql`SELECT id FROM proposals WHERE id = ${proposalId}::uuid AND hidden = false AND status = 'open' AND ("deliberationEndsAt" IS NULL OR "deliberationEndsAt" > now()) FOR SHARE`,
+  );
+  if (vivo.length === 0) throw new BadRequestException(FIJAS);
+  const decision = await tx.decision.findUnique({ where: { proposalId }, select: { id: true } });
+  if (decision) throw new BadRequestException(FIJAS);
+}
+
+/** Cómo salió una decisión de la fase `modo`. */
+type SalidaDelModo = { fase: 'contada' } | { fase: 'votacion' } | { fase: 'objecion'; modo: DecisionModoValue };
+
 interface TemaRow {
   id: string;
   groupId: string;
@@ -105,14 +123,17 @@ export class DecisionesService {
   ): Promise<{ id: string }> {
     const tema = await this.tema(profileId, proposalId);
     await this.assertDebate(tema);
-    const created = await this.prisma.solucion.create({
-      data: {
-        proposalId,
-        authorProfileId: profileId,
-        title: dto.title.trim(),
-        description: dto.description.trim(),
-        origen: 'persona',
-      },
+    const created = await this.prisma.$transaction(async (tx) => {
+      await bloquearDebate(tx, proposalId);
+      return tx.solucion.create({
+        data: {
+          proposalId,
+          authorProfileId: profileId,
+          title: dto.title.trim(),
+          description: dto.description.trim(),
+          origen: 'persona',
+        },
+      });
     });
     void this.audit.log({
       ...(await this.actorId(profileId)),
@@ -135,6 +156,7 @@ export class DecisionesService {
     if (!(await this.forums.canOrganize(profileId, tema.groupId))) {
       throw new ForbiddenException('Solo quien organiza la comunidad puede juntar soluciones.');
     }
+    await this.requireMembership(tema.groupId, profileId);
     const destino = await this.prisma.solucion.findUnique({ where: { id: intoId } });
     if (!destino) throw new NotFoundException('Solución no encontrada.');
     if (destino.proposalId !== origen.proposalId) {
@@ -146,6 +168,8 @@ export class DecisionesService {
       throw new BadRequestException('Alguna de las soluciones ya fue juntada.');
     }
     await this.prisma.$transaction(async (tx) => {
+      // Primero el tema (como al crear), luego las soluciones: el fin del debate espera o ya se ve.
+      await bloquearDebate(tx, origen.proposalId);
       // Bloqueo en orden fijo: dos juntadas cruzadas (A→B y B→A) se serializan.
       const [a, b] = solucionId < intoId ? [solucionId, intoId] : [intoId, solucionId];
       await tx.$queryRaw(Prisma.sql`SELECT id FROM soluciones WHERE id IN (${a}::uuid, ${b}::uuid) ORDER BY id FOR UPDATE`);
@@ -207,18 +231,26 @@ export class DecisionesService {
     if (decision) {
       const fase = decision.fase as DecisionView['fase'];
       const candidatas: DecisionView['candidatas'] = [];
-      for (const id of decision.candidatas) {
-        const s = porId.get(id);
-        if (s) candidatas.push({ id: s.id, ...textoDe(s), hidden: s.hidden });
+      if (fase === 'modo' || fase === 'objecion') {
+        // Aún no están congeladas: se muestran las vivas (filas ya viene en orden de llegada).
+        for (const s of filas) {
+          if (!s.hidden && s.mergedIntoId === null) candidatas.push({ id: s.id, ...textoDe(s), hidden: s.hidden });
+        }
+      } else {
+        for (const id of decision.candidatas) {
+          const s = porId.get(id);
+          if (s) candidatas.push({ id: s.id, ...textoDe(s), hidden: s.hidden });
+        }
       }
 
       // Solo la papeleta y la objeción propias, leídas por su clave única: nunca las de otra persona.
       const clave = { decisionId_profileId: { decisionId: decision.id, profileId } };
-      const [papeleta, objecion] = await Promise.all([
+      const [papeleta, objecion, fraccionObjecionPct] = await Promise.all([
         fase === 'votacion' || fase === 'contada'
           ? this.prisma.decisionPapeleta.findUnique({ where: clave, select: { abstencion: true, orden: true } })
           : null,
         this.prisma.objecionModo.findUnique({ where: clave, select: { id: true } }),
+        this.rules.getInt('debate.fraccion_objecion_modo', tema.groupId),
       ]);
       const puedoObjetar =
         fase === 'objecion' &&
@@ -256,6 +288,7 @@ export class DecisionesService {
         yoObjete: Boolean(objecion),
         puedoObjetar,
         resultado,
+        fraccionObjecionPct,
       };
     }
 
@@ -279,26 +312,78 @@ export class DecisionesService {
     if (!(await this.forums.canOrganize(profileId, tema.groupId))) {
       throw new ForbiddenException('Solo quien organiza la comunidad puede proponer el modo de decisión.');
     }
+    await this.requireMembership(tema.groupId, profileId);
     if (tema.hidden) throw new BadRequestException('Este tema está oculto por moderación.');
     const decision = await this.prisma.decision.findUnique({ where: { proposalId }, select: { id: true, fase: true } });
     const fueraDeFase = 'Esta decisión no está esperando que se proponga el modo.';
     if (!decision || (decision.fase as string) !== 'modo') throw new BadRequestException(fueraDeFase);
-    const dias = await this.rules.getInt('debate.plazo_objecion_modo_dias', tema.groupId);
-    const objecionEndsAt = new Date(Date.now() + dias * DIA_MS);
-    const r = await this.prisma.$transaction((tx) =>
-      tx.decision.updateMany({
-        where: { id: decision.id, fase: 'modo' },
-        data: { fase: 'objecion', modoPropuesto: modo, objecionEndsAt },
-      }),
-    );
-    if (r.count === 0) throw new BadRequestException(fueraDeFase);
-    void this.audit.log({
-      ...(await this.actorId(profileId)),
-      action: 'decision.mode_proposed',
-      resource: `decision:${decision.id}`,
-      ip,
-      metadata: { proposalId, modo },
+    const plazos = await this.plazosDelModo(tema.groupId);
+    const salida = await this.prisma.$transaction(async (tx) => {
+      if (!(await bloquearTema(tx, proposalId))) return null;
+      return this.salirDelModo(tx, decision.id, proposalId, new Date(), modo, plazos);
     });
+    if (!salida) throw new BadRequestException(fueraDeFase);
+    this.auditarSalidaDelModo(salida, decision.id, proposalId, { ...(await this.actorId(profileId)), ip });
+  }
+
+  private async plazosDelModo(groupId: string): Promise<{ objecionDias: number; votacionDias: number }> {
+    const [objecionDias, votacionDias] = await Promise.all([
+      this.rules.getInt('debate.plazo_objecion_modo_dias', groupId),
+      this.rules.getInt('votacion.plazo_dias', groupId),
+    ]);
+    return { objecionDias, votacionDias };
+  }
+
+  /**
+   * Saca la decisión de la fase `modo` (con el tema ya bloqueado). Con dos o más soluciones
+   * vivas se abre la objeción al modo; con una no hay nada que excluir ni objetar (§5) y se
+   * vota en compatibles; sin ninguna queda contada sin soluciones. Null si ya no estaba en `modo`.
+   */
+  private async salirDelModo(
+    tx: Prisma.TransactionClient,
+    decisionId: string,
+    proposalId: string,
+    now: Date,
+    modo: DecisionModoValue,
+    plazos: { objecionDias: number; votacionDias: number },
+  ): Promise<SalidaDelModo | null> {
+    const candidatas = (await tx.solucion.findMany(CANDIDATAS(proposalId))).map((s) => s.id);
+    let salida: SalidaDelModo;
+    let data: Prisma.DecisionUpdateManyMutationInput;
+    if (candidatas.length === 0) {
+      salida = { fase: 'contada' };
+      data = { fase: 'contada', resultado: 'sin_soluciones', contadaAt: now, candidatas: [] };
+    } else if (candidatas.length === 1) {
+      salida = { fase: 'votacion' };
+      data = {
+        fase: 'votacion',
+        modo: 'compatibles',
+        candidatas,
+        votacionStartsAt: now,
+        votacionEndsAt: new Date(now.getTime() + plazos.votacionDias * DIA_MS),
+      };
+    } else {
+      salida = { fase: 'objecion', modo };
+      data = { fase: 'objecion', modoPropuesto: modo, objecionEndsAt: new Date(now.getTime() + plazos.objecionDias * DIA_MS) };
+    }
+    const r = await tx.decision.updateMany({ where: { id: decisionId, fase: 'modo' }, data });
+    return r.count === 0 ? null : salida;
+  }
+
+  private auditarSalidaDelModo(
+    salida: SalidaDelModo,
+    decisionId: string,
+    proposalId: string,
+    extra: { actorId?: string; ip?: string } = {},
+  ): void {
+    const resource = `decision:${decisionId}`;
+    if (salida.fase === 'contada') {
+      void this.audit.log({ ...extra, action: 'decision.counted', resource, metadata: { proposalId, resultado: 'sin_soluciones' } });
+    } else if (salida.fase === 'votacion') {
+      void this.audit.log({ ...extra, action: 'decision.vote_opened', resource, metadata: { proposalId } });
+    } else {
+      void this.audit.log({ ...extra, action: 'decision.mode_proposed', resource, metadata: { proposalId, modo: salida.modo } });
+    }
   }
 
   /** Objetar o retirar la objeción al modo propuesto. No se audita (como los votos). */
@@ -413,10 +498,11 @@ export class DecisionesService {
 
   // ─── Plazos ───────────────────────────────────────────────────────────────
 
-  /** Revisa los tres plazos (debate, objeción, votación). Devuelve cuántas transiciones hizo. */
+  /** Revisa los plazos (debate, modo, objeción, votación). Devuelve cuántas transiciones hizo. */
   async processDeadlines(now: Date): Promise<number> {
     let n = 0;
     n += await this.finDelDebate(now);
+    n += await this.finDelModo(now);
     n += await this.finDeLaObjecion(now);
     n += await this.finDeLaVotacion(now);
     return n;
@@ -472,6 +558,34 @@ export class DecisionesService {
         // Otra ejecución ya creó la decisión de este tema (proposalId @unique).
         if (esDuplicado(err)) continue;
         this.logger.error(`No se pudo cerrar el debate ${t.id}: ${err instanceof Error ? err.name : 'error'}`);
+      }
+    }
+    return n;
+  }
+
+  /**
+   * Si quien organiza no propone el modo en `debate.plazo_objecion_modo_dias` días desde que
+   * empezó la fase, se propone «excluyentes» y se abre la objeción (o el atajo con 0 o 1 vivas).
+   */
+  private async finDelModo(now: Date): Promise<number> {
+    const decisiones = await this.prisma.decision.findMany({
+      where: { fase: 'modo' },
+      select: { id: true, proposalId: true, createdAt: true, proposal: { select: { groupId: true } } },
+    });
+    let n = 0;
+    for (const d of decisiones) {
+      try {
+        const plazos = await this.plazosDelModo(d.proposal.groupId);
+        if (d.createdAt.getTime() + plazos.objecionDias * DIA_MS > now.getTime()) continue;
+        const salida = await this.prisma.$transaction(async (tx) => {
+          if (!(await bloquearTema(tx, d.proposalId))) return null;
+          return this.salirDelModo(tx, d.id, d.proposalId, now, 'excluyentes', plazos);
+        });
+        if (!salida) continue;
+        n += 1;
+        this.auditarSalidaDelModo(salida, d.id, d.proposalId);
+      } catch (err) {
+        this.logger.error(`No se pudo cerrar el plazo del modo ${d.id}: ${err instanceof Error ? err.name : 'error'}`);
       }
     }
     return n;
@@ -603,7 +717,11 @@ export class DecisionesService {
       if (d.candidatas.length === 1) modo = 'compatibles';
       else if (d.modo) modo = d.modo as DecisionModoValue;
       else throw new Error('Decisión en votación sin modo');
-      const t = tallyDecision({ candidatas: d.candidatas, modo, papeletas, miembros, quorumPct });
+      // Una candidata ocultada por moderación durante la votación sigue en las cifras, pero no gana.
+      const ocultas = (
+        await tx.solucion.findMany({ where: { id: { in: d.candidatas }, hidden: true }, select: { id: true } })
+      ).map((s) => s.id);
+      const t = tallyDecision({ candidatas: d.candidatas, modo, papeletas, miembros, quorumPct, excluidas: ocultas });
       const r = await tx.decision.updateMany({
         where: { id: decisionId, fase: 'votacion' },
         data: {

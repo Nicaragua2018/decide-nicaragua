@@ -43,6 +43,8 @@ export interface DecisionView {
   yoObjete: boolean;
   puedoObjetar: boolean;
   resultado: DecisionResultadoView | null;
+  /** Porcentaje de participantes que debe objetar para usar el otro modo (regla del grupo). */
+  fraccionObjecionPct: number;
 }
 
 export interface DecisionTemaResponse {

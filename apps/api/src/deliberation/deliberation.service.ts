@@ -255,10 +255,15 @@ export class DeliberationService {
     }
 
     if ((dto.status as string) === 'archived' && (proposal.kind as string) === 'propuesta') {
-      const election = proposal.electionId
-        ? await this.prisma.election.findUnique({ where: { id: proposal.electionId }, select: { status: true } })
-        : null;
-      const contada = election !== null && ['tallied', 'cancelled'].includes(election.status as string);
+      let contada: boolean;
+      if (proposal.electionId) {
+        const election = await this.prisma.election.findUnique({ where: { id: proposal.electionId }, select: { status: true } });
+        contada = election !== null && ['tallied', 'cancelled'].includes(election.status as string);
+      } else {
+        // Ciclo de soluciones (3A-3): se archiva cuando la decisión ya se contó o se canceló.
+        const decision = await this.prisma.decision.findUnique({ where: { proposalId }, select: { fase: true } });
+        contada = decision != null && ['contada', 'cancelada'].includes(decision.fase as string);
+      }
       if (!contada) {
         throw new BadRequestException('Una propuesta formal no se archiva antes de que se cuente su votación.');
       }
