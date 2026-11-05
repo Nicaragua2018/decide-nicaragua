@@ -6,7 +6,6 @@ import {
   closeTopic,
   formalizeTopic,
   hideContent,
-  openTopicVote,
   type ActionResult,
 } from '@/lib/actions';
 import { ProposalStatus } from '@decide/shared';
@@ -35,7 +34,6 @@ export function TopicActions({ proposal }: { proposal: ProposalDetail }) {
   const isPropuesta = proposal.kind === 'propuesta';
   const voteDone = proposal.electionStatus === 'tallied' || proposal.electionStatus === 'cancelled';
   const canClose = !isPropuesta || voteDone;
-  const canOpenVote = !proposal.electionId || proposal.electionStatus === 'cancelled';
 
   // De un tema oculto no se muestra nada: ni la propuesta, ni su votación, ni acciones.
   if (proposal.hidden) return null;
@@ -52,16 +50,6 @@ export function TopicActions({ proposal }: { proposal: ProposalDetail }) {
             <p className="text-sm text-muted mt-1">
               La deliberación termina el {endsAt.toLocaleDateString('es-NI')}
             </p>
-          )}
-          {deliberationOver && canOpenVote && isOpen && canAct && (
-            <button
-              type="button"
-              className="btn btn-primary btn-sm mt-2"
-              disabled={pending}
-              onClick={() => run(() => openTopicVote(proposal.id))}
-            >
-              Abrir votación
-            </button>
           )}
           {proposal.electionId && (
             <p className="mt-2">

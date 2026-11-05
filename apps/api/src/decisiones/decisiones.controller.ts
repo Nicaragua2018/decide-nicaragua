@@ -1,4 +1,4 @@
-import { Body, Controller, ForbiddenException, Get, Param, ParseUUIDPipe, Post, Req, UseGuards } from '@nestjs/common';
+import { Body, Controller, ForbiddenException, Get, Param, ParseUUIDPipe, Post, Put, Req, UseGuards } from '@nestjs/common';
 import type { Request } from 'express';
 import type { DecisionTemaResponse, JwtPayload } from '@decide/shared';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
@@ -7,6 +7,8 @@ import { extractIp } from '../common/utils/ip.util';
 import { DecisionesService } from './decisiones.service';
 import { CreateSolucionDto } from './dto/create-solucion.dto';
 import { MergeSolucionDto } from './dto/merge-solucion.dto';
+import { ProposeModoDto } from './dto/propose-modo.dto';
+import { ObjecionDto } from './dto/objecion.dto';
 
 @Controller('decisiones')
 @UseGuards(JwtAuthGuard)
@@ -44,5 +46,24 @@ export class DecisionesController {
     @Req() req: Request,
   ): Promise<void> {
     await this.decisiones.mergeSolucion(this.perfil(user), id, dto.intoId, extractIp(req));
+  }
+
+  @Post('temas/:proposalId/modo')
+  async proposeModo(
+    @Param('proposalId', ParseUUIDPipe) proposalId: string,
+    @Body() dto: ProposeModoDto,
+    @CurrentUser() user: JwtPayload,
+    @Req() req: Request,
+  ): Promise<void> {
+    await this.decisiones.proposeModo(this.perfil(user), proposalId, dto.modo, extractIp(req));
+  }
+
+  @Put('temas/:proposalId/objecion')
+  async setObjecion(
+    @Param('proposalId', ParseUUIDPipe) proposalId: string,
+    @Body() dto: ObjecionDto,
+    @CurrentUser() user: JwtPayload,
+  ): Promise<{ yoObjete: boolean }> {
+    return this.decisiones.setObjecion(this.perfil(user), proposalId, dto.objeto);
   }
 }

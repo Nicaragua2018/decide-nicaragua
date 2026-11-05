@@ -7,7 +7,6 @@ import {
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import {
-  VOTING_DAYS,
   type ForumDetail,
   type ForumSummary,
   type ModerationAppeal,
@@ -27,9 +26,6 @@ const DIA_MS = 86_400_000;
 /** Título que toma la votación de un tema oculto, para que no repita el título del tema. */
 const HIDDEN_VOTE_TITLE = 'Votación de un tema oculto';
 
-/** Título neutro de una votación cancelada que queda huérfana al abrir otra. */
-const ORPHAN_VOTE_TITLE = 'Votación anterior (cancelada)';
-
 type ModTarget = 'tema' | 'respuesta' | 'inquietud' | 'frase' | 'solucion';
 
 /** Cada tipo de contenido tiene su propia rama: ninguno cae en otro por descarte. */
@@ -37,6 +33,8 @@ function checkTarget(target: string): ModTarget {
   if (target === 'tema' || target === 'respuesta' || target === 'inquietud' || target === 'frase' || target === 'solucion') return target;
   throw new BadRequestException('Tipo de contenido no válido.');
 }
+
+const NO_CONTADA = 'Una propuesta formal se cierra cuando su votación ya fue contada.';
 
 const voteTitle = (topicTitle: string): string => `Votación: ${topicTitle}`.slice(0, 200);
 
@@ -253,70 +251,19 @@ export class ForumsService {
     void this.audit.log({ ...(await this.actorId(profileId)), action: 'proposal.formalized', resource: `proposal:${topicId}`, ip });
   }
 
-  async openVote(profileId: string, topicId: string, ip: string): Promise<{ electionId: string }> {
-    const topic = await this.topicForAction(profileId, topicId);
-    if ((topic.kind as string) !== 'propuesta') throw new BadRequestException('Primero hay que convertir el tema en propuesta formal.');
-    if (topic.electionId) {
-      // Solo si la votación anterior fue cancelada (al ocultar el tema) se puede abrir otra.
-      const previa = await this.prisma.election.findUnique({ where: { id: topic.electionId }, select: { status: true } });
-      if ((previa?.status as string | undefined) !== 'cancelled') {
-        throw new ConflictException('La votación de esta propuesta ya está abierta.');
-      }
-    }
-    if ((topic.status as string) !== 'open') throw new BadRequestException('Solo un tema abierto puede votarse.');
-    if (!topic.deliberationEndsAt || topic.deliberationEndsAt.getTime() > Date.now()) {
-      throw new BadRequestException('La votación se abre cuando termina el plazo de deliberación.');
-    }
-    const ahora = new Date();
-    const election = await this.prisma.$transaction(async (tx) => {
-      const e = await tx.election.create({
-        data: {
-          groupId: topic.groupId,
-          createdByProfileId: profileId,
-          title: voteTitle(topic.title),
-          description: 'Votación de una propuesta formal del foro.',
-          status: 'open',
-          startsAt: ahora,
-          endsAt: new Date(ahora.getTime() + VOTING_DAYS * DIA_MS),
-          candidates: {
-            create: [
-              { title: 'A favor', position: 1 },
-              { title: 'En contra', position: 2 },
-              { title: 'Abstención', position: 3 },
-            ],
-          },
-        },
-      });
-      const vinculada = await tx.proposal.updateMany({
-        where: { id: topicId, electionId: topic.electionId ?? null, status: 'open', hidden: false },
-        data: { electionId: e.id },
-      });
-      if (vinculada.count === 0) throw new ConflictException('La votación de esta propuesta ya está abierta.');
-      if (topic.electionId) {
-        // La votación cancelada queda sin tema: que no conserve su título.
-        await tx.election.update({ where: { id: topic.electionId }, data: { title: ORPHAN_VOTE_TITLE } });
-      }
-      return e;
-    });
-    void this.audit.log({
-      ...(await this.actorId(profileId)),
-      action: 'proposal.vote_opened',
-      resource: `proposal:${topicId}`,
-      ip,
-      metadata: { electionId: election.id },
-    });
-    return { electionId: election.id };
-  }
-
   async closeWithConsensus(profileId: string, topicId: string, dto: CloseTopicDto, ip: string): Promise<void> {
     const topic = await this.topicForAction(profileId, topicId);
     if ((topic.status as string) !== 'open') throw new BadRequestException('Solo se cierra un tema abierto.');
-    if ((topic.kind as string) === 'propuesta') {
-      const election = topic.electionId
-        ? await this.prisma.election.findUnique({ where: { id: topic.electionId }, select: { status: true } })
-        : null;
+    if (topic.electionId) {
+      // Propuesta del plan 2: se cierra cuando su votación (elección) ya fue contada o cancelada.
+      const election = await this.prisma.election.findUnique({ where: { id: topic.electionId }, select: { status: true } });
       if (!election || !['tallied', 'cancelled'].includes(election.status as string)) {
-        throw new BadRequestException('Una propuesta formal se cierra cuando su votación ya fue contada.');
+        throw new BadRequestException(NO_CONTADA);
+      }
+    } else if ((topic.kind as string) === 'propuesta') {
+      const decision = await this.prisma.decision.findUnique({ where: { proposalId: topicId }, select: { fase: true } });
+      if (!decision || !['contada', 'cancelada'].includes(decision.fase as string)) {
+        throw new BadRequestException(NO_CONTADA);
       }
     }
     await this.prisma.proposal.update({
@@ -374,10 +321,11 @@ export class ForumsService {
     if (!(await this.canModerate(profileId, groupId))) {
       throw new ForbiddenException('No tienes permiso para moderar en esta comunidad.');
     }
+    const canceladas: string[] = [];
     const action = await this.prisma.$transaction(async (tx) => {
       let linkedTopicId: string | null = null;
       if (target === 'tema') {
-        await this.hideTopicTx(tx, dto.targetId);
+        if (await this.hideTopicTx(tx, dto.targetId)) canceladas.push(dto.targetId);
       } else if (target === 'inquietud') {
         const q = await tx.inquietud.update({ where: { id: dto.targetId }, data: { hidden: true } });
         // El debate que abrió la comunidad copia el título y el texto de la inquietud: se oculta con ella.
@@ -389,7 +337,7 @@ export class ForumsService {
             select: { abiertoPorComunidad: true, hidden: true },
           });
           if (p?.abiertoPorComunidad === true && p.hidden === false) {
-            await this.hideTopicTx(tx, proposalId);
+            if (await this.hideTopicTx(tx, proposalId)) canceladas.push(proposalId);
             linkedTopicId = proposalId;
           }
         }
@@ -417,6 +365,15 @@ export class ForumsService {
       ip,
       metadata: { moderationId: action.id },
     });
+    for (const proposalId of canceladas) {
+      void this.audit.log({
+        ...(await this.actorId(profileId)),
+        action: 'decision.cancelled',
+        resource: `proposal:${proposalId}`,
+        ip,
+        metadata: { proposalId },
+      });
+    }
     return { id: action.id };
   }
 
@@ -495,8 +452,11 @@ export class ForumsService {
     });
   }
 
-  /** Oculta un tema; su votación pierde el título y, si sigue activa, se cancela. */
-  private async hideTopicTx(tx: Tx, topicId: string): Promise<void> {
+  /**
+   * Oculta un tema; su votación pierde el título y, si sigue activa, se cancela.
+   * También cancela su decisión activa (plan 3); devuelve si canceló alguna.
+   */
+  private async hideTopicTx(tx: Tx, topicId: string): Promise<boolean> {
     // electionId se relee dentro de la transacción: así se ve una votación abierta justo antes.
     const t = await tx.proposal.update({ where: { id: topicId }, data: { hidden: true } });
     const electionId = t?.electionId ?? null;
@@ -509,6 +469,11 @@ export class ForumsService {
         data: activa ? { title: HIDDEN_VOTE_TITLE, status: 'cancelled' } : { title: HIDDEN_VOTE_TITLE },
       });
     }
+    const d = await tx.decision.updateMany({
+      where: { proposalId: topicId, fase: { in: ['modo', 'objecion', 'votacion'] } },
+      data: { fase: 'cancelada' },
+    });
+    return d.count > 0;
   }
 
   /** Vuelve a mostrar un tema; su votación recupera el título, pero una cancelada no se reabre. */

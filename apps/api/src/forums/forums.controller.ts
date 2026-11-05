@@ -49,11 +49,6 @@ export class ForumsController {
     return { ok: true };
   }
 
-  @Post('topics/:id/open-vote')
-  async openVote(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() user: JwtPayload, @Req() req: Request): Promise<{ electionId: string }> {
-    return this.forums.openVote(this.perfil(user), id, extractIp(req));
-  }
-
   @Post('topics/:id/close')
   @HttpCode(HttpStatus.OK)
   async close(@Param('id', ParseUUIDPipe) id: string, @Body() dto: CloseTopicDto, @CurrentUser() user: JwtPayload, @Req() req: Request): Promise<{ ok: true }> {

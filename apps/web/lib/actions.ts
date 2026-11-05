@@ -373,13 +373,6 @@ export async function formalizeTopic(topicId: string): Promise<ActionResult> {
   return { success: true };
 }
 
-export async function openTopicVote(topicId: string): Promise<ActionResult> {
-  const res = await actionFetch(`/api/forums/topics/${topicId}/open-vote`, { method: 'POST' });
-  if (!res.ok) return { error: await parseError(res) };
-  revalidatePath(`/proposals/${topicId}`);
-  return { success: true };
-}
-
 export async function closeTopic(_prev: ActionResult | null, formData: FormData): Promise<ActionResult> {
   const topicId = String(formData.get('topicId'));
   const res = await actionFetch(`/api/forums/topics/${topicId}/close`, {
