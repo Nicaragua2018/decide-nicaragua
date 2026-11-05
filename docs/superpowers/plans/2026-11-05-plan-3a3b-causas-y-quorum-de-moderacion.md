@@ -1,0 +1,148 @@
+# Plan 3A-3b — Causas cerradas y quórum de la mesa para ocultar
+
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+
+**Goal:** Cumplir dos decisiones de Carlos Robleto del 2026-11-05, que van en el mismo PR #7:
+- **Lista cerrada de causas:** toda moderación usa una causa de una lista fija.
+- **Quórum de la mesa:** ocultar una **solución** o una **propuesta formal** (tema con `kind = 'propuesta'`) requiere el quórum de la mesa, es decir, 2 miembros distintos (`VOTOS_PARA_RESOLVER = 2` de `BoardService`).
+
+**Architecture:**
+- La moderación del plan 2 (`ForumsService.hide / appeal / resolveAppeal`) suma una causa obligatoria y dos estados nuevos para las ocultaciones que esperan una segunda firma.
+- Un programador horario vence las solicitudes que nadie confirma.
+- La web cambia el motivo libre por una lista de causas y suma, en «Mesa», la cola «Ocultaciones por confirmar».
+
+**Tech Stack:** NestJS 10, Prisma 6 + PostgreSQL, vitest 3, Next.js 15.
+
+**Spec:** `docs/superpowers/specs/2026-11-04-plan-3a-ciclo-comunitario-design.md` (§10: el contenido oculto no sale por ningún camino) y ADR-017 (moderación con motivo y apelación). Decisiones de Carlos en el chat del 2026-11-05: «usa lista cerrada de causas, agrega el requisito de quorum minimo para ocultar una solucion o propuesta. en este mismo PR».
+
+## Global Constraints
+
+- **Causas** (`ModeracionCausa`), con sus etiquetas para mostrar:
+  - `datos_personales` → «Datos que identifican o ponen en riesgo a una persona»
+  - `insultos_amenazas` → «Insultos, amenazas o acoso»
+  - `spam` → «Correo basura o publicidad ajena al tema»
+  - `ilegal_violencia` → «Contenido ilegal o que incita a la violencia»
+  - `suplantacion` → «Suplantación de una persona u organización»
+
+  Las causas **urgentes** son `datos_personales` e `ilegal_violencia`.
+- **Detalle:** `ModerateDto` pide `causa` (obligatoria, de la lista). El texto libre `reason` pasa a ser un detalle **opcional** de 0 a 500 caracteres, recortado.
+  - Las moderaciones viejas tienen `causa = null` y se muestran con su `reason`.
+  - La ocultación vinculada (`LINKED_TOPIC_REASON`) copia la causa de la inquietud de origen.
+- **Quórum, solo para `solucion` y para `tema` con `kind = 'propuesta'`.** El resto (respuestas, frases, inquietudes, temas no formales) sigue con una sola persona de la mesa.
+  - **Causa urgente:** se oculta **ya**, con `status = 'provisional'` y `venceAt = now + 48 h`. Si nadie la confirma a tiempo, el contenido se restaura solo.
+  - **Otra causa:** se registra una solicitud con `status = 'pendiente'` y `venceAt = now + 7 días`. El contenido **sigue visible** hasta que otra persona de la mesa la confirme.
+  - **Segunda firma:** la da otra persona de la mesa (`BoardService.roleOf` distinto de null, perfil distinto de quien solicitó).
+    - Confirmar: `pendiente` → se oculta y pasa a `oculto`; `provisional` → `oculto`.
+    - Rechazar: `pendiente` → `rechazado`; `provisional` → se restaura y pasa a `rechazado`.
+  - Solo puede haber una solicitud `pendiente` o `provisional` por contenido; si ya hay una, responde 409.
+  - La apelación de la persona autora solo existe sobre `oculto`, igual que hoy.
+  - Ocultar una propuesta formal, al confirmarse o al ocultarse provisionalmente, cancela su decisión activa (`hideTopicTx`). Si luego se restaura, la decisión no se reabre (regla de 3A-3).
+- **Privacidad:**
+  - Mientras está `pendiente`, nadie fuera de la mesa sabe que hay una solicitud.
+  - La cola de confirmación muestra el texto original solo a la mesa, como la cola de apelaciones.
+  - La auditoría lleva `{ moderationId, causa }`, sin texto.
+- Mensajes en español. Tildes solo con Edit/Write y verificadas en UTF-8 estricto. Commits con `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`. Nunca se hace commit de `apps/web/next-env.d.ts` ni de `.superpowers/`.
+
+## Review Focus
+
+1. **Una sola persona de la mesa no puede ocultar sola una solución o propuesta con causa no urgente.** Tampoco con una urgente más allá de 48 h, ni confirmando su propia solicitud.
+2. Una solicitud `pendiente` **no oculta nada** y no se ve fuera de la mesa.
+3. **Vencimiento:** que el vencimiento corra dos veces a la vez no restaura dos veces ni pisa una confirmación hecha justo antes. Todo pasa por un `updateMany` condicionado al estado.
+4. Una solución ocultada provisionalmente durante la votación **no gana** si sigue oculta al conteo. Si se restaura antes, sí cuenta.
+5. Las moderaciones anteriores, sin causa, siguen mostrándose y apelándose.
+
+---
+
+### Task 1: API — causas, estados nuevos y segunda firma
+
+**Files:**
+- Modify: `apps/api/prisma/schema.prisma`
+- Create: `apps/api/prisma/migrations/20261106140000_causas_y_quorum_moderacion/migration.sql`
+- Modify: `packages/shared/src/types/forum.types.ts`; create `packages/shared/src/constants/moderacion.ts` (exportado desde `constants/index.ts`)
+- Modify: `apps/api/src/forums/forums.service.ts`, `forums.controller.ts`, `dto/moderate.dto.ts`, `forums.module.ts` (+ spec)
+- Create: `apps/api/src/forums/moderacion.scheduler.ts`, `dto/confirmar-moderacion.dto.ts`
+
+**Interfaces:**
+- Produces (Prisma):
+  - `enum ModeracionCausa { datos_personales insultos_amenazas spam ilegal_violencia suplantacion }`
+  - `ModerationStatus` suma `pendiente`, `provisional` y `rechazado`.
+  - `ModerationAction` suma `causa ModeracionCausa?`, `confirmadorProfileId String? @db.Uuid` (columna simple) y `venceAt DateTime? @db.Timestamptz`, con `@@index([status, venceAt])`.
+- Produces (shared):
+  - `MODERACION_CAUSAS: readonly { value: ModeracionCausaValue; label: string; urgente: boolean }[]`
+  - `type ModeracionCausaValue`
+  - `ModerationAppeal` suma `causa: ModeracionCausaValue | null`.
+  - nuevo `ModeracionPorConfirmar { id; target; targetId; causa; detalle: string; originalText; estado: 'pendiente' | 'provisional'; venceAt; createdAt }`.
+- Produces (API):
+  - `hide` devuelve `{ id, estado: 'oculto' | 'provisional' | 'pendiente' }`.
+  - `GET /api/forums/moderation/por-confirmar`, solo para la mesa.
+  - `POST /api/forums/moderation/:id/confirmar` con `{ aprobar: boolean }`.
+  - `ForumsService.processModerationDeadlines(now): Promise<number>`.
+  - `hiddenReason` (donde ya se arma para temas, respuestas, inquietudes, frases y soluciones) pasa a ser la etiqueta de la causa, más `: detalle` si lo hay. Si no hay causa, se usa `reason`.
+
+- [ ] **Step 1:** Escribe las pruebas:
+  - el DTO exige una causa de la lista y acepta un detalle vacío;
+  - una solución con causa `spam` queda `pendiente`, sin cambiar `hidden`, con `venceAt = +7 d`;
+  - con causa `datos_personales` queda `provisional`, con `hidden = true` y `venceAt = +48 h`;
+  - un tema `kind = 'propuesta'` sigue la misma regla, y un tema `kind = 'tema'` o una frase se ocultan directo (`oculto`);
+  - una segunda solicitud sobre el mismo contenido da 409;
+  - confirmar la propia solicitud da 403, y quien no es de la mesa también da 403;
+  - confirmar `pendiente` oculta y pasa a `oculto`;
+  - rechazar `provisional` restaura y pasa a `rechazado`;
+  - confirmar o rechazar algo que ya no está `pendiente` ni `provisional` da 409;
+  - el vencimiento restaura `provisional` y cierra `pendiente`, y si `count = 0` no audita;
+  - apelar una `pendiente` da 409;
+  - `hiddenReason` usa la etiqueta;
+  - la ocultación vinculada copia la causa;
+  - la cola por confirmar no incluye nada de una persona sin cargo.
+- [ ] **Step 2:** Ejecuta `cd apps/api && npx vitest run src/forums`. Expected: FAIL.
+- [ ] **Step 3:** Implementa:
+  - la migración, con `ALTER TYPE ... ADD VALUE` para cada valor nuevo; si `migrate diff` agrupa mal los enums, escríbela a mano;
+  - el servicio, usando `updateMany` condicionado al estado en confirmar, rechazar y vencer;
+  - el controlador;
+  - `ModeracionScheduler`, copia del de inquietudes, que llama a `processModerationDeadlines(new Date())`.
+
+  Aplica la migración con `npx prisma migrate deploy && npx prisma generate`, cargando `.env` sin imprimirlo.
+- [ ] **Step 4:** Ejecuta `pnpm --filter @decide/shared build && pnpm --filter @decide/api typecheck && cd apps/api && npx vitest run`. Expected: todo pasa.
+- [ ] **Step 5:** Commit: `API: causas cerradas y segunda firma de la mesa para ocultar soluciones y propuestas`.
+
+---
+
+### Task 2: Web — lista de causas, ocultar soluciones y cola de confirmación
+
+**Files:**
+- Modify: cada formulario de moderación, que se encuentra con `grep -rn "reason" apps/web/app --include=*.tsx`, más `apps/web/lib/actions.ts`
+- Modify: `apps/web/app/(app)/proposals/[id]/SolucionesSection.tsx`
+- Modify: `apps/web/app/(app)/admin/mesa/page.tsx`; create `apps/web/app/(app)/admin/mesa/PorConfirmarList.tsx`
+
+**Comportamiento:**
+- **Formularios de moderación:**
+  - un `<select>` «Causa» con `MODERACION_CAUSAS`, obligatorio;
+  - un campo «Detalle (opcional)» de hasta 500 caracteres;
+  - el aviso «No escribas aquí datos de la persona».
+- **Respuesta tras enviar**, según el estado que devuelve la API:
+  - `oculto`: «Contenido ocultado.»
+  - `provisional`: «Ocultado de forma provisional: otra persona de la mesa debe confirmarlo en 48 horas o vuelve a mostrarse.»
+  - `pendiente`: «Solicitud registrada: el contenido sigue visible hasta que otra persona de la mesa la confirme (7 días).»
+- **Soluciones:** quien organiza ve «Ocultar» en cada solución visible, con el mismo formulario.
+- **«Mesa» → «Ocultaciones por confirmar»:**
+  - por cada solicitud: tipo, causa, detalle, texto original, estado y vence el {fecha};
+  - botones «Confirmar» y «Rechazar»;
+  - si fue tu propia solicitud, en lugar de los botones aparece «Esperando a otra persona de la mesa».
+  - La API no dice quién solicitó. Para saberlo, agrega `esMia: boolean` en `ModeracionPorConfirmar`; esta tarea puede tocar el tipo y el servicio para eso.
+- **Contenido oculto:** sigue mostrando `hiddenReason` como hoy, que ahora trae la etiqueta de la causa.
+
+- [ ] **Step 1:** Implementa.
+- [ ] **Step 2:** Ejecuta `cd apps/web && npx tsc --noEmit` (y el typecheck de la API si tocaste el servicio). Expected: sin errores.
+- [ ] **Step 3:** Verifica UTF-8 y haz commit: `Web: causas de moderación y ocultaciones por confirmar`.
+
+---
+
+### Task 3: Documentación
+
+- [ ] ADR-021, «Causas cerradas y segunda firma para ocultar soluciones y propuestas»: las decisiones de arriba y por qué las urgentes se ocultan ya. Agrega una línea en ROADMAP, bajo 3A-3. Verifica UTF-8 y haz commit: `Docs: ADR-021 causas y quórum de moderación`.
+
+## Rulings del plan
+
+- **R1:** «Quórum mínimo» se lee como **2 personas de la mesa**, el mismo umbral que las acciones de 2 de 3 del plan 1. Costo si está mal: cambiar una constante.
+- **R2:** con las causas urgentes (datos personales, ilegal o violento) se oculta **ya** y se confirma después. Esperar la segunda firma dejaría expuesta a una persona. Si nadie confirma en 48 h, el contenido vuelve. Costo si está mal: pasar las urgentes a «pendiente».
+- **R3:** el quórum aplica a soluciones y a propuestas formales. El resto de la moderación sigue con una persona, porque Carlos lo pidió solo para esas dos.
