@@ -556,6 +556,18 @@ describe('DecisionesService', () => {
       }));
     });
 
+    it('bloquea la fila de la decisión antes de leer las papeletas (espera a una papeleta en curso)', async () => {
+      await service.processDeadlines(NOW);
+      const i = prisma.$queryRaw.mock.calls.findIndex(([q]) => {
+        const sql = (q as Prisma.Sql).sql;
+        return sql.includes('FROM decisiones') && sql.includes('FOR UPDATE');
+      });
+      expect(i).toBeGreaterThanOrEqual(0);
+      expect(prisma.$queryRaw.mock.invocationCallOrder[i]!).toBeLessThan(
+        prisma.decisionPapeleta.findMany.mock.invocationCallOrder[0]!,
+      );
+    });
+
     it('ejecutado dos veces audita una sola vez (el segundo updateMany no toca nada)', async () => {
       prisma.decision.updateMany.mockResolvedValueOnce({ count: 1 }).mockResolvedValueOnce({ count: 0 });
       expect(await service.processDeadlines(NOW)).toBe(1);

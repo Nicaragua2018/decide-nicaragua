@@ -576,6 +576,9 @@ export class DecisionesService {
     const resultado = await this.prisma.$transaction(async (tx) => {
       // Un tema ocultado a la vez ya canceló la decisión (hideTopicTx): aquí no se cuenta.
       if (!(await bloquearTema(tx, proposalId))) return null;
+      // Bloquea la decisión antes de leer las papeletas: una papeleta que ya pasó su
+      // comprobación (FOR UPDATE en castPapeleta) termina de guardarse antes de contar.
+      await tx.$queryRaw(Prisma.sql`SELECT id FROM decisiones WHERE id = ${decisionId}::uuid FOR UPDATE`);
       const d = await tx.decision.findUnique({
         where: { id: decisionId },
         select: { fase: true, modo: true, candidatas: true },
