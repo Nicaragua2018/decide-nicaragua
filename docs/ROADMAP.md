@@ -32,6 +32,18 @@ Base del diseño «Primeros 200» entregada en las tareas 1 a 9:
 
 ---
 
+## Primeros 200 — Plan 3A-3 (soluciones y papeleta): COMPLETO
+
+Votación de las soluciones de cada debate (ADR-020):
+
+- [x] Soluciones propuestas por los miembros, con juntar repetidas y moderación con apelación
+- [x] «Llevar a decisión»: plazo de debate y fases automáticas (modo, objeción de un tercio, votación, conteo)
+- [x] Papeleta: Apruebo / No apruebo / Me abstengo, u ordenar solo las aceptadas, «Rechazo todas» y «Me abstengo»
+- [x] Resultado con quórum, aprobación por más de la mitad y Schulze entre las aprobadas, publicado con sus matrices
+- [x] Web: sección «Soluciones y decisión», papeleta y resultado en cada tema
+
+---
+
 ## Primeros 200 — Plan 3A-2 (frases): COMPLETO
 
 Debate con frases al estilo Pol.is (ADR-019):
