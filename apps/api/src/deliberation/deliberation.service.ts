@@ -21,6 +21,7 @@ import { CreateProposalDto } from './dto/create-proposal.dto';
 import { CreateCommentDto } from './dto/create-comment.dto';
 import { SetSignalDto } from './dto/set-signal.dto';
 import { UpdateProposalStatusDto } from './dto/update-proposal-status.dto';
+import { LINKED_TOPIC_REASON } from '../forums/forums.service';
 
 /** Estados que aceptan nuevos comentarios y señales */
 const MUTABLE_STATUSES: string[] = [ProposalStatus.open];
@@ -425,8 +426,12 @@ export class DeliberationService {
       orderBy: { createdAt: 'desc' },
       select: { id: true, reason: true, status: true },
     });
+    // La ocultación vinculada se apela desde la inquietud de origen, no desde el debate.
     const canAppeal =
-      action !== null && authorProfileId === viewerProfileId && (action.status as string) === 'oculto';
+      action !== null &&
+      action.reason !== LINKED_TOPIC_REASON &&
+      authorProfileId === viewerProfileId &&
+      (action.status as string) === 'oculto';
     return { reason: action?.reason ?? null, moderationId: canAppeal ? action.id : null };
   }
 

@@ -19,9 +19,11 @@ export default async function InquietudPage({ params }: { params: Promise<{ id: 
   return (
     <>
       <div className="page-header">
-        <Link href={`/inquietudes?groupId=${q.groupId}`} className="text-sm text-muted">
-          ← Volver a las inquietudes
-        </Link>
+        {q.isMember && (
+          <Link href={`/inquietudes?groupId=${q.groupId}`} className="text-sm text-muted">
+            ← Volver a las inquietudes
+          </Link>
+        )}
         <div className="flex justify-between items-center mt-2">
           <h1 className="page-title">{q.hidden ? 'Inquietud oculta por la moderación' : q.title}</h1>
           <span className={`badge ${INQUIETUD_STATUS_BADGE[q.status]}`}>{INQUIETUD_STATUS_LABEL[q.status]}</span>
@@ -46,9 +48,11 @@ export default async function InquietudPage({ params }: { params: Promise<{ id: 
             {q.status === 'en_plazo' && q.deadlineAt && (
               <p className="card-meta">Plazo para responder: {formatDate(q.deadlineAt)}</p>
             )}
-            <div className="mt-2">
-              <SupportButton id={q.id} supported={q.supportedByMe} />
-            </div>
+            {q.isMember && (
+              <div className="mt-2">
+                <SupportButton id={q.id} supported={q.supportedByMe} />
+              </div>
+            )}
           </>
         )}
       </div>
@@ -61,7 +65,7 @@ export default async function InquietudPage({ params }: { params: Promise<{ id: 
         </div>
       )}
 
-      {!q.hidden && q.proposalId && (
+      {!q.hidden && q.proposalId && q.isMember && (
         <p className="mb-4">
           <Link href={`/proposals/${q.proposalId}`} className="btn btn-primary btn-sm">Ver el debate</Link>
         </p>

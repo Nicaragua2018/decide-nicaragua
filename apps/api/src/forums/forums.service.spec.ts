@@ -12,6 +12,7 @@ function buildPrisma() {
     proposal: { findUnique: vi.fn(), findMany: vi.fn(), update: vi.fn(), updateMany: vi.fn() },
     proposalComment: { findUnique: vi.fn(), update: vi.fn() },
     inquietud: { findUnique: vi.fn(), update: vi.fn() },
+    frase: { findUnique: vi.fn(), update: vi.fn() },
     election: { create: vi.fn(), findUnique: vi.fn(), update: vi.fn() },
     electionResult: { findUnique: vi.fn() },
     electionCandidate: { findUnique: vi.fn() },
@@ -375,6 +376,86 @@ describe('ForumsService', () => {
       await expect(service.resolveAppeal(YO, 'ma1', true, 'ip')).rejects.toThrow(ForbiddenException);
     });
 
+    describe('frases', () => {
+      const fr = (over: Record<string, unknown> = {}) => ({
+        id: 'f1', proposalId: 't1', authorProfileId: YO, text: 'Una frase de prueba', hidden: false,
+        proposal: { groupId: 'g1' }, ...over,
+      });
+
+      it('ocultar una frase la marca oculta y registra el motivo, resolviendo el grupo por su tema', async () => {
+        board.roleOf.mockResolvedValue('administrador');
+        prisma.frase.findUnique.mockResolvedValue(fr());
+        prisma.frase.update.mockResolvedValue({});
+        prisma.moderationAction.create.mockResolvedValue({ id: 'ma1' });
+        expect(await service.hide(YO, { target: 'frase', targetId: 'f1', reason: 'Lenguaje ofensivo' }, 'ip')).toEqual({ id: 'ma1' });
+        expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+        expect(prisma.frase.update).toHaveBeenCalledWith({ where: { id: 'f1' }, data: { hidden: true } });
+        expect(prisma.moderationAction.create).toHaveBeenCalledWith({
+          data: { target: 'frase', targetId: 'f1', reason: 'Lenguaje ofensivo', moderatorProfileId: YO },
+        });
+      });
+
+      it('ocultarla dos veces da ConflictException; un no moderador no oculta', async () => {
+        board.roleOf.mockResolvedValue('administrador');
+        prisma.frase.findUnique.mockResolvedValue(fr({ hidden: true }));
+        await expect(service.hide(YO, { target: 'frase', targetId: 'f1', reason: 'Lenguaje ofensivo' }, 'ip'))
+          .rejects.toThrow(ConflictException);
+        board.roleOf.mockResolvedValue(null);
+        prisma.frase.findUnique.mockResolvedValue(fr());
+        await expect(service.hide(YO, { target: 'frase', targetId: 'f1', reason: 'Lenguaje ofensivo' }, 'ip'))
+          .rejects.toThrow(ForbiddenException);
+      });
+
+      it("'frase' con el id de un comentario da NotFound y no toca el comentario", async () => {
+        board.roleOf.mockResolvedValue('administrador');
+        prisma.frase.findUnique.mockResolvedValue(null);
+        prisma.proposalComment.findUnique.mockResolvedValue({ id: 'c1', proposal: { groupId: 'g1' } });
+        const p = service.hide(YO, { target: 'frase', targetId: 'c1', reason: 'Lenguaje ofensivo' }, 'ip');
+        await expect(p).rejects.toThrow(NotFoundException);
+        await expect(p).rejects.toThrow('Frase no encontrada');
+        expect(prisma.proposalComment.update).not.toHaveBeenCalled();
+        expect(prisma.moderationAction.create).not.toHaveBeenCalled();
+      });
+
+      it('un no autor no apela; un autor que ya no es miembro tampoco; el autor miembro sí', async () => {
+        prisma.moderationAction.findUnique.mockResolvedValue({ id: 'ma1', target: 'frase', targetId: 'f1', status: 'oculto' });
+        prisma.frase.findUnique.mockResolvedValue(fr({ authorProfileId: 'p-otro' }));
+        await expect(service.appeal(YO, 'ma1', 'No fue mi intención ofender', 'ip')).rejects.toThrow(ForbiddenException);
+        prisma.frase.findUnique.mockResolvedValue(fr());
+        prisma.groupMembership.findUnique.mockResolvedValue(null);
+        await expect(service.appeal(YO, 'ma1', 'No fue mi intención ofender', 'ip')).rejects.toThrow(ForbiddenException);
+        expect(prisma.moderationAction.update).not.toHaveBeenCalled();
+        prisma.groupMembership.findUnique.mockResolvedValue({ id: 'm1' });
+        await service.appeal(YO, 'ma1', 'No fue mi intención ofender', 'ip');
+        expect(prisma.moderationAction.update).toHaveBeenCalledWith({
+          where: { id: 'ma1' },
+          data: expect.objectContaining({ status: 'apelado' }),
+        });
+      });
+
+      it('restaurar deja la frase visible; confirmar la deja oculta', async () => {
+        board.roleOf.mockResolvedValue('secretario');
+        prisma.moderationAction.findUnique.mockResolvedValue({ id: 'ma1', target: 'frase', targetId: 'f1', status: 'apelado' });
+        prisma.frase.update.mockResolvedValue({});
+        prisma.moderationAction.update.mockResolvedValue({});
+        await service.resolveAppeal(YO, 'ma1', true, 'ip');
+        expect(prisma.frase.update).toHaveBeenCalledWith({ where: { id: 'f1' }, data: { hidden: false } });
+        prisma.frase.update.mockClear();
+        await service.resolveAppeal(YO, 'ma1', false, 'ip');
+        expect(prisma.frase.update).not.toHaveBeenCalled();
+      });
+
+      it('la lista de apelaciones muestra el texto de la frase', async () => {
+        board.roleOf.mockResolvedValue('secretario');
+        prisma.moderationAction.findMany.mockResolvedValue([
+          { id: 'ma1', target: 'frase', targetId: 'f1', reason: 'Lenguaje ofensivo', appealText: 'No fue así', appealedAt: new Date(), createdAt: new Date() },
+        ]);
+        prisma.frase.findUnique.mockResolvedValue(fr());
+        const r = await service.listAppeals(YO);
+        expect(r[0]).toMatchObject({ target: 'frase', originalText: 'Una frase de prueba' });
+      });
+    });
+
     describe('inquietudes', () => {
       const inq = (over: Record<string, unknown> = {}) => ({
         id: 'q1', groupId: 'g1', authorProfileId: YO, title: 'Arreglar el local', body: 'Explicación larga', hidden: false, ...over,
@@ -421,6 +502,11 @@ describe('ForumsService', () => {
           .rejects.toThrow('Tipo de contenido no válido.');
         prisma.moderationAction.findUnique.mockResolvedValue({ id: 'ma1', target: 'otro', targetId: 'x', status: 'oculto' });
         await expect(service.appeal(YO, 'ma1', 'No fue mi intención ofender', 'ip')).rejects.toThrow(BadRequestException);
+      });
+
+      it('un tipo de contenido no válido sigue rechazándose', async () => {
+        await expect(service.hide(YO, { target: 'foro' as never, targetId: 'f1', reason: 'Lenguaje ofensivo' }, 'ip'))
+          .rejects.toThrow(new BadRequestException('Tipo de contenido no válido.'));
       });
 
       it('un no autor no apela; el autor sí, una vez', async () => {

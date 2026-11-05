@@ -30,18 +30,18 @@ const HIDDEN_VOTE_TITLE = 'Votación de un tema oculto';
 /** Título neutro de una votación cancelada que queda huérfana al abrir otra. */
 const ORPHAN_VOTE_TITLE = 'Votación anterior (cancelada)';
 
-type ModTarget = 'tema' | 'respuesta' | 'inquietud';
+type ModTarget = 'tema' | 'respuesta' | 'inquietud' | 'frase';
 
 /** Cada tipo de contenido tiene su propia rama: ninguno cae en otro por descarte. */
 function checkTarget(target: string): ModTarget {
-  if (target === 'tema' || target === 'respuesta' || target === 'inquietud') return target;
+  if (target === 'tema' || target === 'respuesta' || target === 'inquietud' || target === 'frase') return target;
   throw new BadRequestException('Tipo de contenido no válido.');
 }
 
 const voteTitle = (topicTitle: string): string => `Votación: ${topicTitle}`.slice(0, 200);
 
 /** Motivo de la moderación que oculta el debate abierto por la comunidad junto con su inquietud. */
-const LINKED_TOPIC_REASON = 'Oculto junto con la inquietud de origen.';
+export const LINKED_TOPIC_REASON = 'Oculto junto con la inquietud de origen.';
 
 /** Una ocultación vinculada sigue a su inquietud: no se apela ni se resuelve por separado. */
 function rejectLinkedTopicAction(action: { target: string; reason: string }): void {
@@ -325,6 +325,14 @@ export class ForumsService {
       if (!q) throw new NotFoundException('Inquietud no encontrada');
       if (q.hidden) throw new ConflictException('Este contenido ya está oculto.');
       groupId = q.groupId;
+    } else if (target === 'frase') {
+      const f = await this.prisma.frase.findUnique({
+        where: { id: dto.targetId },
+        include: { proposal: { select: { groupId: true } } },
+      });
+      if (!f) throw new NotFoundException('Frase no encontrada');
+      if (f.hidden) throw new ConflictException('Este contenido ya está oculto.');
+      groupId = f.proposal.groupId;
     } else {
       const c = await this.prisma.proposalComment.findUnique({
         where: { id: dto.targetId },
@@ -356,6 +364,8 @@ export class ForumsService {
             linkedTopicId = proposalId;
           }
         }
+      } else if (target === 'frase') {
+        await tx.frase.update({ where: { id: dto.targetId }, data: { hidden: true } });
       } else {
         await tx.proposalComment.update({ where: { id: dto.targetId }, data: { hidden: true } });
       }
@@ -433,6 +443,8 @@ export class ForumsService {
           const q = await tx.inquietud.update({ where: { id: action.targetId }, data: { hidden: false } });
           const proposalId = (q as { proposalId?: string | null } | undefined)?.proposalId ?? null;
           if (proposalId) await this.restoreLinkedTopicTx(tx, proposalId);
+        } else if (target === 'frase') {
+          await tx.frase.update({ where: { id: action.targetId }, data: { hidden: false } });
         } else {
           await tx.proposalComment.update({ where: { id: action.targetId }, data: { hidden: false } });
         }
@@ -510,6 +522,13 @@ export class ForumsService {
       const q = await this.prisma.inquietud.findUnique({ where: { id } });
       return q ? { authorProfileId: q.authorProfileId, groupId: q.groupId } : null;
     }
+    if (target === 'frase') {
+      const f = await this.prisma.frase.findUnique({
+        where: { id },
+        include: { proposal: { select: { groupId: true } } },
+      });
+      return f ? { authorProfileId: f.authorProfileId, groupId: f.proposal.groupId } : null;
+    }
     const c = await this.prisma.proposalComment.findUnique({
       where: { id },
       include: { proposal: { select: { groupId: true } } },
@@ -525,6 +544,9 @@ export class ForumsService {
     if (target === 'inquietud') {
       const q = await this.prisma.inquietud.findUnique({ where: { id } });
       return q ? `${q.title}\n\n${q.body}` : '';
+    }
+    if (target === 'frase') {
+      return (await this.prisma.frase.findUnique({ where: { id } }))?.text ?? '';
     }
     return (await this.prisma.proposalComment.findUnique({ where: { id } }))?.body ?? '';
   }

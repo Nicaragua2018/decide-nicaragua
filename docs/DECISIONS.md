@@ -417,6 +417,35 @@ El diseño del plan 3A (`docs/superpowers/specs/2026-11-04-plan-3a-ciclo-comunit
 
 ---
 
+## ADR-019: Debate con frases al estilo Pol.is (2026-11-05)
+**Fecha:** 2026-11-05
+**Estado:** Aceptado
+
+### Contexto
+El spec 3A (§4) pide que el consenso real se vea en el debate. Inspirados en Pol.is y en la democracia de las abejas, cada persona opina por su cuenta y el cálculo muestra dónde hay acuerdo entre quienes piensan distinto.
+
+### Decisión
+- En cada tema abierto, los miembros escriben **frases** de 10 a 140 caracteres y marcan «de acuerdo», «en desacuerdo» o «paso». Cada persona ve el resultado de una frase **solo después de votarla**. La siguiente frase a votar es una de las que tienen menos votos.
+- **Cálculo sin IA**, reproducible, con semilla tomada del id del tema (`apps/api/src/frases/opinion-groups.ts`): matriz persona × frase, PCA a 2 dimensiones y k-means con k de 2 a 4 elegido por silueta, con 5 reinicios por k. Entran al mapa quienes votaron al menos 3 frases.
+- **Frase puente:** al menos 60 % de acuerdo en cada grupo, con 3 o más votantes por grupo. Si se forma un solo grupo, cuenta como consenso general. **Frase que divide:** al menos 60 % en un grupo y como mucho 40 % en otro.
+- **Privacidad:**
+  - el mapa existe con 7 o más participantes (regla local);
+  - los grupos de menos de 3 personas no se muestran;
+  - porcentajes, tamaños de grupo y participantes se redondean a múltiplos de 5;
+  - solo aparecen las frases que la persona ya votó;
+  - el resultado de una frase nunca lleva recuentos exactos: solo porcentajes y un total aproximado, redondeados a múltiplos de 5, y con menos de 5 votos no se muestran porcentajes (si no, comparar antes y después de que alguien deje el grupo revelaría todos sus votos);
+  - el aviso de frases puente por ver solo sale si le faltan 3 o más, y no cuando todas las que le faltan son puentes;
+  - los votos de frases ocultas no entran en el mapa;
+  - nunca se devuelve quién está en qué grupo ni cómo votó nadie;
+  - los votos de frases no se auditan y solo cuentan los de miembros actuales.
+- Las frases se moderan como lo demás: quien modera ve la lista de todas las frases visibles del tema (solo el texto, sin resultados) y puede ocultar cualquiera con un motivo. La autora ve su frase oculta sin el texto, con el motivo y la apelación.
+
+### Consecuencias
+- Las frases puente serán el punto de partida de las soluciones en 3A-3, y el resumen con citas del agente llega en 3B.
+- Con pocos participantes, el redondeo hace que las cifras sean aproximadas, a cambio de que no se pueda deducir el voto de nadie.
+
+---
+
 ## Decisiones pendientes
 
 | ID | Pregunta | Prioridad |

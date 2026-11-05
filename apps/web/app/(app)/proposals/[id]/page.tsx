@@ -5,6 +5,7 @@ import SignalForm from '@/components/SignalForm';
 import { CommentsSection } from './CommentsSection';
 import { TopicActions } from './TopicActions';
 import { AppealForm } from './AppealForm';
+import { FrasesSection } from './FrasesSection';
 import { updateProposalStatusDirect } from '@/lib/actions';
 import { ProposalStatus } from '@decide/shared';
 import type { ProposalDetail, SignalCounts } from '@decide/shared';
@@ -210,6 +211,10 @@ export default async function ProposalPage({
           canModerate={proposal.canModerate}
         />
       </div>
+
+      {!proposal.hidden && (
+        <FrasesSection proposalId={id} isOpen={isOpen} canModerate={proposal.canModerate} />
+      )}
     </>
   );
 }

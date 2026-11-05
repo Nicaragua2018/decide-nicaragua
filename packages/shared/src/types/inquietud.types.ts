@@ -25,6 +25,8 @@ export interface InquietudDetail extends InquietudSummary {
   response: string | null;
   respondedAt: string | null;
   canOrganize: boolean;
+  /** Falso para quien organiza la agenda sin ser miembro de la comunidad. */
+  isMember: boolean;
   isAuthor: boolean;
   hiddenReason: string | null;
   moderationId: string | null;

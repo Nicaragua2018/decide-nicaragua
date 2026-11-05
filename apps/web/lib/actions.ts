@@ -502,3 +502,36 @@ export async function respondInquietud(_prev: ActionResult | null, formData: For
   revalidatePath('/inquietudes/agenda');
   return { success: true };
 }
+
+// ─── Frases y mapa de opiniones ───────────────────────────────────────────────
+
+export async function createFrase(
+  proposalId: string,
+  _prev: ActionResult | null,
+  formData: FormData,
+): Promise<ActionResult> {
+  if (!isUuid(proposalId)) return INVALID;
+  const res = await actionFetch(`/api/frases/temas/${proposalId}`, {
+    method: 'POST',
+    body: JSON.stringify({ text: formData.get('text') }),
+  });
+  if (!res.ok) return { error: await parseError(res) };
+  revalidatePath(`/proposals/${proposalId}`);
+  return { success: true };
+}
+
+export async function voteFrase(
+  fraseId: string,
+  value: string,
+  proposalId: string,
+): Promise<ActionResult> {
+  if (!isUuid(fraseId) || !isUuid(proposalId)) return INVALID;
+  if (value !== 'de_acuerdo' && value !== 'en_desacuerdo' && value !== 'paso') return INVALID;
+  const res = await actionFetch(`/api/frases/${fraseId}/voto`, {
+    method: 'PUT',
+    body: JSON.stringify({ value }),
+  });
+  if (!res.ok) return { error: await parseError(res) };
+  revalidatePath(`/proposals/${proposalId}`);
+  return { success: true };
+}

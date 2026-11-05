@@ -276,6 +276,17 @@ describe('InquietudesService', () => {
       expect(JSON.stringify(d)).not.toContain(OTRO);
     });
 
+    it('el detalle trae isMember: verdadero para un miembro, falso para quien organiza sin ser miembro', async () => {
+      prisma.inquietud.findUnique.mockResolvedValue(fila());
+      prisma.groupMembership.findUnique.mockResolvedValue({ id: 'm1' });
+      expect((await service.get(YO, 'i1')).isMember).toBe(true);
+      forums.canOrganize.mockResolvedValue(true);
+      prisma.groupMembership.findUnique.mockResolvedValue(null);
+      const d = await service.get(YO, 'i1');
+      expect(d.canOrganize).toBe(true);
+      expect(d.isMember).toBe(false);
+    });
+
     it('el detalle de una oculta tiene texto neutro, motivo y moderationId solo para el autor', async () => {
       prisma.inquietud.findUnique.mockResolvedValue(fila({ hidden: true, authorProfileId: YO }));
       prisma.moderationAction.findFirst.mockResolvedValue({ id: 'mod1', reason: 'Insultos', status: 'oculto' });
