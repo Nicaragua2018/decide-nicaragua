@@ -6,6 +6,8 @@ import type { PapeletaValue } from '@decide/shared';
 
 type Candidata = { id: string; title: string; description: string; hidden: boolean };
 
+const OCULTA_NO_GANA = 'Oculta por moderación: no puede ganar';
+
 function actual(p: PapeletaValue | null, unica: boolean): string | null {
   if (!p) return null;
   if (p.abstencion) return 'Me abstengo';
@@ -72,11 +74,12 @@ export function Papeleta({
         <>
           <p className="font-medium">{primera.title}</p>
           {primera.description && <p className="text-sm text-muted mb-2">{primera.description}</p>}
+          {primera.hidden && <p className="text-sm text-muted mb-2">{OCULTA_NO_GANA}</p>}
           <div className="flex gap-2 flex-wrap">
             <button
               type="button"
               className={sel === 'si' ? 'btn btn-primary btn-sm' : 'btn btn-ghost btn-sm'}
-              disabled={pending}
+              disabled={pending || primera.hidden}
               onClick={() => enviar(false, [primera.id])}
             >
               Apruebo
@@ -105,9 +108,16 @@ export function Papeleta({
             {candidatas.map((c) => (
               <li key={c.id} className="mb-2">
                 <label className="flex gap-2 items-center">
-                  <input type="checkbox" checked={orden.includes(c.id)} onChange={() => alternar(c.id)} />
+                  <input
+                    type="checkbox"
+                    checked={orden.includes(c.id)}
+                    // Una oculta no se puede marcar; si ya estaba en el orden, sí se puede quitar.
+                    disabled={c.hidden && !orden.includes(c.id)}
+                    onChange={() => alternar(c.id)}
+                  />
                   <span>
-                    {c.title} <span className="text-xs text-muted">La acepto</span>
+                    {c.title} {!c.hidden && <span className="text-xs text-muted">La acepto</span>}
+                    {c.hidden && <span className="text-xs text-muted" style={{ display: 'block' }}>{OCULTA_NO_GANA}</span>}
                     {c.description && <span className="text-sm text-muted" style={{ display: 'block' }}>{c.description}</span>}
                   </span>
                 </label>

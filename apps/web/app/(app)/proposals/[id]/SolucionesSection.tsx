@@ -93,6 +93,7 @@ export function SolucionesSection({
             modoPropuesto={decision.modoPropuesto}
             puedoObjetar={decision.puedoObjetar}
             yoObjete={decision.yoObjete}
+            fraccionObjecionPct={decision.fraccionObjecionPct}
           />
         </div>
       )}
@@ -116,7 +117,7 @@ export function SolucionesSection({
       {decision?.fase === 'contada' && (
         <div className="mt-3">
           {decision.resultado ? (
-            <ResultadoDecision resultado={decision.resultado} candidatas={decision.candidatas} />
+            <ResultadoDecision resultado={decision.resultado} candidatas={decision.candidatas} modo={decision.modo} />
           ) : (
             <p className="text-sm text-muted">No se propusieron soluciones</p>
           )}

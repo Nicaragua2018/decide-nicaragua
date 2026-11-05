@@ -1,15 +1,18 @@
-import type { DecisionResultadoView } from '@decide/shared';
+import type { DecisionModoValue, DecisionResultadoView } from '@decide/shared';
 
 type Candidata = { id: string; title: string };
 
-function frase(r: DecisionResultadoView, candidatas: Candidata[]): string {
+function frase(r: DecisionResultadoView, candidatas: Candidata[], modo: DecisionModoValue | null): string {
   switch (r.resultado) {
     case 'aprobada': {
       const titulos = r.ganadoras.map((id) => candidatas.find((c) => c.id === id)?.title ?? '').filter(Boolean);
       return `Aprobada: ${titulos.join('; ')}`;
     }
     case 'ninguna':
-      return 'Ninguna solución obtuvo más de la mitad';
+      // Con una sola candidata se vota en compatibles aunque se hubiera propuesto excluyentes.
+      return modo === 'excluyentes' && candidatas.length > 1
+        ? 'La solución preferida no obtuvo más de la mitad de las papeletas: no se aprueba ninguna'
+        : 'Ninguna solución obtuvo más de la mitad';
     case 'empate':
       return 'Empate: sin decisión';
     case 'sin_quorum':
@@ -51,13 +54,15 @@ function Matriz({ nombre, m, candidatas }: { nombre: string; m: number[][]; cand
 export function ResultadoDecision({
   resultado,
   candidatas,
+  modo,
 }: {
   resultado: DecisionResultadoView;
   candidatas: Candidata[];
+  modo: DecisionModoValue | null;
 }) {
   return (
     <div>
-      <p className="font-medium">{frase(resultado, candidatas)}</p>
+      <p className="font-medium">{frase(resultado, candidatas, modo)}</p>
 
       {resultado.resultado !== 'sin_soluciones' && (
         <>

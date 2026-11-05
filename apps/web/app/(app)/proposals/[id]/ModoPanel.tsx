@@ -41,11 +41,13 @@ export function ObjecionPanel({
   modoPropuesto,
   puedoObjetar,
   yoObjete,
+  fraccionObjecionPct,
 }: {
   proposalId: string;
   modoPropuesto: DecisionModoValue | null;
   puedoObjetar: boolean;
   yoObjete: boolean;
+  fraccionObjecionPct: number;
 }) {
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
@@ -74,7 +76,7 @@ export function ObjecionPanel({
         </p>
       )}
       <p className="text-xs text-muted mt-2">
-        Si se opone al menos un tercio de quienes participaron, se usa el otro modo
+        Si se opone al menos el {fraccionObjecionPct} % de quienes participaron, se usa el otro modo
       </p>
       {error && <p role="alert" className="alert alert-error mt-2">{error}</p>}
     </div>
