@@ -7,7 +7,6 @@ import {
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import {
-  DELIBERATION_DAYS,
   VOTING_DAYS,
   type ForumDetail,
   type ForumSummary,
@@ -18,6 +17,7 @@ import {
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { BoardService } from '../board/board.service';
+import { RulesService } from '../rules/rules.service';
 import type { CreateForumDto } from './dto/create-forum.dto';
 import type { CloseTopicDto } from './dto/close-topic.dto';
 import type { ModerateDto } from './dto/moderate.dto';
@@ -30,11 +30,11 @@ const HIDDEN_VOTE_TITLE = 'Votación de un tema oculto';
 /** Título neutro de una votación cancelada que queda huérfana al abrir otra. */
 const ORPHAN_VOTE_TITLE = 'Votación anterior (cancelada)';
 
-type ModTarget = 'tema' | 'respuesta' | 'inquietud' | 'frase';
+type ModTarget = 'tema' | 'respuesta' | 'inquietud' | 'frase' | 'solucion';
 
 /** Cada tipo de contenido tiene su propia rama: ninguno cae en otro por descarte. */
 function checkTarget(target: string): ModTarget {
-  if (target === 'tema' || target === 'respuesta' || target === 'inquietud' || target === 'frase') return target;
+  if (target === 'tema' || target === 'respuesta' || target === 'inquietud' || target === 'frase' || target === 'solucion') return target;
   throw new BadRequestException('Tipo de contenido no válido.');
 }
 
@@ -58,6 +58,7 @@ export class ForumsService {
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
     private readonly board: BoardService,
+    private readonly rules: RulesService,
   ) {}
 
   // ─── Permisos ─────────────────────────────────────────────────────────────
@@ -225,9 +226,26 @@ export class ForumsService {
     const topic = await this.topicForAction(profileId, topicId);
     if ((topic.kind as string) === 'propuesta') throw new ConflictException('Este tema ya es una propuesta formal.');
     if ((topic.status as string) !== 'open') throw new BadRequestException('Solo un tema abierto puede convertirse en propuesta.');
-    await this.prisma.proposal.update({
-      where: { id: topicId },
-      data: { kind: 'propuesta', deliberationEndsAt: new Date(Date.now() + DELIBERATION_DAYS * DIA_MS) },
+    const dias = await this.rules.getInt('debate.plazo_dias', topic.groupId);
+    await this.prisma.$transaction(async (tx) => {
+      await tx.proposal.update({
+        where: { id: topicId },
+        data: { kind: 'propuesta', deliberationEndsAt: new Date(Date.now() + dias * DIA_MS) },
+      });
+      // Si nadie propuso soluciones, el propio tema pasa a ser la primera.
+      const visibles = await tx.solucion.count({ where: { proposalId: topicId, hidden: false, mergedIntoId: null } });
+      if (visibles === 0) {
+        const title = topic.title.slice(0, 140);
+        await tx.solucion.create({
+          data: {
+            proposalId: topicId,
+            authorProfileId: topic.authorProfileId,
+            title,
+            description: (topic.body.length > 0 ? topic.body : title).slice(0, 2000),
+            origen: 'persona',
+          },
+        });
+      }
     });
     void this.audit.log({ ...(await this.actorId(profileId)), action: 'proposal.formalized', resource: `proposal:${topicId}`, ip });
   }
@@ -333,6 +351,14 @@ export class ForumsService {
       if (!f) throw new NotFoundException('Frase no encontrada');
       if (f.hidden) throw new ConflictException('Este contenido ya está oculto.');
       groupId = f.proposal.groupId;
+    } else if (target === 'solucion') {
+      const so = await this.prisma.solucion.findUnique({
+        where: { id: dto.targetId },
+        include: { proposal: { select: { groupId: true } } },
+      });
+      if (!so) throw new NotFoundException('Solución no encontrada');
+      if (so.hidden) throw new ConflictException('Este contenido ya está oculto.');
+      groupId = so.proposal.groupId;
     } else {
       const c = await this.prisma.proposalComment.findUnique({
         where: { id: dto.targetId },
@@ -366,6 +392,8 @@ export class ForumsService {
         }
       } else if (target === 'frase') {
         await tx.frase.update({ where: { id: dto.targetId }, data: { hidden: true } });
+      } else if (target === 'solucion') {
+        await tx.solucion.update({ where: { id: dto.targetId }, data: { hidden: true } });
       } else {
         await tx.proposalComment.update({ where: { id: dto.targetId }, data: { hidden: true } });
       }
@@ -445,6 +473,8 @@ export class ForumsService {
           if (proposalId) await this.restoreLinkedTopicTx(tx, proposalId);
         } else if (target === 'frase') {
           await tx.frase.update({ where: { id: action.targetId }, data: { hidden: false } });
+        } else if (target === 'solucion') {
+          await tx.solucion.update({ where: { id: action.targetId }, data: { hidden: false } });
         } else {
           await tx.proposalComment.update({ where: { id: action.targetId }, data: { hidden: false } });
         }
@@ -529,6 +559,13 @@ export class ForumsService {
       });
       return f ? { authorProfileId: f.authorProfileId, groupId: f.proposal.groupId } : null;
     }
+    if (target === 'solucion') {
+      const so = await this.prisma.solucion.findUnique({
+        where: { id },
+        include: { proposal: { select: { groupId: true } } },
+      });
+      return so ? { authorProfileId: so.authorProfileId, groupId: so.proposal.groupId } : null;
+    }
     const c = await this.prisma.proposalComment.findUnique({
       where: { id },
       include: { proposal: { select: { groupId: true } } },
@@ -547,6 +584,12 @@ export class ForumsService {
     }
     if (target === 'frase') {
       return (await this.prisma.frase.findUnique({ where: { id } }))?.text ?? '';
+    }
+    if (target === 'solucion') {
+      const so = await this.prisma.solucion.findUnique({ where: { id } });
+      return so ? `${so.title}
+
+${so.description}` : '';
     }
     return (await this.prisma.proposalComment.findUnique({ where: { id } }))?.body ?? '';
   }

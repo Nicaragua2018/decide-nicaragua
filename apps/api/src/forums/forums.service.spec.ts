@@ -13,6 +13,7 @@ function buildPrisma() {
     proposalComment: { findUnique: vi.fn(), update: vi.fn() },
     inquietud: { findUnique: vi.fn(), update: vi.fn() },
     frase: { findUnique: vi.fn(), update: vi.fn() },
+    solucion: { findUnique: vi.fn(), update: vi.fn(), count: vi.fn(), create: vi.fn() },
     election: { create: vi.fn(), findUnique: vi.fn(), update: vi.fn() },
     electionResult: { findUnique: vi.fn() },
     electionCandidate: { findUnique: vi.fn() },
@@ -28,6 +29,7 @@ describe('ForumsService', () => {
   let prisma: ReturnType<typeof buildPrisma>;
   let audit: { log: ReturnType<typeof vi.fn> };
   let board: { roleOf: ReturnType<typeof vi.fn> };
+  let rules: { getInt: ReturnType<typeof vi.fn> };
   let service: ForumsService;
 
   beforeEach(() => {
@@ -35,7 +37,9 @@ describe('ForumsService', () => {
     prisma.$transaction.mockImplementation((fn: (tx: unknown) => unknown) => fn(prisma));
     audit = { log: vi.fn().mockResolvedValue(undefined) };
     board = { roleOf: vi.fn().mockResolvedValue(null) };
-    service = new ForumsService(prisma as never, audit as never, board as never);
+    rules = { getInt: vi.fn().mockResolvedValue(7) };
+    service = new ForumsService(prisma as never, audit as never, board as never, rules as never);
+    prisma.solucion.count.mockResolvedValue(1);
     prisma.profile.findUnique.mockResolvedValue({ userId: 'u-yo' });
     prisma.groupMembership.findUnique.mockResolvedValue({ id: 'm1' });
   });
@@ -126,6 +130,43 @@ describe('ForumsService', () => {
       const plazo = (data.deliberationEndsAt as Date).getTime() - antes;
       expect(plazo).toBeGreaterThanOrEqual(7 * 86_400_000 - 1000);
       expect(plazo).toBeLessThanOrEqual(7 * 86_400_000 + 1000);
+    });
+
+    it('usa debate.plazo_dias de la comunidad para el plazo', async () => {
+      rules.getInt.mockResolvedValue(10);
+      prisma.proposal.findUnique.mockResolvedValue({ id: 't1', groupId: 'g1', authorProfileId: YO, status: 'open', kind: 'tema', hidden: false, title: 'T', body: '' });
+      prisma.proposal.update.mockResolvedValue({});
+      const antes = Date.now();
+      await service.formalize(YO, 't1', 'ip');
+      expect(rules.getInt).toHaveBeenCalledWith('debate.plazo_dias', 'g1');
+      const plazo = (prisma.proposal.update.mock.calls[0]![0].data.deliberationEndsAt as Date).getTime() - antes;
+      expect(plazo).toBeGreaterThanOrEqual(10 * 86_400_000 - 1000);
+      expect(plazo).toBeLessThanOrEqual(10 * 86_400_000 + 1000);
+    });
+
+    it('siembra una solución con el título y el cuerpo del tema si no hay ninguna', async () => {
+      prisma.proposal.findUnique.mockResolvedValue({ id: 't1', groupId: 'g1', authorProfileId: 'p-aut', status: 'open', kind: 'tema', hidden: false, title: 'T'.repeat(200), body: 'B'.repeat(3000) });
+      prisma.proposal.update.mockResolvedValue({});
+      board.roleOf.mockResolvedValue('administrador');
+      prisma.solucion.count.mockResolvedValue(0);
+      await service.formalize(YO, 't1', 'ip');
+      expect(prisma.solucion.count).toHaveBeenCalledWith({ where: { proposalId: 't1', hidden: false, mergedIntoId: null } });
+      const data = prisma.solucion.create.mock.calls[0]![0].data;
+      expect(data).toMatchObject({ proposalId: 't1', authorProfileId: 'p-aut', origen: 'persona' });
+      expect(data.title).toHaveLength(140);
+      expect(data.description).toHaveLength(2000);
+    });
+
+    it('si el cuerpo está vacío la descripción usa el título; si ya hay una solución no siembra', async () => {
+      prisma.proposal.findUnique.mockResolvedValue({ id: 't1', groupId: 'g1', authorProfileId: YO, status: 'open', kind: 'tema', hidden: false, title: 'Un título', body: '' });
+      prisma.proposal.update.mockResolvedValue({});
+      prisma.solucion.count.mockResolvedValue(0);
+      await service.formalize(YO, 't1', 'ip');
+      expect(prisma.solucion.create.mock.calls[0]![0].data.description).toBe('Un título');
+      prisma.solucion.create.mockClear();
+      prisma.solucion.count.mockResolvedValue(2);
+      await service.formalize(YO, 't1', 'ip');
+      expect(prisma.solucion.create).not.toHaveBeenCalled();
     });
 
     it('un autor sin membresía (suspendido) no puede formalizar', async () => {
@@ -374,6 +415,59 @@ describe('ForumsService', () => {
     it('resolver apelaciones es solo de la mesa', async () => {
       board.roleOf.mockResolvedValue(null);
       await expect(service.resolveAppeal(YO, 'ma1', true, 'ip')).rejects.toThrow(ForbiddenException);
+    });
+
+    describe('soluciones', () => {
+      const so = (over: Record<string, unknown> = {}) => ({
+        id: 's1', proposalId: 't1', authorProfileId: YO, title: 'Una solución', description: 'Detalle de la solución', hidden: false,
+        proposal: { groupId: 'g1' }, ...over,
+      });
+
+      it('ocultar una solución la marca oculta, resolviendo el grupo por su tema', async () => {
+        board.roleOf.mockResolvedValue('administrador');
+        prisma.solucion.findUnique.mockResolvedValue(so());
+        prisma.solucion.update.mockResolvedValue({});
+        prisma.moderationAction.create.mockResolvedValue({ id: 'ma1' });
+        expect(await service.hide(YO, { target: 'solucion', targetId: 's1', reason: 'Lenguaje ofensivo' }, 'ip')).toEqual({ id: 'ma1' });
+        expect(prisma.solucion.update).toHaveBeenCalledWith({ where: { id: 's1' }, data: { hidden: true } });
+        expect(prisma.moderationAction.create).toHaveBeenCalledWith({
+          data: { target: 'solucion', targetId: 's1', reason: 'Lenguaje ofensivo', moderatorProfileId: YO },
+        });
+      });
+
+      it('ocultarla dos veces da Conflict y un no moderador no oculta', async () => {
+        board.roleOf.mockResolvedValue('administrador');
+        prisma.solucion.findUnique.mockResolvedValue(so({ hidden: true }));
+        await expect(service.hide(YO, { target: 'solucion', targetId: 's1', reason: 'Lenguaje ofensivo' }, 'ip')).rejects.toThrow(ConflictException);
+        board.roleOf.mockResolvedValue(null);
+        prisma.solucion.findUnique.mockResolvedValue(so());
+        await expect(service.hide(YO, { target: 'solucion', targetId: 's1', reason: 'Lenguaje ofensivo' }, 'ip')).rejects.toThrow(ForbiddenException);
+        expect(prisma.solucion.update).not.toHaveBeenCalled();
+      });
+
+      it('restaurar deja la solución visible; confirmar la deja oculta', async () => {
+        board.roleOf.mockResolvedValue('administrador');
+        prisma.moderationAction.findUnique.mockResolvedValue({ id: 'ma1', target: 'solucion', targetId: 's1', status: 'apelado' });
+        prisma.solucion.update.mockResolvedValue({});
+        await service.resolveAppeal(YO, 'ma1', true, 'ip');
+        expect(prisma.solucion.update).toHaveBeenCalledWith({ where: { id: 's1' }, data: { hidden: false } });
+        prisma.solucion.update.mockClear();
+        await service.resolveAppeal(YO, 'ma1', false, 'ip');
+        expect(prisma.solucion.update).not.toHaveBeenCalled();
+      });
+
+      it('la lista de apelaciones muestra el texto de la solución y solo su autor apela', async () => {
+        prisma.moderationAction.findUnique.mockResolvedValue({ id: 'ma1', target: 'solucion', targetId: 's1', status: 'oculto' });
+        prisma.solucion.findUnique.mockResolvedValue(so({ authorProfileId: 'p-otro' }));
+        await expect(service.appeal(YO, 'ma1', 'No fue así', 'ip')).rejects.toThrow(ForbiddenException);
+        board.roleOf.mockResolvedValue('administrador');
+        prisma.moderationAction.findMany.mockResolvedValue([
+          { id: 'ma1', target: 'solucion', targetId: 's1', reason: 'Lenguaje ofensivo', appealText: 'No fue así', appealedAt: new Date(), createdAt: new Date() },
+        ]);
+        prisma.solucion.findUnique.mockResolvedValue(so());
+        const r = await service.listAppeals(YO);
+        expect(r[0]).toMatchObject({ target: 'solucion', originalText: 'Una solución\n\nDetalle de la solución' });
+      });
     });
 
     describe('frases', () => {
