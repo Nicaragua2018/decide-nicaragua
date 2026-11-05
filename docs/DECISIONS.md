@@ -433,10 +433,12 @@ El spec 3A (§4) pide que el consenso real se vea en el debate. Inspirados en Po
   - los grupos de menos de 3 personas no se muestran;
   - porcentajes, tamaños de grupo y participantes se redondean a múltiplos de 5;
   - solo aparecen las frases que la persona ya votó;
-  - el aviso de frases puente por ver solo sale si le faltan 3 o más;
+  - el resultado de una frase nunca lleva recuentos exactos: solo porcentajes y un total aproximado, redondeados a múltiplos de 5, y con menos de 5 votos no se muestran porcentajes (si no, comparar antes y después de que alguien deje el grupo revelaría todos sus votos);
+  - el aviso de frases puente por ver solo sale si le faltan 3 o más, y no cuando todas las que le faltan son puentes;
+  - los votos de frases ocultas no entran en el mapa;
   - nunca se devuelve quién está en qué grupo ni cómo votó nadie;
   - los votos de frases no se auditan y solo cuentan los de miembros actuales.
-- Las frases se moderan como lo demás. La autora ve su frase oculta sin el texto, con el motivo y la apelación.
+- Las frases se moderan como lo demás: quien modera ve la lista de todas las frases visibles del tema (solo el texto, sin resultados) y puede ocultar cualquiera con un motivo. La autora ve su frase oculta sin el texto, con el motivo y la apelación.
 
 ### Consecuencias
 - Las frases puente serán el punto de partida de las soluciones en 3A-3, y el resumen con citas del agente llega en 3B.
