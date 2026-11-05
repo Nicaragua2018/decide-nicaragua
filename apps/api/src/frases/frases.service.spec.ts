@@ -6,6 +6,22 @@ import { plainToInstance } from 'class-transformer';
 import { FrasesService } from './frases.service';
 import { CreateFraseDto } from './dto/create-frase.dto';
 import { VoteFraseDto } from './dto/vote-frase.dto';
+import type { OpinionResult } from './opinion-groups';
+
+/** Permite sustituir analyzeOpinions en una prueba concreta; por defecto usa el real. */
+const ctl = vi.hoisted(() => ({ override: null as null | (() => OpinionResult) }));
+vi.mock('./opinion-groups', async (importOriginal) => {
+  const m = await importOriginal<typeof import('./opinion-groups')>();
+  return {
+    ...m,
+    analyzeOpinions: (...args: Parameters<typeof m.analyzeOpinions>) =>
+      ctl.override ? ctl.override() : m.analyzeOpinions(...args),
+  };
+});
+
+const CLAVES_RESULTADO = ['deAcuerdoPct', 'enDesacuerdoPct', 'pasoPct', 'suficiente', 'totalAprox'];
+/** Claves de recuentos exactos (con «:» para no confundirlas con el valor "paso" de myVote). */
+const CLAVES_EXACTAS = ['"deAcuerdo":', '"enDesacuerdo":', '"paso":', '"total":'];
 
 const YO = 'p-yo';
 const G = 'g1';
@@ -33,6 +49,7 @@ describe('FrasesService', () => {
   let service: FrasesService;
 
   beforeEach(() => {
+    ctl.override = null;
     prisma = buildPrisma();
     audit = { log: vi.fn().mockResolvedValue(undefined) };
     rules = { getInt: vi.fn().mockResolvedValue(7) };
@@ -123,9 +140,30 @@ describe('FrasesService', () => {
       const r = await service.list(YO, T);
       expect(r.pendientes).toBe(1);
       expect(r.items[0]).toMatchObject({ id: 'f1', isAuthor: true, myVote: 'de_acuerdo', hiddenReason: null, moderationId: null });
-      expect(r.items[0]!.resultado).toEqual({ deAcuerdo: 7, enDesacuerdo: 2, paso: 1, total: 10, acuerdoPct: 70 });
+      expect(r.items[0]!.resultado).toEqual({ deAcuerdoPct: 70, enDesacuerdoPct: 20, pasoPct: 10, totalAprox: 10, suficiente: true });
       expect(r.items[1]).toMatchObject({ id: 'f22', isAuthor: false, myVote: null, resultado: null });
       expect(prisma.frase.findMany.mock.calls[0]![0].where.OR).toContainEqual({ hidden: false });
+    });
+
+    it('list: ningún resultado trae recuentos exactos; con menos de 5 votos no hay porcentajes', async () => {
+      prisma.frase.findMany.mockResolvedValue([frase('f1'), frase('f2'), frase('f3')]);
+      prisma.fraseVoto.findMany.mockResolvedValue([
+        { fraseId: 'f1', value: 'de_acuerdo' },
+        { fraseId: 'f2', value: 'paso' },
+      ]);
+      prisma.fraseVoto.groupBy.mockResolvedValue([
+        { fraseId: 'f1', value: 'de_acuerdo', _count: { _all: 2 } },
+        { fraseId: 'f1', value: 'en_desacuerdo', _count: { _all: 1 } },
+        { fraseId: 'f2', value: 'paso', _count: { _all: 9 } },
+      ]);
+      const r = await service.list(YO, T);
+      for (const i of r.items) if (i.resultado) expect(Object.keys(i.resultado).sort()).toEqual(CLAVES_RESULTADO);
+      expect(r.items[0]!.resultado).toEqual({ deAcuerdoPct: null, enDesacuerdoPct: null, pasoPct: null, totalAprox: 5, suficiente: false });
+      expect(r.items[1]!.resultado).toEqual({ deAcuerdoPct: 0, enDesacuerdoPct: 0, pasoPct: 100, totalAprox: 10, suficiente: true });
+      // la no votada llega igual (con texto, sin resultado): la usa la lista de moderación
+      expect(r.items[2]).toMatchObject({ id: 'f3', text: 'Texto de la frase f3 largo', myVote: null, resultado: null });
+      const json = JSON.stringify(r);
+      for (const k of CLAVES_EXACTAS) expect(json).not.toContain(k);
     });
 
     it('list: solo cuentan los votos de miembros actuales del grupo del tema', async () => {
@@ -207,9 +245,42 @@ describe('FrasesService', () => {
         update: { value: 'de_acuerdo' },
         create: { fraseId: 'f1', profileId: YO, value: 'de_acuerdo' },
       });
-      expect(r1).toEqual({ deAcuerdo: 3, enDesacuerdo: 1, paso: 0, total: 4, acuerdoPct: 75 });
+      // 4 votos (< 5): sin porcentajes
+      expect(r1).toEqual({ deAcuerdoPct: null, enDesacuerdoPct: null, pasoPct: null, totalAprox: 5, suficiente: false });
       expect(audit.log).not.toHaveBeenCalled();
     });
+    function votarCon(conteos: [string, number][]) {
+      prisma.frase.findUnique.mockResolvedValue({ ...frase('f1'), proposal: { groupId: G, status: 'open', hidden: false } });
+      prisma.fraseVoto.upsert.mockResolvedValue({});
+      prisma.fraseVoto.groupBy.mockResolvedValue(conteos.map(([value, n]) => ({ fraseId: 'f1', value, _count: { _all: n } })));
+      return service.vote(YO, 'f1', 'paso');
+    }
+
+    it('resultado: nunca trae recuentos exactos, solo las claves aproximadas', async () => {
+      const r = await votarCon([['de_acuerdo', 7], ['en_desacuerdo', 4], ['paso', 2]]);
+      expect(Object.keys(r).sort()).toEqual(CLAVES_RESULTADO);
+      const json = JSON.stringify(r);
+      for (const k of CLAVES_EXACTAS) expect(json).not.toContain(k);
+    });
+
+    it('resultado: con menos de 5 votos suficiente es false y los porcentajes null', async () => {
+      expect(await votarCon([['de_acuerdo', 1]])).toEqual({ deAcuerdoPct: null, enDesacuerdoPct: null, pasoPct: null, totalAprox: 5, suficiente: false });
+      expect(await votarCon([])).toEqual({ deAcuerdoPct: null, enDesacuerdoPct: null, pasoPct: null, totalAprox: 0, suficiente: false });
+    });
+
+    it('resultado: porcentajes y total redondeados a múltiplos de 5', async () => {
+      // 13 votos: 53,8 % -> 55; 30,8 % -> 30; 15,4 % -> 15; total 13 -> 15
+      expect(await votarCon([['de_acuerdo', 7], ['en_desacuerdo', 4], ['paso', 2]])).toEqual({
+        deAcuerdoPct: 55, enDesacuerdoPct: 30, pasoPct: 15, totalAprox: 15, suficiente: true,
+      });
+      // 6 votos: 16,7 -> 15; 33,3 -> 35; 50 -> 50; total 6 -> 5
+      expect(await votarCon([['de_acuerdo', 1], ['en_desacuerdo', 2], ['paso', 3]])).toEqual({
+        deAcuerdoPct: 15, enDesacuerdoPct: 35, pasoPct: 50, totalAprox: 5, suficiente: true,
+      });
+      // 5 votos justos: ya es suficiente
+      expect(await votarCon([['de_acuerdo', 5]])).toMatchObject({ deAcuerdoPct: 100, totalAprox: 5, suficiente: true });
+    });
+
     it('vote: el resultado solo cuenta a miembros actuales', async () => {
       prisma.frase.findUnique.mockResolvedValue({ ...frase('f1'), proposal: { groupId: G, status: 'open', hidden: false } });
       prisma.fraseVoto.upsert.mockResolvedValue({});
@@ -272,6 +343,72 @@ describe('FrasesService', () => {
       const r = await service.analysis(YO, T);
       if (!r.available) throw new Error('debía estar disponible');
       expect(r.puentesSinVer).toBe(0);
+    });
+
+    it('puentesSinVer es 0 cuando todas las frases sin votar son puentes (la igualdad delataría)', async () => {
+      prisma.frase.findMany.mockResolvedValue(['f1', 'f2', 'f3', 'f4', 'f5', 'f6'].map((id) => frase(id)));
+      const rows = votosDosBandos();
+      // f5 y f6 también son puentes: todos de acuerdo
+      for (let i = 0; i < 12; i++) {
+        const pid = `pid-secreto-${String(i).padStart(2, '0')}`;
+        rows.push({ profileId: pid, fraseId: 'f5', value: 'de_acuerdo' }, { profileId: pid, fraseId: 'f6', value: 'de_acuerdo' });
+      }
+      // YO votó f2, f3 y f4: sin votar quedan f1, f5 y f6 (3), y las 3 son puentes
+      for (const f of ['f2', 'f3', 'f4']) rows.push({ profileId: YO, fraseId: f, value: 'de_acuerdo' });
+      prisma.fraseVoto.findMany.mockResolvedValue(rows);
+      const r = await service.analysis(YO, T);
+      if (!r.available) throw new Error('debía estar disponible');
+      expect(r.puentesSinVer).toBe(0);
+    });
+
+    it('analysis: excluye los votos de frases ocultas (filtro en la consulta y en el cálculo)', async () => {
+      // f9 está oculta: no viene entre las frases visibles, aunque la consulta devolviera votos suyos
+      const rows = votosDosBandos();
+      for (let i = 0; i < 12; i++) rows.push({ profileId: `pid-secreto-${String(i).padStart(2, '0')}`, fraseId: 'f9', value: 'de_acuerdo' });
+      for (const f of ['f2', 'f9']) rows.push({ profileId: YO, fraseId: f, value: 'de_acuerdo' });
+      prisma.fraseVoto.findMany.mockResolvedValue(rows);
+      const r = await service.analysis(YO, T);
+      expect(prisma.fraseVoto.findMany.mock.calls[0]![0].where.frase).toEqual({ proposalId: T, hidden: false });
+      if (!r.available) throw new Error('debía estar disponible');
+      expect(JSON.stringify(r)).not.toContain('f9');
+    });
+
+    it('analysis: puentes y divisivas solo incluyen frases que quien consulta ya votó', async () => {
+      const rows = votosDosBandos();
+      rows.push({ profileId: YO, fraseId: 'f2', value: 'de_acuerdo' });
+      prisma.fraseVoto.findMany.mockResolvedValue(rows);
+      const r = await service.analysis(YO, T);
+      if (!r.available) throw new Error('debía estar disponible');
+      expect(r.puentes).toEqual([]);
+      expect(r.divisivas.map((d) => d.fraseId)).toEqual(['f2']);
+    });
+
+    it('analysis: un grupo de menos de 3 personas no aparece ni en grupos ni en los porcentajes', async () => {
+      prisma.fraseVoto.findMany.mockResolvedValue([{ profileId: YO, fraseId: 'f1', value: 'de_acuerdo' }]);
+      ctl.override = () => ({
+        participants: 13,
+        grupos: [
+          { id: 0, size: 6, members: [] },
+          { id: 1, size: 5, members: [] },
+          { id: 2, size: 2, members: [] },
+        ],
+        frases: [
+          {
+            fraseId: 'f1',
+            porGrupo: [
+              { grupo: 0, votantes: 6, deAcuerdo: 6, total: 6 },
+              { grupo: 1, votantes: 5, deAcuerdo: 5, total: 5 },
+              { grupo: 2, votantes: 2, deAcuerdo: 0, total: 2 },
+            ],
+          },
+        ],
+      });
+      const r = await service.analysis(YO, T);
+      if (!r.available) throw new Error('debía estar disponible');
+      expect(r.grupos.map((g) => g.id)).toEqual([0, 1]);
+      // sin el grupo 2 (0 % de acuerdo), f1 cuenta como puente
+      expect(r.puentes).toHaveLength(1);
+      expect(r.puentes[0]!.acuerdoPorGrupo.map((a) => a.grupo)).toEqual([0, 1]);
     });
 
     it('con dos bandos de 6 y 6: 2 grupos y ningún profileId en la respuesta', async () => {

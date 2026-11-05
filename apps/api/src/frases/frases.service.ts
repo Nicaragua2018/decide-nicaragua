@@ -15,6 +15,8 @@ import { analyzeOpinions, isDivisiva, isPuente, seedFromId, type VoteRow } from 
 
 const VALOR: Record<FraseVotoValue, -1 | 0 | 1> = { de_acuerdo: 1, en_desacuerdo: -1, paso: 0 };
 const MIN_GRUPO = 3;
+/** Por debajo de 5 votos una frase no muestra porcentajes. */
+const MIN_RESULTADO = 5;
 
 /** Múltiplo de 5 más cercano. */
 function round5(n: number): number {
@@ -73,9 +75,23 @@ export class FrasesService {
     if (tema.status !== 'open') throw new BadRequestException('Este tema ya no acepta frases.');
   }
 
+  /**
+   * Nunca devuelve recuentos exactos: con ellos (y el filtro de miembros actuales)
+   * se deduciría el voto de quien deja el grupo comparando antes y después.
+   */
   private resultado(counts: { deAcuerdo: number; enDesacuerdo: number; paso: number }): FraseResultado {
     const total = counts.deAcuerdo + counts.enDesacuerdo + counts.paso;
-    return { ...counts, total, acuerdoPct: pct(counts.deAcuerdo, total) };
+    const totalAprox = total === 0 ? 0 : Math.max(MIN_RESULTADO, round5(total));
+    if (total < MIN_RESULTADO) {
+      return { deAcuerdoPct: null, enDesacuerdoPct: null, pasoPct: null, totalAprox, suficiente: false };
+    }
+    return {
+      deAcuerdoPct: pct(counts.deAcuerdo, total),
+      enDesacuerdoPct: pct(counts.enDesacuerdo, total),
+      pasoPct: pct(counts.paso, total),
+      totalAprox,
+      suficiente: true,
+    };
   }
 
   async create(profileId: string, proposalId: string, text: string, ip: string): Promise<{ id: string }> {
@@ -215,7 +231,9 @@ export class FrasesService {
         select: { profileId: true, fraseId: true, value: true },
       }),
     ]);
-    const rows: VoteRow[] = votos.map((v) => ({
+    // Defensa extra: aunque la consulta ya filtra, solo cuentan votos de frases visibles.
+    const visiblesIds = new Set(frases.map((f) => f.id));
+    const rows: VoteRow[] = votos.filter((v) => visiblesIds.has(v.fraseId)).map((v) => ({
       profileId: v.profileId,
       fraseId: v.fraseId,
       value: VALOR[v.value as FraseVotoValue],
@@ -238,9 +256,11 @@ export class FrasesService {
     const puentesTodos = analizadas.filter((f) => isPuente(f));
     const puentes = puentesTodos.filter((f) => votadasPorMi.has(f.fraseId)).map(aAnalisis);
     // Si quien consulta tiene pocas frases sin votar, el número de puentes pendientes
-    // delataría demasiado: solo se informa con 3 o más sin votar.
+    // delataría demasiado: solo se informa con 3 o más sin votar, y nunca cuando
+    // coincide con las sin votar (diría que todas las pendientes son puentes).
     const sinVotar = frases.filter((f) => !votadasPorMi.has(f.id)).length;
-    const puentesSinVer = sinVotar >= MIN_GRUPO ? puentesTodos.filter((f) => !votadasPorMi.has(f.fraseId)).length : 0;
+    const pendientesPuente = puentesTodos.filter((f) => !votadasPorMi.has(f.fraseId)).length;
+    const puentesSinVer = sinVotar >= MIN_GRUPO && pendientesPuente < sinVotar ? pendientesPuente : 0;
     const divisivas = analizadas.filter((f) => isDivisiva(f) && votadasPorMi.has(f.fraseId)).map(aAnalisis);
 
     return {

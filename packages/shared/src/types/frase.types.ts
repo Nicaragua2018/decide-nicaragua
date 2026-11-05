@@ -2,13 +2,18 @@
 
 export type FraseVotoValue = 'de_acuerdo' | 'en_desacuerdo' | 'paso';
 
-/** Resultado de una frase; el porcentaje va redondeado a múltiplos de 5. */
+/**
+ * Resultado de una frase. Nunca lleva recuentos exactos: los porcentajes y el
+ * total van redondeados a múltiplos de 5, y con menos de 5 votos no hay
+ * porcentajes (suficiente: false), para que no se pueda deducir el voto de nadie.
+ */
 export interface FraseResultado {
-  deAcuerdo: number;
-  enDesacuerdo: number;
-  paso: number;
-  total: number;
-  acuerdoPct: number;
+  deAcuerdoPct: number | null;
+  enDesacuerdoPct: number | null;
+  pasoPct: number | null;
+  /** Total aproximado: 0 si no hay votos; si no, múltiplo de 5 y al menos 5. */
+  totalAprox: number;
+  suficiente: boolean;
 }
 
 /** Siguiente frase ofrecida para votar (sin resultados: independencia). */
