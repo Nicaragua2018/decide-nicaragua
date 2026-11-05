@@ -9,9 +9,15 @@ import {
   type ActionResult,
 } from '@/lib/actions';
 import { ProposalStatus } from '@decide/shared';
-import type { ProposalDetail } from '@decide/shared';
+import type { DecisionFaseValue, ProposalDetail } from '@decide/shared';
 
-export function TopicActions({ proposal }: { proposal: ProposalDetail }) {
+export function TopicActions({
+  proposal,
+  decisionFase = null,
+}: {
+  proposal: ProposalDetail;
+  decisionFase?: DecisionFaseValue | null;
+}) {
   const [pending, startTransition] = useTransition();
   const [actionError, setActionError] = useState<string | null>(null);
   const [closeState, closeAction, closing] = useActionState<ActionResult | null, FormData>(closeTopic, null);
@@ -32,7 +38,9 @@ export function TopicActions({ proposal }: { proposal: ProposalDetail }) {
 
   // Una propuesta formal se cierra con consenso solo cuando su votación ya fue contada (o cancelada).
   const isPropuesta = proposal.kind === 'propuesta';
-  const voteDone = proposal.electionStatus === 'tallied' || proposal.electionStatus === 'cancelled';
+  const voteDone = proposal.electionId
+    ? proposal.electionStatus === 'tallied' || proposal.electionStatus === 'cancelled'
+    : decisionFase === 'contada' || decisionFase === 'cancelada';
   const canClose = !isPropuesta || voteDone;
 
   // De un tema oculto no se muestra nada: ni la propuesta, ni su votación, ni acciones.
@@ -68,17 +76,20 @@ export function TopicActions({ proposal }: { proposal: ProposalDetail }) {
             className="btn btn-ghost btn-sm"
             disabled={pending}
             onClick={() => {
-              if (window.confirm('¿Convertir este tema en propuesta formal? Habrá 7 días de deliberación y luego una votación.')) {
+              if (window.confirm('¿Llevar este tema a decisión? Se fija un plazo de debate; al terminar, la comunidad vota las soluciones.')) {
                 run(() => formalizeTopic(proposal.id));
               }
             }}
           >
-            Convertir en propuesta formal
+            Llevar a decisión
           </button>
+          <p className="text-xs text-muted mt-1">
+            Fija un plazo de debate; al terminar, la comunidad vota las soluciones
+          </p>
         </div>
       )}
 
-      {isOpen && canAct && !canClose && proposal.electionId && (
+      {isOpen && canAct && !canClose && (
         <p className="text-sm text-muted mb-3">Podrás cerrar con consenso cuando se cuente la votación.</p>
       )}
 

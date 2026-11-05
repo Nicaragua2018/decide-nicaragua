@@ -6,9 +6,10 @@ import { CommentsSection } from './CommentsSection';
 import { TopicActions } from './TopicActions';
 import { AppealForm } from './AppealForm';
 import { FrasesSection } from './FrasesSection';
+import { SolucionesSection } from './SolucionesSection';
 import { updateProposalStatusDirect } from '@/lib/actions';
 import { ProposalStatus } from '@decide/shared';
-import type { ProposalDetail, SignalCounts } from '@decide/shared';
+import type { DecisionTemaResponse, ProposalDetail, SignalCounts } from '@decide/shared';
 
 const STATUS_LABEL: Record<ProposalStatus, string> = {
   [ProposalStatus.draft]:    'Borrador',
@@ -82,6 +83,17 @@ export default async function ProposalPage({
 
   const nextStatuses = NEXT_STATUS[proposal.status] ?? [];
   const isOpen       = proposal.status === ProposalStatus.open;
+
+  // Soluciones y decisión: se pide una sola vez y se reparte (no aplica a temas ocultos).
+  let decisionTema: DecisionTemaResponse | null = null;
+  if (!proposal.hidden) {
+    try {
+      const dres = await serverFetch(`/api/decisiones/temas/${id}`);
+      if (dres.ok) decisionTema = (await dres.json()) as DecisionTemaResponse;
+    } catch {
+      decisionTema = null;
+    }
+  }
 
   return (
     <>
@@ -175,7 +187,7 @@ export default async function ProposalPage({
         </div>
       </div>
 
-      <TopicActions proposal={proposal} />
+      <TopicActions proposal={proposal} decisionFase={decisionTema?.decision?.fase ?? null} />
 
       {/* Gestión del autor — solo visible si el usuario es el autor */}
       {proposal.isAuthor && nextStatuses.length > 0 && (
@@ -211,6 +223,10 @@ export default async function ProposalPage({
           canModerate={proposal.canModerate}
         />
       </div>
+
+      {!proposal.hidden && decisionTema && (
+        <SolucionesSection proposalId={id} data={decisionTema} />
+      )}
 
       {!proposal.hidden && (
         <FrasesSection proposalId={id} isOpen={isOpen} canModerate={proposal.canModerate} />

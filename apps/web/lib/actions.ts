@@ -528,3 +528,74 @@ export async function voteFrase(
   revalidatePath(`/proposals/${proposalId}`);
   return { success: true };
 }
+
+// ─── Soluciones y decisión ────────────────────────────────────────────────────
+
+export async function createSolucion(
+  proposalId: string,
+  _prev: ActionResult | null,
+  formData: FormData,
+): Promise<ActionResult> {
+  if (!isUuid(proposalId)) return INVALID;
+  const res = await actionFetch(`/api/decisiones/temas/${proposalId}/soluciones`, {
+    method: 'POST',
+    body: JSON.stringify({ title: formData.get('title'), description: formData.get('description') }),
+  });
+  if (!res.ok) return { error: await parseError(res) };
+  revalidatePath(`/proposals/${proposalId}`);
+  return { success: true };
+}
+
+export async function mergeSolucion(
+  solucionId: string,
+  intoId: string,
+  proposalId: string,
+): Promise<ActionResult> {
+  if (!isUuid(solucionId) || !isUuid(intoId) || !isUuid(proposalId)) return INVALID;
+  const res = await actionFetch(`/api/decisiones/soluciones/${solucionId}/juntar`, {
+    method: 'POST',
+    body: JSON.stringify({ intoId }),
+  });
+  if (!res.ok) return { error: await parseError(res) };
+  revalidatePath(`/proposals/${proposalId}`);
+  return { success: true };
+}
+
+export async function proposeModo(proposalId: string, modo: string): Promise<ActionResult> {
+  if (!isUuid(proposalId)) return INVALID;
+  if (modo !== 'excluyentes' && modo !== 'compatibles') return INVALID;
+  const res = await actionFetch(`/api/decisiones/temas/${proposalId}/modo`, {
+    method: 'POST',
+    body: JSON.stringify({ modo }),
+  });
+  if (!res.ok) return { error: await parseError(res) };
+  revalidatePath(`/proposals/${proposalId}`);
+  return { success: true };
+}
+
+export async function setObjecion(proposalId: string, objeto: boolean): Promise<ActionResult> {
+  if (!isUuid(proposalId) || typeof objeto !== 'boolean') return INVALID;
+  const res = await actionFetch(`/api/decisiones/temas/${proposalId}/objecion`, {
+    method: 'PUT',
+    body: JSON.stringify({ objeto }),
+  });
+  if (!res.ok) return { error: await parseError(res) };
+  revalidatePath(`/proposals/${proposalId}`);
+  return { success: true };
+}
+
+export async function castPapeleta(
+  proposalId: string,
+  abstencion: boolean,
+  orden: string[],
+): Promise<ActionResult> {
+  if (!isUuid(proposalId) || typeof abstencion !== 'boolean') return INVALID;
+  if (!Array.isArray(orden) || !orden.every(isUuid)) return INVALID;
+  const res = await actionFetch(`/api/decisiones/temas/${proposalId}/papeleta`, {
+    method: 'PUT',
+    body: JSON.stringify({ abstencion, orden }),
+  });
+  if (!res.ok) return { error: await parseError(res) };
+  revalidatePath(`/proposals/${proposalId}`);
+  return { success: true };
+}
