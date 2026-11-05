@@ -1,3 +1,4 @@
+import { Prisma } from '@prisma/client';
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import type { DecisionTemaResponse, DecisionView, SolucionItem } from '@decide/shared';
 import { PrismaService } from '../prisma/prisma.service';
@@ -102,11 +103,28 @@ export class DecisionesService {
     if (origen.mergedIntoId !== null || destino.mergedIntoId !== null) {
       throw new BadRequestException('Alguna de las soluciones ya fue juntada.');
     }
-    const r = await this.prisma.solucion.updateMany({
-      where: { id: solucionId, mergedIntoId: null, hidden: false },
-      data: { mergedIntoId: intoId },
+    await this.prisma.$transaction(async (tx) => {
+      // Bloqueo en orden fijo: dos juntadas cruzadas (A→B y B→A) se serializan.
+      const [a, b] = solucionId < intoId ? [solucionId, intoId] : [intoId, solucionId];
+      await tx.$queryRaw(Prisma.sql`SELECT id FROM soluciones WHERE id IN (${a}::uuid, ${b}::uuid) ORDER BY id FOR UPDATE`);
+      const [o, d] = await Promise.all([
+        tx.solucion.findUnique({ where: { id: solucionId } }),
+        tx.solucion.findUnique({ where: { id: intoId } }),
+      ]);
+      if (!o || !d || o.proposalId !== d.proposalId) {
+        throw new BadRequestException('Las dos soluciones deben ser del mismo tema.');
+      }
+      if (o.hidden || d.hidden || o.mergedIntoId !== null || d.mergedIntoId !== null) {
+        throw new BadRequestException('Alguna de las soluciones ya fue juntada u ocultada.');
+      }
+      const fijada = await tx.decision.findUnique({ where: { proposalId: o.proposalId }, select: { id: true } });
+      if (fijada) throw new BadRequestException(FIJAS);
+      const r = await tx.solucion.updateMany({
+        where: { id: solucionId, mergedIntoId: null, hidden: false },
+        data: { mergedIntoId: intoId },
+      });
+      if (r.count === 0) throw new BadRequestException('Alguna de las soluciones ya fue juntada u ocultada.');
     });
-    if (r.count === 0) throw new BadRequestException('Alguna de las soluciones ya fue juntada.');
     void this.audit.log({
       ...(await this.actorId(profileId)),
       action: 'solucion.merged',

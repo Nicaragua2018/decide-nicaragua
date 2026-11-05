@@ -15,6 +15,8 @@ function buildPrisma() {
   return {
     proposal: { findUnique: vi.fn() },
     groupMembership: { findUnique: vi.fn() },
+    $transaction: vi.fn(),
+    $queryRaw: vi.fn().mockResolvedValue([]),
     solucion: { create: vi.fn(), findMany: vi.fn(), findUnique: vi.fn(), updateMany: vi.fn() },
     decision: { findUnique: vi.fn() },
     profile: { findUnique: vi.fn() },
@@ -53,6 +55,7 @@ describe('DecisionesService', () => {
     prisma.groupMembership.findUnique.mockResolvedValue({ id: 'm1' });
     prisma.profile.findUnique.mockResolvedValue({ userId: 'u1' });
     prisma.decision.findUnique.mockResolvedValue(null);
+    prisma.$transaction.mockImplementation((fn: (tx: unknown) => unknown) => fn(prisma));
     service = new DecisionesService(prisma as never, audit as never, forums as never);
   });
 
@@ -176,6 +179,19 @@ describe('DecisionesService', () => {
     it('si el updateMany no toca nada (carrera): 400 y sin auditar', async () => {
       prisma.solucion.updateMany.mockResolvedValue({ count: 0 });
       await expect(service.mergeSolucion(YO, 's1', 's2', 'ip')).rejects.toThrow(BadRequestException);
+      expect(audit.log).not.toHaveBeenCalled();
+    });
+    it('dentro de la transacción vuelve a leer: destino ya juntado por otra petición → 400 sin auditar', async () => {
+      let lecturas = 0;
+      prisma.solucion.findUnique.mockImplementation(async ({ where }: { where: { id: string } }) => {
+        if (where.id === 's1') return sol('s1');
+        lecturas += 1;
+        // 1.ª lectura (fuera de la transacción): limpia; siguientes: ya juntada.
+        return lecturas === 1 ? sol('s2') : sol('s2', { mergedIntoId: 's3' });
+      });
+      await expect(service.mergeSolucion(YO, 's1', 's2', 'ip')).rejects.toThrow(BadRequestException);
+      expect(prisma.$queryRaw).toHaveBeenCalledTimes(1);
+      expect(prisma.solucion.updateMany).not.toHaveBeenCalled();
       expect(audit.log).not.toHaveBeenCalled();
     });
     it('solución inexistente: 404', async () => {

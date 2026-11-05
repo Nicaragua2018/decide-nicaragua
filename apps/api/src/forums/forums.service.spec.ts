@@ -40,6 +40,7 @@ describe('ForumsService', () => {
     rules = { getInt: vi.fn().mockResolvedValue(7) };
     service = new ForumsService(prisma as never, audit as never, board as never, rules as never);
     prisma.solucion.count.mockResolvedValue(1);
+    prisma.proposal.updateMany.mockResolvedValue({ count: 1 });
     prisma.profile.findUnique.mockResolvedValue({ userId: 'u-yo' });
     prisma.groupMembership.findUnique.mockResolvedValue({ id: 'm1' });
   });
@@ -125,7 +126,7 @@ describe('ForumsService', () => {
       prisma.proposal.update.mockResolvedValue({});
       const antes = Date.now();
       await service.formalize(YO, 't1', 'ip');
-      const data = prisma.proposal.update.mock.calls[0]![0].data;
+      const data = prisma.proposal.updateMany.mock.calls[0]![0].data;
       expect(data.kind).toBe('propuesta');
       const plazo = (data.deliberationEndsAt as Date).getTime() - antes;
       expect(plazo).toBeGreaterThanOrEqual(7 * 86_400_000 - 1000);
@@ -139,7 +140,7 @@ describe('ForumsService', () => {
       const antes = Date.now();
       await service.formalize(YO, 't1', 'ip');
       expect(rules.getInt).toHaveBeenCalledWith('debate.plazo_dias', 'g1');
-      const plazo = (prisma.proposal.update.mock.calls[0]![0].data.deliberationEndsAt as Date).getTime() - antes;
+      const plazo = (prisma.proposal.updateMany.mock.calls[0]![0].data.deliberationEndsAt as Date).getTime() - antes;
       expect(plazo).toBeGreaterThanOrEqual(10 * 86_400_000 - 1000);
       expect(plazo).toBeLessThanOrEqual(10 * 86_400_000 + 1000);
     });
@@ -167,6 +168,15 @@ describe('ForumsService', () => {
       prisma.solucion.count.mockResolvedValue(2);
       await service.formalize(YO, 't1', 'ip');
       expect(prisma.solucion.create).not.toHaveBeenCalled();
+    });
+
+    it('un doble envío (updateMany sin filas) da 409 sin sembrar ni auditar', async () => {
+      prisma.proposal.findUnique.mockResolvedValue({ id: 't1', groupId: 'g1', authorProfileId: YO, status: 'open', kind: 'tema', hidden: false, title: 'T', body: '' });
+      prisma.proposal.updateMany.mockResolvedValue({ count: 0 });
+      prisma.solucion.count.mockResolvedValue(0);
+      await expect(service.formalize(YO, 't1', 'ip')).rejects.toThrow(ConflictException);
+      expect(prisma.solucion.create).not.toHaveBeenCalled();
+      expect(audit.log).not.toHaveBeenCalled();
     });
 
     it('un autor sin membresía (suspendido) no puede formalizar', async () => {

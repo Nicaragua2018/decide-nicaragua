@@ -228,13 +228,16 @@ export class ForumsService {
     if ((topic.status as string) !== 'open') throw new BadRequestException('Solo un tema abierto puede convertirse en propuesta.');
     const dias = await this.rules.getInt('debate.plazo_dias', topic.groupId);
     await this.prisma.$transaction(async (tx) => {
-      await tx.proposal.update({
-        where: { id: topicId },
+      // Condicionado: dos envíos a la vez no siembran dos veces ni mueven el plazo.
+      const r = await tx.proposal.updateMany({
+        where: { id: topicId, kind: { not: 'propuesta' }, status: 'open', hidden: false },
         data: { kind: 'propuesta', deliberationEndsAt: new Date(Date.now() + dias * DIA_MS) },
       });
+      if (r.count === 0) throw new ConflictException('Este tema ya es una propuesta formal.');
       // Si nadie propuso soluciones, el propio tema pasa a ser la primera.
       const visibles = await tx.solucion.count({ where: { proposalId: topicId, hidden: false, mergedIntoId: null } });
       if (visibles === 0) {
+        // Hereda el título del tema: puede tener menos de 10 caracteres (el mínimo del DTO solo rige las propuestas manuales).
         const title = topic.title.slice(0, 140);
         await tx.solucion.create({
           data: {
@@ -587,9 +590,7 @@ export class ForumsService {
     }
     if (target === 'solucion') {
       const so = await this.prisma.solucion.findUnique({ where: { id } });
-      return so ? `${so.title}
-
-${so.description}` : '';
+      return so ? `${so.title}\n\n${so.description}` : '';
     }
     return (await this.prisma.proposalComment.findUnique({ where: { id } }))?.body ?? '';
   }
