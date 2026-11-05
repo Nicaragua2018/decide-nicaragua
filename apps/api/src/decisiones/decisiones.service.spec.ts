@@ -316,8 +316,21 @@ describe('DecisionesService', () => {
       prisma.proposal.findMany.mockResolvedValue([]);
       await service.processDeadlines(NOW);
       expect(prisma.proposal.findMany).toHaveBeenCalledWith(expect.objectContaining({
-        where: { kind: 'propuesta', status: 'open', hidden: false, deliberationEndsAt: { lte: NOW }, decision: null },
+        where: {
+          kind: 'propuesta', status: 'open', hidden: false, deliberationEndsAt: { lte: NOW }, decision: null, electionId: null,
+        },
       }));
+    });
+
+    it('una propuesta del plan 2 con votación propia (electionId) no entra: ni la consulta ni el bloqueo la toman', async () => {
+      // La consulta ya la excluye; si se colara (lectura vieja), el bloqueo exige electionId nulo.
+      prisma.$queryRaw.mockResolvedValue([]);
+      prisma.solucion.findMany.mockResolvedValue([{ id: 's1' }]);
+      expect(await service.processDeadlines(NOW)).toBe(0);
+      const sql = (prisma.$queryRaw.mock.calls[0]![0] as Prisma.Sql).sql;
+      expect(sql).toContain('"electionId" IS NULL');
+      expect(sql).toContain('FOR UPDATE');
+      expect(prisma.decision.create).not.toHaveBeenCalled();
     });
 
     it('con 0 soluciones visibles: contada sin_soluciones y audita decision.counted', async () => {
@@ -393,6 +406,36 @@ describe('DecisionesService', () => {
       prisma.groupMembership.findMany.mockImplementation(async ({ where }: { where: { profileId: { in: string[] } } }) =>
         where.profileId.in.filter((p) => PARTICIPANTES.includes(p)).map((profileId) => ({ profileId })));
       rules.getInt.mockImplementation(async (key: string) => (key === 'debate.fraccion_objecion_modo' ? 33 : 7));
+      prisma.$queryRaw.mockResolvedValue([{ id: T }]);
+    });
+
+    it('bloquea el tema con FOR UPDATE antes de leer las candidatas; si ya no está vivo, no toca nada', async () => {
+      prisma.$queryRaw.mockResolvedValue([]);
+      expect(await service.processDeadlines(NOW)).toBe(0);
+      expect((prisma.$queryRaw.mock.calls[0]![0] as Prisma.Sql).sql).toContain('FOR UPDATE');
+      expect(prisma.decision.updateMany).not.toHaveBeenCalled();
+      expect(audit.log).not.toHaveBeenCalled();
+    });
+
+    it('con 0 candidatas visibles: queda contada sin_soluciones y audita decision.counted', async () => {
+      prisma.solucion.findMany.mockResolvedValue([]);
+      expect(await service.processDeadlines(NOW)).toBe(1);
+      expect(prisma.decision.updateMany).toHaveBeenCalledWith({
+        where: { id: 'd1', fase: 'objecion' },
+        data: { fase: 'contada', resultado: 'sin_soluciones', contadaAt: NOW, candidatas: [] },
+      });
+      expect(audit.log).toHaveBeenCalledWith(expect.objectContaining({
+        action: 'decision.counted', metadata: { proposalId: T, resultado: 'sin_soluciones' },
+      }));
+      expect(audit.log).not.toHaveBeenCalledWith(expect.objectContaining({ action: 'decision.vote_opened' }));
+    });
+
+    it('con 1 candidata: modo compatibles aunque se propusiera excluyentes y nadie objetara', async () => {
+      prisma.solucion.findMany.mockResolvedValue([{ id: 's1' }]);
+      expect(await service.processDeadlines(NOW)).toBe(1);
+      expect(prisma.decision.updateMany).toHaveBeenCalledWith(expect.objectContaining({
+        data: expect.objectContaining({ fase: 'votacion', modo: 'compatibles', candidatas: ['s1'] }),
+      }));
     });
 
     it('P = 6, f = 33: 2 objeciones cambian el modo', async () => {
@@ -517,6 +560,20 @@ describe('DecisionesService', () => {
       prisma.proposalComment.findMany.mockResolvedValue([{ authorProfileId: YO }]);
       prisma.groupMembership.findMany.mockImplementation(async ({ where }: { where: { profileId: { in: string[] } } }) =>
         where.profileId.in.map((profileId) => ({ profileId })));
+      prisma.$queryRaw.mockResolvedValue([{ id: 'd1' }]);
+    });
+
+    it('dentro de la transacción vuelve a comprobar la fase y el plazo; si cambiaron: 400 sin escribir', async () => {
+      prisma.$queryRaw.mockResolvedValue([]);
+      await expect(service.setObjecion(YO, T, true)).rejects.toThrow('El plazo para objetar el modo no está abierto.');
+      await expect(service.setObjecion(YO, T, false)).rejects.toThrow(BadRequestException);
+      expect(prisma.$transaction).toHaveBeenCalled();
+      const sql = (prisma.$queryRaw.mock.calls[0]![0] as Prisma.Sql).sql;
+      expect(sql).toContain("fase = 'objecion'");
+      expect(sql).toContain('"objecionEndsAt" >');
+      expect(sql).toContain('FOR UPDATE');
+      expect(prisma.objecionModo.upsert).not.toHaveBeenCalled();
+      expect(prisma.objecionModo.deleteMany).not.toHaveBeenCalled();
     });
 
     it('quien no participó en el debate: 403', async () => {
