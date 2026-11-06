@@ -586,6 +586,34 @@ El spec 3A (§6 y §7) y el spec 3A-4 (§4 y §5) piden dos cosas. Que alguien l
 
 ---
 
+## ADR-024: Cambio de reglas por votación (2026-11-06)
+**Fecha:** 2026-11-06
+**Estado:** Aceptado
+
+### Contexto
+El spec 3A (§8) pide que las reglas no las fije nadie por su cuenta: la comunidad las cambia votando. Las locales se aplican solas; las de la colmena necesitan además a la mesa.
+
+### Decisión
+- **Proponer.** Cualquier miembro propone un cambio desde la página «Reglas», con un valor dentro de los límites de la colmena y un motivo opcional.
+  - Las reglas locales se cambian en su comunidad: origen, acogida o el nivel general.
+  - Las de la colmena solo se cambian en «Exilio y diáspora».
+  - Hay un solo cambio abierto por regla y comunidad.
+- **Debatir y votar.** El cambio abre un tema que ya es propuesta formal, con una única solución («Cambiar a …»). Pasa por el plazo de debate y después por la votación automática de 3A-3, con «Apruebo / No apruebo / Me abstengo».
+  - No admite otras soluciones.
+  - No genera comisiones ni iniciativas de grupo.
+- **Participación.** Para valer debe votar al menos `reglas.participacion_minima` (30 %) de la comunidad. Si no, el resultado es «Sin participación suficiente».
+- **Aplicar.** El resultado se aplica una sola vez, de forma automática:
+  - una **regla local** aprobada se guarda al instante, después de comprobar de nuevo sus límites;
+  - una **regla de la colmena** aprobada crea una acción de la mesa, que la aplica con 2 aprobaciones (o la rechaza con 2), comprobando otra vez los límites.
+  - Nadie puede crear a mano una acción de la mesa para cambiar una regla.
+- **Historial.** Cada regla muestra su cambio en curso y los últimos cambios resueltos (aplicado, rechazado, rechazado por la mesa, sin participación o anulado), sin nombres.
+
+### Consecuencias
+- Con esto se cierra el ciclo de la comunidad de 3A: inquietud, debate, votación, comisión, iniciativa de un grupo y reglas que la propia comunidad ajusta.
+- Para cambiar las reglas de la colmena, la mesa necesita al menos 2 personas con cargo.
+
+---
+
 ## Decisiones pendientes
 
 | ID | Pregunta | Prioridad |
