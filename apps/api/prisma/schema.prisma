@@ -717,7 +717,7 @@ model BoardAction {
   reason              String            @db.VarChar(500)
   status              BoardActionStatus @default(pending)
   proposedByProfileId String?           @db.Uuid
-  proposedBy          Profile?          @relation("BoardActionProposer", fields: [proposedByProfileId], references: [id])
+  proposedBy          Profile?          @relation("BoardActionProposer", fields: [proposedByProfileId], references: [id], onDelete: Restrict)
   createdAt           DateTime          @default(now()) @db.Timestamptz
   resolvedAt          DateTime?         @db.Timestamptz
 
