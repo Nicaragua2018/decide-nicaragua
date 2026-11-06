@@ -137,7 +137,63 @@
 
 ---
 
-### Task 3: Documentación
+### Task 3: Página «Decisiones» (pedido de Carlos, 2026-11-05)
+
+Carlos lo pidió así: «quiero que toda complejidad este automatizada y que sea sencillo proponer, debatir y votar, para luego ver los concensos logrados, los rechazados y los resultados de las votaciones … por territorios de origen y acogida y de forma general como exilio y diaspora».
+
+**Files:**
+- Modify: `apps/api/src/decisiones/decisiones.service.ts`, `decisiones.controller.ts` (+ spec); `packages/shared/src/types/decision.types.ts`
+- Create: `apps/web/app/(app)/decisiones/page.tsx`
+- Modify: `apps/web/components/NavBar.tsx`
+
+**Interfaces:**
+- Produces (shared):
+  ```ts
+  export type ComunidadTipo = 'origen' | 'acogida' | 'general';
+  export interface DecisionResumenItem {
+    proposalId: string; title: string;
+    estado: 'aprobada' | 'rechazada' | 'en_curso';
+    detalle: string;              // texto llano, ver abajo
+    ganadoras: { title: string; incluyenPct: number | null }[];
+    fecha: string | null;         // contadaAt/closedAt, o la fecha de cierre de la fase en curso
+  }
+  export interface ComunidadDecisiones {
+    groupId: string; name: string; tipo: ComunidadTipo;
+    aprobadas: DecisionResumenItem[]; rechazadas: DecisionResumenItem[]; enCurso: DecisionResumenItem[];
+  }
+  export interface DecisionesResumenResponse { comunidades: ComunidadDecisiones[] }
+  ```
+- Produces (API): `GET /api/decisiones/resumen` → `DecisionesResumenResponse` con las comunidades de quien consulta. El orden es: origen (`territorial_origin`), acogida (`territorial_residence`) y general (`custom` con slug `GENERAL_GROUP_SLUG`). Las demás `custom` van al final como `general`.
+
+**Reglas:** se excluyen siempre los temas ocultos. Cada lista trae como máximo 50 elementos, los más recientes primero.
+
+| Lista | Qué entra | `detalle` |
+|---|---|---|
+| **Aprobadas** | decisiones `contada` con `resultado = 'aprobada'`; temas cerrados con conclusión (consenso) y sin decisión | `«Aprobada por votación»` (`incluyenPct` = `round(100 * incluyen / validas)` de cada ganadora) o `«Consenso del debate»` (sin ganadoras) |
+| **Rechazadas o sin decisión** | decisiones `contada` con `ninguna`, `empate`, `sin_quorum` o `sin_soluciones` | `«Ninguna solución obtuvo más de la mitad»`, `«Empate: sin decisión»`, `«Sin decisión: no se alcanzó la participación mínima»`, `«No se propusieron soluciones»` |
+| **En curso** | temas `propuesta` abiertos sin decisión o con decisión en `modo`, `objecion` o `votacion` | `«En debate hasta el {fecha}»`, `«Eligiendo cómo decidir»`, `«Objeciones hasta el {fecha}»` o `«Votación abierta hasta el {fecha}»`. La fecha va en `fecha` (ISO); la web la formatea. |
+
+Los títulos de soluciones ocultas se enmascaran como en 3A-3.
+
+**Web:**
+- `/decisiones` muestra cada comunidad con su encabezado: «Tu territorio de origen: {name}», «Tu comunidad de acogida: {name}» o «Exilio y diáspora: {name}».
+- Debajo van tres bloques: «Aprobadas», «Rechazadas o sin decisión» y «En curso». Cada elemento enlaza a `/proposals/{id}` y muestra las ganadoras con su porcentaje.
+- Un bloque vacío dice «Todavía no hay decisiones aquí.».
+- En la barra de navegación aparece el enlace «Decisiones».
+
+- [ ] **Step 1:** Escribe las pruebas:
+  - las listas se clasifican bien en cada estado;
+  - el tema oculto no aparece;
+  - la solución oculta aparece enmascarada;
+  - el orden es origen, acogida y general;
+  - solo salen las comunidades de quien consulta;
+  - la decisión cancelada no aparece en ninguna lista.
+- [ ] **Step 2:** Ejecuta las pruebas. Expected: FAIL. Implementa la API y la web.
+- [ ] **Step 3:** Ejecuta `npx vitest run && pnpm --filter @decide/api typecheck && pnpm --filter @decide/shared build && (cd apps/web && npx tsc --noEmit)`. Expected: todo en verde. Verifica UTF-8 y haz commit: `Página Decisiones: aprobadas, rechazadas y en curso por comunidad`.
+
+---
+
+### Task 4: Documentación
 
 - [ ] ADR-021, «Causas cerradas y segunda firma para ocultar soluciones y propuestas»: las decisiones de arriba y por qué las urgentes se ocultan ya. Agrega una línea en ROADMAP, bajo 3A-3. Verifica UTF-8 y haz commit: `Docs: ADR-021 causas y quórum de moderación`.
 
