@@ -5,9 +5,9 @@ import { useActionState, useState, useTransition } from 'react';
 import {
   closeTopic,
   formalizeTopic,
-  hideContent,
   type ActionResult,
 } from '@/lib/actions';
+import { ModerarForm } from '@/components/ModerarForm';
 import { ProposalStatus } from '@decide/shared';
 import type { DecisionFaseValue, ProposalDetail } from '@decide/shared';
 
@@ -21,7 +21,6 @@ export function TopicActions({
   const [pending, startTransition] = useTransition();
   const [actionError, setActionError] = useState<string | null>(null);
   const [closeState, closeAction, closing] = useActionState<ActionResult | null, FormData>(closeTopic, null);
-  const [hideState, hideAction, hiding] = useActionState<ActionResult | null, FormData>(hideContent, null);
 
   const canAct = (proposal.isAuthor || proposal.canModerate) && !proposal.hidden;
   const isOpen = proposal.status === ProposalStatus.open;
@@ -120,23 +119,7 @@ export function TopicActions({
       )}
 
       {proposal.canModerate && !proposal.hidden && (
-        <form action={hideAction} className="form">
-          <p className="card-title">Ocultar tema</p>
-          <input type="hidden" name="target" value="tema" />
-          <input type="hidden" name="targetId" value={proposal.id} />
-          <input type="hidden" name="topicId" value={proposal.id} />
-          <textarea
-            name="reason"
-            className="form-textarea"
-            rows={2}
-            required
-            minLength={10}
-            maxLength={500}
-            placeholder="Motivo (obligatorio)"
-          />
-          <button className="btn btn-ghost btn-sm" disabled={hiding}>Ocultar tema</button>
-          {hideState && 'error' in hideState && <p className="alert alert-error">{hideState.error}</p>}
-        </form>
+        <ModerarForm target="tema" targetId={proposal.id} topicId={proposal.id} titulo="Ocultar tema" boton="Ocultar tema" />
       )}
 
       {actionError && <p className="alert alert-error mt-2">{actionError}</p>}

@@ -6,7 +6,7 @@ import { redirect } from 'next/navigation';
 
 const API_URL = process.env.API_URL ?? 'http://localhost:4000';
 
-export type ActionResult = { error: string } | { success: true; devInviteUrl?: string };
+export type ActionResult = { error: string } | { success: true; devInviteUrl?: string; estado?: string };
 
 async function actionFetch(path: string, init?: RequestInit): Promise<Response> {
   const cookieStore = await cookies();
@@ -400,12 +400,32 @@ function revalidateContent(formData: FormData): void {
 }
 
 export async function hideContent(_prev: ActionResult | null, formData: FormData): Promise<ActionResult> {
+  const targetId = formData.get('targetId');
+  if (!isUuid(targetId)) return INVALID;
+  const detalle = formData.get('reason');
   const res = await actionFetch('/api/forums/moderation/hide', {
     method: 'POST',
-    body: JSON.stringify({ target: formData.get('target'), targetId: formData.get('targetId'), reason: formData.get('reason') }),
+    body: JSON.stringify({
+      target: formData.get('target'),
+      targetId,
+      causa: formData.get('causa'),
+      ...(typeof detalle === 'string' && detalle.trim() !== '' ? { reason: detalle.trim() } : {}),
+    }),
   });
   if (!res.ok) return { error: await parseError(res) };
+  const body = (await res.json().catch(() => ({}))) as { estado?: string };
   revalidateContent(formData);
+  return body.estado ? { success: true, estado: body.estado } : { success: true };
+}
+
+export async function confirmarModeracion(moderationId: string, aprobar: boolean): Promise<ActionResult> {
+  if (!isUuid(moderationId)) return INVALID;
+  const res = await actionFetch(`/api/forums/moderation/${moderationId}/confirmar`, {
+    method: 'POST',
+    body: JSON.stringify({ aprobar }),
+  });
+  if (!res.ok) return { error: await parseError(res) };
+  revalidatePath('/admin/mesa');
   return { success: true };
 }
 

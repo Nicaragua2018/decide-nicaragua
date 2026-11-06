@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from 'react';
 import { resolveAppeal } from '@/lib/actions';
+import { MODERACION_CAUSAS } from '@decide/shared';
 import type { ModerationAppeal } from '@decide/shared';
 
 export function AppealsList({ appeals }: { appeals: ModerationAppeal[] }) {
@@ -23,6 +24,9 @@ export function AppealsList({ appeals }: { appeals: ModerationAppeal[] }) {
       {appeals.map((a) => (
         <div key={a.id} className="card">
           <p className="card-title">{a.target === 'tema' ? 'Tema' : 'Respuesta'}</p>
+          {a.causa && (
+            <p className="card-meta">Causa: {MODERACION_CAUSAS.find((c) => c.value === a.causa)?.label ?? a.causa}</p>
+          )}
           <p className="card-meta">Motivo de la moderación: {a.reason}</p>
           <p className="text-sm font-medium mt-2">Texto original</p>
           <blockquote className="card" style={{ whiteSpace: 'pre-wrap' }}>{a.originalText}</blockquote>

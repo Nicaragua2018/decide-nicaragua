@@ -1,4 +1,5 @@
 import type { DecisionTemaResponse } from '@decide/shared';
+import { ModerarForm } from '@/components/ModerarForm';
 import { JuntarSolucion } from './JuntarSolucion';
 import { ObjecionPanel, ProponerModo } from './ModoPanel';
 import { NuevaSolucionForm } from './NuevaSolucionForm';
@@ -54,6 +55,9 @@ export function SolucionesSection({
                   ) : (
                     <>
                       <p className="comment-body">{s.description}</p>
+                      {data.canOrganize && !s.hidden && (
+                        <ModerarForm target="solucion" targetId={s.id} topicId={proposalId} colapsable className="comment-reply-form" />
+                      )}
                       {data.canOrganize && (
                         <JuntarSolucion
                           solucionId={s.id}
