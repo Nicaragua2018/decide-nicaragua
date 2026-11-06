@@ -110,7 +110,8 @@ export default async function ProposalPage({
       grupo = null;
     }
   }
-  const llevarGrupoId = aprobada && grupo?.soyMiembro ? grupo.id : null;
+  // Solo un subgrupo activo lleva propuestas a la comunidad.
+  const llevarGrupoId = aprobada && grupo?.soyMiembro && grupo.estado === 'activo' ? grupo.id : null;
 
   return (
     <>
@@ -216,8 +217,9 @@ export default async function ProposalPage({
       </div>
 
       <TopicActions
-        proposal={soloLectura ? { ...proposal, isAuthor: false, canModerate: false } : proposal}
+        proposal={soloLectura ? { ...proposal, isAuthor: false } : proposal}
         decisionFase={decisionTema?.decision?.fase ?? null}
+        soloModeracion={soloLectura}
       />
 
       {/* Gestión del autor — solo visible si el usuario es el autor */}
@@ -251,16 +253,21 @@ export default async function ProposalPage({
           proposalId={id}
           comments={proposal.comments}
           isOpen={isOpen && !soloLectura}
-          canModerate={proposal.canModerate && !soloLectura}
+          canModerate={proposal.canModerate}
         />
       </div>
 
       {!proposal.hidden && decisionTema && (
-        <SolucionesSection proposalId={id} data={decisionTema} llevarGrupoId={llevarGrupoId} />
+        <SolucionesSection
+          proposalId={id}
+          data={decisionTema}
+          llevarGrupoId={llevarGrupoId}
+          canModerate={proposal.canModerate}
+        />
       )}
 
       {!proposal.hidden && (
-        <FrasesSection proposalId={id} isOpen={isOpen && !soloLectura} canModerate={proposal.canModerate && !soloLectura} />
+        <FrasesSection proposalId={id} isOpen={isOpen && !soloLectura} canModerate={proposal.canModerate} />
       )}
     </>
   );

@@ -30,13 +30,17 @@ export function SolucionesSection({
   proposalId,
   data,
   llevarGrupoId = null,
+  canModerate = false,
 }: {
   proposalId: string;
   data: DecisionTemaResponse;
   /** Id del grupo de trabajo si quien mira es miembro y puede llevar las ganadoras a la comunidad. */
   llevarGrupoId?: string | null;
+  /** Moderar no es participar: se ve también para quien solo lee el grupo. */
+  canModerate?: boolean;
 }) {
   const { soluciones, decision, soloLectura } = data;
+  const yaLlevadas = new Set(data.llevadas);
   if (!decision && soluciones.length === 0 && !data.puedeProponer) return null;
 
   const vivas = soluciones.filter((s) => s.mergedIntoTitle === null);
@@ -59,7 +63,7 @@ export function SolucionesSection({
                   ) : (
                     <>
                       <p className="comment-body">{s.description}</p>
-                      {data.canOrganize && !soloLectura && !s.hidden && (
+                      {(data.canOrganize || canModerate) && !s.hidden && (
                         <ModerarForm target="solucion" targetId={s.id} topicId={proposalId} colapsable className="comment-reply-form" />
                       )}
                       {data.canOrganize && !soloLectura && (
@@ -136,7 +140,11 @@ export function SolucionesSection({
                   {decision.resultado.ganadoras.map((gid) => (
                     <div key={gid} className="comment-thread">
                       <p className="font-medium">{decision.candidatas.find((c) => c.id === gid)?.title}</p>
-                      <LlevarALaComunidad grupoId={llevarGrupoId} solucionId={gid} />
+                      {yaLlevadas.has(gid) ? (
+                        <p className="text-xs text-muted mt-1">Ya se llevó a la comunidad</p>
+                      ) : (
+                        <LlevarALaComunidad grupoId={llevarGrupoId} solucionId={gid} />
+                      )}
                     </div>
                   ))}
                 </div>

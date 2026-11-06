@@ -73,10 +73,19 @@ export default async function ForoPage({ params }: { params: Promise<{ id: strin
         ))
       )}
 
-      <div className="card mt-4">
-        <p className="card-title mb-3">Abrir un tema nuevo</p>
-        <NewTopicForm groupId={forum.groupId} forumId={forum.id} />
-      </div>
+      {forum.soloLectura ? (
+        <div className="alert alert-warning mt-4">
+          <p>Puedes leer todo; para participar, únete al grupo</p>
+          <p className="mt-2">
+            <Link href={`/grupos/${forum.groupId}`} className="btn btn-ghost btn-sm">Ir al grupo</Link>
+          </p>
+        </div>
+      ) : (
+        <div className="card mt-4">
+          <p className="card-title mb-3">Abrir un tema nuevo</p>
+          <NewTopicForm groupId={forum.groupId} forumId={forum.id} />
+        </div>
+      )}
     </>
   );
 }
