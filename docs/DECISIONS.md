@@ -573,11 +573,16 @@ El spec 3A (§6 y §7) y el spec 3A-4 (§4 y §5) piden dos cosas. Que alguien l
     - toda acción dentro de ella o de su comisión se audita sin actor, porque el registro de auditoría lo lee cualquier persona verificada;
     - quien lleva la solución de vuelta a la comunidad aparece como «Iniciativa de un grupo».
   - **Pausa.** Quien organiza la pausa con una causa de la lista; sus miembros apelan una vez y la mesa decide. Si la mesa mantiene la pausa, la iniciativa queda en pausa sin plazo.
+    - La pausa detiene todo: sus temas, sus decisiones y su comisión no avanzan ni admiten escrituras. Al reanudarse, sus plazos se corren lo que duró la pausa.
+    - Quien organiza pausa desde la lista de grupos, sin entrar a la iniciativa. Si es miembro de ella, la pausa se audita sin actor.
 
 ### Consecuencias
 - El primer despliegue creará comisiones para las soluciones aprobadas que ya existan. Hoy no hay datos reales; antes de producción se decide si poner una fecha de corte.
 - Una comisión archivada cierra el camino automático para esa solución; solo la renovación crea otra.
 - Las notificaciones de informes llegarán con el agente (3B) o con el correo.
+- **La mesa no lee lo de dentro de una iniciativa.** La privacidad pesa más que la moderación: la mesa resuelve la apelación de una pausa solo con la causa, el detalle, la apelación y el título de la solución (enmascarado si se ocultó). Es un límite conocido de la moderación; si hiciera falta, más adelante se agregaría una vista de la mesa con los nombres enmascarados.
+- **La última persona puede salir de una comisión activa.** La comisión no se archiva por quedarse sin miembros: deja de informar, se atrasa y la comunidad la renueva.
+- **La semilla del sorteo se genera después de conocer la lista de voluntarios.** El sorteo es reproducible (semilla, lista y algoritmo publicados), pero la semilla no se comprometió antes. El compromiso previo (commit-reveal) sigue pendiente en ADR-014.
 
 ---
 
