@@ -1,0 +1,346 @@
+import {
+  BadRequestException,
+  ConflictException,
+  ForbiddenException,
+  Injectable,
+  Logger,
+  NotFoundException,
+} from '@nestjs/common';
+import { randomUUID } from 'node:crypto';
+import { Prisma } from '@prisma/client';
+import { GENERAL_GROUP_SLUG } from '@decide/shared';
+import type {
+  GrupoTrabajoDetail,
+  GrupoTrabajoItem,
+  GruposAmbitoResponse,
+  TrabajoEstadoValue,
+  TrabajoTipoValue,
+} from '@decide/shared';
+import { PrismaService } from '../prisma/prisma.service';
+import { AuditService } from '../audit/audit.service';
+import { RulesService } from '../rules/rules.service';
+import { GroupAccessService } from '../groups/group-access.service';
+
+const DIA_MS = 86_400_000;
+/** Un subgrupo activo con menos de estas personas empieza a contar los días para archivarse. */
+const MINIMO_ACTIVO = 3;
+const DIAS_CON_POCOS = 30;
+const FASES_ACTIVAS = ['modo', 'objecion', 'votacion'] as const;
+
+const NO_AMBITO = 'Los grupos de trabajo cuelgan de una comunidad o del nivel general.';
+const NO_MIEMBRO_AMBITO = 'Solo los miembros de esta comunidad pueden proponer o entrar a sus grupos de trabajo.';
+const NO_EXISTE = 'Grupo de trabajo no encontrado.';
+const NO_ADMITE = 'Este grupo de trabajo ya no admite nuevos miembros.';
+
+type AmbitoTipo = 'origen' | 'acogida' | 'general';
+type Tx = Prisma.TransactionClient;
+
+interface GrupoFila {
+  id: string;
+  name: string;
+  type: string;
+  parentGroupId: string | null;
+  trabajoTipo: string | null;
+  trabajoEstado: string | null;
+  proposito: string | null;
+  convocatoriaEndsAt: Date | null;
+  pocosMiembrosDesde: Date | null;
+}
+
+/** Tipo de ámbito y su orden (origen → acogida → general); null si el grupo no puede ser ámbito. */
+function tipoDeAmbito(g: { type: string; slug: string }): { tipo: AmbitoTipo; rango: number } | null {
+  if (g.type === 'territorial_origin') return { tipo: 'origen', rango: 0 };
+  if (g.type === 'territorial_residence') return { tipo: 'acogida', rango: 1 };
+  if (g.type === 'custom' && g.slug === GENERAL_GROUP_SLUG) return { tipo: 'general', rango: 2 };
+  return null;
+}
+
+@Injectable()
+export class GruposService {
+  private readonly logger = new Logger(GruposService.name);
+
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly access: GroupAccessService,
+    private readonly rules: RulesService,
+    private readonly audit: AuditService,
+  ) {}
+
+  private async actorId(profileId: string): Promise<{ actorId: string } | Record<never, never>> {
+    const p = await this.prisma.profile.findUnique({ where: { id: profileId }, select: { userId: true } });
+    return p?.userId ? { actorId: p.userId } : {};
+  }
+
+  private async auditar(action: string, grupoId: string, profileId: string | null, ip?: string): Promise<void> {
+    void this.audit.log({
+      ...(profileId ? await this.actorId(profileId) : {}),
+      action,
+      resource: `group:${grupoId}`,
+      ...(ip ? { ip } : {}),
+      metadata: { grupoId },
+    });
+  }
+
+  /** Grupo de trabajo por id; 404 si no existe o no es de trabajo. */
+  private async grupoDeTrabajo(id: string): Promise<GrupoFila & { parentGroupId: string }> {
+    const g = (await this.prisma.group.findUnique({ where: { id } })) as GrupoFila | null;
+    if (!g || g.type !== 'trabajo' || !g.parentGroupId) throw new NotFoundException(NO_EXISTE);
+    return g as GrupoFila & { parentGroupId: string };
+  }
+
+  private faltan(estado: string | null, miembros: number, minimo: number): number | null {
+    return estado === 'convocando' ? Math.max(0, minimo - miembros) : null;
+  }
+
+  private item(g: GrupoFila, miembros: number, minimo: number, soyMiembro: boolean): GrupoTrabajoItem {
+    return {
+      id: g.id,
+      name: g.name,
+      proposito: g.proposito ?? '',
+      tipo: (g.trabajoTipo ?? 'subgrupo') as TrabajoTipoValue,
+      estado: (g.trabajoEstado ?? 'convocando') as TrabajoEstadoValue,
+      miembros,
+      faltan: this.faltan(g.trabajoEstado, miembros, minimo),
+      convocatoriaEndsAt: g.convocatoriaEndsAt ? g.convocatoriaEndsAt.toISOString() : null,
+      soyMiembro,
+    };
+  }
+
+  // ─── Lecturas ─────────────────────────────────────────────────────────────
+
+  async list(profileId: string): Promise<GruposAmbitoResponse> {
+    const memberships = await this.prisma.groupMembership.findMany({
+      where: { profileId, group: { type: { not: 'trabajo' } } },
+      include: { group: true },
+    });
+    const ambitos = memberships
+      .map((m) => {
+        const t = tipoDeAmbito({ type: m.group.type as string, slug: m.group.slug });
+        return t ? { id: m.group.id, name: m.group.name, ...t } : null;
+      })
+      .filter((a): a is { id: string; name: string; tipo: AmbitoTipo; rango: number } => a !== null)
+      .sort((a, b) => a.rango - b.rango || a.name.localeCompare(b.name, 'es'));
+    if (ambitos.length === 0) return { ambitos: [] };
+
+    const grupos = (await this.prisma.group.findMany({
+      where: { type: 'trabajo', parentGroupId: { in: ambitos.map((a) => a.id) }, trabajoEstado: { not: 'archivado' } },
+      include: { _count: { select: { memberships: true } } },
+      orderBy: { createdAt: 'asc' },
+    })) as (GrupoFila & { _count: { memberships: number } })[];
+    const mias = grupos.length
+      ? await this.prisma.groupMembership.findMany({
+          where: { profileId, groupId: { in: grupos.map((g) => g.id) } },
+          select: { groupId: true },
+        })
+      : [];
+    const soy = new Set(mias.map((m) => m.groupId));
+
+    const result: GruposAmbitoResponse['ambitos'] = [];
+    for (const a of ambitos) {
+      const minimo = await this.rules.getInt('subgrupo.minimo_personas', a.id);
+      result.push({
+        id: a.id,
+        name: a.name,
+        tipo: a.tipo,
+        grupos: grupos
+          .filter((g) => g.parentGroupId === a.id)
+          .map((g) => this.item(g, g._count.memberships, minimo, soy.has(g.id))),
+      });
+    }
+    return { ambitos: result };
+  }
+
+  async detail(profileId: string, id: string): Promise<GrupoTrabajoDetail> {
+    await this.access.requireReader(id, profileId);
+    return this.construirDetalle(profileId, id, true);
+  }
+
+  /** `completo = false` para quien acaba de salir y ya no lee el grupo: sin nombres ni foro. */
+  private async construirDetalle(profileId: string, id: string, completo: boolean): Promise<GrupoTrabajoDetail> {
+    const g = (await this.prisma.group.findUnique({ where: { id }, include: { parent: true } })) as
+      | (GrupoFila & { parent: { id: string; name: string; type: string; slug: string } | null })
+      | null;
+    if (!g || g.type !== 'trabajo' || !g.parent) throw new NotFoundException(NO_EXISTE);
+    const ambito = tipoDeAmbito({ type: g.parent.type as string, slug: g.parent.slug });
+    const [miembros, minimo, soyMiembro, enAmbito] = await Promise.all([
+      this.prisma.groupMembership.count({ where: { groupId: id } }),
+      this.rules.getInt('subgrupo.minimo_personas', g.parent.id),
+      this.access.isParticipant(id, profileId),
+      this.access.isParticipant(g.parent.id, profileId),
+    ]);
+    let miembrosNombres: string[] = [];
+    let forumId: string | null = null;
+    if (completo) {
+      if (g.trabajoTipo !== 'bifurcacion') {
+        const filas = await this.prisma.groupMembership.findMany({
+          where: { groupId: id },
+          select: { profile: { select: { displayName: true } } },
+        });
+        miembrosNombres = filas.map((f) => f.profile.displayName).sort((a, b) => a.localeCompare(b, 'es'));
+      }
+      const foro = await this.prisma.forum.findFirst({ where: { groupId: id, isDefault: true }, select: { id: true } });
+      forumId = foro?.id ?? null;
+    }
+    const estado = g.trabajoEstado;
+    return {
+      ...this.item(g, miembros, minimo, soyMiembro),
+      ambito: { id: g.parent.id, name: g.parent.name, tipo: ambito?.tipo ?? 'general' },
+      miembrosNombres,
+      forumId,
+      puedoEntrar: enAmbito && !soyMiembro && (estado === 'convocando' || estado === 'activo'),
+      puedoSalir: soyMiembro,
+    };
+  }
+
+  // ─── Proponer, entrar y salir ─────────────────────────────────────────────
+
+  async proponer(
+    profileId: string,
+    dto: { ambitoId: string; name: string; proposito: string },
+    ip: string,
+    now: Date = new Date(),
+  ): Promise<{ id: string }> {
+    const ambito = await this.prisma.group.findUnique({ where: { id: dto.ambitoId } });
+    if (!ambito) throw new NotFoundException('Comunidad no encontrada.');
+    if (!tipoDeAmbito({ type: ambito.type as string, slug: ambito.slug })) throw new BadRequestException(NO_AMBITO);
+    if (!(await this.access.isParticipant(ambito.id, profileId))) throw new ForbiddenException(NO_MIEMBRO_AMBITO);
+
+    const plazo = await this.rules.getInt('subgrupo.plazo_dias', ambito.id);
+    const id = randomUUID();
+    await this.prisma.$transaction(async (tx) => {
+      await tx.group.create({
+        data: {
+          id,
+          name: dto.name,
+          slug: `trabajo-${id}`,
+          type: 'trabajo',
+          parentGroupId: ambito.id,
+          trabajoTipo: 'subgrupo',
+          trabajoEstado: 'convocando',
+          proposito: dto.proposito,
+          convocatoriaEndsAt: new Date(now.getTime() + plazo * DIA_MS),
+          creadoPorProfileId: profileId,
+        },
+      });
+      await tx.groupMembership.create({ data: { groupId: id, profileId } });
+    });
+    await this.auditar('grupo.proposed', id, profileId, ip);
+    return { id };
+  }
+
+  private async bloquear(tx: Tx, id: string): Promise<GrupoFila> {
+    await tx.$queryRaw(Prisma.sql`SELECT id FROM groups WHERE id = ${id}::uuid FOR UPDATE`);
+    const g = (await tx.group.findUnique({ where: { id } })) as GrupoFila | null;
+    if (!g) throw new NotFoundException(NO_EXISTE);
+    return g;
+  }
+
+  async entrar(profileId: string, id: string, ip: string): Promise<GrupoTrabajoDetail> {
+    const g = await this.grupoDeTrabajo(id);
+    if (!(await this.access.isParticipant(g.parentGroupId, profileId))) throw new ForbiddenException(NO_MIEMBRO_AMBITO);
+    const minimo = await this.rules.getInt('subgrupo.minimo_personas', g.parentGroupId);
+
+    const { entro, activado } = await this.prisma.$transaction(async (tx) => {
+      // Con la fila bloqueada, dos que entran a la vez se cuentan uno tras otro.
+      const actual = await this.bloquear(tx, id);
+      if (actual.trabajoEstado !== 'convocando' && actual.trabajoEstado !== 'activo') throw new ConflictException(NO_ADMITE);
+      const ya = await tx.groupMembership.findUnique({ where: { groupId_profileId: { groupId: id, profileId } } });
+      await tx.groupMembership.upsert({
+        where: { groupId_profileId: { groupId: id, profileId } },
+        create: { groupId: id, profileId },
+        update: {},
+      });
+      const miembros = await tx.groupMembership.count({ where: { groupId: id } });
+      let activado = false;
+      if (actual.trabajoEstado === 'convocando' && miembros >= minimo) {
+        const res = await tx.group.updateMany({
+          where: { id, trabajoEstado: 'convocando' },
+          data: { trabajoEstado: 'activo', convocatoriaEndsAt: null },
+        });
+        if (res.count === 1) {
+          // Solo la transacción que hizo el cambio crea el foro: hay uno solo.
+          await tx.forum.create({ data: { groupId: id, title: actual.name, isDefault: true } });
+          activado = true;
+        }
+      } else if (actual.trabajoEstado === 'activo' && actual.pocosMiembrosDesde && miembros >= MINIMO_ACTIVO) {
+        await tx.group.updateMany({ where: { id, trabajoEstado: 'activo' }, data: { pocosMiembrosDesde: null } });
+      }
+      return { entro: !ya, activado };
+    });
+
+    if (entro) await this.auditar('grupo.joined', id, profileId, ip);
+    if (activado) await this.auditar('grupo.activated', id, null);
+    return this.detail(profileId, id);
+  }
+
+  async salir(profileId: string, id: string, ip: string, now: Date = new Date()): Promise<GrupoTrabajoDetail> {
+    await this.grupoDeTrabajo(id);
+    const { salio, archivado } = await this.prisma.$transaction(async (tx) => {
+      const actual = await this.bloquear(tx, id);
+      const res = await tx.groupMembership.deleteMany({ where: { groupId: id, profileId } });
+      const miembros = await tx.groupMembership.count({ where: { groupId: id } });
+      let archivado = false;
+      if (actual.trabajoEstado === 'activo' && miembros < MINIMO_ACTIVO && !actual.pocosMiembrosDesde) {
+        await tx.group.updateMany({
+          where: { id, trabajoEstado: 'activo', pocosMiembrosDesde: null },
+          data: { pocosMiembrosDesde: now },
+        });
+      } else if (actual.trabajoEstado === 'convocando' && miembros === 0) {
+        archivado = await this.archivarTx(tx, id, { id, trabajoEstado: 'convocando' }, now);
+      }
+      return { salio: res.count > 0, archivado };
+    });
+
+    if (salio) await this.auditar('grupo.left', id, profileId, ip);
+    if (archivado) await this.auditar('grupo.archived', id, null);
+    // Quien ya no lee el grupo (se mudó de comunidad) recibe el detalle sin nombres ni foro.
+    const lee = await this.access.canRead(id, profileId);
+    return this.construirDetalle(profileId, id, lee);
+  }
+
+  // ─── Archivar ─────────────────────────────────────────────────────────────
+
+  /**
+   * Archiva con un `updateMany` condicionado; solo si cambió una fila cierra sus temas abiertos
+   * (sin conclusión) y cancela sus decisiones activas, en la misma transacción.
+   */
+  private async archivarTx(tx: Tx, id: string, where: Prisma.GroupWhereInput, now: Date): Promise<boolean> {
+    const res = await tx.group.updateMany({ where, data: { trabajoEstado: 'archivado' } });
+    if (res.count !== 1) return false;
+    await tx.decision.updateMany({
+      where: { proposal: { groupId: id }, fase: { in: [...FASES_ACTIVAS] } },
+      data: { fase: 'cancelada' },
+    });
+    await tx.proposal.updateMany({ where: { groupId: id, status: 'open' }, data: { status: 'closed', closedAt: now } });
+    return true;
+  }
+
+  /** Archiva las convocatorias vencidas y los activos con pocos miembros durante 30 días. */
+  async processDeadlines(now: Date): Promise<number> {
+    const limite = new Date(now.getTime() - DIAS_CON_POCOS * DIA_MS);
+    const vencidos = await this.prisma.group.findMany({
+      where: { type: 'trabajo', trabajoEstado: 'convocando', convocatoriaEndsAt: { lte: now } },
+      select: { id: true },
+    });
+    const conPocos = await this.prisma.group.findMany({
+      where: { type: 'trabajo', trabajoEstado: 'activo', pocosMiembrosDesde: { lte: limite } },
+      select: { id: true },
+    });
+    const casos: { id: string; where: Prisma.GroupWhereInput }[] = [
+      ...vencidos.map((g) => ({ id: g.id, where: { id: g.id, trabajoEstado: 'convocando' as const, convocatoriaEndsAt: { lte: now } } })),
+      ...conPocos.map((g) => ({ id: g.id, where: { id: g.id, trabajoEstado: 'activo' as const, pocosMiembrosDesde: { lte: limite } } })),
+    ];
+    let archivados = 0;
+    for (const c of casos) {
+      try {
+        const ok = await this.prisma.$transaction((tx) => this.archivarTx(tx, c.id, c.where, now));
+        if (!ok) continue;
+        archivados += 1;
+        await this.auditar('grupo.archived', c.id, null);
+      } catch (err) {
+        this.logger.error(`No se pudo archivar el grupo ${c.id}: ${err instanceof Error ? err.name : 'error'}`);
+      }
+    }
+    return archivados;
+  }
+}
