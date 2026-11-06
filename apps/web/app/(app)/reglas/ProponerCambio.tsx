@@ -1,6 +1,5 @@
 'use client';
 
-import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useState, useTransition } from 'react';
 import { proponerCambioRegla } from '@/lib/actions';
@@ -22,16 +21,6 @@ export function ProponerCambio({ groupId, ruleKey, type, value, min, max, option
   const [valor, setValor] = useState(value);
   const [motivo, setMotivo] = useState('');
   const [error, setError] = useState<string | null>(null);
-  const [proposalId, setProposalId] = useState<string | null>(null);
-
-  if (proposalId) {
-    return (
-      <p className="text-sm" role="status">
-        Se abrió el debate. La comunidad votará cuando termine.{' '}
-        <Link href={`/proposals/${proposalId}`}>Ver el debate</Link>
-      </p>
-    );
-  }
 
   if (!abierto) {
     return (
@@ -50,8 +39,8 @@ export function ProponerCambio({ groupId, ruleKey, type, value, min, max, option
         setError(r.error);
         return;
       }
-      setProposalId(r.proposalId);
-      router.refresh();
+      // Se va al debate recién abierto: ahí queda a la vista aunque se recargue la página.
+      router.push(`/proposals/${r.proposalId}`);
     });
   }
 
