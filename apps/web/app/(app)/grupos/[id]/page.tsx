@@ -105,7 +105,9 @@ function Comision({ g, c }: { g: GrupoTrabajoDetail; c: ComisionView }) {
               ) : (
                 <>
                   <p className="comment-body" style={{ whiteSpace: 'pre-wrap' }}>{i.texto}</p>
-                  <ModerarForm target="informe" targetId={i.id} grupoId={g.id} colapsable className="comment-reply-form" />
+                  {c.canModerate && (
+                    <ModerarForm target="informe" targetId={i.id} grupoId={g.id} colapsable className="comment-reply-form" />
+                  )}
                 </>
               )}
             </div>
@@ -146,7 +148,7 @@ function Bifurcacion({ g, b }: { g: GrupoTrabajoDetail; b: BifurcacionView }) {
           {b.yaLlevada ? (
             <p className="text-xs text-muted mt-2">Ya se llevó a la comunidad</p>
           ) : (
-            <VolverALaColmena grupoId={g.id} solucionId={b.solucionId} />
+            b.solucionId && <VolverALaColmena grupoId={g.id} solucionId={b.solucionId} />
           )}
           {b.comisionId && (
             <p className="mt-2"><Link href={`/grupos/${b.comisionId}`}>Ver la comisión de esta iniciativa</Link></p>

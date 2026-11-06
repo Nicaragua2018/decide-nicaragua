@@ -1,4 +1,3 @@
-import Link from 'next/link';
 import type { DecisionModoValue, DecisionResultadoView } from '@decide/shared';
 import { ImpulsarSolucion } from './ImpulsarSolucion';
 
@@ -80,14 +79,9 @@ export function ResultadoDecision({
                     la incluyó el {pct} % de las papeletas válidas ({incluyen} de {resultado.validas})
                   </span>
                   {/* Solo quien puede iniciar ve el botón; a las demás personas no se les insinúa nada. */}
+                  {/* Si ya existe la iniciativa, quien la apoyó se suma desde aquí (todavía no la puede leer). */}
                   {c.puedoIniciarBifurcacion === true && (
-                    c.bifurcacionId ? (
-                      <Link href={`/grupos/${c.bifurcacionId}`} className="btn btn-ghost btn-sm mt-1">
-                        Impulsar esta solución como iniciativa de un grupo
-                      </Link>
-                    ) : (
-                      <ImpulsarSolucion solucionId={c.id} />
-                    )
+                    <ImpulsarSolucion solucionId={c.id} bifurcacionId={c.bifurcacionId ?? null} />
                   )}
                 </li>
               );

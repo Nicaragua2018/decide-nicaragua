@@ -753,6 +753,18 @@ export async function iniciarBifurcacion(solucionId: string): Promise<ActionResu
   redirect(`/grupos/${data.id}`);
 }
 
+/**
+ * Sumarse a una iniciativa de un grupo que ya existe, desde el resultado de la decisión: quien la
+ * apoyó todavía no la puede leer, así que no se refresca la página; al entrar se va a la iniciativa.
+ */
+export async function sumarmeAIniciativa(grupoId: string): Promise<ActionResult> {
+  if (!isUuid(grupoId)) return INVALID;
+  const res = await actionFetch(`/api/grupos/${grupoId}/entrar`, { method: 'POST' });
+  if (!res.ok) return { error: await parseError(res) };
+  revalidarGrupo(grupoId);
+  redirect(`/grupos/${grupoId}`);
+}
+
 export async function pausarBifurcacion(grupoId: string, causa: string, detalle: string): Promise<ActionResult> {
   if (!isUuid(grupoId)) return INVALID;
   const res = await actionFetch(`/api/grupos/${grupoId}/pausa`, {

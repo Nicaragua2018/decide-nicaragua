@@ -1,6 +1,5 @@
 'use client';
 
-import Link from 'next/link';
 import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { MODERACION_CAUSAS } from '@decide/shared';
@@ -26,6 +25,7 @@ export function PausasApeladas({ items }: { items: PausaApeladaItem[] }) {
     <>
       {items.map((p) => (
         <div key={p.grupoId} className="card">
+          {/* La mesa decide solo con estos datos: no lee lo de dentro de la iniciativa (ni foro ni miembros). */}
           <p className="card-title">Iniciativa de un grupo: {p.solucionTitulo}</p>
           <p className="card-meta">
             Causa de la pausa: {MODERACION_CAUSAS.find((c) => c.value === p.causa)?.label ?? p.causa}
@@ -35,7 +35,6 @@ export function PausasApeladas({ items }: { items: PausaApeladaItem[] }) {
           <p style={{ whiteSpace: 'pre-wrap' }}>{p.apelacion}</p>
           <p className="text-xs text-muted">{new Date(p.apeladaAt).toLocaleDateString('es-NI')}</p>
           <div className="flex gap-2 mt-2">
-            <Link href={`/grupos/${p.grupoId}`} className="btn btn-ghost btn-sm">Ver</Link>
             <button type="button" className="btn btn-primary btn-sm" disabled={pending} onClick={() => resolver(p.grupoId, true)}>Reanudar</button>
             <button type="button" className="btn btn-ghost btn-sm" disabled={pending} onClick={() => resolver(p.grupoId, false)}>Mantener</button>
           </div>

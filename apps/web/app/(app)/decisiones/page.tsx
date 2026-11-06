@@ -2,6 +2,7 @@ import Link from 'next/link';
 import type { Metadata } from 'next';
 import { serverFetch } from '@/lib/api';
 import type { ComunidadDecisiones, ComunidadTipo, DecisionesResumenResponse, DecisionResumenItem } from '@decide/shared';
+import { UltimoInforme } from '../grupos/GrupoCard';
 
 export const metadata: Metadata = { title: 'Decisiones — Decide Nicaragua' };
 
@@ -88,6 +89,7 @@ function Comunidad({ c }: { c: ComunidadDecisiones }) {
                 {g.tipo === 'bifurcacion' && (
                   <p className="card-meta">Iniciativa de un grupo · {g.miembros} {g.miembros === 1 ? 'persona' : 'personas'}</p>
                 )}
+                <UltimoInforme g={g} />
               </li>
             ))}
           </ul>

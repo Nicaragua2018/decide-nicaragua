@@ -94,7 +94,8 @@ export function PapeletaForm({
 }) {
   const { pending, error, hecho, run } = useAccion();
   const conId = voluntarios.flatMap((v) => (v.id === null ? [] : [{ ...v, id: v.id }]));
-  const [orden, setOrden] = useState<string[]>(miPapeleta ?? []);
+  // Solo los voluntarios que siguen en la lista: alguien guardado que ya no está no se reenvía.
+  const [orden, setOrden] = useState<string[]>(() => (miPapeleta ?? []).filter((id) => conId.some((v) => v.id === id)));
 
   function alternar(id: string) {
     setOrden((o) => (o.includes(id) ? o.filter((x) => x !== id) : [...o, id]));
