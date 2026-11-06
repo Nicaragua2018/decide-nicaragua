@@ -37,13 +37,23 @@ function build(rows: Row[], cambios: Cambio[] = [], miembroDe: string[] = []) {
         rows.filter((r) => where.OR.some((c) => c.groupId === r.groupId)),
       ),
     },
+    // Solo los abiertos van por Prisma; los resueltos, por SQL con un tope por regla.
     cambioRegla: {
-      findMany: vi.fn(async ({ where }: { where: { OR: { nivel: string; ambitoGroupId?: string }[] } }) =>
-        cambios.filter((c) =>
-          where.OR.some((o) => o.nivel === c.nivel && (o.ambitoGroupId === undefined || o.ambitoGroupId === c.ambitoGroupId)),
+      findMany: vi.fn(async ({ where }: { where: { estado: { in: string[] }; OR: { nivel: string; ambitoGroupId?: string }[] } }) =>
+        cambios.filter(
+          (c) =>
+            where.estado.in.includes(c.estado) &&
+            where.OR.some((o) => o.nivel === c.nivel && (o.ambitoGroupId === undefined || o.ambitoGroupId === c.ambitoGroupId)),
         ),
       ),
     },
+    $queryRaw: vi.fn(async (q: { values: unknown[] }) =>
+      cambios.filter(
+        (c) =>
+          !['en_votacion', 'pendiente_mesa'].includes(c.estado) &&
+          (c.nivel === 'colmena' || (c.nivel === 'local' && q.values.includes(c.ambitoGroupId))),
+      ),
+    ),
     group: {
       findUnique: vi.fn(async ({ where }: { where: { id?: string; slug?: string } }) => {
         if (where.slug === 'general' || where.id === GENERAL) return { id: GENERAL, type: 'custom', slug: 'general' };
@@ -173,6 +183,22 @@ describe('RulesService', () => {
       expect(r.puedoProponer).toBe(false);
       const otra = (await s.list('g1', 'p-yo')).find((x) => x.key === 'debate.minimo_para_grupos')!;
       expect(otra).toMatchObject({ enCurso: null, historial: [], puedoProponer: true });
+    });
+
+    it('lecturas acotadas: abiertos por Prisma y, de los resueltos, como mucho 10 por regla (SQL con ventana)', async () => {
+      const db = build([], [], []);
+      await new RulesService(db as never).list('g1');
+      expect(db.cambioRegla.findMany).toHaveBeenCalledWith(expect.objectContaining({
+        where: {
+          estado: { in: ['en_votacion', 'pendiente_mesa'] },
+          OR: [{ nivel: 'colmena' }, { nivel: 'local', ambitoGroupId: 'g1' }],
+        },
+      }));
+      const q = db.$queryRaw.mock.calls[0]![0] as unknown as { strings: string[]; values: unknown[] };
+      const sql = q.strings.join('?');
+      expect(sql).toContain('ROW_NUMBER() OVER (PARTITION BY c.key, c.nivel');
+      expect(sql).toContain("NOT IN ('en_votacion', 'pendiente_mesa')");
+      expect(q.values).toEqual(['g1', 10]);
     });
 
     it('pendiente_mesa también cuenta como en curso', async () => {

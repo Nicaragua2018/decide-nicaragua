@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { GENERAL_GROUP_SLUG, RULE_DEFINITIONS, ruleDefinition } from '@decide/shared';
 import type { CambioReglaView, CambioReglaEstadoValue, RuleDefinition, RuleView } from '@decide/shared';
 import { PrismaService } from '../prisma/prisma.service';
@@ -65,21 +66,36 @@ export class RulesService {
    */
   async list(groupId: string | null, profileId?: string): Promise<RuleView[]> {
     const defs = RULE_DEFINITIONS.filter((d) => d.level === 'colmena' || groupId !== null);
-    const [rows, cambiosRaw, general, grupo] = await Promise.all([
+    const [rows, abiertos, resueltos, general, grupo] = await Promise.all([
       this.prisma.ruleValue.findMany({
         where: { OR: groupId ? [{ groupId: null }, { groupId }] : [{ groupId: null }] },
       }),
+      // Lecturas acotadas: los abiertos (como mucho uno por regla) y, de los resueltos, los últimos por regla.
       this.prisma.cambioRegla.findMany({
-        where: { OR: [{ nivel: 'colmena' }, ...(groupId ? [{ nivel: 'local', ambitoGroupId: groupId }] : [])] },
+        where: {
+          estado: { in: [...CAMBIO_ABIERTO] },
+          OR: [{ nivel: 'colmena' }, ...(groupId ? [{ nivel: 'local', ambitoGroupId: groupId }] : [])],
+        },
         select: {
           id: true, key: true, nivel: true, valorAnterior: true, valorPropuesto: true, estado: true,
           proposalId: true, createdAt: true, resueltoAt: true,
         },
       }),
+      this.prisma.$queryRaw<CambioFila[]>(Prisma.sql`
+        SELECT id, key, nivel, "valorAnterior", "valorPropuesto", estado::text AS estado,
+               "proposalId", "createdAt", "resueltoAt"
+        FROM (
+          SELECT c.*, ROW_NUMBER() OVER (PARTITION BY c.key, c.nivel
+                                         ORDER BY COALESCE(c."resueltoAt", c."createdAt") DESC, c."createdAt" DESC) AS n
+          FROM cambios_regla c
+          WHERE c.estado NOT IN ('en_votacion', 'pendiente_mesa')
+            AND (c.nivel = 'colmena' OR (c.nivel = 'local' AND c."ambitoGroupId" = ${groupId}::uuid))
+        ) r
+        WHERE r.n <= ${HISTORIAL_MAX}`),
       profileId ? this.prisma.group.findUnique({ where: { slug: GENERAL_GROUP_SLUG }, select: { id: true } }) : null,
       profileId && groupId ? this.prisma.group.findUnique({ where: { id: groupId }, select: { type: true, slug: true } }) : null,
     ]);
-    const cambios: CambioFila[] = cambiosRaw;
+    const cambios: CambioFila[] = [...abiertos, ...resueltos];
 
     // Dónde puede proponer quien consulta: miembro actual del nivel general (colmena) y del ámbito (locales).
     let puedeColmena = false;
