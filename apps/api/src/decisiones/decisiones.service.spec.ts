@@ -5,6 +5,7 @@ import { Prisma } from '@prisma/client';
 import { validate } from 'class-validator';
 import { plainToInstance } from 'class-transformer';
 import { DecisionesService } from './decisiones.service';
+import { GroupAccessService } from '../groups/group-access.service';
 import { CreateSolucionDto } from './dto/create-solucion.dto';
 import { MergeSolucionDto } from './dto/merge-solucion.dto';
 import { ProposeModoDto } from './dto/propose-modo.dto';
@@ -18,7 +19,11 @@ const T = 't1';
 function buildPrisma() {
   return {
     proposal: { findUnique: vi.fn(), findMany: vi.fn().mockResolvedValue([]) },
-    groupMembership: { findUnique: vi.fn(), findMany: vi.fn().mockResolvedValue([]), count: vi.fn().mockResolvedValue(0) },
+    groupMembership: {
+      findUnique: vi.fn(), findMany: vi.fn().mockResolvedValue([]), count: vi.fn().mockResolvedValue(0),
+      groupBy: vi.fn().mockResolvedValue([]),
+    },
+    group: { findUnique: vi.fn().mockResolvedValue(null), findMany: vi.fn().mockResolvedValue([]) },
     $transaction: vi.fn(),
     $queryRaw: vi.fn().mockResolvedValue([]),
     solucion: { create: vi.fn(), findMany: vi.fn().mockResolvedValue([]), findUnique: vi.fn(), updateMany: vi.fn() },
@@ -36,6 +41,7 @@ function buildPrisma() {
     fraseVoto: { findMany: vi.fn().mockResolvedValue([]) },
     profile: { findUnique: vi.fn() },
     moderationAction: { findMany: vi.fn().mockResolvedValue([]) },
+    inquietud: { findMany: vi.fn().mockResolvedValue([]) },
   };
 }
 
@@ -74,7 +80,7 @@ describe('DecisionesService', () => {
     prisma.profile.findUnique.mockResolvedValue({ userId: 'u1' });
     prisma.decision.findUnique.mockResolvedValue(null);
     prisma.$transaction.mockImplementation((fn: (tx: unknown) => unknown) => fn(prisma));
-    service = new DecisionesService(prisma as never, audit as never, forums as never, rules as never);
+    service = new DecisionesService(prisma as never, audit as never, forums as never, rules as never, new GroupAccessService(prisma as never));
   });
 
   describe('DTOs', () => {
@@ -298,6 +304,17 @@ describe('DecisionesService', () => {
       expect(r.soluciones[2]!.mergedIntoTitle).toBe('Solución oculta por moderación');
       expect(r.soluciones[0]).toMatchObject({ isAuthor: true, mergedIntoTitle: null, hidden: false });
       expect(JSON.stringify(r)).not.toContain('secreto');
+    });
+    it('llevadas: las soluciones del tema que ya se llevaron a la comunidad, en una consulta', async () => {
+      let r = await service.getTema(YO, T);
+      expect(r.llevadas).toEqual([]);
+      prisma.inquietud.findMany.mockResolvedValue([{ origenSolucionId: 's1' }]);
+      r = await service.getTema(YO, T);
+      expect(r.llevadas).toEqual(['s1']);
+      expect(prisma.inquietud.findMany).toHaveBeenLastCalledWith({
+        where: { origenSolucionId: { in: ['s1', 's2', 's3'] } },
+        select: { origenSolucionId: true },
+      });
     });
     it('quien organiza ve el texto de las ocultas', async () => {
       forums.canOrganize.mockResolvedValue(true);
@@ -1138,6 +1155,65 @@ describe('DecisionesService', () => {
     });
   });
 
+  describe('grupo de trabajo (G es subgrupo de g-ambito)', () => {
+    /** YO es miembro solo de los grupos de `de`. */
+    function miembroDe(de: string[]): void {
+      prisma.groupMembership.findUnique.mockImplementation(({ where }: { where: { groupId_profileId: { groupId: string } } }) =>
+        Promise.resolve(de.includes(where.groupId_profileId.groupId) ? { id: 'm' } : null),
+      );
+      prisma.group.findUnique.mockImplementation(({ where }: { where: { id: string } }) =>
+        Promise.resolve(where.id === G ? { type: 'trabajo', parentGroupId: 'g-ambito' } : { type: 'territorial_residence', parentGroupId: null }),
+      );
+    }
+    const NO_PARTICIPA = 'Solo los miembros de este grupo pueden participar.';
+
+    it('un miembro del ámbito lee el tema con las banderas de participación en false', async () => {
+      miembroDe(['g-ambito']);
+      forums.canOrganize.mockResolvedValue(true);
+      prisma.solucion.findMany.mockResolvedValue([sol('s1', { authorProfileId: YO })]);
+      prisma.decision.findUnique.mockResolvedValue({
+        id: 'd1', proposalId: T, fase: 'votacion', modo: 'excluyentes', modoPropuesto: 'excluyentes',
+        objecionEndsAt: null, votacionEndsAt: new Date('2099-01-01T00:00:00Z'), candidatas: ['s1'],
+        resultado: null, ganadoras: [], aprobaciones: [], papeletasTotal: null, abstenciones: null, miembros: null,
+      });
+      prisma.decisionPapeleta.findUnique.mockResolvedValue({ abstencion: false, orden: ['s1'] });
+      const r = await service.getTema(YO, T);
+      expect(r.soloLectura).toBe(true);
+      expect(r.puedeProponer).toBe(false);
+      expect(r.canOrganize).toBe(false);
+      expect(r.soluciones[0]!.isAuthor).toBe(false);
+      expect(r.decision).toMatchObject({ miPapeleta: null, puedoObjetar: false, yoObjete: false });
+    });
+
+    it('un miembro del subgrupo recibe soloLectura en false', async () => {
+      miembroDe([G, 'g-ambito']);
+      const r = await service.getTema(YO, T);
+      expect(r.soloLectura).toBe(false);
+      expect(r.puedeProponer).toBe(true);
+    });
+
+    it('un miembro del ámbito no propone, no junta, no propone el modo, no objeta ni vota (403)', async () => {
+      miembroDe(['g-ambito']);
+      await expect(
+        service.createSolucion(YO, T, { title: 'Huerto comunitario', description: 'Una descripción suficiente' }, 'ip'),
+      ).rejects.toThrow(NO_PARTICIPA);
+      await expect(service.setObjecion(YO, T, true)).rejects.toThrow(NO_PARTICIPA);
+      await expect(service.castPapeleta(YO, T, { abstencion: true, orden: [] })).rejects.toThrow(NO_PARTICIPA);
+      forums.canOrganize.mockResolvedValue(true);
+      await expect(service.proposeModo(YO, T, 'excluyentes', 'ip')).rejects.toThrow(NO_PARTICIPA);
+      prisma.solucion.findUnique.mockResolvedValue(sol('s1'));
+      await expect(service.mergeSolucion(YO, 's1', 's2', 'ip')).rejects.toThrow(NO_PARTICIPA);
+      expect(prisma.solucion.create).not.toHaveBeenCalled();
+      expect(prisma.objecionModo.upsert).not.toHaveBeenCalled();
+      expect(prisma.decisionPapeleta.upsert).not.toHaveBeenCalled();
+    });
+
+    it('quien no es del ámbito no lee el tema', async () => {
+      miembroDe(['g-otra']);
+      await expect(service.getTema(YO, T)).rejects.toThrow('Solo los miembros de esta comunidad pueden ver esto.');
+    });
+  });
+
   describe('getResumen()', () => {
     const ORIGEN = { id: 'g-origen', name: 'Matagalpa', type: 'territorial_origin', slug: 'matagalpa' };
     const ACOGIDA = { id: 'g-acogida', name: 'Costa Rica', type: 'territorial_residence', slug: 'country-cr' };
@@ -1166,6 +1242,39 @@ describe('DecisionesService', () => {
         ['g-origen', 'origen'], ['g-acogida', 'acogida'], ['g-general', 'general'], ['g-otra', 'general'],
       ]);
       expect(r.comunidades[0]?.name).toBe('Matagalpa');
+      expect(r.comunidades.every((c) => Array.isArray(c.grupos))).toBe(true);
+    });
+
+    it('incluye los grupos de trabajo de cada ámbito y no los trata como comunidades', async () => {
+      const SUB = {
+        id: 'g-sub', name: 'Agua potable', type: 'trabajo', slug: 'trabajo-g-sub', parentGroupId: ORIGEN.id,
+        trabajoTipo: 'subgrupo', trabajoEstado: 'convocando', proposito: 'Agua para el barrio norte.',
+        convocatoriaEndsAt: new Date('2026-11-20T00:00:00Z'), pocosMiembrosDesde: null,
+      };
+      const OTRO_SUB = { ...SUB, id: 'g-sub2', name: 'Caminos', parentGroupId: ACOGIDA.id, trabajoEstado: 'activo', convocatoriaEndsAt: null };
+      miembroDe(ORIGEN, ACOGIDA, SUB as never);
+      prisma.group.findMany.mockResolvedValue([SUB, OTRO_SUB]);
+      prisma.groupMembership.groupBy.mockResolvedValue([
+        { groupId: 'g-sub', _count: { _all: 2 } },
+        { groupId: 'g-sub2', _count: { _all: 6 } },
+      ]);
+      rules.getInt.mockResolvedValue(5);
+      const r = await service.getResumen(YO);
+      expect(r.comunidades.map((c) => c.groupId)).toEqual(['g-origen', 'g-acogida']);
+      const where = prisma.group.findMany.mock.calls[0]?.[0]?.where;
+      expect(where).toEqual({ type: 'trabajo', parentGroupId: { in: ['g-origen', 'g-acogida'] }, trabajoEstado: { not: 'archivado' } });
+      expect(prisma.group.findMany).toHaveBeenCalledTimes(1);
+      expect(prisma.groupMembership.groupBy).toHaveBeenCalledTimes(1);
+      expect(prisma.proposal.findMany.mock.calls[0]?.[0]?.where.groupId).toEqual({ in: ['g-origen', 'g-acogida'] });
+      expect(r.comunidades[0]!.grupos).toEqual([
+        {
+          id: 'g-sub', name: 'Agua potable', proposito: 'Agua para el barrio norte.', tipo: 'subgrupo', estado: 'convocando',
+          miembros: 2, faltan: 3, convocatoriaEndsAt: '2026-11-20T00:00:00.000Z', soyMiembro: true,
+        },
+      ]);
+      expect(r.comunidades[1]!.grupos).toEqual([
+        expect.objectContaining({ id: 'g-sub2', estado: 'activo', miembros: 6, faltan: null, soyMiembro: false }),
+      ]);
     });
 
     it('solo consulta las comunidades de quien pregunta y excluye los temas ocultos', async () => {

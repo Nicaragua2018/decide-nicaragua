@@ -77,6 +77,9 @@ function buildPrismaMock() {
     electionResult: {
       create: vi.fn(),
     },
+    group: {
+      findUnique: vi.fn(),
+    },
     groupMembership: {
       findUnique: vi.fn(),
     },
@@ -124,6 +127,16 @@ describe('VotingService', () => {
       endsAt: farFutureDate.toISOString(),
       candidates: [{ title: 'Opción A' }, { title: 'Opción B' }],
     };
+
+    it('no se crean elecciones dentro de un grupo de trabajo (400)', async () => {
+      prisma.groupMembership.findUnique.mockResolvedValue(mockMembership);
+      prisma.group.findUnique.mockResolvedValue({ type: 'trabajo' });
+
+      await expect(service.createElection(GROUP_ID, dto, PROFILE_ID, IP)).rejects.toThrow(
+        'Los grupos de trabajo deciden con soluciones y votación; lo demás se lleva a la comunidad.',
+      );
+      expect(prisma.election.create).not.toHaveBeenCalled();
+    });
 
     it('crea una elección cuando el usuario es miembro', async () => {
       prisma.groupMembership.findUnique.mockResolvedValue(mockMembership);

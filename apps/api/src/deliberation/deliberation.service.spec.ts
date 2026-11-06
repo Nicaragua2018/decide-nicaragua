@@ -14,6 +14,7 @@ import {
   NotFoundException,
   ForbiddenException,
   BadRequestException,
+  ConflictException,
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { ProposalStatus, SignalType } from '@decide/shared';
@@ -21,6 +22,7 @@ import { ProposalStatus, SignalType } from '@decide/shared';
 import { DeliberationService } from './deliberation.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
+import { GroupAccessService } from '../groups/group-access.service';
 
 // ─── Fixtures ────────────────────────────────────────────────────────────────
 
@@ -115,6 +117,7 @@ describe('DeliberationService', () => {
     service = new DeliberationService(
       prisma as unknown as PrismaService,
       audit as unknown as AuditService,
+      new GroupAccessService(prisma as unknown as PrismaService),
     );
   });
 
@@ -523,6 +526,122 @@ describe('DeliberationService', () => {
       await expect(
         service.setSignal(PROPOSAL_ID, { signal: SignalType.object }, PROFILE_ID, IP),
       ).rejects.toThrow(NotFoundException);
+    });
+  });
+
+  // ─── Grupos de trabajo ────────────────────────────────────────────────────
+
+  describe('grupo de trabajo (GROUP_ID es subgrupo de g-ambito)', () => {
+    const NO_PARTICIPA = 'Solo los miembros de este grupo pueden participar.';
+    /** PROFILE_ID es miembro solo de los grupos de `de`. */
+    function miembroDe(de: string[], trabajoEstado = 'activo'): void {
+      prisma.groupMembership.findUnique.mockImplementation(({ where }: { where: { groupId_profileId: { groupId: string } } }) =>
+        Promise.resolve(de.includes(where.groupId_profileId.groupId) ? mockMembership : null),
+      );
+      prisma.group.findUnique.mockImplementation(({ where }: { where: { id: string } }) =>
+        Promise.resolve(
+          where.id === GROUP_ID
+            ? { type: 'trabajo', parentGroupId: 'g-ambito', trabajoEstado }
+            : { type: 'territorial_residence', parentGroupId: null, trabajoEstado: null },
+        ),
+      );
+    }
+    const detalle = {
+      ...mockProposal,
+      hidden: false,
+      author: { displayName: 'Usuario Test' },
+      signals: [{ signal: 'support', profileId: PROFILE_ID }],
+      comments: [],
+      _count: { comments: 0 },
+      inquietudes: [],
+    };
+
+    it('un miembro del ámbito lee la lista y el tema, como solo lectura', async () => {
+      miembroDe(['g-ambito']);
+      prisma.proposal.findMany.mockResolvedValue([]);
+      await expect(service.listGroupProposals(GROUP_ID, PROFILE_ID)).resolves.toEqual({ proposals: [] });
+      prisma.proposal.findUnique.mockResolvedValue(detalle);
+      const r = await service.getProposalById(PROPOSAL_ID, PROFILE_ID);
+      expect(r.soloLectura).toBe(true);
+      expect(r.isAuthor).toBe(false);
+      expect(r.userSignal).toBeNull();
+    });
+
+    it('quien lee no recibe datos de apelación de sus comentarios ni de su tema ocultos', async () => {
+      miembroDe(['g-ambito']);
+      prisma.moderationAction.findFirst.mockResolvedValue({ id: 'ma1', causa: null, reason: 'x', status: 'oculto' });
+      prisma.proposal.findUnique.mockResolvedValue({
+        ...detalle,
+        comments: [
+          { id: COMMENT_ID, authorProfileId: PROFILE_ID, author: { displayName: 'Yo' }, body: 'texto', parentId: null, createdAt: new Date(), hidden: true },
+        ],
+      });
+      let r = await service.getProposalById(PROPOSAL_ID, PROFILE_ID);
+      expect(r.comments[0]!.moderationId).toBeNull();
+      prisma.proposal.findUnique.mockResolvedValue({ ...detalle, hidden: true });
+      r = await service.getProposalById(PROPOSAL_ID, PROFILE_ID);
+      expect(r.moderationId).toBeNull();
+    });
+
+    it('un miembro del subgrupo no es solo lectura', async () => {
+      miembroDe([GROUP_ID]);
+      prisma.proposal.findUnique.mockResolvedValue(detalle);
+      const r = await service.getProposalById(PROPOSAL_ID, PROFILE_ID);
+      expect(r.soloLectura).toBe(false);
+      expect(r.isAuthor).toBe(true);
+      expect(r.userSignal).toBe('support');
+    });
+
+    it('un miembro del ámbito no abre temas, no comenta, no señala ni cambia el estado (403)', async () => {
+      miembroDe(['g-ambito']);
+      await expect(
+        service.createProposal(GROUP_ID, { title: 'Propuesta de prueba suficientemente larga', body: 'Cuerpo suficiente' }, PROFILE_ID, IP),
+      ).rejects.toThrow(NO_PARTICIPA);
+      prisma.proposal.findUnique.mockResolvedValue({ ...mockProposal, hidden: false });
+      await expect(service.addComment(PROPOSAL_ID, { body: 'Un comentario' }, PROFILE_ID, IP)).rejects.toThrow(NO_PARTICIPA);
+      await expect(service.setSignal(PROPOSAL_ID, { signal: SignalType.support }, PROFILE_ID, IP)).rejects.toThrow(NO_PARTICIPA);
+      await expect(
+        service.updateProposalStatus(PROPOSAL_ID, { status: ProposalStatus.archived }, PROFILE_ID, IP),
+      ).rejects.toThrow(NO_PARTICIPA);
+      expect(prisma.proposal.create).not.toHaveBeenCalled();
+      expect(prisma.proposalComment.create).not.toHaveBeenCalled();
+      expect(prisma.consensusSignal.upsert).not.toHaveBeenCalled();
+    });
+
+    it('un miembro del subgrupo no escribe si el grupo está convocando o archivado (409)', async () => {
+      for (const estado of ['convocando', 'archivado']) {
+        miembroDe([GROUP_ID], estado);
+        await expect(
+          service.createProposal(GROUP_ID, { title: 'Propuesta de prueba suficientemente larga', body: 'Cuerpo suficiente' }, PROFILE_ID, IP),
+        ).rejects.toThrow(ConflictException);
+        prisma.proposal.findUnique.mockResolvedValue({ ...mockProposal, hidden: false });
+        await expect(service.addComment(PROPOSAL_ID, { body: 'Un comentario' }, PROFILE_ID, IP)).rejects.toThrow(
+          'Este grupo de trabajo no está activo.',
+        );
+        await expect(service.setSignal(PROPOSAL_ID, { signal: SignalType.support }, PROFILE_ID, IP)).rejects.toThrow(
+          ConflictException,
+        );
+      }
+      expect(prisma.proposal.create).not.toHaveBeenCalled();
+      expect(prisma.proposalComment.create).not.toHaveBeenCalled();
+      expect(prisma.consensusSignal.upsert).not.toHaveBeenCalled();
+    });
+
+    it('un miembro del subgrupo activo sí abre temas', async () => {
+      miembroDe([GROUP_ID], 'activo');
+      prisma.forum.findFirst.mockResolvedValue({ id: 'forum-uuid-1', groupId: GROUP_ID });
+      prisma.proposal.create.mockResolvedValue({ id: PROPOSAL_ID });
+      await expect(
+        service.createProposal(GROUP_ID, { title: 'Propuesta de prueba suficientemente larga', body: 'Cuerpo suficiente' }, PROFILE_ID, IP),
+      ).resolves.toBeDefined();
+      expect(prisma.proposal.create).toHaveBeenCalled();
+    });
+
+    it('quien no es del ámbito no lee ni por id directo', async () => {
+      miembroDe(['g-otra']);
+      await expect(service.listGroupProposals(GROUP_ID, PROFILE_ID)).rejects.toThrow('Solo los miembros de esta comunidad pueden ver esto.');
+      prisma.proposal.findUnique.mockResolvedValue(detalle);
+      await expect(service.getProposalById(PROPOSAL_ID, PROFILE_ID)).rejects.toThrow(ForbiddenException);
     });
   });
 

@@ -30,6 +30,8 @@ export const RULE_DEFINITIONS: readonly RuleDefinition[] = [
   int('inquietud.apoyo_minimo_personas', 'local', 'Apoyo mínimo para que una inquietud pida respuesta (personas)', 3, 2, 50, 'personas'),
   int('inquietud.apoyo_minimo_porcentaje', 'local', 'Apoyo mínimo para que una inquietud pida respuesta (% del grupo)', 10, 1, 50, 'porcentaje'),
   int('inquietud.plazo_respuesta_dias', 'local', 'Plazo para responder una inquietud (días)', 7, 1, 30, 'dias'),
+  int('subgrupo.minimo_personas', 'local', 'Personas mínimas para activar un subgrupo (personas)', 5, 3, 50, 'personas'),
+  int('subgrupo.plazo_dias', 'local', 'Plazo de convocatoria de un subgrupo (días)', 14, 7, 60, 'dias'),
   int('debate.plazo_dias', 'local', 'Duración del debate (días)', 7, 3, 60, 'dias'),
   int('debate.plazo_objecion_modo_dias', 'local', 'Plazo para objetar el modo de decisión (días)', 3, 1, 14, 'dias'),
   int('debate.fraccion_objecion_modo', 'local', 'Objeciones necesarias para cambiar el modo de decisión (%)', 33, 10, 50, 'porcentaje'),

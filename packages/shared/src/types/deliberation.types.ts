@@ -63,6 +63,8 @@ export interface ProposalDetail extends ProposalSummary {
   canModerate: boolean;
   abiertoPorComunidad: boolean;
   inquietudes: { id: string; title: string }[];
+  /** Quien lee desde el ámbito de un grupo de trabajo sin ser miembro: no participa. */
+  soloLectura: boolean;
 }
 
 export interface ProposalListResponse {

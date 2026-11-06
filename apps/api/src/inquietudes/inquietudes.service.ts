@@ -9,6 +9,7 @@ import {
 import { Prisma } from '@prisma/client';
 import type { InquietudDetail, InquietudStatusValue, InquietudSummary } from '@decide/shared';
 import { PrismaService } from '../prisma/prisma.service';
+import { rechazarGrupoDeTrabajo } from '../groups/group-access.service';
 import { AuditService } from '../audit/audit.service';
 import { RulesService } from '../rules/rules.service';
 import { ForumsService } from '../forums/forums.service';
@@ -109,6 +110,7 @@ export class InquietudesService {
     ip: string,
   ): Promise<{ id: string }> {
     await this.requireMembership(dto.groupId, profileId);
+    await rechazarGrupoDeTrabajo(this.prisma, dto.groupId);
     const created = await this.prisma.inquietud.create({
       data: { groupId: dto.groupId, authorProfileId: profileId, title: dto.title, body: dto.body },
     });

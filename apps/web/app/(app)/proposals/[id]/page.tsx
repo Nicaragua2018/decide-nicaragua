@@ -8,8 +8,9 @@ import { AppealForm } from './AppealForm';
 import { FrasesSection } from './FrasesSection';
 import { SolucionesSection } from './SolucionesSection';
 import { updateProposalStatusDirect } from '@/lib/actions';
+import { EntrarSalir } from '../../grupos/[id]/EntrarSalir';
 import { ProposalStatus } from '@decide/shared';
-import type { DecisionTemaResponse, ProposalDetail, SignalCounts } from '@decide/shared';
+import type { DecisionTemaResponse, GrupoTrabajoDetail, ProposalDetail, SignalCounts } from '@decide/shared';
 
 const STATUS_LABEL: Record<ProposalStatus, string> = {
   [ProposalStatus.draft]:    'Borrador',
@@ -95,6 +96,23 @@ export default async function ProposalPage({
     }
   }
 
+  // Quien lee desde un grupo de trabajo sin ser miembro no participa.
+  const soloLectura = proposal.soloLectura || decisionTema?.soloLectura === true;
+
+  // Solo un grupo de trabajo responde a /api/grupos/:id; para cualquier otro tema se ignora.
+  const aprobada = decisionTema?.decision?.fase === 'contada' && decisionTema.decision.resultado?.resultado === 'aprobada';
+  let grupo: GrupoTrabajoDetail | null = null;
+  if (soloLectura || aprobada) {
+    try {
+      const gres = await serverFetch(`/api/grupos/${proposal.groupId}`);
+      if (gres.ok) grupo = (await gres.json()) as GrupoTrabajoDetail;
+    } catch {
+      grupo = null;
+    }
+  }
+  // Solo un subgrupo activo lleva propuestas a la comunidad.
+  const llevarGrupoId = aprobada && grupo?.soyMiembro && grupo.estado === 'activo' ? grupo.id : null;
+
   return (
     <>
       {/* Cabecera */}
@@ -121,6 +139,17 @@ export default async function ProposalPage({
           {' · '}{proposal.commentCount} comentario{proposal.commentCount !== 1 ? 's' : ''}
         </p>
       </div>
+
+      {soloLectura && (
+        <div className="alert alert-warning mb-4">
+          <p>Puedes leer todo; para participar, únete al grupo</p>
+          {grupo?.puedoEntrar && (
+            <div className="mt-2">
+              <EntrarSalir grupoId={grupo.id} accion="entrar" />
+            </div>
+          )}
+        </div>
+      )}
 
       {proposal.abiertoPorComunidad && (
         <p className="mb-4">
@@ -174,7 +203,7 @@ export default async function ProposalPage({
         <p className="card-title mb-3">Señales de consenso</p>
         <ConsensusBar counts={proposal.signalCounts} />
         <div className="mt-4" style={{ borderTop: '1px solid var(--border)', paddingTop: '1rem' }}>
-          {!proposal.hidden && (
+          {!proposal.hidden && !soloLectura && (
             <>
               <p className="text-sm font-medium mb-2">Tu posición:</p>
               <SignalForm
@@ -187,10 +216,14 @@ export default async function ProposalPage({
         </div>
       </div>
 
-      <TopicActions proposal={proposal} decisionFase={decisionTema?.decision?.fase ?? null} />
+      <TopicActions
+        proposal={soloLectura ? { ...proposal, isAuthor: false } : proposal}
+        decisionFase={decisionTema?.decision?.fase ?? null}
+        soloModeracion={soloLectura}
+      />
 
       {/* Gestión del autor — solo visible si el usuario es el autor */}
-      {proposal.isAuthor && nextStatuses.length > 0 && (
+      {proposal.isAuthor && !soloLectura && nextStatuses.length > 0 && (
         <div className="card mb-4">
           <p className="card-title">Gestionar propuesta</p>
           <p className="text-sm text-muted mt-1 mb-3">
@@ -219,17 +252,22 @@ export default async function ProposalPage({
         <CommentsSection
           proposalId={id}
           comments={proposal.comments}
-          isOpen={isOpen}
+          isOpen={isOpen && !soloLectura}
           canModerate={proposal.canModerate}
         />
       </div>
 
       {!proposal.hidden && decisionTema && (
-        <SolucionesSection proposalId={id} data={decisionTema} />
+        <SolucionesSection
+          proposalId={id}
+          data={decisionTema}
+          llevarGrupoId={llevarGrupoId}
+          canModerate={proposal.canModerate}
+        />
       )}
 
       {!proposal.hidden && (
-        <FrasesSection proposalId={id} isOpen={isOpen} canModerate={proposal.canModerate} />
+        <FrasesSection proposalId={id} isOpen={isOpen && !soloLectura} canModerate={proposal.canModerate} />
       )}
     </>
   );

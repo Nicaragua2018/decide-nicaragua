@@ -5,6 +5,7 @@ import { BadRequestException, ConflictException, ForbiddenException, NotFoundExc
 import { validate } from 'class-validator';
 import { plainToInstance } from 'class-transformer';
 import { ForumsService, LINKED_TOPIC_REASON } from './forums.service';
+import { GroupAccessService } from '../groups/group-access.service';
 import { ForumsController } from './forums.controller';
 import { ModerateDto } from './dto/moderate.dto';
 import { ConfirmarModeracionDto } from './dto/confirmar-moderacion.dto';
@@ -47,7 +48,7 @@ describe('ForumsService', () => {
     audit = { log: vi.fn().mockResolvedValue(undefined) };
     board = { roleOf: vi.fn().mockResolvedValue(null) };
     rules = { getInt: vi.fn().mockResolvedValue(7) };
-    service = new ForumsService(prisma as never, audit as never, board as never, rules as never);
+    service = new ForumsService(prisma as never, audit as never, board as never, rules as never, new GroupAccessService(prisma as never));
     prisma.solucion.count.mockResolvedValue(1);
     prisma.proposal.updateMany.mockResolvedValue({ count: 1 });
     prisma.decision.updateMany.mockResolvedValue({ count: 0 });
@@ -78,7 +79,7 @@ describe('ForumsService', () => {
       const r = await service.publicConsensus();
       expect(prisma.proposal.findMany).toHaveBeenCalledWith(
         expect.objectContaining({
-          where: { status: 'closed', hidden: false, conclusion: { not: null } },
+          where: { status: 'closed', hidden: false, conclusion: { not: null }, group: { type: { not: 'trabajo' } } },
         }),
       );
       expect(r).toEqual([
@@ -90,6 +91,13 @@ describe('ForumsService', () => {
         },
       ]);
       expect(JSON.stringify(r)).not.toMatch(/author|displayName|email/);
+    });
+
+    it('excluye los temas de los grupos de trabajo: lo suyo llega a la comunidad al llevarlo', async () => {
+      prisma.proposal.findMany.mockResolvedValue([]);
+      await service.publicConsensus();
+      const where = (prisma.proposal.findMany.mock.calls[0]![0] as { where: Record<string, unknown> }).where;
+      expect(where.group).toEqual({ type: { not: 'trabajo' } });
     });
 
     it('si hubo votación contada, incluye la opción ganadora', async () => {
@@ -142,6 +150,70 @@ describe('ForumsService', () => {
       prisma.forum.findMany.mockResolvedValue([]);
       await expect(service.listMine(YO)).resolves.toEqual([]);
       expect(prisma.forum.findFirst).toHaveBeenCalledTimes(2);
+    });
+  });
+
+  describe('grupos de trabajo', () => {
+    /** YO es miembro solo de los grupos de `de`; g-sub es un grupo de trabajo de g-ambito. */
+    function miembroDe(de: string[]): void {
+      prisma.groupMembership.findUnique.mockImplementation(({ where }: { where: { groupId_profileId: { groupId: string } } }) =>
+        Promise.resolve(de.includes(where.groupId_profileId.groupId) ? { id: 'm' } : null),
+      );
+      prisma.group.findUnique.mockImplementation(({ where }: { where: { id: string } }) =>
+        Promise.resolve(where.id === 'g-sub' ? { type: 'trabajo', parentGroupId: 'g-ambito' } : { type: 'territorial_residence', parentGroupId: null }),
+      );
+    }
+    beforeEach(() => {
+      prisma.forum.findUnique.mockResolvedValue({
+        id: 'f-sub', groupId: 'g-sub', title: 'Foro del subgrupo', description: null, isDefault: true,
+        group: { name: 'Subgrupo' }, _count: { proposals: 0 },
+      });
+      prisma.proposal.findMany.mockResolvedValue([]);
+    });
+
+    it('listMine no muestra los foros de los grupos de trabajo', async () => {
+      prisma.groupMembership.findMany.mockResolvedValue([]);
+      await service.listMine(YO);
+      expect(prisma.groupMembership.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({ where: { profileId: YO, group: { type: { not: 'trabajo' } } } }),
+      );
+    });
+
+    it('un miembro del ámbito lee el foro del subgrupo', async () => {
+      miembroDe(['g-ambito']);
+      await expect(service.getForum(YO, 'f-sub')).resolves.toMatchObject({ id: 'f-sub', groupId: 'g-sub', soloLectura: true });
+    });
+
+    it('un miembro del subgrupo no es solo lectura', async () => {
+      miembroDe(['g-sub', 'g-ambito']);
+      await expect(service.getForum(YO, 'f-sub')).resolves.toMatchObject({ soloLectura: false });
+    });
+
+    it('el autor apela aunque el subgrupo esté archivado (apelar no es participar)', async () => {
+      miembroDe(['g-sub', 'g-ambito']);
+      prisma.group.findUnique.mockResolvedValue({ type: 'trabajo', parentGroupId: 'g-ambito', trabajoEstado: 'archivado' });
+      prisma.moderationAction.findUnique.mockResolvedValue({ id: 'ma1', target: 'respuesta', targetId: 'c1', reason: 'x', status: 'oculto' });
+      prisma.proposalComment.findUnique.mockResolvedValue({ authorProfileId: YO, proposal: { groupId: 'g-sub' } });
+      prisma.moderationAction.update.mockResolvedValue({});
+      await service.appeal(YO, 'ma1', 'No fue mi intención ofender', 'ip');
+      expect(prisma.moderationAction.update).toHaveBeenCalledWith(
+        expect.objectContaining({ data: expect.objectContaining({ status: 'apelado' }) }),
+      );
+    });
+
+    it('un miembro del ámbito no apela en el subgrupo (403)', async () => {
+      miembroDe(['g-ambito']);
+      prisma.moderationAction.findUnique.mockResolvedValue({ id: 'ma1', target: 'respuesta', targetId: 'c1', reason: 'x', status: 'oculto' });
+      prisma.proposalComment.findUnique.mockResolvedValue({ authorProfileId: YO, proposal: { groupId: 'g-sub' } });
+      await expect(service.appeal(YO, 'ma1', 'No fue mi intención ofender', 'ip')).rejects.toThrow(
+        'Solo los miembros de este grupo pueden participar.',
+      );
+      expect(prisma.moderationAction.update).not.toHaveBeenCalled();
+    });
+
+    it('quien no es del ámbito no lee el foro del subgrupo', async () => {
+      miembroDe(['g-otra']);
+      await expect(service.getForum(YO, 'f-sub')).rejects.toThrow('Solo los miembros de esta comunidad pueden ver esto.');
     });
   });
 

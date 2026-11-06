@@ -73,6 +73,23 @@ function Comunidad({ c }: { c: ComunidadDecisiones }) {
       <Bloque titulo="Aprobadas" items={c.aprobadas} />
       <Bloque titulo="Rechazadas o sin decisión" items={c.rechazadas} />
       <Bloque titulo="En curso" items={c.enCurso} />
+      <div className="card mt-4">
+        <p className="card-title">Grupos de trabajo</p>
+        {c.grupos.length === 0 ? (
+          <p className="card-meta">Todavía no hay grupos de trabajo aquí.</p>
+        ) : (
+          <ul>
+            {c.grupos.map((g) => (
+              <li key={g.id} className="mt-2">
+                <Link href={`/grupos/${g.id}`}>
+                  <span className="group-card-name">{g.name}</span>
+                </Link>
+                <p className="card-meta">{g.proposito}</p>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
     </section>
   );
 }

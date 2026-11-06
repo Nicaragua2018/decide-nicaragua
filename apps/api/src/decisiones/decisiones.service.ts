@@ -10,13 +10,16 @@ import type {
   DecisionResultadoView,
   DecisionTemaResponse,
   DecisionView,
+  GrupoTrabajoItem,
   PapeletaValue,
   SolucionItem,
 } from '@decide/shared';
+import { type GrupoFila, grupoTrabajoItem } from '../grupos/grupo-item';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { ForumsService } from '../forums/forums.service';
 import { RulesService } from '../rules/rules.service';
+import { GroupAccessService } from '../groups/group-access.service';
 import { tallyDecision } from './decision-tally';
 
 const OCULTA_TITULO = 'Solución oculta por moderación';
@@ -113,6 +116,8 @@ interface TemaRow {
   status: string;
   hidden: boolean;
   deliberationEndsAt: Date | null;
+  /** Es miembro del grupo; si es false, solo lee desde el ámbito de un grupo de trabajo. */
+  participa: boolean;
 }
 
 @Injectable()
@@ -124,33 +129,34 @@ export class DecisionesService {
     private readonly audit: AuditService,
     private readonly forums: ForumsService,
     private readonly rules: RulesService,
+    private readonly access: GroupAccessService,
   ) {}
-
-  private async requireMembership(groupId: string, profileId: string): Promise<void> {
-    const m = await this.prisma.groupMembership.findUnique({
-      where: { groupId_profileId: { groupId, profileId } },
-    });
-    if (!m) throw new ForbiddenException('Solo los miembros de esta comunidad pueden participar.');
-  }
 
   private async actorId(profileId: string): Promise<{ actorId: string } | Record<never, never>> {
     const p = await this.prisma.profile.findUnique({ where: { id: profileId }, select: { userId: true } });
     return p?.userId ? { actorId: p.userId } : {};
   }
 
-  /** El tema debe existir y la persona ser miembro de su grupo. */
-  private async tema(profileId: string, proposalId: string): Promise<TemaRow> {
+  /**
+   * El tema debe existir. Para `participar`, la persona debe ser miembro de su grupo; para
+   * `leer` basta con poder leerlo (miembro, o miembro del ámbito si es un grupo de trabajo).
+   */
+  private async tema(profileId: string, proposalId: string, modo: 'leer' | 'participar'): Promise<TemaRow> {
     const tema = await this.prisma.proposal.findUnique({
       where: { id: proposalId },
       select: { id: true, groupId: true, status: true, hidden: true, deliberationEndsAt: true },
     });
     if (!tema) throw new NotFoundException('Tema no encontrado.');
-    await this.requireMembership(tema.groupId, profileId);
-    return tema as TemaRow;
+    if (modo === 'participar') {
+      await this.access.requireParticipant(tema.groupId, profileId);
+      return { ...(tema as Omit<TemaRow, 'participa'>), participa: true };
+    }
+    const { participa } = await this.access.requireReader(tema.groupId, profileId);
+    return { ...(tema as Omit<TemaRow, 'participa'>), participa };
   }
 
   /** Fase de debate: tema abierto, no oculto y sin fila en `decisiones`. */
-  private async assertDebate(tema: TemaRow): Promise<void> {
+  private async assertDebate(tema: Omit<TemaRow, 'participa'>): Promise<void> {
     if (tema.hidden) throw new BadRequestException('Este tema está oculto por moderación.');
     if (tema.status !== 'open') throw new BadRequestException('Este tema ya no acepta soluciones.');
     if (debateVencido(tema.deliberationEndsAt, new Date())) throw new BadRequestException(FIJAS);
@@ -164,7 +170,7 @@ export class DecisionesService {
     dto: { title: string; description: string },
     ip: string,
   ): Promise<{ id: string }> {
-    const tema = await this.tema(profileId, proposalId);
+    const tema = await this.tema(profileId, proposalId, 'participar');
     await this.assertDebate(tema);
     const created = await this.prisma.$transaction(async (tx) => {
       await bloquearDebate(tx, proposalId);
@@ -195,11 +201,11 @@ export class DecisionesService {
       include: { proposal: { select: { id: true, groupId: true, status: true, hidden: true, deliberationEndsAt: true } } },
     });
     if (!origen) throw new NotFoundException('Solución no encontrada.');
-    const tema = origen.proposal as TemaRow;
+    const tema = origen.proposal as Omit<TemaRow, 'participa'>;
     if (!(await this.forums.canOrganize(profileId, tema.groupId))) {
       throw new ForbiddenException('Solo quien organiza la comunidad puede juntar soluciones.');
     }
-    await this.requireMembership(tema.groupId, profileId);
+    await this.access.requireParticipant(tema.groupId, profileId);
     const destino = await this.prisma.solucion.findUnique({ where: { id: intoId } });
     if (!destino) throw new NotFoundException('Solución no encontrada.');
     if (destino.proposalId !== origen.proposalId) {
@@ -244,9 +250,11 @@ export class DecisionesService {
   }
 
   async getTema(profileId: string, proposalId: string): Promise<DecisionTemaResponse> {
-    const tema = await this.tema(profileId, proposalId);
+    const tema = await this.tema(profileId, proposalId, 'leer');
     if (tema.hidden) throw new BadRequestException('Este tema está oculto por moderación.');
+    // `organiza` decide qué texto de las ocultas se ve (moderación); quien solo lee no organiza aquí.
     const organiza = await this.forums.canOrganize(profileId, tema.groupId);
+    const { participa } = tema;
     const [filas, decision] = await Promise.all([
       this.prisma.solucion.findMany({ where: { proposalId }, orderBy: { createdAt: 'asc' } }),
       this.prisma.decision.findUnique({ where: { proposalId } }),
@@ -256,6 +264,17 @@ export class DecisionesService {
     const textoDe = (s: (typeof filas)[number]): { title: string; description: string } =>
       s.hidden && !organiza ? { title: OCULTA_TITULO, description: '' } : { title: s.title, description: s.description };
     const porId = new Map(filas.map((s) => [s.id, s]));
+    // Soluciones de este tema que ya se llevaron a la comunidad (cada una a lo sumo una vez).
+    const llevadas = filas.length
+      ? (
+          await this.prisma.inquietud.findMany({
+            where: { origenSolucionId: { in: filas.map((s) => s.id) } },
+            select: { origenSolucionId: true },
+          })
+        )
+          .map((i) => i.origenSolucionId)
+          .filter((x): x is string => x !== null)
+      : [];
 
     const soluciones: SolucionItem[] = filas.map((s) => {
       const destino = s.mergedIntoId ? porId.get(s.mergedIntoId) : undefined;
@@ -265,7 +284,7 @@ export class DecisionesService {
         origen: s.origen as SolucionItem['origen'],
         hidden: s.hidden,
         mergedIntoTitle: destino ? textoDe(destino).title : null,
-        isAuthor: s.authorProfileId === profileId,
+        isAuthor: participa && s.authorProfileId === profileId,
         createdAt: s.createdAt.toISOString(),
       };
     });
@@ -292,14 +311,16 @@ export class DecisionesService {
 
       // Solo la papeleta y la objeción propias, leídas por su clave única: nunca las de otra persona.
       const clave = { decisionId_profileId: { decisionId: decision.id, profileId } };
+      // Quien solo lee no tiene papeleta ni objeción: ni se consultan.
       const [papeleta, objecion, fraccionObjecionPct] = await Promise.all([
-        fase === 'votacion' || fase === 'contada'
+        participa && (fase === 'votacion' || fase === 'contada')
           ? this.prisma.decisionPapeleta.findUnique({ where: clave, select: { abstencion: true, orden: true } })
           : null,
-        this.prisma.objecionModo.findUnique({ where: clave, select: { id: true } }),
+        participa ? this.prisma.objecionModo.findUnique({ where: clave, select: { id: true } }) : null,
         this.rules.getInt('debate.fraccion_objecion_modo', tema.groupId),
       ]);
       const puedoObjetar =
+        participa &&
         fase === 'objecion' &&
         decision.objecionEndsAt !== null &&
         Date.now() < decision.objecionEndsAt.getTime() &&
@@ -341,10 +362,13 @@ export class DecisionesService {
 
     return {
       debateEndsAt: tema.deliberationEndsAt ? tema.deliberationEndsAt.toISOString() : null,
-      puedeProponer: tema.status === 'open' && decision === null && !debateVencido(tema.deliberationEndsAt, new Date()),
-      canOrganize: organiza,
+      puedeProponer:
+        participa && tema.status === 'open' && decision === null && !debateVencido(tema.deliberationEndsAt, new Date()),
+      canOrganize: participa && organiza,
       soluciones,
       decision: vista,
+      soloLectura: !participa,
+      llevadas,
     };
   }
 
@@ -359,7 +383,7 @@ export class DecisionesService {
     if (!(await this.forums.canOrganize(profileId, tema.groupId))) {
       throw new ForbiddenException('Solo quien organiza la comunidad puede proponer el modo de decisión.');
     }
-    await this.requireMembership(tema.groupId, profileId);
+    await this.access.requireParticipant(tema.groupId, profileId);
     if (tema.hidden) throw new BadRequestException('Este tema está oculto por moderación.');
     const decision = await this.prisma.decision.findUnique({ where: { proposalId }, select: { id: true, fase: true } });
     const fueraDeFase = 'Esta decisión no está esperando que se proponga el modo.';
@@ -435,7 +459,7 @@ export class DecisionesService {
 
   /** Objetar o retirar la objeción al modo propuesto. No se audita (como los votos). */
   async setObjecion(profileId: string, proposalId: string, objeto: boolean): Promise<{ yoObjete: boolean }> {
-    const tema = await this.tema(profileId, proposalId);
+    const tema = await this.tema(profileId, proposalId, 'participar');
     if (tema.hidden) throw new BadRequestException('Este tema está oculto por moderación.');
     const decision = await this.prisma.decision.findUnique({
       where: { proposalId },
@@ -476,7 +500,7 @@ export class DecisionesService {
 
   /** Guarda o cambia la papeleta propia mientras la votación esté abierta. No se audita (como los votos). */
   async castPapeleta(profileId: string, proposalId: string, p: PapeletaValue): Promise<PapeletaValue> {
-    const tema = await this.tema(profileId, proposalId);
+    const tema = await this.tema(profileId, proposalId, 'participar');
     if (tema.hidden) throw new BadRequestException('Este tema está oculto por moderación.');
     const decision = await this.prisma.decision.findUnique({
       where: { proposalId },
@@ -817,10 +841,17 @@ export class DecisionesService {
       where: { profileId },
       select: { group: { select: { id: true, name: true, type: true, slug: true } } },
     });
+    // Los grupos de trabajo no son comunidades: van dentro de la lista `grupos` de su ámbito.
+    const soyDeTrabajo = new Set(
+      membresias.filter(({ group }) => (group.type as string) === 'trabajo').map(({ group }) => group.id),
+    );
     const grupos = membresias
+      .filter(({ group }) => (group.type as string) !== 'trabajo')
       .map(({ group }) => ({ ...group, ...tipoDeComunidad(group.type as string, group.slug) }))
       .sort((a, b) => a.rango - b.rango || a.name.localeCompare(b.name, 'es'));
     if (grupos.length === 0) return { comunidades: [] };
+
+    const trabajoPorAmbito = await this.gruposDeTrabajo(grupos.map((g) => g.id), soyDeTrabajo);
 
     const temas = await this.prisma.proposal.findMany({
       where: {
@@ -947,8 +978,44 @@ export class DecisionesService {
         aprobadas: recortar(l.aprobadas),
         rechazadas: recortar(l.rechazadas),
         enCurso: recortar(l.enCurso),
+        grupos: trabajoPorAmbito.get(g.id) ?? [],
       };
     });
     return { comunidades };
+  }
+
+  /**
+   * Grupos de trabajo no archivados de cada ámbito: una consulta para los grupos y otra (groupBy)
+   * para contar sus miembros. `soy` son los grupos de trabajo de quien pregunta.
+   */
+  private async gruposDeTrabajo(ambitoIds: string[], soy: Set<string>): Promise<Map<string, GrupoTrabajoItem[]>> {
+    const porAmbito = new Map<string, GrupoTrabajoItem[]>();
+    const filas = (await this.prisma.group.findMany({
+      where: { type: 'trabajo', parentGroupId: { in: ambitoIds }, trabajoEstado: { not: 'archivado' } },
+      select: {
+        id: true, name: true, type: true, parentGroupId: true, trabajoTipo: true, trabajoEstado: true,
+        proposito: true, convocatoriaEndsAt: true, pocosMiembrosDesde: true,
+      },
+      orderBy: { createdAt: 'asc' },
+    })) as GrupoFila[];
+    if (filas.length === 0) return porAmbito;
+
+    const conteos = await this.prisma.groupMembership.groupBy({
+      by: ['groupId'],
+      where: { groupId: { in: filas.map((f) => f.id) } },
+      _count: { _all: true },
+    });
+    const miembros = new Map(conteos.map((c) => [c.groupId, c._count._all]));
+    const minimos = new Map<string, number>();
+    for (const ambitoId of new Set(filas.map((f) => f.parentGroupId ?? ''))) {
+      minimos.set(ambitoId, await this.rules.getInt('subgrupo.minimo_personas', ambitoId));
+    }
+    for (const f of filas) {
+      const ambitoId = f.parentGroupId ?? '';
+      const lista = porAmbito.get(ambitoId) ?? [];
+      lista.push(grupoTrabajoItem(f, miembros.get(f.id) ?? 0, minimos.get(ambitoId) ?? 0, soy.has(f.id)));
+      porAmbito.set(ambitoId, lista);
+    }
+    return porAmbito;
   }
 }

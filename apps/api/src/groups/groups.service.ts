@@ -5,21 +5,26 @@ import { slugify } from '../common/utils/slugify.util';
 import { MIN_ACTIVE_MEMBERS, GENERAL_GROUP_NAME, GENERAL_GROUP_SLUG } from '@decide/shared';
 import type { GroupSummary, GroupDetail, GroupListResponse } from '@decide/shared';
 import { hostCommunity } from '../common/utils/host-community.util';
+import { GroupAccessService } from './group-access.service';
 
 @Injectable()
 export class GroupsService {
   private readonly logger = new Logger(GroupsService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly access: GroupAccessService,
+  ) {}
 
   // ─── Consultas ────────────────────────────────────────────────────────────
 
   /**
-   * Devuelve todos los grupos a los que pertenece un perfil.
+   * Devuelve las comunidades a las que pertenece un perfil (sin los grupos de trabajo).
    */
   async getMyGroups(profileId: string): Promise<GroupListResponse> {
+    // Los grupos de trabajo no son comunidades: se muestran dentro de su ámbito.
     const memberships = await this.prisma.groupMembership.findMany({
-      where: { profileId },
+      where: { profileId, group: { type: { not: GroupType.trabajo } } },
       include: { group: true },
       orderBy: { group: { name: 'asc' } },
     });
@@ -50,6 +55,8 @@ export class GroupsService {
     if (!group || !group.isActive) {
       throw new NotFoundException('Group not found');
     }
+    // Un grupo de trabajo solo lo ven sus miembros y los miembros de su ámbito.
+    if (group.type === GroupType.trabajo) await this.access.requireReader(groupId, profileId);
 
     const membership = await this.prisma.groupMembership.findUnique({
       where: {

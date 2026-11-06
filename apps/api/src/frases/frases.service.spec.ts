@@ -4,6 +4,7 @@ import { BadRequestException, ForbiddenException } from '@nestjs/common';
 import { validate } from 'class-validator';
 import { plainToInstance } from 'class-transformer';
 import { FrasesService } from './frases.service';
+import { GroupAccessService } from '../groups/group-access.service';
 import { CreateFraseDto } from './dto/create-frase.dto';
 import { VoteFraseDto } from './dto/vote-frase.dto';
 import type { OpinionResult } from './opinion-groups';
@@ -31,6 +32,7 @@ function buildPrisma() {
   return {
     proposal: { findUnique: vi.fn() },
     groupMembership: { findUnique: vi.fn() },
+    group: { findUnique: vi.fn().mockResolvedValue(null) },
     frase: { create: vi.fn(), findMany: vi.fn(), findUnique: vi.fn() },
     fraseVoto: { upsert: vi.fn(), findMany: vi.fn(), groupBy: vi.fn() },
     profile: { findUnique: vi.fn() },
@@ -56,7 +58,7 @@ describe('FrasesService', () => {
     prisma.proposal.findUnique.mockResolvedValue({ id: T, groupId: G, status: 'open', hidden: false });
     prisma.groupMembership.findUnique.mockResolvedValue({ id: 'm1' });
     prisma.profile.findUnique.mockResolvedValue({ userId: 'u1' });
-    service = new FrasesService(prisma as never, audit as never, rules as never);
+    service = new FrasesService(prisma as never, audit as never, rules as never, new GroupAccessService(prisma as never));
   });
 
   describe('DTOs', () => {
@@ -94,6 +96,82 @@ describe('FrasesService', () => {
       await expect(service.vote(YO, 'f1', 'paso')).rejects.toThrow('Solo los miembros de esta comunidad pueden participar.');
       expect(prisma.frase.create).not.toHaveBeenCalled();
       expect(prisma.fraseVoto.upsert).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('grupo de trabajo (G es subgrupo de g-ambito)', () => {
+    /** YO es miembro solo de los grupos de `de`. */
+    function miembroDe(de: string[]): void {
+      prisma.groupMembership.findUnique.mockImplementation(({ where }: { where: { groupId_profileId: { groupId: string } } }) =>
+        Promise.resolve(de.includes(where.groupId_profileId.groupId) ? { id: 'm' } : null),
+      );
+      prisma.group.findUnique.mockImplementation(({ where }: { where: { id: string } }) =>
+        Promise.resolve(where.id === G ? { type: 'trabajo', parentGroupId: 'g-ambito' } : { type: 'territorial_residence', parentGroupId: null }),
+      );
+    }
+    beforeEach(() => {
+      prisma.frase.findMany.mockResolvedValue([frase('f1'), frase('f2')]);
+      prisma.fraseVoto.findMany.mockResolvedValue([]);
+      prisma.fraseVoto.groupBy.mockResolvedValue([]);
+      prisma.moderationAction.findMany.mockResolvedValue([]);
+    });
+
+    it('un miembro del ámbito lee las frases sin resultados, sin frase para votar y con el análisis', async () => {
+      miembroDe(['g-ambito']);
+      const r = await service.list(YO, T);
+      expect(r.items.map((i) => i.id)).toEqual(['f1', 'f2']);
+      expect(r.items.every((i) => i.resultado === null && i.myVote === null)).toBe(true);
+      expect(r.pendientes).toBe(0);
+      expect(await service.next(YO, T)).toBeNull();
+      await expect(service.analysis(YO, T)).resolves.toMatchObject({ available: false });
+    });
+
+    it('un miembro del ámbito no escribe ni vota frases (403)', async () => {
+      miembroDe(['g-ambito']);
+      await expect(service.create(YO, T, 'Una frase de prueba', 'ip')).rejects.toThrow('Solo los miembros de este grupo pueden participar.');
+      prisma.frase.findUnique.mockResolvedValue({ ...frase('f1'), proposal: { groupId: G, status: 'open', hidden: false } });
+      await expect(service.vote(YO, 'f1', 'paso')).rejects.toThrow('Solo los miembros de este grupo pueden participar.');
+      expect(prisma.frase.create).not.toHaveBeenCalled();
+      expect(prisma.fraseVoto.upsert).not.toHaveBeenCalled();
+    });
+
+    it('el análisis de quien lee no cuenta puentes sin ver ni muestra puentes', async () => {
+      miembroDe(['g-ambito']);
+      prisma.frase.findMany.mockResolvedValue([frase('f1'), frase('f2'), frase('f3'), frase('f4')]);
+      // Votos guardados de cuando era miembro: no deben contar como suyos.
+      prisma.fraseVoto.findMany.mockResolvedValue([{ profileId: YO, fraseId: 'f1', value: 'de_acuerdo' }]);
+      const acuerdo = { votantes: 5, deAcuerdo: 5, total: 5 };
+      const desacuerdo = { votantes: 5, deAcuerdo: 0, total: 5 };
+      ctl.override = () => ({
+        participants: 10,
+        grupos: [{ id: 0, size: 5, members: [] }, { id: 1, size: 5, members: [] }],
+        frases: [
+          { fraseId: 'f1', porGrupo: [{ grupo: 0, ...acuerdo }, { grupo: 1, ...acuerdo }] },
+          { fraseId: 'f2', porGrupo: [{ grupo: 0, ...acuerdo }, { grupo: 1, ...acuerdo }] },
+          { fraseId: 'f3', porGrupo: [{ grupo: 0, ...acuerdo }, { grupo: 1, ...acuerdo }] },
+          { fraseId: 'f4', porGrupo: [{ grupo: 0, ...acuerdo }, { grupo: 1, ...desacuerdo }] },
+        ],
+      });
+      const r = await service.analysis(YO, T);
+      expect(r).toMatchObject({ available: true, puentesSinVer: 0, puentes: [], divisivas: [] });
+    });
+
+    it('quien lee (antes miembro) no ve sus votos, ni resultados, ni datos de apelación', async () => {
+      miembroDe(['g-ambito']);
+      prisma.frase.findMany.mockResolvedValue([frase('f1', undefined, { authorProfileId: YO })]);
+      prisma.fraseVoto.findMany.mockResolvedValue([{ fraseId: 'f1', value: 'de_acuerdo' }]);
+      prisma.fraseVoto.groupBy.mockResolvedValue([{ fraseId: 'f1', value: 'de_acuerdo', _count: { _all: 9 } }]);
+      const r = await service.list(YO, T);
+      expect(r.items[0]).toMatchObject({ id: 'f1', isAuthor: false, myVote: null, resultado: null, moderationId: null });
+      // Solo pide frases visibles: las ocultas propias (con su apelación) son de quien participa.
+      expect(prisma.frase.findMany).toHaveBeenCalledWith(expect.objectContaining({ where: { proposalId: T, hidden: false } }));
+    });
+
+    it('quien no es del ámbito no lee nada', async () => {
+      miembroDe(['g-otra']);
+      await expect(service.list(YO, T)).rejects.toThrow('Solo los miembros de esta comunidad pueden ver esto.');
+      await expect(service.next(YO, T)).rejects.toThrow(ForbiddenException);
+      await expect(service.analysis(YO, T)).rejects.toThrow(ForbiddenException);
     });
   });
 

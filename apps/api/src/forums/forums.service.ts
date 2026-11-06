@@ -20,6 +20,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { BoardService } from '../board/board.service';
 import { RulesService } from '../rules/rules.service';
+import { GroupAccessService } from '../groups/group-access.service';
 import type { CreateForumDto } from './dto/create-forum.dto';
 import type { CloseTopicDto } from './dto/close-topic.dto';
 import type { ModerateDto } from './dto/moderate.dto';
@@ -86,6 +87,7 @@ export class ForumsService {
     private readonly audit: AuditService,
     private readonly board: BoardService,
     private readonly rules: RulesService,
+    private readonly access: GroupAccessService,
   ) {}
 
   // ─── Permisos ─────────────────────────────────────────────────────────────
@@ -108,13 +110,6 @@ export class ForumsService {
     return (await this.board.roleOf(profileId)) !== null;
   }
 
-  private async requireMembership(groupId: string, profileId: string): Promise<void> {
-    const m = await this.prisma.groupMembership.findUnique({
-      where: { groupId_profileId: { groupId, profileId } },
-    });
-    if (!m) throw new ForbiddenException('Solo los miembros de esta comunidad pueden participar.');
-  }
-
   private async actorId(profileId: string): Promise<{ actorId: string } | Record<never, never>> {
     const p = await this.prisma.profile.findUnique({ where: { id: profileId }, select: { userId: true } });
     return p?.userId ? { actorId: p.userId } : {};
@@ -123,8 +118,9 @@ export class ForumsService {
   // ─── Foros ────────────────────────────────────────────────────────────────
 
   async listMine(profileId: string): Promise<ForumSummary[]> {
+    // Los foros de los grupos de trabajo se ven dentro de su grupo, no en la lista propia.
     const memberships = await this.prisma.groupMembership.findMany({
-      where: { profileId },
+      where: { profileId, group: { type: { not: 'trabajo' } } },
       include: { group: true },
     });
     const result: ForumSummary[] = [];
@@ -169,7 +165,8 @@ export class ForumsService {
       include: { group: true, _count: { select: { proposals: true } } },
     });
     if (!forum) throw new NotFoundException('Foro no encontrado');
-    await this.requireMembership(forum.groupId, profileId);
+    // Lo leen los miembros y, si es de un grupo de trabajo, los miembros de su ámbito.
+    const { participa } = await this.access.requireReader(forum.groupId, profileId);
 
     const topics = await this.prisma.proposal.findMany({
       where: { forumId },
@@ -190,6 +187,7 @@ export class ForumsService {
       isDefault: forum.isDefault,
       topicCount: forum._count.proposals,
       canModerate: await this.canModerate(profileId, forum.groupId),
+      soloLectura: !participa,
       topics: topics.map((t): ProposalSummary => {
         const counts = { support: 0, neutral: 0, object: 0 };
         for (const s of t.signals) counts[s.signal as keyof typeof counts] += 1;
@@ -244,7 +242,7 @@ export class ForumsService {
     if (!(await this.canModerate(profileId, topic.groupId))) {
       if (!esAutor) throw new ForbiddenException('Solo quien abrió el tema o la moderación pueden hacer esto.');
       // Como autor (no como moderador) hay que seguir siendo miembro: una persona suspendida pierde sus membresías.
-      await this.requireMembership(topic.groupId, profileId);
+      await this.access.requireParticipant(topic.groupId, profileId);
     }
     return topic;
   }
@@ -541,7 +539,8 @@ export class ForumsService {
     if (!contenido || contenido.authorProfileId !== profileId) {
       throw new ForbiddenException('Solo quien escribió el contenido puede apelar.');
     }
-    await this.requireMembership(contenido.groupId, profileId);
+    // Apelar es defenderse de la moderación, no participar: vale aunque el grupo de trabajo ya no esté activo.
+    await this.access.requireMember(contenido.groupId, profileId);
     // Solo se apela lo ya ocultado en firme: una solicitud pendiente o provisional aún no lo está.
     if ((action.status as string) !== 'oculto') throw new ConflictException('Esta moderación ya fue apelada o resuelta.');
     await this.prisma.moderationAction.update({
@@ -970,7 +969,8 @@ export class ForumsService {
   /** Consensos publicados para cualquier visitante (spec §3 y §7). Sin nombres. */
   async publicConsensus(): Promise<PublicConsensus[]> {
     const topics = await this.prisma.proposal.findMany({
-      where: { status: 'closed', hidden: false, conclusion: { not: null } },
+      // Lo de un grupo de trabajo no es público por sí solo: llega a la comunidad al llevarlo.
+      where: { status: 'closed', hidden: false, conclusion: { not: null }, group: { type: { not: 'trabajo' } } },
       select: {
         id: true, title: true, kind: true, conclusion: true, objections: true, closedAt: true, electionId: true,
         group: { select: { name: true } },

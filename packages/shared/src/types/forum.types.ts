@@ -15,6 +15,8 @@ export interface ForumSummary {
 
 export interface ForumDetail extends ForumSummary {
   canModerate: boolean;
+  /** Quien lee desde el ámbito de un grupo de trabajo, sin ser miembro: no abre temas. */
+  soloLectura: boolean;
   topics: import('./deliberation.types.js').ProposalSummary[];
 }
 

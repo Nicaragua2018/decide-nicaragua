@@ -622,3 +622,40 @@ export async function castPapeleta(
   revalidatePath(`/proposals/${proposalId}`);
   return { success: true };
 }
+
+// ─── Grupos de trabajo ────────────────────────────────────────────────────────
+
+export async function proponerGrupo(_prev: ActionResult | null, formData: FormData): Promise<ActionResult> {
+  const ambitoId = formData.get('ambitoId');
+  if (!isUuid(ambitoId)) return { error: 'Elige una comunidad.' };
+  const res = await actionFetch('/api/grupos', {
+    method: 'POST',
+    body: JSON.stringify({ ambitoId, name: formData.get('name'), proposito: formData.get('proposito') }),
+  });
+  if (!res.ok) return { error: await parseError(res) };
+  revalidatePath('/grupos');
+  revalidatePath('/decisiones');
+  return { success: true };
+}
+
+/** Entra o sale de un grupo de trabajo. */
+export async function cambiarMembresiaGrupo(grupoId: string, accion: 'entrar' | 'salir'): Promise<ActionResult> {
+  if (!isUuid(grupoId) || (accion !== 'entrar' && accion !== 'salir')) return INVALID;
+  const res = await actionFetch(`/api/grupos/${grupoId}/${accion}`, { method: 'POST' });
+  if (!res.ok) return { error: await parseError(res) };
+  // La pertenencia cambia lo que se ve en grupos, temas y decisiones.
+  revalidatePath('/', 'layout');
+  return { success: true };
+}
+
+export async function llevarALaComunidad(grupoId: string, solucionId: string): Promise<ActionResult> {
+  if (!isUuid(grupoId) || !isUuid(solucionId)) return INVALID;
+  const res = await actionFetch(`/api/grupos/${grupoId}/llevar`, {
+    method: 'POST',
+    body: JSON.stringify({ solucionId }),
+  });
+  if (!res.ok) return { error: await parseError(res) };
+  const data = (await res.json()) as { inquietudId: string };
+  revalidatePath('/inquietudes');
+  redirect(`/inquietudes/${data.inquietudId}`);
+}

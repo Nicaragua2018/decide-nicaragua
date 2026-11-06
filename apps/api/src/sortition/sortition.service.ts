@@ -16,6 +16,7 @@ import type {
 } from '@decide/shared';
 
 import { PrismaService } from '../prisma/prisma.service';
+import { rechazarGrupoDeTrabajo } from '../groups/group-access.service';
 import { AuditService } from '../audit/audit.service';
 import {
   generateSeed,
@@ -44,6 +45,7 @@ export class SortitionService {
     ip: string,
   ): Promise<{ id: string }> {
     await this.requireMembership(groupId, profileId);
+    await rechazarGrupoDeTrabajo(this.prisma, groupId);
 
     const draw = await this.prisma.sortitionDraw.create({
       data: {

@@ -518,6 +518,36 @@ Carlos Robleto pidió el 2026-11-05 tres cosas:
 
 ---
 
+## ADR-022: Grupos de trabajo y subgrupos por tema (2026-11-05)
+**Fecha:** 2026-11-05
+**Estado:** Aceptado
+
+### Contexto
+Carlos Robleto aclaró el 2026-11-05 la estructura: cada persona tiene **dos comunidades** (territorio de origen y país o estado de acogida) y participa en el **nivel general «Exilio y diáspora»**. Dentro de ellas se crean mesas de trabajo, comisiones o subgrupos por temas de interés. Eligió estas opciones:
+- cualquiera propone un subgrupo y nace solo con suficientes personas;
+- la comunidad lee lo que pasa dentro y solo participan sus miembros;
+- lo aprobado pasa a la comunidad;
+- un solo tipo de grupo de trabajo con variantes;
+- también hay subgrupos en el nivel general.
+
+### Decisión
+- Un **grupo de trabajo** es un `Group` hijo (`type = 'trabajo'`, `parentGroupId`) con variantes `subgrupo`, `comision` y `bifurcacion`. Así reutiliza sin cambios los foros, temas, frases, soluciones, decisiones y la moderación.
+- **Lectura y participación** (`GroupAccessService`): leen los miembros del grupo y los del ámbito; participan solo los miembros del grupo. Quien solo lee no ve resultados de frases ni datos propios, y recibe `soloLectura`.
+- **Subgrupo:**
+  - lo propone cualquier miembro del ámbito;
+  - nace solo al reunir `subgrupo.minimo_personas` (5) en `subgrupo.plazo_dias` (14), una sola vez aunque se sumen a la vez;
+  - si no llega al mínimo, se archiva solo; también si queda con menos de 3 miembros durante 30 días;
+  - la entrada y la salida son libres, y se auditan, porque la lista de miembros es visible en el ámbito.
+- **Llevar a la comunidad:** una solución ganadora de una votación aprobada del subgrupo pasa al ámbito como inquietud que ya pide respuesta, una sola vez.
+- Los grupos de trabajo **no** tienen inquietudes, elecciones ni sorteos propios: deciden con soluciones y votación, y lo demás se lleva a la comunidad.
+- «Decisiones» y la nueva página «Grupos de trabajo» muestran los grupos de cada ámbito.
+
+### Consecuencias
+- Organizar dentro de un subgrupo (juntar soluciones, proponer el modo) sigue en manos de la mesa hasta que existan coordinadores (3C). Los plazos automáticos evitan que algo se quede trabado.
+- Las comisiones y las bifurcaciones (3A-4b) usarán el mismo modelo.
+
+---
+
 ## Decisiones pendientes
 
 | ID | Pregunta | Prioridad |

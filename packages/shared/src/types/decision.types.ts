@@ -1,3 +1,5 @@
+import type { GrupoTrabajoItem } from './group.types';
+
 export type DecisionFaseValue = 'modo' | 'objecion' | 'votacion' | 'contada' | 'cancelada';
 export type DecisionModoValue = 'excluyentes' | 'compatibles';
 export type DecisionResultadoValue = 'aprobada' | 'ninguna' | 'empate' | 'sin_quorum' | 'sin_soluciones';
@@ -55,6 +57,10 @@ export interface DecisionTemaResponse {
   canOrganize: boolean;
   soluciones: SolucionItem[];
   decision: DecisionView | null;
+  /** Quien lee desde el ámbito de un grupo de trabajo sin ser miembro: no participa. */
+  soloLectura: boolean;
+  /** Ids de las soluciones de este tema que ya se llevaron a la comunidad. */
+  llevadas: string[];
 }
 
 /** Tipo de comunidad en la página «Decisiones». */
@@ -78,6 +84,8 @@ export interface ComunidadDecisiones {
   aprobadas: DecisionResumenItem[];
   rechazadas: DecisionResumenItem[];
   enCurso: DecisionResumenItem[];
+  /** Grupos de trabajo de esta comunidad que no están archivados. */
+  grupos: GrupoTrabajoItem[];
 }
 
 export interface DecisionesResumenResponse {

@@ -14,15 +14,18 @@ import type { DecisionFaseValue, ProposalDetail } from '@decide/shared';
 export function TopicActions({
   proposal,
   decisionFase = null,
+  soloModeracion = false,
 }: {
   proposal: ProposalDetail;
   decisionFase?: DecisionFaseValue | null;
+  /** Quien solo lee el grupo: la moderación sigue visible, lo demás no (moderar no es participar). */
+  soloModeracion?: boolean;
 }) {
   const [pending, startTransition] = useTransition();
   const [actionError, setActionError] = useState<string | null>(null);
   const [closeState, closeAction, closing] = useActionState<ActionResult | null, FormData>(closeTopic, null);
 
-  const canAct = (proposal.isAuthor || proposal.canModerate) && !proposal.hidden;
+  const canAct = !soloModeracion && (proposal.isAuthor || proposal.canModerate) && !proposal.hidden;
   const isOpen = proposal.status === ProposalStatus.open;
   const endsAt = proposal.deliberationEndsAt ? new Date(proposal.deliberationEndsAt) : null;
   const deliberationOver = endsAt !== null && endsAt.getTime() <= Date.now();
