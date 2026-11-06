@@ -4,6 +4,7 @@ import { DeliberationModule } from '../deliberation/deliberation.module';
 import { GroupsModule } from '../groups/groups.module';
 import { RulesModule } from './rules.module';
 import { CambiosReglaService } from './cambios-regla.service';
+import { CambiosReglaScheduler } from './cambios-regla.scheduler';
 import { CambiosReglaController } from './cambios-regla.controller';
 
 /**
@@ -13,7 +14,7 @@ import { CambiosReglaController } from './cambios-regla.controller';
 @Module({
   imports: [RulesModule, DeliberationModule, GroupsModule, AuditModule],
   controllers: [CambiosReglaController],
-  providers: [CambiosReglaService],
+  providers: [CambiosReglaService, CambiosReglaScheduler],
   exports: [CambiosReglaService],
 })
 export class CambiosReglaModule {}

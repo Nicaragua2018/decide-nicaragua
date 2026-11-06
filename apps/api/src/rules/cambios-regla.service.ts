@@ -13,13 +13,15 @@ import { AuditService } from '../audit/audit.service';
 import { DeliberationService } from '../deliberation/deliberation.service';
 import { GroupAccessService } from '../groups/group-access.service';
 import { RulesService } from './rules.service';
-import { conUnidad, esAmbitoDeReglas, esNivelGeneral } from './ambito-reglas';
+import { conUnidad, esAmbitoDeReglas, esNivelGeneral, guardarValor, normalizarValor } from './ambito-reglas';
 import type { ProponerCambioDto } from './dto/proponer-cambio.dto';
 
 const DIA_MS = 86_400_000;
 const TITULO_MAX = 200;
 const SOLUCION_TITULO_MAX = 140;
 const SOLUCION_DESCRIPCION_MAX = 2000;
+/** Cambios resueltos como mucho por pasada; el resto espera a la siguiente. */
+const LOTE = 100;
 
 const NO_AMBITO = 'Las reglas se cambian en una comunidad de origen, de acogida o en el nivel general, no en un grupo de trabajo.';
 const EN_CURSO = 'Ya hay un cambio en curso para esta regla.';
@@ -130,23 +132,114 @@ export class CambiosReglaService {
       .catch((err: unknown) => this.logger.error('Audit log failed', err));
     return creado;
   }
+
+  // ─── Aplicar el resultado ─────────────────────────────────────────────────
+
+  /**
+   * Pasada del programador: cada cambio en votación cuyo tema ya tiene la decisión contada o
+   * cancelada se resuelve una sola vez, en su propia transacción (un error no detiene a los demás).
+   * Devuelve cuántos cambios resolvió esta pasada.
+   */
+  async procesarResultados(): Promise<number> {
+    const pendientes = await this.prisma.cambioRegla.findMany({
+      where: { estado: 'en_votacion', proposal: { decision: { fase: { in: ['contada', 'cancelada'] } } } },
+      select: { id: true },
+      orderBy: { createdAt: 'asc' },
+      take: LOTE,
+    });
+    let n = 0;
+    for (const { id } of pendientes) {
+      try {
+        const hecho = await this.procesarUno(id);
+        if (!hecho) continue;
+        n++;
+        void this.audit
+          .log({ action: hecho.accion, resource: `cambio_regla:${id}`, metadata: { cambioId: id, key: hecho.key } })
+          .catch((err: unknown) => this.logger.error('Audit log failed', err));
+      } catch (err) {
+        this.logger.error(`No se pudo resolver el cambio ${id}: ${err instanceof Error ? err.name : 'error'}`);
+      }
+    }
+    return n;
+  }
+
+  /**
+   * Resuelve un cambio con la fila bloqueada. El `updateMany` condicionado a `en_votacion` va
+   * antes de cualquier escritura: si otra pasada ya lo tomó, no se escribe nada.
+   * Un valor que ya no cabe en la definición actual de la regla (límites que cambiaron entre la
+   * propuesta y la aplicación, o una regla que ya no existe o cambió de nivel) deja el cambio
+   * `rechazado` y no se guarda.
+   */
+  private async procesarUno(id: string): Promise<{ accion: string; key: string } | null> {
+    return this.prisma.$transaction(async (tx) => {
+      await tx.$queryRaw(Prisma.sql`SELECT id FROM cambios_regla WHERE id = ${id}::uuid FOR UPDATE`);
+      const c = await tx.cambioRegla.findUnique({
+        where: { id },
+        select: {
+          id: true, key: true, nivel: true, ambitoGroupId: true, valorPropuesto: true, estado: true,
+          proposal: { select: { decision: { select: { fase: true, resultado: true } } } },
+        },
+      });
+      const d = c?.proposal.decision;
+      if (!c || (c.estado as string) !== 'en_votacion' || !d) return null;
+      const fase = d.fase as string;
+      if (fase !== 'contada' && fase !== 'cancelada') return null;
+
+      const ahora = new Date();
+      const tomar = async (estado: CambioEstadoFinal, resuelto: boolean): Promise<boolean> =>
+        (
+          await tx.cambioRegla.updateMany({
+            where: { id, estado: 'en_votacion' },
+            data: { estado, ...(resuelto ? { resueltoAt: ahora } : {}) },
+          })
+        ).count === 1;
+      const rechazar = async (estado: CambioEstadoFinal) =>
+        (await tomar(estado, true)) ? { accion: 'regla.cambio_rechazado', key: c.key } : null;
+
+      if (fase === 'cancelada') return rechazar('anulado');
+      const resultado = d.resultado as string | null;
+      if (resultado === 'sin_quorum') return rechazar('sin_participacion');
+      if (resultado !== 'aprobada') return rechazar('rechazado');
+
+      const def = RULE_DEFINITIONS.find((x) => x.key === c.key);
+      const valor = def && def.level === c.nivel ? normalizarValor(def, c.valorPropuesto) : null;
+      if (!def || valor === null) return rechazar('rechazado');
+
+      if (def.level === 'local') {
+        if (!(await tomar('aplicado', true))) return null;
+        await guardarValor(tx, def.key, c.ambitoGroupId, valor);
+        return { accion: 'regla.cambio_aplicado', key: c.key };
+      }
+
+      // Colmena: la mesa lo ejecuta con 2 aprobaciones (la acción no tiene proponente).
+      if (!(await tomar('pendiente_mesa', false))) return null;
+      const accion = await tx.boardAction.create({
+        data: {
+          type: 'change_rule',
+          params: { key: def.key, valor, cambioId: c.id },
+          reason: 'Cambio de regla aprobado por la comunidad',
+        },
+        select: { id: true },
+      });
+      await tx.cambioRegla.update({ where: { id }, data: { boardActionId: accion.id } });
+      return { accion: 'regla.cambio_enviado_a_mesa', key: c.key };
+    });
+  }
 }
+
+type CambioEstadoFinal = 'aplicado' | 'pendiente_mesa' | 'rechazado' | 'sin_participacion' | 'anulado';
 
 /**
  * Valor propuesto ya normalizado, o 400. Un entero se acepta solo como `-?\d+` dentro de
  * `min`/`max` (se guarda sin ceros a la izquierda); una opción, solo si está en `options`.
  */
 export function valorValido(def: RuleDefinition, crudo: string): string {
-  const v = crudo.trim();
+  const v = normalizarValor(def, crudo);
+  if (v !== null) return v;
   if (def.type === 'int') {
-    const n = /^-?\d+$/.test(v) ? Number(v) : NaN;
-    const min = def.min ?? Number.MIN_SAFE_INTEGER;
-    const max = def.max ?? Number.MAX_SAFE_INTEGER;
-    if (!Number.isSafeInteger(n) || n < min || n > max) {
-      throw new BadRequestException(`El valor debe estar entre ${def.min ?? min} y ${def.max ?? max}.`);
-    }
-    return String(n);
+    throw new BadRequestException(
+      `El valor debe estar entre ${def.min ?? Number.MIN_SAFE_INTEGER} y ${def.max ?? Number.MAX_SAFE_INTEGER}.`,
+    );
   }
-  if (!def.options?.includes(v)) throw new BadRequestException('Elige una de las opciones.');
-  return v;
+  throw new BadRequestException('Elige una de las opciones.');
 }

@@ -10,8 +10,10 @@ function buildPrisma() {
     profile: { findUnique: vi.fn(), update: vi.fn() },
     user: { findUnique: vi.fn(), update: vi.fn() },
     groupMembership: { deleteMany: vi.fn() },
-    boardAction: { create: vi.fn(), findUnique: vi.fn(), findMany: vi.fn(), update: vi.fn() },
+    boardAction: { create: vi.fn(), findUnique: vi.fn(), findMany: vi.fn(), update: vi.fn(), updateMany: vi.fn() },
     boardApproval: { create: vi.fn(), findMany: vi.fn() },
+    cambioRegla: { findFirst: vi.fn(), updateMany: vi.fn() },
+    ruleValue: { findFirst: vi.fn(), create: vi.fn(), update: vi.fn() },
   };
   // tx === prisma: la transacción de prueba ejecuta el callback con el mismo mock
   prisma.$transaction.mockImplementation((fn: (tx: unknown) => unknown) => fn(prisma));
@@ -242,6 +244,166 @@ describe('BoardService', () => {
 
       expect(prisma.profile.update).toHaveBeenCalled();
       expect(groups.syncMemberships).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('change_rule', () => {
+    const params = { key: 'reglas.participacion_minima', valor: '40', cambioId: 'c-9' };
+    /** Acción creada por el sistema (sin proponente): llega con un voto previo de otro cargo. */
+    const accion = (approve: boolean) => ({
+      id: 'a9',
+      type: 'change_rule',
+      targetUserId: null,
+      params,
+      status: 'pending',
+      approvals: [{ profileId: 'p-sec', approve }],
+    });
+    const cambio = { id: 'c-9', key: 'reglas.participacion_minima', valorPropuesto: '40' };
+
+    beforeEach(() => {
+      prisma.boardSeat.findFirst.mockResolvedValue(asiento('administrador'));
+      prisma.boardApproval.create.mockResolvedValue({});
+      prisma.boardAction.updateMany.mockResolvedValue({ count: 1 });
+      prisma.cambioRegla.findFirst.mockResolvedValue(cambio);
+      prisma.cambioRegla.updateMany.mockResolvedValue({ count: 1 });
+      prisma.ruleValue.findFirst.mockResolvedValue(null);
+      prisma.ruleValue.create.mockResolvedValue({});
+    });
+
+    it('con 2 aprobaciones guarda el valor de la colmena y el cambio queda aplicado, en una transacción', async () => {
+      prisma.boardAction.findUnique.mockResolvedValue(accion(true));
+
+      await service.voteAction(ADMIN, 'a9', true, 'ip');
+
+      expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+      expect(prisma.cambioRegla.findFirst).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: 'c-9', boardActionId: 'a9', nivel: 'colmena', estado: 'pendiente_mesa' },
+        }),
+      );
+      expect(prisma.boardAction.updateMany).toHaveBeenCalledWith({
+        where: { id: 'a9', status: 'pending' },
+        data: { status: 'executed', resolvedAt: expect.any(Date) },
+      });
+      expect(prisma.ruleValue.findFirst).toHaveBeenCalledWith({ where: { key: 'reglas.participacion_minima', groupId: null } });
+      expect(prisma.ruleValue.create).toHaveBeenCalledWith({
+        data: { key: 'reglas.participacion_minima', groupId: null, value: '40' },
+      });
+      expect(prisma.cambioRegla.updateMany).toHaveBeenCalledWith({
+        where: { id: 'c-9', estado: 'pendiente_mesa' },
+        data: { estado: 'aplicado', resueltoAt: expect.any(Date) },
+      });
+      expect(prisma.user.update).not.toHaveBeenCalled();
+      expect(audit.log).toHaveBeenCalledWith(expect.objectContaining({ action: 'board.action_executed' }));
+      expect(audit.log).toHaveBeenCalledWith({
+        action: 'regla.cambio_aplicado',
+        resource: 'cambio_regla:c-9',
+        metadata: { cambioId: 'c-9', key: 'reglas.participacion_minima' },
+      });
+    });
+
+    it('si ya hay un valor de la colmena, lo actualiza', async () => {
+      prisma.boardAction.findUnique.mockResolvedValue(accion(true));
+      prisma.ruleValue.findFirst.mockResolvedValue({ id: 'rv-1' });
+      await service.voteAction(ADMIN, 'a9', true, 'ip');
+      expect(prisma.ruleValue.update).toHaveBeenCalledWith({ where: { id: 'rv-1' }, data: { value: '40' } });
+      expect(prisma.ruleValue.create).not.toHaveBeenCalled();
+    });
+
+    it('con un solo voto no se resuelve', async () => {
+      prisma.boardAction.findUnique.mockResolvedValue({ ...accion(true), approvals: [] });
+      await service.voteAction(ADMIN, 'a9', true, 'ip');
+      expect(prisma.boardAction.updateMany).not.toHaveBeenCalled();
+      expect(prisma.ruleValue.create).not.toHaveBeenCalled();
+    });
+
+    it('con 2 rechazos el cambio queda rechazado_mesa y no se guarda nada', async () => {
+      prisma.boardAction.findUnique.mockResolvedValue(accion(false));
+
+      await service.voteAction(ADMIN, 'a9', false, 'ip');
+
+      expect(prisma.boardAction.updateMany).toHaveBeenCalledWith({
+        where: { id: 'a9', status: 'pending' },
+        data: { status: 'rejected', resolvedAt: expect.any(Date) },
+      });
+      expect(prisma.cambioRegla.updateMany).toHaveBeenCalledWith({
+        where: { id: 'c-9', estado: 'pendiente_mesa' },
+        data: { estado: 'rechazado_mesa', resueltoAt: expect.any(Date) },
+      });
+      expect(prisma.ruleValue.create).not.toHaveBeenCalled();
+      expect(prisma.ruleValue.update).not.toHaveBeenCalled();
+      expect(audit.log).toHaveBeenCalledWith(expect.objectContaining({ action: 'board.action_rejected' }));
+      expect(audit.log).toHaveBeenCalledWith(expect.objectContaining({ action: 'regla.cambio_rechazado' }));
+    });
+
+    it('si el valor ya no cabe en los límites, la mesa no lo guarda: acción rechazada y cambio rechazado_mesa', async () => {
+      prisma.boardAction.findUnique.mockResolvedValue(accion(true));
+      prisma.cambioRegla.findFirst.mockResolvedValue({ ...cambio, valorPropuesto: '5' });
+
+      await service.voteAction(ADMIN, 'a9', true, 'ip');
+
+      expect(prisma.boardAction.updateMany).toHaveBeenCalledWith(
+        expect.objectContaining({ data: { status: 'rejected', resolvedAt: expect.any(Date) } }),
+      );
+      expect(prisma.cambioRegla.updateMany).toHaveBeenCalledWith(
+        expect.objectContaining({ data: { estado: 'rechazado_mesa', resueltoAt: expect.any(Date) } }),
+      );
+      expect(prisma.ruleValue.create).not.toHaveBeenCalled();
+      expect(audit.log).toHaveBeenCalledWith(expect.objectContaining({ action: 'board.action_rejected' }));
+    });
+
+    it('nunca aplica un cambio local ni uno que no esté ligado a la acción: la acción se rechaza', async () => {
+      prisma.boardAction.findUnique.mockResolvedValue(accion(true));
+      prisma.cambioRegla.findFirst.mockResolvedValue(null); // el filtro exige nivel colmena y boardActionId
+
+      await service.voteAction(ADMIN, 'a9', true, 'ip');
+
+      expect(prisma.boardAction.updateMany).toHaveBeenCalledWith(
+        expect.objectContaining({ data: { status: 'rejected', resolvedAt: expect.any(Date) } }),
+      );
+      expect(prisma.cambioRegla.updateMany).not.toHaveBeenCalled();
+      expect(prisma.ruleValue.create).not.toHaveBeenCalled();
+    });
+
+    it('si otra persona resolvió la acción a la vez, no se aplica dos veces (400)', async () => {
+      prisma.boardAction.findUnique.mockResolvedValue(accion(true));
+      prisma.boardAction.updateMany.mockResolvedValue({ count: 0 });
+
+      await expect(service.voteAction(ADMIN, 'a9', true, 'ip')).rejects.toThrow(
+        new BadRequestException('Esta acción ya se resolvió.'),
+      );
+      expect(prisma.ruleValue.create).not.toHaveBeenCalled();
+      expect(prisma.cambioRegla.updateMany).not.toHaveBeenCalled();
+    });
+
+    it('la mesa no puede proponer un change_rule a mano', async () => {
+      prisma.boardSeat.findFirst.mockResolvedValue(asiento('secretario'));
+      prisma.user.findUnique.mockResolvedValue({ id: 'u-t' });
+      await expect(
+        service.proposeAction(SECRE, { type: 'change_rule' as never, targetUserId: 'u-t', reason: 'quiero', params }, 'ip'),
+      ).rejects.toThrow(BadRequestException);
+      expect(prisma.boardAction.create).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('listActions()', () => {
+    it('muestra change_rule sin proponente ni persona objetivo', async () => {
+      prisma.boardAction.findMany.mockResolvedValue([
+        {
+          id: 'a9',
+          type: 'change_rule',
+          targetUserId: null,
+          params: { key: 'reglas.participacion_minima', valor: '40', cambioId: 'c-9' },
+          reason: 'Cambio de regla aprobado por la comunidad',
+          status: 'pending',
+          proposedBy: null,
+          approvals: [],
+          createdAt: new Date('2026-11-06T00:00:00Z'),
+        },
+      ]);
+      const [a] = await service.listActions();
+      expect(a).toMatchObject({ type: 'change_rule', targetDisplayName: null, proposedBy: null });
+      expect(prisma.profile.findUnique).not.toHaveBeenCalled();
     });
   });
 });

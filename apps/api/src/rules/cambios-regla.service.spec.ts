@@ -242,3 +242,200 @@ describe('CambiosReglaService', () => {
     });
   });
 });
+
+// ─── Aplicar el resultado ─────────────────────────────────────────────────────
+
+interface FilaCambio {
+  id: string;
+  key: string;
+  nivel: string;
+  ambitoGroupId: string;
+  valorPropuesto: string;
+  estado: string;
+  boardActionId: string | null;
+  resueltoAt: Date | null;
+  decision: { fase: string; resultado: string | null };
+}
+
+/** Base en memoria: el `updateMany` condicionado decide quién se queda con cada cambio. */
+function fakeDb(filas: FilaCambio[]) {
+  const cambios = new Map(filas.map((f) => [f.id, { ...f }]));
+  const ruleValues: { id: string; key: string; groupId: string | null; value: string }[] = [];
+  const db = {
+    $queryRaw: vi.fn().mockResolvedValue([]),
+    cambioRegla: {
+      findMany: vi.fn(async () =>
+        [...cambios.values()]
+          .filter((c) => c.estado === 'en_votacion' && ['contada', 'cancelada'].includes(c.decision.fase))
+          .map((c) => ({ id: c.id })),
+      ),
+      findUnique: vi.fn(async ({ where }: { where: { id: string } }) => {
+        const c = cambios.get(where.id);
+        return c ? { ...c, proposal: { decision: { ...c.decision } } } : null;
+      }),
+      updateMany: vi.fn(async ({ where, data }: { where: { id: string; estado: string }; data: Partial<FilaCambio> }) => {
+        const c = cambios.get(where.id);
+        if (!c || c.estado !== where.estado) return { count: 0 };
+        Object.assign(c, data);
+        return { count: 1 };
+      }),
+      update: vi.fn(async ({ where, data }: { where: { id: string }; data: Partial<FilaCambio> }) => {
+        const c = cambios.get(where.id)!;
+        Object.assign(c, data);
+        return c;
+      }),
+    },
+    ruleValue: {
+      findFirst: vi.fn(async ({ where }: { where: { key: string; groupId: string | null } }) =>
+        ruleValues.find((r) => r.key === where.key && r.groupId === where.groupId) ?? null,
+      ),
+      update: vi.fn(async ({ where, data }: { where: { id: string }; data: { value: string } }) => {
+        const r = ruleValues.find((x) => x.id === where.id)!;
+        r.value = data.value;
+        return r;
+      }),
+      create: vi.fn(async ({ data }: { data: { key: string; groupId: string | null; value: string } }) => {
+        const r = { id: `rv-${ruleValues.length + 1}`, ...data };
+        ruleValues.push(r);
+        return r;
+      }),
+    },
+    boardAction: { create: vi.fn().mockResolvedValue({ id: 'a-1' }) },
+    $transaction: vi.fn(async (fn: (t: unknown) => unknown) => fn(db)),
+  };
+  return { db, cambios, ruleValues };
+}
+
+const fila = (over: Partial<FilaCambio> = {}): FilaCambio => ({
+  id: 'c-1',
+  key: 'inquietud.plazo_respuesta_dias',
+  nivel: 'local',
+  ambitoGroupId: ORIGEN,
+  valorPropuesto: '10',
+  estado: 'en_votacion',
+  boardActionId: null,
+  resueltoAt: null,
+  decision: { fase: 'contada', resultado: 'aprobada' },
+  ...over,
+});
+
+describe('CambiosReglaService.procesarResultados()', () => {
+  let audit: { log: ReturnType<typeof vi.fn> };
+
+  const crear = (filas: FilaCambio[]) => {
+    const f = fakeDb(filas);
+    audit = { log: vi.fn().mockResolvedValue(undefined) };
+    const service = new CambiosReglaService(f.db as never, {} as never, {} as never, {} as never, audit as never);
+    return { ...f, service };
+  };
+
+  it('local aprobado: guarda el valor del ámbito y queda aplicado, con la fila bloqueada', async () => {
+    const { db, service, cambios, ruleValues } = crear([fila()]);
+    expect(await service.procesarResultados()).toBe(1);
+    expect(ruleValues).toEqual([{ id: 'rv-1', key: 'inquietud.plazo_respuesta_dias', groupId: ORIGEN, value: '10' }]);
+    expect(cambios.get('c-1')).toMatchObject({ estado: 'aplicado' });
+    expect(cambios.get('c-1')!.resueltoAt).toBeInstanceOf(Date);
+    expect(db.$queryRaw).toHaveBeenCalledTimes(1);
+    expect(db.cambioRegla.updateMany.mock.calls[0]![0].where).toEqual({ id: 'c-1', estado: 'en_votacion' });
+    expect(db.boardAction.create).not.toHaveBeenCalled();
+    expect(audit.log).toHaveBeenCalledWith({
+      action: 'regla.cambio_aplicado',
+      resource: 'cambio_regla:c-1',
+      metadata: { cambioId: 'c-1', key: 'inquietud.plazo_respuesta_dias' },
+    });
+  });
+
+  it('local aprobado con valor ya guardado: lo actualiza', async () => {
+    const { service, ruleValues } = crear([fila()]);
+    ruleValues.push({ id: 'rv-0', key: 'inquietud.plazo_respuesta_dias', groupId: ORIGEN, value: '7' });
+    await service.procesarResultados();
+    expect(ruleValues).toEqual([{ id: 'rv-0', key: 'inquietud.plazo_respuesta_dias', groupId: ORIGEN, value: '10' }]);
+  });
+
+  it('colmena aprobado: crea la acción de la mesa sin proponente ni persona objetivo y queda pendiente_mesa', async () => {
+    const { db, service, cambios, ruleValues } = crear([
+      fila({ key: 'reglas.participacion_minima', nivel: 'colmena', ambitoGroupId: GENERAL, valorPropuesto: '40' }),
+    ]);
+    expect(await service.procesarResultados()).toBe(1);
+    expect(db.boardAction.create).toHaveBeenCalledWith({
+      data: {
+        type: 'change_rule',
+        params: { key: 'reglas.participacion_minima', valor: '40', cambioId: 'c-1' },
+        reason: 'Cambio de regla aprobado por la comunidad',
+      },
+      select: { id: true },
+    });
+    expect(cambios.get('c-1')).toMatchObject({ estado: 'pendiente_mesa', boardActionId: 'a-1', resueltoAt: null });
+    expect(ruleValues).toEqual([]);
+    expect(audit.log).toHaveBeenCalledWith(expect.objectContaining({ action: 'regla.cambio_enviado_a_mesa' }));
+  });
+
+  it('sin_quorum → sin_participacion; ninguna, empate y sin_soluciones → rechazado; cancelada → anulado', async () => {
+    const { service, cambios, ruleValues } = crear([
+      fila({ id: 'c-q', decision: { fase: 'contada', resultado: 'sin_quorum' } }),
+      fila({ id: 'c-n', decision: { fase: 'contada', resultado: 'ninguna' } }),
+      fila({ id: 'c-e', decision: { fase: 'contada', resultado: 'empate' } }),
+      fila({ id: 'c-s', decision: { fase: 'contada', resultado: 'sin_soluciones' } }),
+      fila({ id: 'c-x', decision: { fase: 'cancelada', resultado: null } }),
+    ]);
+    expect(await service.procesarResultados()).toBe(5);
+    expect(cambios.get('c-q')!.estado).toBe('sin_participacion');
+    expect(cambios.get('c-n')!.estado).toBe('rechazado');
+    expect(cambios.get('c-e')!.estado).toBe('rechazado');
+    expect(cambios.get('c-s')!.estado).toBe('rechazado');
+    expect(cambios.get('c-x')!.estado).toBe('anulado');
+    for (const id of ['c-q', 'c-n', 'c-e', 'c-s', 'c-x']) expect(cambios.get(id)!.resueltoAt).toBeInstanceOf(Date);
+    expect(ruleValues).toEqual([]);
+    const acciones = audit.log.mock.calls.map((c) => (c[0] as { action: string }).action);
+    expect(acciones.filter((a) => a === 'regla.cambio_rechazado')).toHaveLength(5);
+  });
+
+  it('una votación que sigue abierta no se toca', async () => {
+    const { service, cambios } = crear([fila({ decision: { fase: 'votacion', resultado: null } })]);
+    expect(await service.procesarResultados()).toBe(0);
+    expect(cambios.get('c-1')!.estado).toBe('en_votacion');
+  });
+
+  it('busca solo cambios en votación con la decisión contada o cancelada', async () => {
+    const { db, service } = crear([]);
+    await service.procesarResultados();
+    expect(db.cambioRegla.findMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: { estado: 'en_votacion', proposal: { decision: { fase: { in: ['contada', 'cancelada'] } } } },
+    }));
+  });
+
+  it('dos pasadas a la vez aplican el cambio una sola vez', async () => {
+    const { service, ruleValues } = crear([fila()]);
+    const [a, b] = await Promise.all([service.procesarResultados(), service.procesarResultados()]);
+    expect(a + b).toBe(1);
+    expect(ruleValues).toHaveLength(1);
+    expect(audit.log).toHaveBeenCalledTimes(1);
+  });
+
+  it('dos pasadas a la vez crean una sola acción de la mesa', async () => {
+    const { db, service } = crear([fila({ key: 'reglas.participacion_minima', nivel: 'colmena', valorPropuesto: '40' })]);
+    await Promise.all([service.procesarResultados(), service.procesarResultados()]);
+    expect(db.boardAction.create).toHaveBeenCalledTimes(1);
+  });
+
+  it('un valor que ya no cabe en los límites al aplicar no se guarda: el cambio queda rechazado', async () => {
+    const { db, service, cambios, ruleValues } = crear([
+      fila({ id: 'c-l', valorPropuesto: '31' }),
+      fila({ id: 'c-c', key: 'reglas.participacion_minima', nivel: 'colmena', valorPropuesto: '5' }),
+      fila({ id: 'c-o', key: 'comision.forma', valorPropuesto: 'dedazo' }),
+      fila({ id: 'c-k', key: 'no.existe' }),
+      fila({ id: 'c-n', key: 'reglas.participacion_minima', nivel: 'local', valorPropuesto: '40' }),
+    ]);
+    await service.procesarResultados();
+    for (const id of ['c-l', 'c-c', 'c-o', 'c-k', 'c-n']) expect(cambios.get(id)!.estado).toBe('rechazado');
+    expect(ruleValues).toEqual([]);
+    expect(db.boardAction.create).not.toHaveBeenCalled();
+  });
+
+  it('un error en un cambio no detiene a los demás', async () => {
+    const { db, service, cambios } = crear([fila({ id: 'c-a' }), fila({ id: 'c-b', key: 'debate.plazo_dias', valorPropuesto: '5' })]);
+    db.ruleValue.create.mockRejectedValueOnce(new Error('boom'));
+    expect(await service.procesarResultados()).toBe(1);
+    expect(cambios.get('c-b')!.estado).toBe('aplicado');
+  });
+});
