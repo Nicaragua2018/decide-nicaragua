@@ -78,6 +78,9 @@ function RulesTable({ rules, groupId }: { rules: RuleView[]; groupId: string | n
                 <td>{r.isDefault ? 'por defecto' : 'ajustada'}</td>
                 <td>{limits}</td>
                 <td>
+                  {!r.conectada && (
+                    <p className="text-sm text-muted">Aún no tiene efecto (se conecta con las elecciones)</p>
+                  )}
                   {r.enCurso && <EnCurso c={r.enCurso} />}
                   {r.puedoProponer && !r.enCurso && groupId && (
                     <ProponerCambio

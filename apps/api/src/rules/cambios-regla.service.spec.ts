@@ -181,6 +181,13 @@ describe('CambiosReglaService', () => {
       noCrea();
     });
 
+    it('una regla de la colmena que aún no tiene efecto no se puede proponer (400)', async () => {
+      await expect(proponer({ groupId: GENERAL, key: 'observadores.numero', valor: '9' })).rejects.toThrow(
+        new BadRequestException('Esta regla aún no tiene efecto: se conecta con las elecciones (plan 3C).'),
+      );
+      noCrea();
+    });
+
     it('una regla local también se cambia en el nivel general (con su valor local)', async () => {
       await proponer({ groupId: GENERAL });
       expect(rules.getInt).toHaveBeenCalledWith('inquietud.plazo_respuesta_dias', GENERAL);

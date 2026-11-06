@@ -25,6 +25,7 @@ const LOTE = 100;
 
 const NO_AMBITO = 'Las reglas se cambian en una comunidad de origen, de acogida o en el nivel general, no en un grupo de trabajo.';
 const EN_CURSO = 'Ya hay un cambio en curso para esta regla.';
+const SIN_EFECTO = 'Esta regla aún no tiene efecto: se conecta con las elecciones (plan 3C).';
 
 /**
  * Proponer el cambio de una regla: abre en el foro por defecto del ámbito un tema que nace como
@@ -59,6 +60,8 @@ export class CambiosReglaService {
     if (def.level === 'colmena' && !esNivelGeneral(g)) {
       throw new BadRequestException(`Las reglas de la colmena se cambian en «${GENERAL_GROUP_NAME}».`);
     }
+    // Una votación nunca debe quedar sin efecto: las reglas que aún no lee ningún código no se proponen.
+    if (!def.conectada) throw new BadRequestException(SIN_EFECTO);
 
     const propuesto = valorValido(def, dto.valor);
     const scope = def.level === 'local' ? grupo.id : null;

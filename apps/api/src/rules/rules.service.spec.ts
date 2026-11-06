@@ -185,16 +185,25 @@ describe('RulesService', () => {
       let s = conCambios([], ['g1']);
       let list = await s.list('g1', 'p-yo');
       expect(list.find((x) => x.key === 'debate.plazo_dias')!.puedoProponer).toBe(true);
-      expect(list.find((x) => x.key === 'observadores.numero')!.puedoProponer).toBe(false);
+      expect(list.find((x) => x.key === 'reglas.participacion_minima')!.puedoProponer).toBe(false);
       s = conCambios([], ['g1', GENERAL]);
       list = await s.list('g1', 'p-yo');
-      expect(list.find((x) => x.key === 'observadores.numero')!.puedoProponer).toBe(true);
+      expect(list.find((x) => x.key === 'reglas.participacion_minima')!.puedoProponer).toBe(true);
       // Sin perfil (página pública) nunca.
       expect((await s.list(null)).every((x) => !x.puedoProponer)).toBe(true);
       // Un grupo de trabajo no cambia reglas locales.
       s = conCambios([], ['g-trabajo']);
       list = await s.list('g-trabajo', 'p-yo');
       expect(list.filter((x) => x.level === 'local').every((x) => !x.puedoProponer)).toBe(true);
+    });
+
+    it('una regla sin conectar lleva conectada = false y nunca puedoProponer', async () => {
+      const s = conCambios([], ['g1', GENERAL]);
+      const list = await s.list('g1', 'p-yo');
+      const obs = list.find((x) => x.key === 'observadores.numero')!;
+      expect(obs).toMatchObject({ conectada: false, puedoProponer: false });
+      expect(list.find((x) => x.key === 'invitaciones.pendientes_max')).toMatchObject({ conectada: true, puedoProponer: true });
+      expect(list.find((x) => x.key === 'debate.plazo_dias')).toMatchObject({ conectada: true, puedoProponer: true });
     });
 
     it('list(null) da el historial de la colmena sin datos del autor', async () => {

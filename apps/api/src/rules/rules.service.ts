@@ -122,10 +122,11 @@ export class RulesService {
         ...(def.min !== undefined && { min: def.min }),
         ...(def.max !== undefined && { max: def.max }),
         ...(def.options !== undefined && { options: def.options }),
+        conectada: def.conectada,
         isDefault: row === undefined,
         enCurso: enCurso ? vistaCambio(enCurso) : null,
         historial,
-        puedoProponer: puede && enCurso === null,
+        puedoProponer: puede && def.conectada && enCurso === null,
       };
     });
   }

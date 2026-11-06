@@ -122,6 +122,8 @@ const groupsMock = {
   syncMemberships: vi.fn(),
 };
 
+let rulesMock: { getInt: ReturnType<typeof vi.fn> };
+
 // ─── Setup ────────────────────────────────────────────────────────────────────
 
 describe('AuthService', () => {
@@ -161,6 +163,7 @@ describe('AuthService', () => {
     });
 
     // Instanciación directa — sin NestJS DI, sin reflect-metadata en runtime
+    rulesMock = { getInt: vi.fn().mockResolvedValue(5) };
     groupsMock.syncMemberships.mockResolvedValue(undefined);
     service = new AuthService(
       prismaMock as unknown as PrismaService,
@@ -170,6 +173,7 @@ describe('AuthService', () => {
       auditMock as unknown as AuditService,
       configMock as unknown as ConfigService,
       groupsMock as never,
+      rulesMock as never,
     );
   });
 
@@ -228,6 +232,23 @@ describe('AuthService', () => {
 
       await expect(service.inviteUser(dto, 'actor-id', ip)).rejects.toThrow(ForbiddenException);
       expect(prismaMock.user.create).not.toHaveBeenCalled();
+    });
+
+    it('el máximo de invitaciones pendientes sale de la regla invitaciones.pendientes_max (colmena)', async () => {
+      prismaMock.user.findUnique.mockResolvedValue(null);
+      prismaMock.boardSeat.findFirst.mockResolvedValue(null);
+      rulesMock.getInt.mockResolvedValue(8);
+      prismaMock.user.count.mockResolvedValue(8);
+
+      await expect(service.inviteUser(dto, 'actor-id', ip)).rejects.toThrow(
+        'Ya tienes 8 invitaciones pendientes. Podrás invitar a más cuando esas personas se registren y se verifiquen.',
+      );
+      expect(rulesMock.getInt).toHaveBeenCalledWith('invitaciones.pendientes_max', null);
+
+      prismaMock.user.count.mockResolvedValue(7);
+      prismaMock.user.create.mockResolvedValue({ ...invitedUser, id: 'new-id' });
+      await service.inviteUser(dto, 'actor-id', ip);
+      expect(prismaMock.user.create).toHaveBeenCalledOnce();
     });
 
     it('una invitación vencida no cuenta como pendiente', async () => {
