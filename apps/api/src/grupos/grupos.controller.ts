@@ -18,6 +18,7 @@ import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { extractIp } from '../common/utils/ip.util';
 import { GruposService } from './grupos.service';
 import { ProponerGrupoDto } from './dto/proponer-grupo.dto';
+import { LlevarPropuestaDto } from './dto/llevar-propuesta.dto';
 
 @Controller('grupos')
 @UseGuards(JwtAuthGuard)
@@ -48,6 +49,16 @@ export class GruposController {
   @HttpCode(HttpStatus.OK)
   async entrar(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() user: JwtPayload, @Req() req: Request): Promise<GrupoTrabajoDetail> {
     return this.grupos.entrar(this.perfil(user), id, extractIp(req));
+  }
+
+  @Post(':id/llevar')
+  async llevar(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: LlevarPropuestaDto,
+    @CurrentUser() user: JwtPayload,
+    @Req() req: Request,
+  ): Promise<{ inquietudId: string }> {
+    return this.grupos.llevar(this.perfil(user), id, dto.solucionId, extractIp(req));
   }
 
   @Post(':id/salir')

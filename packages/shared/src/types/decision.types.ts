@@ -1,4 +1,6 @@
-export type DecisionFaseValue = 'modo' | 'objecion' | 'votacion' | 'contada' | 'cancelada';
+import type { GrupoTrabajoItem } from './group.types';
+
+export type DecisionFaseValue ='modo' | 'objecion' | 'votacion' | 'contada' | 'cancelada';
 export type DecisionModoValue = 'excluyentes' | 'compatibles';
 export type DecisionResultadoValue = 'aprobada' | 'ninguna' | 'empate' | 'sin_quorum' | 'sin_soluciones';
 
@@ -80,6 +82,8 @@ export interface ComunidadDecisiones {
   aprobadas: DecisionResumenItem[];
   rechazadas: DecisionResumenItem[];
   enCurso: DecisionResumenItem[];
+  /** Grupos de trabajo de esta comunidad que no están archivados. */
+  grupos: GrupoTrabajoItem[];
 }
 
 export interface DecisionesResumenResponse {

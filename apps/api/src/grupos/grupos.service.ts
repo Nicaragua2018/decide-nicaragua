@@ -9,17 +9,12 @@ import {
 import { randomUUID } from 'node:crypto';
 import { Prisma } from '@prisma/client';
 import { GENERAL_GROUP_SLUG } from '@decide/shared';
-import type {
-  GrupoTrabajoDetail,
-  GrupoTrabajoItem,
-  GruposAmbitoResponse,
-  TrabajoEstadoValue,
-  TrabajoTipoValue,
-} from '@decide/shared';
+import type { GrupoTrabajoDetail, GrupoTrabajoItem, GruposAmbitoResponse } from '@decide/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { RulesService } from '../rules/rules.service';
 import { GroupAccessService } from '../groups/group-access.service';
+import { type GrupoFila, grupoTrabajoItem } from './grupo-item';
 
 const DIA_MS = 86_400_000;
 /** Un subgrupo activo con menos de estas personas empieza a contar los días para archivarse. */
@@ -32,21 +27,17 @@ const NO_MIEMBRO_AMBITO = 'Solo los miembros de esta comunidad pueden proponer o
 const NO_EXISTE = 'Grupo de trabajo no encontrado.';
 const NO_ADMITE = 'Este grupo de trabajo ya no admite nuevos miembros.';
 const NO_ES_TRABAJO = 'Esto no es un grupo de trabajo.';
+const YA_LLEVADA = 'Esta propuesta ya se llevó a la comunidad.';
+const NO_GANADORA = 'Solo se puede llevar a la comunidad una propuesta ganadora de una decisión aprobada de este grupo.';
+const OCULTA = 'Esta propuesta fue ocultada por moderación y no se puede llevar a la comunidad.';
+const NO_ACTIVO = 'Solo un grupo de trabajo activo puede llevar propuestas a la comunidad.';
+const CUERPO_MAX = 2000;
 
 type AmbitoTipo = 'origen' | 'acogida' | 'general';
 type Tx = Prisma.TransactionClient;
 
-interface GrupoFila {
-  id: string;
-  name: string;
-  type: string;
-  parentGroupId: string | null;
-  trabajoTipo: string | null;
-  trabajoEstado: string | null;
-  proposito: string | null;
-  convocatoriaEndsAt: Date | null;
-  pocosMiembrosDesde: Date | null;
-}
+const esDuplicado = (err: unknown): boolean =>
+  err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002';
 
 /** Tipo de ámbito y su orden (origen → acogida → general); null si el grupo no puede ser ámbito. */
 function tipoDeAmbito(g: { type: string; slug: string }): { tipo: AmbitoTipo; rango: number } | null {
@@ -72,13 +63,19 @@ export class GruposService {
     return p?.userId ? { actorId: p.userId } : {};
   }
 
-  private async auditar(action: string, grupoId: string, profileId: string | null, ip?: string): Promise<void> {
+  private async auditar(
+    action: string,
+    grupoId: string,
+    profileId: string | null,
+    ip?: string,
+    extra: Record<string, string> = {},
+  ): Promise<void> {
     void this.audit.log({
       ...(profileId ? await this.actorId(profileId) : {}),
       action,
       resource: `group:${grupoId}`,
       ...(ip ? { ip } : {}),
-      metadata: { grupoId },
+      metadata: { grupoId, ...extra },
     });
   }
 
@@ -93,22 +90,8 @@ export class GruposService {
     return g as GrupoFila & { parentGroupId: string };
   }
 
-  private faltan(estado: string | null, miembros: number, minimo: number): number | null {
-    return estado === 'convocando' ? Math.max(0, minimo - miembros) : null;
-  }
-
   private item(g: GrupoFila, miembros: number, minimo: number, soyMiembro: boolean): GrupoTrabajoItem {
-    return {
-      id: g.id,
-      name: g.name,
-      proposito: g.proposito ?? '',
-      tipo: (g.trabajoTipo ?? 'subgrupo') as TrabajoTipoValue,
-      estado: (g.trabajoEstado ?? 'convocando') as TrabajoEstadoValue,
-      miembros,
-      faltan: this.faltan(g.trabajoEstado, miembros, minimo),
-      convocatoriaEndsAt: g.convocatoriaEndsAt ? g.convocatoriaEndsAt.toISOString() : null,
-      soyMiembro,
-    };
+    return grupoTrabajoItem(g, miembros, minimo, soyMiembro);
   }
 
   // ─── Lecturas ─────────────────────────────────────────────────────────────
@@ -302,6 +285,71 @@ export class GruposService {
     // Quien ya no lee el grupo (se mudó de comunidad) recibe el detalle sin nombres ni foro.
     const lee = await this.access.canRead(id, profileId);
     return this.construirDetalle(profileId, id, lee);
+  }
+
+  // ─── Llevar a la comunidad ────────────────────────────────────────────────
+
+  /**
+   * Lleva al ámbito una solución ganadora de una decisión contada y aprobada de un tema del subgrupo.
+   * Nace como una inquietud `en_plazo`: aparece en la agenda y, si nadie responde, la comunidad la abre
+   * como debate al vencer el plazo. `origenSolucionId` es único: una solución se lleva una sola vez.
+   */
+  async llevar(
+    profileId: string,
+    id: string,
+    solucionId: string,
+    ip: string,
+    now: Date = new Date(),
+  ): Promise<{ inquietudId: string }> {
+    // Quien no lee el subgrupo recibe 403 sin saber si existe; quien solo lee, 403 al participar.
+    const g = await this.grupoDeTrabajoLegible(id, profileId);
+    await this.access.requireParticipant(id, profileId);
+    if (g.trabajoEstado !== 'activo') throw new ConflictException(NO_ACTIVO);
+
+    const s = await this.prisma.solucion.findUnique({
+      where: { id: solucionId },
+      select: {
+        id: true,
+        title: true,
+        description: true,
+        hidden: true,
+        proposal: { select: { groupId: true, decision: { select: { fase: true, resultado: true, ganadoras: true } } } },
+      },
+    });
+    if (!s || s.proposal.groupId !== id) throw new BadRequestException(NO_GANADORA);
+    if (s.hidden) throw new BadRequestException(OCULTA);
+    const d = s.proposal.decision;
+    if (!d || d.fase !== 'contada' || d.resultado !== 'aprobada' || !d.ganadoras.includes(s.id)) {
+      throw new BadRequestException(NO_GANADORA);
+    }
+
+    const dias = await this.rules.getInt('inquietud.plazo_respuesta_dias', g.parentGroupId);
+    const body = `Propuesta del grupo de trabajo ${g.name}.\n\n${s.description}`.slice(0, CUERPO_MAX);
+    let inquietudId: string;
+    try {
+      const creada = await this.prisma.$transaction((tx) =>
+        tx.inquietud.create({
+          data: {
+            groupId: g.parentGroupId,
+            authorProfileId: profileId,
+            title: s.title,
+            body,
+            status: 'en_plazo',
+            thresholdReachedAt: now,
+            deadlineAt: new Date(now.getTime() + dias * DIA_MS),
+            origenSolucionId: s.id,
+          },
+          select: { id: true },
+        }),
+      );
+      inquietudId = creada.id;
+    } catch (err) {
+      // Fuera de la transacción: dos que la llevan a la vez chocan en el índice único.
+      if (esDuplicado(err)) throw new ConflictException(YA_LLEVADA);
+      throw err;
+    }
+    await this.auditar('grupo.propuesta_llevada', id, profileId, ip, { inquietudId });
+    return { inquietudId };
   }
 
   // ─── Archivar ─────────────────────────────────────────────────────────────

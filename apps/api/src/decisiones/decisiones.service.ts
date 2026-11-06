@@ -10,9 +10,11 @@ import type {
   DecisionResultadoView,
   DecisionTemaResponse,
   DecisionView,
+  GrupoTrabajoItem,
   PapeletaValue,
   SolucionItem,
 } from '@decide/shared';
+import { type GrupoFila, grupoTrabajoItem } from '../grupos/grupo-item';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { ForumsService } from '../forums/forums.service';
@@ -827,10 +829,17 @@ export class DecisionesService {
       where: { profileId },
       select: { group: { select: { id: true, name: true, type: true, slug: true } } },
     });
+    // Los grupos de trabajo no son comunidades: van dentro de la lista `grupos` de su ámbito.
+    const soyDeTrabajo = new Set(
+      membresias.filter(({ group }) => (group.type as string) === 'trabajo').map(({ group }) => group.id),
+    );
     const grupos = membresias
+      .filter(({ group }) => (group.type as string) !== 'trabajo')
       .map(({ group }) => ({ ...group, ...tipoDeComunidad(group.type as string, group.slug) }))
       .sort((a, b) => a.rango - b.rango || a.name.localeCompare(b.name, 'es'));
     if (grupos.length === 0) return { comunidades: [] };
+
+    const trabajoPorAmbito = await this.gruposDeTrabajo(grupos.map((g) => g.id), soyDeTrabajo);
 
     const temas = await this.prisma.proposal.findMany({
       where: {
@@ -957,8 +966,44 @@ export class DecisionesService {
         aprobadas: recortar(l.aprobadas),
         rechazadas: recortar(l.rechazadas),
         enCurso: recortar(l.enCurso),
+        grupos: trabajoPorAmbito.get(g.id) ?? [],
       };
     });
     return { comunidades };
+  }
+
+  /**
+   * Grupos de trabajo no archivados de cada ámbito: una consulta para los grupos y otra (groupBy)
+   * para contar sus miembros. `soy` son los grupos de trabajo de quien pregunta.
+   */
+  private async gruposDeTrabajo(ambitoIds: string[], soy: Set<string>): Promise<Map<string, GrupoTrabajoItem[]>> {
+    const porAmbito = new Map<string, GrupoTrabajoItem[]>();
+    const filas = (await this.prisma.group.findMany({
+      where: { type: 'trabajo', parentGroupId: { in: ambitoIds }, trabajoEstado: { not: 'archivado' } },
+      select: {
+        id: true, name: true, type: true, parentGroupId: true, trabajoTipo: true, trabajoEstado: true,
+        proposito: true, convocatoriaEndsAt: true, pocosMiembrosDesde: true,
+      },
+      orderBy: { createdAt: 'asc' },
+    })) as GrupoFila[];
+    if (filas.length === 0) return porAmbito;
+
+    const conteos = await this.prisma.groupMembership.groupBy({
+      by: ['groupId'],
+      where: { groupId: { in: filas.map((f) => f.id) } },
+      _count: { _all: true },
+    });
+    const miembros = new Map(conteos.map((c) => [c.groupId, c._count._all]));
+    const minimos = new Map<string, number>();
+    for (const ambitoId of new Set(filas.map((f) => f.parentGroupId ?? ''))) {
+      minimos.set(ambitoId, await this.rules.getInt('subgrupo.minimo_personas', ambitoId));
+    }
+    for (const f of filas) {
+      const ambitoId = f.parentGroupId ?? '';
+      const lista = porAmbito.get(ambitoId) ?? [];
+      lista.push(grupoTrabajoItem(f, miembros.get(f.id) ?? 0, minimos.get(ambitoId) ?? 0, soy.has(f.id)));
+      porAmbito.set(ambitoId, lista);
+    }
+    return porAmbito;
   }
 }

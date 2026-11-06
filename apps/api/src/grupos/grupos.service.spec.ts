@@ -1,10 +1,12 @@
 import 'reflect-metadata';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { BadRequestException, ConflictException, ForbiddenException, NotFoundException } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { plainToInstance } from 'class-transformer';
 import { validate } from 'class-validator';
 import { GruposService } from './grupos.service';
 import { ProponerGrupoDto } from './dto/proponer-grupo.dto';
+import { LlevarPropuestaDto } from './dto/llevar-propuesta.dto';
 
 const YO = 'p-yo';
 const AMBITO = '11111111-1111-4111-8111-111111111111';
@@ -48,6 +50,7 @@ function buildTx() {
     forum: { create: vi.fn().mockResolvedValue({ id: 'f1' }) },
     proposal: { updateMany: vi.fn().mockResolvedValue({ count: 0 }) },
     decision: { updateMany: vi.fn().mockResolvedValue({ count: 0 }) },
+    inquietud: { create: vi.fn().mockResolvedValue({ id: 'inq-1' }) },
   };
 }
 
@@ -57,6 +60,7 @@ function buildPrisma(tx: ReturnType<typeof buildTx>) {
     groupMembership: { findUnique: vi.fn(), findMany: vi.fn().mockResolvedValue([]), count: vi.fn().mockResolvedValue(1) },
     forum: { findFirst: vi.fn().mockResolvedValue(null) },
     profile: { findUnique: vi.fn().mockResolvedValue({ userId: 'u-yo' }) },
+    solucion: { findUnique: vi.fn().mockResolvedValue(null) },
     $transaction: vi.fn(async (fn: (t: unknown) => unknown) => fn(tx)),
   };
 }
@@ -64,7 +68,12 @@ function buildPrisma(tx: ReturnType<typeof buildTx>) {
 describe('GruposService', () => {
   let tx: ReturnType<typeof buildTx>;
   let prisma: ReturnType<typeof buildPrisma>;
-  let access: { isParticipant: ReturnType<typeof vi.fn>; requireReader: ReturnType<typeof vi.fn>; canRead: ReturnType<typeof vi.fn> };
+  let access: {
+    isParticipant: ReturnType<typeof vi.fn>;
+    requireReader: ReturnType<typeof vi.fn>;
+    requireParticipant: ReturnType<typeof vi.fn>;
+    canRead: ReturnType<typeof vi.fn>;
+  };
   let rules: { getInt: ReturnType<typeof vi.fn> };
   let audit: { log: ReturnType<typeof vi.fn> };
   let service: GruposService;
@@ -78,6 +87,9 @@ describe('GruposService', () => {
     access = {
       isParticipant: vi.fn(async (groupId: string) => miembroDe.has(groupId)),
       requireReader: vi.fn().mockResolvedValue({ participa: true }),
+      requireParticipant: vi.fn(async (groupId: string) => {
+        if (!miembroDe.has(groupId)) throw new ForbiddenException('No participa.');
+      }),
       canRead: vi.fn().mockResolvedValue(true),
     };
     rules = { getInt: vi.fn(async (key: string) => (key === 'subgrupo.minimo_personas' ? 5 : 14)) };
@@ -361,6 +373,128 @@ describe('GruposService', () => {
     });
   });
 
+  describe('llevar a la comunidad', () => {
+    const SOL = 's-ganadora';
+    const solucion = (over: Record<string, unknown> = {}) => ({
+      id: SOL,
+      proposalId: 't-sub',
+      title: 'Pozo comunitario en el barrio norte',
+      description: 'Perforar un pozo y organizar turnos de mantenimiento.',
+      hidden: false,
+      mergedIntoId: null,
+      proposal: { id: 't-sub', groupId: GT, decision: { fase: 'contada', resultado: 'aprobada', ganadoras: [SOL] } },
+      ...over,
+    });
+
+    beforeEach(() => {
+      miembroDe.add(GT);
+      prisma.group.findUnique.mockImplementation(async ({ where }: { where: { id: string } }) =>
+        where.id === AMBITO ? ambito() : trabajo({ trabajoEstado: 'activo', convocatoriaEndsAt: null }),
+      );
+      prisma.solucion.findUnique.mockResolvedValue(solucion());
+      rules.getInt.mockImplementation(async (key: string) => (key === 'inquietud.plazo_respuesta_dias' ? 10 : 5));
+    });
+
+    it('lleva una ganadora real: la inquietud nace en el ámbito, en plazo y con el texto exacto', async () => {
+      const res = await service.llevar(YO, GT, SOL, '1.1.1.1', NOW);
+      expect(res).toEqual({ inquietudId: 'inq-1' });
+      expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+      const data = tx.inquietud.create.mock.calls[0]![0].data as Record<string, unknown>;
+      expect(data).toEqual({
+        groupId: AMBITO,
+        authorProfileId: YO,
+        title: 'Pozo comunitario en el barrio norte',
+        body: 'Propuesta del grupo de trabajo Agua potable.\n\nPerforar un pozo y organizar turnos de mantenimiento.',
+        status: 'en_plazo',
+        thresholdReachedAt: NOW,
+        deadlineAt: new Date(NOW.getTime() + 10 * DIA_MS),
+        origenSolucionId: SOL,
+      });
+      expect(rules.getInt).toHaveBeenCalledWith('inquietud.plazo_respuesta_dias', AMBITO);
+      expect(acciones()).toEqual(['grupo.propuesta_llevada']);
+      expect(audit.log.mock.calls[0]![0].metadata).toEqual({ grupoId: GT, inquietudId: 'inq-1' });
+    });
+
+    it('corta el cuerpo a 2000 caracteres', async () => {
+      prisma.solucion.findUnique.mockResolvedValue(solucion({ description: 'x'.repeat(3000) }));
+      await service.llevar(YO, GT, SOL, '1.1.1.1', NOW);
+      const body = (tx.inquietud.create.mock.calls[0]![0].data as { body: string }).body;
+      expect(body).toHaveLength(2000);
+      expect(body.startsWith('Propuesta del grupo de trabajo Agua potable.\n\nxxx')).toBe(true);
+    });
+
+    it('una solución que no está entre las ganadoras da 400', async () => {
+      prisma.solucion.findUnique.mockResolvedValue(
+        solucion({ proposal: { id: 't-sub', groupId: GT, decision: { fase: 'contada', resultado: 'aprobada', ganadoras: ['otra'] } } }),
+      );
+      await expect(service.llevar(YO, GT, SOL, '1.1.1.1', NOW)).rejects.toBeInstanceOf(BadRequestException);
+      expect(tx.inquietud.create).not.toHaveBeenCalled();
+    });
+
+    it('una decisión que no está contada y aprobada da 400', async () => {
+      for (const decision of [
+        { fase: 'votacion', resultado: null, ganadoras: [SOL] },
+        { fase: 'contada', resultado: 'empate', ganadoras: [SOL] },
+        null,
+      ]) {
+        prisma.solucion.findUnique.mockResolvedValue(solucion({ proposal: { id: 't-sub', groupId: GT, decision } }));
+        await expect(service.llevar(YO, GT, SOL, '1.1.1.1', NOW)).rejects.toBeInstanceOf(BadRequestException);
+      }
+      expect(tx.inquietud.create).not.toHaveBeenCalled();
+    });
+
+    it('una solución de otro grupo da 400', async () => {
+      prisma.solucion.findUnique.mockResolvedValue(
+        solucion({ proposal: { id: 't-otro', groupId: 'g-otro', decision: { fase: 'contada', resultado: 'aprobada', ganadoras: [SOL] } } }),
+      );
+      await expect(service.llevar(YO, GT, SOL, '1.1.1.1', NOW)).rejects.toBeInstanceOf(BadRequestException);
+      expect(tx.inquietud.create).not.toHaveBeenCalled();
+    });
+
+    it('una solución que no existe da 400', async () => {
+      prisma.solucion.findUnique.mockResolvedValue(null);
+      await expect(service.llevar(YO, GT, SOL, '1.1.1.1', NOW)).rejects.toBeInstanceOf(BadRequestException);
+    });
+
+    it('una solución oculta da 400', async () => {
+      prisma.solucion.findUnique.mockResolvedValue(solucion({ hidden: true }));
+      await expect(service.llevar(YO, GT, SOL, '1.1.1.1', NOW)).rejects.toBeInstanceOf(BadRequestException);
+      expect(tx.inquietud.create).not.toHaveBeenCalled();
+    });
+
+    it('la segunda vez da 409 con el mensaje exacto y sin auditar', async () => {
+      tx.inquietud.create.mockRejectedValue(
+        new Prisma.PrismaClientKnownRequestError('dup', { code: 'P2002', clientVersion: 'x', meta: { target: ['origenSolucionId'] } }),
+      );
+      const err = await service.llevar(YO, GT, SOL, '1.1.1.1', NOW).catch((e: unknown) => e);
+      expect(err).toBeInstanceOf(ConflictException);
+      expect((err as ConflictException).message).toBe('Esta propuesta ya se llevó a la comunidad.');
+      expect(audit.log).not.toHaveBeenCalled();
+    });
+
+    it('desde un subgrupo archivado (o que no está activo) da 409', async () => {
+      for (const estado of ['archivado', 'cerrado', 'convocando', 'pausado']) {
+        prisma.group.findUnique.mockResolvedValue(trabajo({ trabajoEstado: estado }));
+        await expect(service.llevar(YO, GT, SOL, '1.1.1.1', NOW)).rejects.toBeInstanceOf(ConflictException);
+      }
+      expect(tx.inquietud.create).not.toHaveBeenCalled();
+    });
+
+    it('quien solo lee (miembro del ámbito, no del subgrupo) recibe 403', async () => {
+      miembroDe.delete(GT);
+      await expect(service.llevar(YO, GT, SOL, '1.1.1.1', NOW)).rejects.toBeInstanceOf(ForbiddenException);
+      expect(access.requireParticipant).toHaveBeenCalledWith(GT, YO);
+      expect(tx.inquietud.create).not.toHaveBeenCalled();
+    });
+
+    it('quien no lee el grupo recibe 403 antes de cualquier consulta', async () => {
+      access.requireReader.mockRejectedValue(new ForbiddenException('x'));
+      await expect(service.llevar(YO, GT, SOL, '1.1.1.1', NOW)).rejects.toBeInstanceOf(ForbiddenException);
+      expect(prisma.group.findUnique).not.toHaveBeenCalled();
+      expect(prisma.solucion.findUnique).not.toHaveBeenCalled();
+    });
+  });
+
   describe('lecturas', () => {
     it('lista los ámbitos en orden origen, acogida y general, con sus grupos no archivados', async () => {
       prisma.groupMembership.findMany.mockImplementation(async ({ where }: { where: Record<string, unknown> }) =>
@@ -449,5 +583,13 @@ describe('ProponerGrupoDto', () => {
 
   it('el ámbito debe ser un UUID', async () => {
     expect((await errores({ ...ok, ambitoId: 'x' })).errs[0]?.constraints?.['isUuid']).toBe('Elige una comunidad válida.');
+  });
+});
+
+describe('LlevarPropuestaDto', () => {
+  it('exige un UUID', async () => {
+    expect(await validate(plainToInstance(LlevarPropuestaDto, { solucionId: AMBITO }))).toHaveLength(0);
+    const errs = await validate(plainToInstance(LlevarPropuestaDto, { solucionId: 'x' }));
+    expect(errs[0]?.constraints?.['isUuid']).toBeDefined();
   });
 });
