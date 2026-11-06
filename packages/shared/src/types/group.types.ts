@@ -34,7 +34,7 @@ export interface GroupListResponse {
 }
 
 export type TrabajoTipoValue = 'subgrupo' | 'comision' | 'bifurcacion';
-export type TrabajoEstadoValue = 'convocando' | 'activo' | 'pausado' | 'cerrado' | 'archivado';
+export type TrabajoEstadoValue = 'convocando' | 'activo' | 'pausado' | 'cerrado' | 'archivado' | 'eligiendo';
 
 export interface GrupoTrabajoItem {
   id: string;
@@ -46,6 +46,10 @@ export interface GrupoTrabajoItem {
   faltan: number | null;
   convocatoriaEndsAt: string | null;
   soyMiembro: boolean;
+  /** Bifurcación activa y quien mira organiza su comunidad: puede pausarla desde la lista (sin ver nada de dentro). */
+  puedoPausar: boolean;
+  /** Comisiones: último informe no oculto, en las listas; null en el detalle y en los demás grupos. */
+  ultimoInforme: { texto: string; createdAt: string } | null;
 }
 
 export interface GrupoTrabajoDetail extends GrupoTrabajoItem {
@@ -56,6 +60,47 @@ export interface GrupoTrabajoDetail extends GrupoTrabajoItem {
   forumId: string | null;
   puedoEntrar: boolean;
   puedoSalir: boolean;
+  comision: ComisionView | null;
+  bifurcacion: BifurcacionView | null;
+}
+
+export interface ComisionView {
+  tarea: string;
+  puestos: number;
+  forma: 'sorteo' | 'preferencias';
+  /** Nombres visibles en el ámbito. */
+  /** `id` solo llega durante la elección (la papeleta ordena por él); después es null. */
+  voluntarios: { id: string | null; nombre: string; experiencia: string; soyYo: boolean }[];
+  yoVoluntario: boolean;
+  ampliada: boolean;
+  seleccion: { semilla: string; pool: string[]; algoritmo: string } | null;
+  eleccionEndsAt: string | null;
+  miPapeleta: string[] | null;
+  /** Del más reciente al más antiguo; un informe oculto llega con texto vacío. */
+  informes: { id: string; texto: string; final: boolean; createdAt: string; oculto: boolean }[];
+  proximoInformeAt: string | null;
+  atrasada: boolean;
+  yoApoyoRenovar: boolean;
+  puedoApoyarRenovar: boolean;
+  puedoAjustar: boolean;
+  puedoInformar: boolean;
+  /** Quien mira puede moderar (ocultar) los informes. */
+  canModerate: boolean;
+  origen: { proposalId: string; solucionTitulo: string } | null;
+}
+
+export interface BifurcacionView {
+  solucionTitulo: string;
+  /** Solución de origen (pública): la que «Volver a la colmena» lleva a la comunidad. */
+  solucionId: string;
+  proposalId: string;
+  pausa: { causa: string; detalle: string; apelada: boolean } | null;
+  puedoApelar: boolean;
+  puedoPausar: boolean;
+  puedoPedirComision: boolean;
+  yaLlevada: boolean;
+  /** Comisión viva propia de la bifurcación (solo para sus miembros); null si no hay. */
+  comisionId: string | null;
 }
 
 export interface GruposAmbitoResponse {
@@ -65,4 +110,15 @@ export interface GruposAmbitoResponse {
     tipo: 'origen' | 'acogida' | 'general';
     grupos: GrupoTrabajoItem[];
   }[];
+}
+
+/** Pausa de una bifurcación apelada y pendiente de la mesa: sin nombres ni ids de sus miembros. */
+export interface PausaApeladaItem {
+  grupoId: string;
+  solucionTitulo: string;
+  proposalId: string;
+  causa: string;
+  detalle: string;
+  apelacion: string;
+  apeladaAt: string;
 }

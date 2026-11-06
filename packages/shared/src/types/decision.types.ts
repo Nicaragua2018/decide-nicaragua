@@ -34,13 +34,29 @@ export interface DecisionResultadoView {
   contadaAt: string;
 }
 
+export interface CandidataView {
+  id: string;
+  title: string;
+  description: string;
+  hidden: boolean;
+  /** Perdedora de una decisión contada que admite bifurcación (3A-4b). */
+  bifurcable: boolean;
+  /**
+   * Quien consulta puede iniciar la bifurcación o sumarse a la que ya existe. Solo es true para
+   * quien apoyó esta solución en su papeleta; para cualquier otra persona es false, sin decir por qué.
+   */
+  puedoIniciarBifurcacion: boolean;
+  /** Bifurcación que ya existe para esta solución: su existencia es pública, sus miembros no. */
+  bifurcacionId: string | null;
+}
+
 export interface DecisionView {
   fase: DecisionFaseValue;
   modo: DecisionModoValue | null;
   modoPropuesto: DecisionModoValue | null;
   objecionEndsAt: string | null;
   votacionEndsAt: string | null;
-  candidatas: { id: string; title: string; description: string; hidden: boolean }[];
+  candidatas: CandidataView[];
   miPapeleta: PapeletaValue | null;
   yoObjete: boolean;
   puedoObjetar: boolean;

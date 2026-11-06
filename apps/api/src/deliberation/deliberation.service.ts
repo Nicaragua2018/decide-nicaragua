@@ -24,6 +24,7 @@ import { SetSignalDto } from './dto/set-signal.dto';
 import { UpdateProposalStatusDto } from './dto/update-proposal-status.dto';
 import { LINKED_TOPIC_REASON } from '../forums/forums.service';
 import { motivoVisible } from '../forums/moderacion-motivo';
+import { NOMBRE_INICIATIVA, temasDeIniciativa } from '../grupos/bifurcacion-reglas';
 
 /** Estados que aceptan nuevos comentarios y señales */
 const MUTABLE_STATUSES: string[] = [ProposalStatus.open];
@@ -73,9 +74,10 @@ export class DeliberationService {
       },
     });
 
-    void this.auditBase(profileId).then((base) =>
+    // En un grupo reservado (bifurcación) no se registra actor, ip ni el grupo.
+    void this.access.rastro(groupId, profileId, ip).then(({ reservado, quien }) =>
       this.audit
-        .log({ ...base, action: 'proposal.created', resource: `proposal:${proposal.id}`, ip, metadata: { groupId } })
+        .log({ ...quien, action: 'proposal.created', resource: `proposal:${proposal.id}`, metadata: reservado ? {} : { groupId } })
         .catch((err: unknown) => this.logger.error('Audit log failed', err)),
     );
 
@@ -121,6 +123,8 @@ export class DeliberationService {
       },
       orderBy: { createdAt: 'desc' },
     });
+    // Temas que llegaron desde una bifurcación: su autor no se muestra (delataría su voto).
+    const anonimos = await temasDeIniciativa(this.prisma, proposals);
 
     return {
       proposals: proposals.map((p) => ({
@@ -128,7 +132,7 @@ export class DeliberationService {
         groupId: p.groupId,
         title: p.hidden ? HIDDEN_TOPIC_TITLE : p.title,
         status: p.status as unknown as ProposalStatus,
-        authorDisplayName: p.author.displayName,
+        authorDisplayName: anonimos.has(p.id) ? NOMBRE_INICIATIVA : p.author.displayName,
         signalCounts: computeSignalCounts(p.signals.map((s) => s.signal as string)),
         commentCount: p._count.comments,
         createdAt: p.createdAt.toISOString(),
@@ -193,15 +197,18 @@ export class DeliberationService {
           }))?.status ?? null) as ProposalDetail['electionStatus'])
         : null;
 
+    const isAuthor = participa && proposal.authorProfileId === profileId;
+    // Tema llegado desde una bifurcación: ni el nombre ni el id de quien lo llevó (salvo a sí mismo).
+    const anonimo = (await temasDeIniciativa(this.prisma, [proposal])).has(proposal.id);
     const detail: ProposalDetail = {
       id: proposal.id,
       groupId: proposal.groupId,
       title: proposal.title,
       body: proposal.body,
       status: proposal.status as unknown as ProposalStatus,
-      authorDisplayName: proposal.author.displayName,
-      authorProfileId: proposal.authorProfileId,
-      isAuthor: participa && proposal.authorProfileId === profileId,
+      authorDisplayName: anonimo ? NOMBRE_INICIATIVA : proposal.author.displayName,
+      authorProfileId: anonimo && !isAuthor ? '' : proposal.authorProfileId,
+      isAuthor,
       signalCounts: computeSignalCounts(proposal.signals.map((s) => s.signal as string)),
       commentCount: proposal._count.comments,
       createdAt: proposal.createdAt.toISOString(),
@@ -283,9 +290,9 @@ export class DeliberationService {
       data: { status: newStatus },
     });
 
-    void this.auditBase(profileId).then((base) =>
+    void this.access.rastro(proposal.groupId, profileId, ip).then(({ quien }) =>
       this.audit
-        .log({ ...base, action: 'proposal.status_changed', resource: `proposal:${proposalId}`, ip, metadata: { newStatus: dto.status } })
+        .log({ ...quien, action: 'proposal.status_changed', resource: `proposal:${proposalId}`, metadata: { newStatus: dto.status } })
         .catch((err: unknown) => this.logger.error('Audit log failed', err)),
     );
   }
@@ -336,9 +343,9 @@ export class DeliberationService {
       },
     });
 
-    void this.auditBase(profileId).then((base) =>
+    void this.access.rastro(proposal.groupId, profileId, ip).then(({ quien }) =>
       this.audit
-        .log({ ...base, action: 'proposal.comment_added', resource: `proposal:${proposalId}`, ip })
+        .log({ ...quien, action: 'proposal.comment_added', resource: `proposal:${proposalId}` })
         .catch((err: unknown) => this.logger.error('Audit log failed', err)),
     );
 
@@ -375,9 +382,9 @@ export class DeliberationService {
       },
     });
 
-    void this.auditBase(profileId).then((base) =>
+    void this.access.rastro(proposal.groupId, profileId, ip).then(({ quien }) =>
       this.audit
-        .log({ ...base, action: 'proposal.signal_set', resource: `proposal:${proposalId}`, ip, metadata: { signal: dto.signal } })
+        .log({ ...quien, action: 'proposal.signal_set', resource: `proposal:${proposalId}`, metadata: { signal: dto.signal } })
         .catch((err: unknown) => this.logger.error('Audit log failed', err)),
     );
   }
@@ -443,23 +450,6 @@ export class DeliberationService {
         `Proposal is ${status} and does not accept new interactions`,
       );
     }
-  }
-
-  /**
-   * Construye el objeto base para audit.log incluyendo actorId solo si está disponible.
-   * Usa spread condicional para respetar `exactOptionalPropertyTypes`.
-   */
-  private async auditBase(profileId: string): Promise<{ actorId: string } | Record<never, never>> {
-    try {
-      const profile = await this.prisma.profile.findUnique({
-        where: { id: profileId },
-        select: { userId: true },
-      });
-      if (profile?.userId) return { actorId: profile.userId };
-    } catch {
-      // silenciar — el audit log es fire-and-forget
-    }
-    return {};
   }
 }
 

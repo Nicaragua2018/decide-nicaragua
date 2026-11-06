@@ -548,6 +548,44 @@ Carlos Robleto aclaró el 2026-11-05 la estructura: cada persona tiene **dos com
 
 ---
 
+## ADR-023: Comisiones e iniciativas de un grupo (2026-11-06)
+**Fecha:** 2026-11-06
+**Estado:** Aceptado
+
+### Contexto
+El spec 3A (§6 y §7) y el spec 3A-4 (§4 y §5) piden dos cosas. Que alguien lleve a cabo lo que la comunidad aprueba, y que una minoría pueda impulsar su solución sin salir de la colmena. Carlos pidió además que «toda complejidad esté automatizada».
+
+### Decisión
+- **Comisión** (grupo de trabajo `comision`):
+  - **Nacimiento.** Nace sola por cada solución ganadora de una votación aprobada, con la tarea, los puestos y la forma por defecto. Quien organiza solo ajusta si quiere.
+  - **Voluntarios.** Cualquier miembro del ámbito se ofrece, con su experiencia si quiere. Si faltan voluntarios, la convocatoria se amplía 7 días una sola vez. Después se forma con quienes haya, o se archiva si no hay nadie.
+  - **Elección.** Por **sorteo verificable**: se publican la semilla y la lista, y cualquiera lo comprueba. Si la regla `comision.forma` lo dice, por **votación de preferencias** con Schulze repetido para varios puestos, con desempate determinista.
+  - **Informes.** Hay un informe cada `comision.informe_cada_dias` y el aviso aparece en la página. No hay notificaciones todavía.
+  - **Renovación.** Si falta a dos informes, la comunidad pide renovarla con el apoyo de una fracción de quienes participaron en el debate; nace entonces una comisión nueva.
+  - **Informe final.** Se publica junto al consenso, sin nombres.
+- **Iniciativa de un grupo** (bifurcación):
+  - **Quién se suma.** Solo quienes incluyeron esa solución en su papeleta, comprobado con la papeleta guardada. La negativa es idéntica para quien votó otra cosa y para quien no votó.
+  - **Nacimiento.** Nace con `bifurcacion.minimo_personas`.
+  - **Privacidad.** Nunca se revela quién la forma:
+    - el ámbito no lee su foro, porque los nombres de quienes escriben delatarían el voto;
+    - fuera solo se ve cuántos son;
+    - sumarse no se audita;
+    - toda acción dentro de ella o de su comisión se audita sin actor, porque el registro de auditoría lo lee cualquier persona verificada;
+    - quien lleva la solución de vuelta a la comunidad aparece como «Iniciativa de un grupo».
+  - **Pausa.** Quien organiza la pausa con una causa de la lista; sus miembros apelan una vez y la mesa decide. Si la mesa mantiene la pausa, la iniciativa queda en pausa sin plazo.
+    - La pausa detiene todo: sus temas, sus decisiones y su comisión no avanzan ni admiten escrituras. Al reanudarse, sus plazos se corren lo que duró la pausa.
+    - Quien organiza pausa desde la lista de grupos, sin entrar a la iniciativa. Si es miembro de ella, la pausa se audita sin actor.
+
+### Consecuencias
+- El primer despliegue creará comisiones para las soluciones aprobadas que ya existan. Hoy no hay datos reales; antes de producción se decide si poner una fecha de corte.
+- Una comisión archivada cierra el camino automático para esa solución; solo la renovación crea otra.
+- Las notificaciones de informes llegarán con el agente (3B) o con el correo.
+- **La mesa no lee lo de dentro de una iniciativa.** La privacidad pesa más que la moderación: la mesa resuelve la apelación de una pausa solo con la causa, el detalle, la apelación y el título de la solución (enmascarado si se ocultó). Es un límite conocido de la moderación; si hiciera falta, más adelante se agregaría una vista de la mesa con los nombres enmascarados.
+- **La última persona puede salir de una comisión activa.** La comisión no se archiva por quedarse sin miembros: deja de informar, se atrasa y la comunidad la renueva.
+- **La semilla del sorteo se genera después de conocer la lista de voluntarios.** El sorteo es reproducible (semilla, lista y algoritmo publicados), pero la semilla no se comprometió antes. El compromiso previo (commit-reveal) sigue pendiente en ADR-014.
+
+---
+
 ## Decisiones pendientes
 
 | ID | Pregunta | Prioridad |

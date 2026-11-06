@@ -21,6 +21,7 @@ import { AuditService } from '../audit/audit.service';
 import { BoardService } from '../board/board.service';
 import { RulesService } from '../rules/rules.service';
 import { GroupAccessService } from '../groups/group-access.service';
+import { NOMBRE_INICIATIVA, solucionesDeIniciativa, temasDeIniciativa } from '../grupos/bifurcacion-reglas';
 import type { CreateForumDto } from './dto/create-forum.dto';
 import type { CloseTopicDto } from './dto/close-topic.dto';
 import type { ModerateDto } from './dto/moderate.dto';
@@ -30,11 +31,20 @@ const DIA_MS = 86_400_000;
 /** Título que toma la votación de un tema oculto, para que no repita el título del tema. */
 const HIDDEN_VOTE_TITLE = 'Votación de un tema oculto';
 
-type ModTarget = 'tema' | 'respuesta' | 'inquietud' | 'frase' | 'solucion';
+type ModTarget = 'tema' | 'respuesta' | 'inquietud' | 'frase' | 'solucion' | 'informe';
 
 /** Cada tipo de contenido tiene su propia rama: ninguno cae en otro por descarte. */
 function checkTarget(target: string): ModTarget {
-  if (target === 'tema' || target === 'respuesta' || target === 'inquietud' || target === 'frase' || target === 'solucion') return target;
+  if (
+    target === 'tema' ||
+    target === 'respuesta' ||
+    target === 'inquietud' ||
+    target === 'frase' ||
+    target === 'solucion' ||
+    target === 'informe'
+  ) {
+    return target;
+  }
   throw new BadRequestException('Tipo de contenido no válido.');
 }
 
@@ -106,7 +116,8 @@ export class ForumsService {
     return this.canModerate(profileId, groupId);
   }
 
-  private async esMesa(profileId: string): Promise<boolean> {
+  /** La mesa directiva (titular verificado); también resuelve las apelaciones de pausas de bifurcaciones. */
+  async esMesa(profileId: string): Promise<boolean> {
     return (await this.board.roleOf(profileId)) !== null;
   }
 
@@ -177,6 +188,8 @@ export class ForumsService {
       },
       orderBy: { createdAt: 'desc' },
     });
+    // Temas que llegaron desde una bifurcación: su autor no se muestra (delataría su voto).
+    const anonimos = await temasDeIniciativa(this.prisma, topics);
 
     return {
       id: forum.id,
@@ -199,7 +212,7 @@ export class ForumsService {
           status: t.status as unknown as ProposalSummary['status'],
           kind: t.kind as unknown as ProposalSummary['kind'],
           hidden: t.hidden,
-          authorDisplayName: t.author.displayName,
+          authorDisplayName: anonimos.has(t.id) ? NOMBRE_INICIATIVA : t.author.displayName,
           signalCounts: counts,
           commentCount: t._count.comments,
           createdAt: t.createdAt.toISOString(),
@@ -275,7 +288,7 @@ export class ForumsService {
         });
       }
     });
-    void this.audit.log({ ...(await this.actorId(profileId)), action: 'proposal.formalized', resource: `proposal:${topicId}`, ip });
+    void this.audit.log({ ...(await this.rastroDelTema(topic, profileId, ip)), action: 'proposal.formalized', resource: `proposal:${topicId}` });
   }
 
   async closeWithConsensus(profileId: string, topicId: string, dto: CloseTopicDto, ip: string): Promise<void> {
@@ -302,7 +315,11 @@ export class ForumsService {
         objections: dto.objections ?? null,
       },
     });
-    void this.audit.log({ ...(await this.actorId(profileId)), action: 'proposal.closed_with_consensus', resource: `proposal:${topicId}`, ip });
+    void this.audit.log({
+      ...(await this.rastroDelTema(topic, profileId, ip)),
+      action: 'proposal.closed_with_consensus',
+      resource: `proposal:${topicId}`,
+    });
   }
 
   // ─── Moderación ───────────────────────────────────────────────────────────
@@ -341,6 +358,12 @@ export class ForumsService {
       if (!so) throw new NotFoundException('Solución no encontrada');
       if (so.hidden) throw new ConflictException('Este contenido ya está oculto.');
       groupId = so.proposal.groupId;
+    } else if (target === 'informe') {
+      // Informe de una comisión: se modera en el grupo de la comisión, con una sola firma.
+      const inf = await this.prisma.comisionInforme.findUnique({ where: { id: dto.targetId } });
+      if (!inf) throw new NotFoundException('Informe no encontrado');
+      if (inf.hidden) throw new ConflictException('Este contenido ya está oculto.');
+      groupId = inf.grupoId;
     } else {
       const c = await this.prisma.proposalComment.findUnique({
         where: { id: dto.targetId },
@@ -547,7 +570,10 @@ export class ForumsService {
       where: { id: moderationId },
       data: { status: 'apelado', appealText: text, appealedAt: new Date() },
     });
-    void this.audit.log({ ...(await this.actorId(profileId)), action: 'moderation.appealed', resource: `moderation:${moderationId}`, ip });
+    // Dentro de una bifurcación, o si el contenido llegó desde una, sin actor ni ip.
+    const forzar = await this.esDeIniciativa(checkTarget(action.target), action.targetId);
+    const { quien } = await this.access.rastro(contenido.groupId, profileId, ip, forzar);
+    void this.audit.log({ ...quien, action: 'moderation.appealed', resource: `moderation:${moderationId}` });
   }
 
   async listAppeals(profileId: string): Promise<ModerationAppeal[]> {
@@ -611,6 +637,8 @@ export class ForumsService {
    */
   private async requiereQuorumTx(tx: Tx, target: ModTarget, targetId: string): Promise<boolean> {
     if (target === 'solucion') return true;
+    // Los informes de comisión, como frases y respuestas, se ocultan con una sola firma.
+    if (target === 'informe') return false;
     if (target !== 'tema') return false;
     return (await this.bloquearTemaTx(tx, targetId))?.kind === 'propuesta';
   }
@@ -701,6 +729,8 @@ export class ForumsService {
       await tx.frase.update({ where: { id: targetId }, data: { hidden: true } });
     } else if (target === 'solucion') {
       await tx.solucion.update({ where: { id: targetId }, data: { hidden: true } });
+    } else if (target === 'informe') {
+      await tx.comisionInforme.update({ where: { id: targetId }, data: { hidden: true } });
     } else {
       await tx.proposalComment.update({ where: { id: targetId }, data: { hidden: true } });
     }
@@ -720,6 +750,8 @@ export class ForumsService {
       await tx.frase.update({ where: { id: targetId }, data: { hidden: false } });
     } else if (target === 'solucion') {
       await tx.solucion.update({ where: { id: targetId }, data: { hidden: false } });
+    } else if (target === 'informe') {
+      await tx.comisionInforme.update({ where: { id: targetId }, data: { hidden: false } });
     } else {
       await tx.proposalComment.update({ where: { id: targetId }, data: { hidden: false } });
     }
@@ -914,6 +946,46 @@ export class ForumsService {
     }
   }
 
+  /**
+   * Rastro de quien actúa sobre un tema: nada si el tema es de un grupo reservado o lo abrió la
+   * comunidad desde una inquietud llevada por una bifurcación (su autor es miembro de ella).
+   */
+  private async rastroDelTema(
+    topic: { id: string; groupId: string; abiertoPorComunidad: boolean },
+    profileId: string,
+    ip: string,
+  ): Promise<{ actorId?: string; ip?: string }> {
+    // La escritura ya se hizo: si la consulta falla, sin rastro (nunca un 500 después).
+    let forzar = true;
+    try {
+      forzar = (await temasDeIniciativa(this.prisma, [topic])).size > 0;
+    } catch {
+      forzar = true;
+    }
+    return (await this.access.rastro(topic.groupId, profileId, ip, forzar)).quien;
+  }
+
+  /** Inquietud o tema llevados a la colmena desde una bifurcación. Si la consulta falla, true (sin rastro). */
+  private async esDeIniciativa(target: ModTarget, id: string): Promise<boolean> {
+    try {
+      return await this.consultarIniciativa(target, id);
+    } catch {
+      return true;
+    }
+  }
+
+  private async consultarIniciativa(target: ModTarget, id: string): Promise<boolean> {
+    if (target === 'tema') {
+      const t = await this.prisma.proposal.findUnique({ where: { id }, select: { id: true, abiertoPorComunidad: true } });
+      return t ? (await temasDeIniciativa(this.prisma, [t])).size > 0 : false;
+    }
+    if (target === 'inquietud') {
+      const q = await this.prisma.inquietud.findUnique({ where: { id }, select: { origenSolucionId: true } });
+      return q?.origenSolucionId ? (await solucionesDeIniciativa(this.prisma, [q.origenSolucionId])).size > 0 : false;
+    }
+    return false;
+  }
+
   private async authorOf(
     target: ModTarget,
     id: string,
@@ -940,6 +1012,10 @@ export class ForumsService {
       });
       return so ? { authorProfileId: so.authorProfileId, groupId: so.proposal.groupId } : null;
     }
+    if (target === 'informe') {
+      const inf = await this.prisma.comisionInforme.findUnique({ where: { id } });
+      return inf ? { authorProfileId: inf.autorProfileId, groupId: inf.grupoId } : null;
+    }
     const c = await this.prisma.proposalComment.findUnique({
       where: { id },
       include: { proposal: { select: { groupId: true } } },
@@ -962,6 +1038,9 @@ export class ForumsService {
     if (target === 'solucion') {
       const so = await this.prisma.solucion.findUnique({ where: { id } });
       return so ? `${so.title}\n\n${so.description}` : '';
+    }
+    if (target === 'informe') {
+      return (await this.prisma.comisionInforme.findUnique({ where: { id } }))?.texto ?? '';
     }
     return (await this.prisma.proposalComment.findUnique({ where: { id } }))?.body ?? '';
   }
@@ -994,6 +1073,22 @@ export class ForumsService {
           select: { id: true, title: true, hidden: true },
         })
       : [];
+    // Informes finales no ocultos de comisiones cerradas de esas soluciones, en una sola consulta
+    // y del más reciente al más antiguo: por tema vale el primero de una de sus ganadoras.
+    const informes = idsGanadoras.length
+      ? await this.prisma.comisionInforme.findMany({
+          where: {
+            final: true,
+            hidden: false,
+            // Solo comisiones de la comunidad: la de una bifurcación (origenGrupoId) no es pública.
+            grupo: { trabajoTipo: 'comision', trabajoEstado: 'cerrado', origenSolucionId: { in: idsGanadoras }, origenGrupoId: null },
+          },
+          select: { texto: true, grupo: { select: { origenSolucionId: true } } },
+          orderBy: { createdAt: 'desc' },
+        })
+      : [];
+    const informeFinalDe = (ganadoras: string[]): string | null =>
+      informes.find((i) => i.grupo.origenSolucionId !== null && ganadoras.includes(i.grupo.origenSolucionId))?.texto ?? null;
     // Una solución ocultada después del conteo sale enmascarada.
     const tituloDe = new Map(
       soluciones.map((s) => [s.id, s.hidden ? 'Solución oculta por moderación' : s.title]),
@@ -1026,6 +1121,7 @@ export class ForumsService {
           const titulo = tituloDe.get(id);
           return titulo === undefined ? [] : [titulo];
         }),
+        informeFinal: informeFinalDe(ganadorasDe.get(t.id) ?? []),
       });
     }
     return result;

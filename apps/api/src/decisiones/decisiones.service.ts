@@ -7,6 +7,7 @@ import type {
   DecisionesResumenResponse,
   DecisionModoValue,
   DecisionResumenItem,
+  CandidataView,
   DecisionResultadoView,
   DecisionTemaResponse,
   DecisionView,
@@ -14,19 +15,31 @@ import type {
   PapeletaValue,
   SolucionItem,
 } from '@decide/shared';
-import { type GrupoFila, grupoTrabajoItem } from '../grupos/grupo-item';
+import { type GrupoFila, claveMinimo, grupoTrabajoItem, ultimosInformes } from '../grupos/grupo-item';
+import {
+  type DecisionBifurcable,
+  GRUPO_EN_MARCHA,
+  enmascararOrigenOculto,
+  esBifurcable,
+  finDelPlazo,
+  grupoEnMarcha,
+} from '../grupos/bifurcacion-reglas';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { ForumsService } from '../forums/forums.service';
 import { RulesService } from '../rules/rules.service';
 import { GroupAccessService } from '../groups/group-access.service';
 import { tallyDecision } from './decision-tally';
+import { participantesDelDebate } from './participantes-del-debate';
 
 const OCULTA_TITULO = 'Solución oculta por moderación';
 const FIJAS = 'Las soluciones ya quedaron fijas.';
 const DIA_MS = 86_400_000;
 const OBJECION_CERRADA = 'El plazo para objetar el modo no está abierto.';
 const VOTACION_CERRADA = 'La votación no está abierta.';
+
+/** Valores de bifurcación antes de calcularlos (o fuera de una decisión contada). */
+const SIN_BIFURCACION = { bifurcable: false, puedoIniciarBifurcacion: false, bifurcacionId: null } as const;
 
 const matriz = (v: Prisma.JsonValue | null | undefined): number[][] => (Array.isArray(v) ? (v as number[][]) : []);
 
@@ -132,11 +145,6 @@ export class DecisionesService {
     private readonly access: GroupAccessService,
   ) {}
 
-  private async actorId(profileId: string): Promise<{ actorId: string } | Record<never, never>> {
-    const p = await this.prisma.profile.findUnique({ where: { id: profileId }, select: { userId: true } });
-    return p?.userId ? { actorId: p.userId } : {};
-  }
-
   /**
    * El tema debe existir. Para `participar`, la persona debe ser miembro de su grupo; para
    * `leer` basta con poder leerlo (miembro, o miembro del ámbito si es un grupo de trabajo).
@@ -184,11 +192,11 @@ export class DecisionesService {
         },
       });
     });
+    // Dentro de una bifurcación (reservada), sin actor ni ip.
     void this.audit.log({
-      ...(await this.actorId(profileId)),
+      ...(await this.access.rastro(tema.groupId, profileId, ip)).quien,
       action: 'solucion.created',
       resource: `solucion:${created.id}`,
-      ip,
       metadata: { proposalId },
     });
     return { id: created.id };
@@ -241,10 +249,9 @@ export class DecisionesService {
       if (r.count === 0) throw new BadRequestException('Alguna de las soluciones ya fue juntada u ocultada.');
     });
     void this.audit.log({
-      ...(await this.actorId(profileId)),
+      ...(await this.access.rastro(tema.groupId, profileId, ip)).quien,
       action: 'solucion.merged',
       resource: `solucion:${solucionId}`,
-      ip,
       metadata: { proposalId: origen.proposalId },
     });
   }
@@ -299,13 +306,13 @@ export class DecisionesService {
         const enPausa = await provisionales(this.prisma, filas.filter((s) => s.hidden).map((s) => s.id));
         for (const s of filas) {
           if (s.mergedIntoId === null && (!s.hidden || enPausa.has(s.id))) {
-            candidatas.push({ id: s.id, ...textoDe(s), hidden: s.hidden });
+            candidatas.push({ id: s.id, ...textoDe(s), hidden: s.hidden, ...SIN_BIFURCACION });
           }
         }
       } else {
         for (const id of decision.candidatas) {
           const s = porId.get(id);
-          if (s) candidatas.push({ id: s.id, ...textoDe(s), hidden: s.hidden });
+          if (s) candidatas.push({ id: s.id, ...textoDe(s), hidden: s.hidden, ...SIN_BIFURCACION });
         }
       }
 
@@ -325,6 +332,10 @@ export class DecisionesService {
         decision.objecionEndsAt !== null &&
         Date.now() < decision.objecionEndsAt.getTime() &&
         (await this.participantes(proposalId, tema.groupId)).has(profileId);
+
+      if (fase === 'contada' && candidatas.length > 0) {
+        await this.marcarBifurcaciones(candidatas, decision, tema.groupId, participa ? profileId : null, papeleta);
+      }
 
       // Antes del conteo no sale ninguna cifra; después, el resultado congelado.
       let resultado: DecisionResultadoView | null = null;
@@ -372,6 +383,53 @@ export class DecisionesService {
     };
   }
 
+  /**
+   * Bifurcación de cada candidata de una decisión contada. `puedoIniciarBifurcacion` sale solo de la
+   * papeleta propia (miembro actual del grupo del tema): para cualquier otra persona es false, sin más.
+   */
+  private async marcarBifurcaciones(
+    candidatas: CandidataView[],
+    decision: DecisionBifurcable & { contadaAt: Date | null; updatedAt: Date },
+    groupId: string,
+    yo: string | null,
+    papeleta: { abstencion: boolean; orden: string[] } | null,
+  ): Promise<void> {
+    const now = new Date();
+    const [grupo, bifs, dias] = await Promise.all([
+      this.prisma.group.findUnique({ where: { id: groupId }, select: { type: true } }),
+      this.prisma.group.findMany({
+        where: { trabajoTipo: 'bifurcacion', origenSolucionId: { in: candidatas.map((c) => c.id) } },
+        select: { id: true, origenSolucionId: true, trabajoEstado: true, convocatoriaEndsAt: true },
+      }),
+      this.rules.getInt('bifurcacion.plazo_dias', groupId),
+    ]);
+    const tipo = (grupo?.type as string | undefined) ?? '';
+    const enPlazo = now.getTime() < finDelPlazo(decision.contadaAt ?? decision.updatedAt, dias).getTime();
+    const mias =
+      yo && bifs.length > 0
+        ? new Set(
+            (
+              await this.prisma.groupMembership.findMany({
+                where: { profileId: yo, groupId: { in: bifs.map((b) => b.id) } },
+                select: { groupId: true },
+              })
+            ).map((m) => m.groupId),
+          )
+        : new Set<string>();
+    for (const c of candidatas) {
+      c.bifurcable = !c.hidden && esBifurcable(decision, c.id, tipo);
+      const b = bifs.find((x) => x.origenSolucionId === c.id);
+      c.bifurcacionId = b?.id ?? null;
+      const apoyo = yo !== null && papeleta !== null && !papeleta.abstencion && papeleta.orden.includes(c.id);
+      const abierta = b
+        ? !mias.has(b.id) &&
+          (b.trabajoEstado === 'activo' ||
+            (b.trabajoEstado === 'convocando' && b.convocatoriaEndsAt !== null && now.getTime() < b.convocatoriaEndsAt.getTime()))
+        : enPlazo;
+      c.puedoIniciarBifurcacion = c.bifurcable && apoyo && abierta;
+    }
+  }
+
   // ─── Modo y objeción ──────────────────────────────────────────────────────
 
   async proposeModo(profileId: string, proposalId: string, modo: DecisionModoValue, ip: string): Promise<void> {
@@ -394,7 +452,7 @@ export class DecisionesService {
       return this.salirDelModo(tx, decision.id, proposalId, new Date(), modo, plazos);
     });
     if (!salida) throw new BadRequestException(fueraDeFase);
-    this.auditarSalidaDelModo(salida, decision.id, proposalId, { ...(await this.actorId(profileId)), ip });
+    this.auditarSalidaDelModo(salida, decision.id, proposalId, (await this.access.rastro(tema.groupId, profileId, ip)).quien);
   }
 
   private async plazosDelModo(groupId: string): Promise<{ objecionDias: number; votacionDias: number }> {
@@ -546,31 +604,9 @@ export class DecisionesService {
     return valor;
   }
 
-  /**
-   * Miembros actuales del grupo que en este tema comentaron, señalaron, escribieron
-   * o votaron una frase, o propusieron una solución.
-   */
-  private async participantes(proposalId: string, groupId: string): Promise<Set<string>> {
-    const [comentarios, senales, frases, votos, soluciones] = await Promise.all([
-      this.prisma.proposalComment.findMany({ where: { proposalId }, select: { authorProfileId: true }, distinct: ['authorProfileId'] }),
-      this.prisma.consensusSignal.findMany({ where: { proposalId }, select: { profileId: true } }),
-      this.prisma.frase.findMany({ where: { proposalId }, select: { authorProfileId: true }, distinct: ['authorProfileId'] }),
-      this.prisma.fraseVoto.findMany({ where: { frase: { proposalId } }, select: { profileId: true }, distinct: ['profileId'] }),
-      this.prisma.solucion.findMany({ where: { proposalId }, select: { authorProfileId: true }, distinct: ['authorProfileId'] }),
-    ]);
-    const ids = new Set<string>([
-      ...comentarios.map((c) => c.authorProfileId),
-      ...senales.map((s) => s.profileId),
-      ...frases.map((f) => f.authorProfileId),
-      ...votos.map((v) => v.profileId),
-      ...soluciones.map((s) => s.authorProfileId),
-    ]);
-    if (ids.size === 0) return new Set();
-    const miembros = await this.prisma.groupMembership.findMany({
-      where: { groupId, profileId: { in: [...ids] } },
-      select: { profileId: true },
-    });
-    return new Set(miembros.map((m) => m.profileId));
+  /** Miembros actuales del grupo que participaron en el debate del tema (ver participantes-del-debate). */
+  private participantes(proposalId: string, groupId: string): Promise<Set<string>> {
+    return participantesDelDebate(this.prisma, proposalId, groupId);
   }
 
   // ─── Plazos ───────────────────────────────────────────────────────────────
@@ -588,7 +624,11 @@ export class DecisionesService {
   private async finDelDebate(now: Date): Promise<number> {
     const temas = await this.prisma.proposal.findMany({
       // Una propuesta del plan 2 con votación propia (electionId) no pasa por este ciclo.
-      where: { kind: 'propuesta', status: 'open', hidden: false, deliberationEndsAt: { lte: now }, decision: null, electionId: null },
+      // Un grupo de trabajo detenido (pausado, cerrado) o que cuelga de una bifurcación pausada no avanza.
+      where: {
+        kind: 'propuesta', status: 'open', hidden: false, deliberationEndsAt: { lte: now }, decision: null, electionId: null,
+        group: GRUPO_EN_MARCHA,
+      },
       select: { id: true, groupId: true },
     });
     let n = 0;
@@ -646,7 +686,7 @@ export class DecisionesService {
    */
   private async finDelModo(now: Date): Promise<number> {
     const decisiones = await this.prisma.decision.findMany({
-      where: { fase: 'modo' },
+      where: { fase: 'modo', proposal: { group: GRUPO_EN_MARCHA } },
       select: { id: true, proposalId: true, createdAt: true, proposal: { select: { groupId: true } } },
     });
     let n = 0;
@@ -670,7 +710,7 @@ export class DecisionesService {
 
   private async finDeLaObjecion(now: Date): Promise<number> {
     const decisiones = await this.prisma.decision.findMany({
-      where: { fase: 'objecion', objecionEndsAt: { lte: now } },
+      where: { fase: 'objecion', objecionEndsAt: { lte: now }, proposal: { group: GRUPO_EN_MARCHA } },
       select: { id: true, proposalId: true, modoPropuesto: true, proposal: { select: { groupId: true } } },
     });
     let n = 0;
@@ -736,7 +776,7 @@ export class DecisionesService {
 
   private async finDeLaVotacion(now: Date): Promise<number> {
     const decisiones = await this.prisma.decision.findMany({
-      where: { fase: 'votacion', votacionEndsAt: { lte: now } },
+      where: { fase: 'votacion', votacionEndsAt: { lte: now }, proposal: { group: GRUPO_EN_MARCHA } },
       select: { id: true },
     });
     let n = 0;
@@ -757,9 +797,29 @@ export class DecisionesService {
   async contar(decisionId: string, now: Date): Promise<boolean> {
     const previa = await this.prisma.decision.findUnique({
       where: { id: decisionId },
-      select: { proposalId: true, proposal: { select: { groupId: true } } },
+      select: {
+        proposalId: true,
+        proposal: {
+          select: {
+            groupId: true,
+            group: { select: { type: true, trabajoEstado: true, parent: { select: { trabajoEstado: true } } } },
+          },
+        },
+      },
     });
     if (!previa) return false;
+    // Un grupo de trabajo pausado (o su comisión) no cuenta: se cuenta al reanudarse, con el plazo corrido.
+    const grupo = previa.proposal.group;
+    if (
+      grupo &&
+      !grupoEnMarcha({
+        type: grupo.type as string,
+        trabajoEstado: (grupo.trabajoEstado as string | null) ?? null,
+        parent: grupo.parent ? { trabajoEstado: (grupo.parent.trabajoEstado as string | null) ?? null } : null,
+      })
+    ) {
+      return false;
+    }
     const { proposalId } = previa;
     const groupId = previa.proposal.groupId;
     const quorumPct = await this.rules.getInt('votacion.quorum_porcentaje', groupId);
@@ -990,14 +1050,18 @@ export class DecisionesService {
    */
   private async gruposDeTrabajo(ambitoIds: string[], soy: Set<string>): Promise<Map<string, GrupoTrabajoItem[]>> {
     const porAmbito = new Map<string, GrupoTrabajoItem[]>();
-    const filas = (await this.prisma.group.findMany({
-      where: { type: 'trabajo', parentGroupId: { in: ambitoIds }, trabajoEstado: { not: 'archivado' } },
-      select: {
-        id: true, name: true, type: true, parentGroupId: true, trabajoTipo: true, trabajoEstado: true,
-        proposito: true, convocatoriaEndsAt: true, pocosMiembrosDesde: true,
-      },
-      orderBy: { createdAt: 'asc' },
-    })) as GrupoFila[];
+    // El propósito de una bifurcación es el título de su solución de origen: enmascarado si se ocultó.
+    const filas = await enmascararOrigenOculto(
+      this.prisma,
+      (await this.prisma.group.findMany({
+        where: { type: 'trabajo', parentGroupId: { in: ambitoIds }, trabajoEstado: { not: 'archivado' } },
+        select: {
+          id: true, name: true, type: true, parentGroupId: true, trabajoTipo: true, trabajoEstado: true,
+          proposito: true, convocatoriaEndsAt: true, pocosMiembrosDesde: true, origenSolucionId: true,
+        },
+        orderBy: { createdAt: 'asc' },
+      })) as GrupoFila[],
+    );
     if (filas.length === 0) return porAmbito;
 
     const conteos = await this.prisma.groupMembership.groupBy({
@@ -1006,14 +1070,27 @@ export class DecisionesService {
       _count: { _all: true },
     });
     const miembros = new Map(conteos.map((c) => [c.groupId, c._count._all]));
+    // Último informe de cada comisión: una consulta para todas.
+    const informes = await ultimosInformes(
+      this.prisma,
+      filas.filter((f) => f.trabajoTipo === 'comision').map((f) => f.id),
+    );
     const minimos = new Map<string, number>();
-    for (const ambitoId of new Set(filas.map((f) => f.parentGroupId ?? ''))) {
-      minimos.set(ambitoId, await this.rules.getInt('subgrupo.minimo_personas', ambitoId));
+    // Mínimo por ámbito y tipo: las bifurcaciones tienen su propia regla.
+    const claveDe = (f: GrupoFila) => `${f.parentGroupId ?? ''}|${claveMinimo(f.trabajoTipo)}`;
+    for (const f of filas) {
+      const k = claveDe(f);
+      if (!minimos.has(k)) minimos.set(k, await this.rules.getInt(claveMinimo(f.trabajoTipo), f.parentGroupId ?? ''));
     }
     for (const f of filas) {
       const ambitoId = f.parentGroupId ?? '';
       const lista = porAmbito.get(ambitoId) ?? [];
-      lista.push(grupoTrabajoItem(f, miembros.get(f.id) ?? 0, minimos.get(ambitoId) ?? 0, soy.has(f.id)));
+      // Una bifurcación sale como «Iniciativa de un grupo» con cuántos son, nunca quiénes.
+      lista.push(
+        grupoTrabajoItem(f, miembros.get(f.id) ?? 0, minimos.get(claveDe(f)) ?? 0, soy.has(f.id), {
+          ultimoInforme: informes.get(f.id) ?? null,
+        }),
+      );
       porAmbito.set(ambitoId, lista);
     }
     return porAmbito;

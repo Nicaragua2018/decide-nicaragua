@@ -392,6 +392,8 @@ const INVALID: ActionResult = { error: 'Solicitud no válida.' };
 function revalidateContent(formData: FormData): void {
   const topicId = formData.get('topicId');
   const inquietudId = formData.get('inquietudId');
+  const grupoId = formData.get('grupoId');
+  if (isUuid(grupoId)) revalidatePath(`/grupos/${grupoId}`);
   if (isUuid(topicId)) revalidatePath(`/proposals/${topicId}`);
   if (isUuid(inquietudId)) {
     revalidatePath(`/inquietudes/${inquietudId}`);
@@ -658,4 +660,151 @@ export async function llevarALaComunidad(grupoId: string, solucionId: string): P
   const data = (await res.json()) as { inquietudId: string };
   revalidatePath('/inquietudes');
   redirect(`/inquietudes/${data.inquietudId}`);
+}
+
+// ─── Comisiones y bifurcaciones ───────────────────────────────────────────────
+
+function revalidarGrupo(grupoId: string): void {
+  revalidatePath(`/grupos/${grupoId}`);
+  revalidatePath('/grupos');
+  revalidatePath('/decisiones');
+}
+
+/** Ofrecerse como voluntario de una comisión o retirarse. */
+export async function ofrecerseComision(grupoId: string, experiencia: string): Promise<ActionResult> {
+  if (!isUuid(grupoId)) return INVALID;
+  const res = await actionFetch(`/api/grupos/${grupoId}/voluntario`, {
+    method: 'POST',
+    body: JSON.stringify(experiencia.trim() === '' ? {} : { experiencia }),
+  });
+  if (!res.ok) return { error: await parseError(res) };
+  revalidarGrupo(grupoId);
+  return { success: true };
+}
+
+export async function retirarseComision(grupoId: string): Promise<ActionResult> {
+  if (!isUuid(grupoId)) return INVALID;
+  const res = await actionFetch(`/api/grupos/${grupoId}/voluntario`, { method: 'DELETE' });
+  if (!res.ok) return { error: await parseError(res) };
+  revalidarGrupo(grupoId);
+  return { success: true };
+}
+
+export async function ajustarComision(grupoId: string, tarea: string, puestos: number): Promise<ActionResult> {
+  if (!isUuid(grupoId) || !Number.isInteger(puestos)) return INVALID;
+  const res = await actionFetch(`/api/grupos/${grupoId}/comision`, {
+    method: 'PATCH',
+    body: JSON.stringify({ tarea, puestos }),
+  });
+  if (!res.ok) return { error: await parseError(res) };
+  revalidarGrupo(grupoId);
+  return { success: true };
+}
+
+export async function guardarPapeletaComision(grupoId: string, orden: string[]): Promise<ActionResult> {
+  if (!isUuid(grupoId) || !orden.every(isUuid)) return INVALID;
+  const res = await actionFetch(`/api/grupos/${grupoId}/comision/papeleta`, {
+    method: 'PUT',
+    body: JSON.stringify({ orden }),
+  });
+  if (!res.ok) return { error: await parseError(res) };
+  revalidarGrupo(grupoId);
+  return { success: true };
+}
+
+export async function publicarInforme(grupoId: string, texto: string, final: boolean): Promise<ActionResult> {
+  if (!isUuid(grupoId)) return INVALID;
+  const res = await actionFetch(`/api/grupos/${grupoId}/informes`, {
+    method: 'POST',
+    body: JSON.stringify({ texto, final }),
+  });
+  if (!res.ok) return { error: await parseError(res) };
+  revalidarGrupo(grupoId);
+  return { success: true };
+}
+
+export async function apoyarRenovacion(grupoId: string, apoyar: boolean): Promise<ActionResult> {
+  if (!isUuid(grupoId)) return INVALID;
+  const res = await actionFetch(`/api/grupos/${grupoId}/renovacion`, { method: apoyar ? 'POST' : 'DELETE' });
+  if (!res.ok) return { error: await parseError(res) };
+  revalidarGrupo(grupoId);
+  return { success: true };
+}
+
+export async function verificarSorteo(grupoId: string): Promise<{ ok: boolean; elegidos: number } | { error: string }> {
+  if (!isUuid(grupoId)) return { error: 'Solicitud no válida.' };
+  const res = await actionFetch(`/api/grupos/${grupoId}/comision/verificar`);
+  if (!res.ok) return { error: await parseError(res) };
+  const body = (await res.json()) as { ok: boolean; elegidos: string[] };
+  return { ok: body.ok, elegidos: body.elegidos.length };
+}
+
+/** Inicia (o se suma a) la bifurcación de una solución perdedora y lleva a su grupo. */
+export async function iniciarBifurcacion(solucionId: string): Promise<ActionResult> {
+  if (!isUuid(solucionId)) return INVALID;
+  const res = await actionFetch('/api/grupos/bifurcaciones', {
+    method: 'POST',
+    body: JSON.stringify({ solucionId }),
+  });
+  if (!res.ok) return { error: await parseError(res) };
+  const data = (await res.json()) as { id: string };
+  revalidatePath('/grupos');
+  revalidatePath('/decisiones');
+  redirect(`/grupos/${data.id}`);
+}
+
+/**
+ * Sumarse a una iniciativa de un grupo que ya existe, desde el resultado de la decisión: quien la
+ * apoyó todavía no la puede leer, así que no se refresca la página; al entrar se va a la iniciativa.
+ */
+export async function sumarmeAIniciativa(grupoId: string): Promise<ActionResult> {
+  if (!isUuid(grupoId)) return INVALID;
+  const res = await actionFetch(`/api/grupos/${grupoId}/entrar`, { method: 'POST' });
+  if (!res.ok) return { error: await parseError(res) };
+  revalidarGrupo(grupoId);
+  redirect(`/grupos/${grupoId}`);
+}
+
+export async function pausarBifurcacion(grupoId: string, causa: string, detalle: string): Promise<ActionResult> {
+  if (!isUuid(grupoId)) return INVALID;
+  const res = await actionFetch(`/api/grupos/${grupoId}/pausa`, {
+    method: 'POST',
+    body: JSON.stringify({ causa, ...(detalle.trim() !== '' ? { detalle: detalle.trim() } : {}) }),
+  });
+  if (!res.ok) return { error: await parseError(res) };
+  revalidarGrupo(grupoId);
+  return { success: true };
+}
+
+export async function apelarPausa(grupoId: string, texto: string): Promise<ActionResult> {
+  if (!isUuid(grupoId)) return INVALID;
+  const res = await actionFetch(`/api/grupos/${grupoId}/pausa/apelacion`, {
+    method: 'POST',
+    body: JSON.stringify({ texto }),
+  });
+  if (!res.ok) return { error: await parseError(res) };
+  revalidarGrupo(grupoId);
+  return { success: true };
+}
+
+export async function resolverPausa(grupoId: string, reanudar: boolean): Promise<ActionResult> {
+  if (!isUuid(grupoId)) return INVALID;
+  const res = await actionFetch(`/api/grupos/${grupoId}/pausa/resolver`, {
+    method: 'POST',
+    body: JSON.stringify({ reanudar }),
+  });
+  if (!res.ok) return { error: await parseError(res) };
+  revalidarGrupo(grupoId);
+  revalidatePath('/admin/mesa');
+  return { success: true };
+}
+
+/** Un miembro de la bifurcación pide su comisión y va a ella. */
+export async function pedirComision(grupoId: string): Promise<ActionResult> {
+  if (!isUuid(grupoId)) return INVALID;
+  const res = await actionFetch(`/api/grupos/${grupoId}/comision`, { method: 'POST' });
+  if (!res.ok) return { error: await parseError(res) };
+  const data = (await res.json()) as { id: string };
+  revalidarGrupo(grupoId);
+  redirect(`/grupos/${data.id}`);
 }

@@ -11,6 +11,7 @@ const TIPO: Record<ModerationAppeal['target'], string> = {
   inquietud: 'Inquietud',
   frase: 'Frase',
   solucion: 'Solución',
+  informe: 'Informe',
 };
 
 /** Etiqueta de la causa más el detalle (si lo hay); sin causa, el motivo de las moderaciones viejas. */

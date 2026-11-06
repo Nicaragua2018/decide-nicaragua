@@ -9,7 +9,7 @@ const SUB = 'g-sub';
 const COMUNIDAD = 'g-comunidad';
 
 /** Membresías por grupo: la persona es miembro de los grupos de `de`. */
-function prismaCon(de: string[], trabajoEstado = 'activo') {
+function prismaCon(de: string[], trabajoEstado = 'activo', trabajoTipo = 'subgrupo') {
   return {
     groupMembership: {
       findUnique: vi.fn(({ where }: { where: { groupId_profileId: { groupId: string; profileId: string } } }) =>
@@ -22,7 +22,7 @@ function prismaCon(de: string[], trabajoEstado = 'activo') {
       findUnique: vi.fn(({ where }: { where: { id: string } }) =>
         Promise.resolve(
           where.id === SUB
-            ? { type: 'trabajo', parentGroupId: AMBITO, trabajoEstado }
+            ? { type: 'trabajo', parentGroupId: AMBITO, trabajoEstado, trabajoTipo }
             : where.id === COMUNIDAD || where.id === AMBITO
               ? { type: 'territorial_residence', parentGroupId: null, trabajoEstado: null }
               : null,
@@ -108,6 +108,93 @@ describe('GroupAccessService', () => {
       await expect(service.requireMember(SUB, YO)).resolves.toBeUndefined();
       service = new GroupAccessService(prismaCon([AMBITO], 'activo') as never);
       await expect(service.requireMember(SUB, YO)).rejects.toThrow('Solo los miembros de este grupo pueden participar.');
+    });
+  });
+
+  describe('bifurcación (R4: el ámbito no la lee)', () => {
+    it('un miembro del ámbito que no es de la bifurcación no la lee ni su foro: 403', async () => {
+      service = new GroupAccessService(prismaCon([AMBITO], 'activo', 'bifurcacion') as never);
+      expect(await service.nivel(SUB, YO)).toBeNull();
+      expect(await service.canRead(SUB, YO)).toBe(false);
+      await expect(service.requireReader(SUB, YO)).rejects.toThrow(ForbiddenException);
+    });
+    it('sus miembros la leen y participan', async () => {
+      service = new GroupAccessService(prismaCon([SUB, AMBITO], 'activo', 'bifurcacion') as never);
+      await expect(service.requireReader(SUB, YO)).resolves.toEqual({ participa: true });
+      await expect(service.requireParticipant(SUB, YO)).resolves.toBeUndefined();
+    });
+    it('pausada, sus miembros la leen pero no participan (409)', async () => {
+      service = new GroupAccessService(prismaCon([SUB, AMBITO], 'pausado', 'bifurcacion') as never);
+      await expect(service.requireReader(SUB, YO)).resolves.toEqual({ participa: true });
+      await expect(service.requireParticipant(SUB, YO)).rejects.toThrow(ConflictException);
+    });
+  });
+
+  describe('grupos reservados y rastro para la auditoría', () => {
+    /** g-bif es una bifurcación de AMBITO; g-com es su comisión; SUB un subgrupo. */
+    function prismaReservado() {
+      const grupos: Record<string, { type: string; parentGroupId: string | null; trabajoEstado: string | null; trabajoTipo: string | null }> = {
+        [AMBITO]: { type: 'territorial_residence', parentGroupId: null, trabajoEstado: null, trabajoTipo: null },
+        [SUB]: { type: 'trabajo', parentGroupId: AMBITO, trabajoEstado: 'activo', trabajoTipo: 'subgrupo' },
+        'g-bif': { type: 'trabajo', parentGroupId: AMBITO, trabajoEstado: 'activo', trabajoTipo: 'bifurcacion' },
+        'g-com': { type: 'trabajo', parentGroupId: 'g-bif', trabajoEstado: 'activo', trabajoTipo: 'comision' },
+      };
+      return {
+        groupMembership: { findUnique: vi.fn().mockResolvedValue(null) },
+        group: { findUnique: vi.fn(({ where }: { where: { id: string } }) => Promise.resolve(grupos[where.id] ?? null)) },
+        profile: { findUnique: vi.fn().mockResolvedValue({ userId: 'u-yo' }) },
+      };
+    }
+
+    it('esReservado: la bifurcación y su comisión sí; el ámbito, un subgrupo o un grupo inexistente no', async () => {
+      service = new GroupAccessService(prismaReservado() as never);
+      expect(await service.esReservado('g-bif')).toBe(true);
+      expect(await service.esReservado('g-com')).toBe(true);
+      expect(await service.esReservado(AMBITO)).toBe(false);
+      expect(await service.esReservado(SUB)).toBe(false);
+      expect(await service.esReservado('g-nada')).toBe(false);
+    });
+
+    it('rastro: fuera de lo reservado lleva actor e ip; dentro, nada', async () => {
+      service = new GroupAccessService(prismaReservado() as never);
+      expect(await service.rastro(AMBITO, YO, '1.1.1.1')).toEqual({ reservado: false, quien: { actorId: 'u-yo', ip: '1.1.1.1' } });
+      expect(await service.rastro('g-bif', YO, '1.1.1.1')).toEqual({ reservado: true, quien: {} });
+      expect(await service.rastro('g-com', YO)).toEqual({ reservado: true, quien: {} });
+      // Reservado por otra causa (p. ej., un tema llevado desde una bifurcación).
+      expect(await service.rastro(AMBITO, YO, '1.1.1.1', true)).toEqual({ reservado: true, quien: {} });
+    });
+  });
+
+  describe('I3: una bifurcación en pausa detiene también lo que cuelga de ella', () => {
+    function prismaPausa(estadoBif: string) {
+      const grupos: Record<string, { type: string; parentGroupId: string | null; trabajoEstado: string | null; trabajoTipo: string | null }> = {
+        [AMBITO]: { type: 'territorial_residence', parentGroupId: null, trabajoEstado: null, trabajoTipo: null },
+        'g-bif': { type: 'trabajo', parentGroupId: AMBITO, trabajoEstado: estadoBif, trabajoTipo: 'bifurcacion' },
+        'g-com': { type: 'trabajo', parentGroupId: 'g-bif', trabajoEstado: 'activo', trabajoTipo: 'comision' },
+      };
+      return {
+        groupMembership: { findUnique: vi.fn().mockResolvedValue({ id: 'm' }) },
+        group: { findUnique: vi.fn(({ where }: { where: { id: string } }) => Promise.resolve(grupos[where.id] ?? null)) },
+      };
+    }
+
+    it('la bifurcación pausada y su comisión activa dan 409 «Esta iniciativa está en pausa.»', async () => {
+      service = new GroupAccessService(prismaPausa('pausado') as never);
+      await expect(service.requireParticipant('g-bif', YO)).rejects.toThrow('Esta iniciativa está en pausa.');
+      await expect(service.requireParticipant('g-com', YO)).rejects.toThrow(ConflictException);
+      await expect(service.requireParticipant('g-com', YO)).rejects.toThrow('Esta iniciativa está en pausa.');
+    });
+
+    it('con la bifurcación activa, su comisión activa sí participa', async () => {
+      service = new GroupAccessService(prismaPausa('activo') as never);
+      await expect(service.requireParticipant('g-com', YO)).resolves.toBeUndefined();
+    });
+
+    it('esReservado que falla no rompe: rastro queda sin actor', async () => {
+      const p = prismaPausa('activo');
+      p.group.findUnique.mockRejectedValue(new Error('caída'));
+      service = new GroupAccessService(p as never);
+      expect(await service.rastro('g-com', YO, '1.1.1.1')).toEqual({ reservado: true, quien: {} });
     });
   });
 });

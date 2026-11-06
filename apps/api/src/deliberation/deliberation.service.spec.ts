@@ -220,6 +220,32 @@ describe('DeliberationService', () => {
         ForbiddenException,
       );
     });
+
+    it('un tema llegado desde una bifurcación no muestra a quien lo llevó; el detalle tampoco da su id', async () => {
+      const p = prisma as unknown as Record<string, unknown>;
+      p['inquietud'] = {
+        findMany: vi.fn().mockResolvedValue([{ proposalId: 'tema-bif', origenSolucionId: 's-bif' }]),
+      };
+      p['group'] = { ...prisma.group, findMany: vi.fn().mockResolvedValue([{ origenSolucionId: 's-bif' }]) };
+      p['solucion'] = { findMany: vi.fn().mockResolvedValue([]) };
+      prisma.groupMembership.findUnique.mockResolvedValue(mockMembership);
+      const base = { ...mockProposal, signals: [], _count: { comments: 0 } };
+      prisma.proposal.findMany.mockResolvedValue([
+        { ...base, id: 'tema-bif', abiertoPorComunidad: true, authorProfileId: 'p-secreta', author: { displayName: 'Zoe Secreta' } },
+        { ...base, id: 'tema-otro', abiertoPorComunidad: false, author: { displayName: 'Ana' } },
+      ]);
+      const lista = await service.listGroupProposals(GROUP_ID, PROFILE_ID);
+      expect(lista.proposals.map((x) => x.authorDisplayName)).toEqual(['Iniciativa de un grupo', 'Ana']);
+
+      prisma.proposal.findUnique.mockResolvedValue({
+        ...base, id: 'tema-bif', abiertoPorComunidad: true, authorProfileId: 'p-secreta',
+        author: { displayName: 'Zoe Secreta' }, comments: [], inquietudes: [],
+      });
+      const d = await service.getProposalById('tema-bif', PROFILE_ID);
+      expect(d.authorDisplayName).toBe('Iniciativa de un grupo');
+      expect(JSON.stringify(d)).not.toContain('p-secreta');
+      expect(JSON.stringify(d)).not.toContain('Zoe');
+    });
   });
 
   // ─── getProposalById ──────────────────────────────────────────────────────
@@ -271,6 +297,58 @@ describe('DeliberationService', () => {
       await expect(service.getProposalById(PROPOSAL_ID, PROFILE_ID)).rejects.toThrow(
         ForbiddenException,
       );
+    });
+  });
+
+  // ─── Auditoría dentro de una bifurcación ──────────────────────────────────
+
+  describe('auditoría dentro de una bifurcación (reservada)', () => {
+    const BIF = { type: 'trabajo', parentGroupId: 'g-ambito', trabajoEstado: 'activo', trabajoTipo: 'bifurcacion' };
+    const sinRastro = () => {
+      expect(audit.log).toHaveBeenCalled();
+      for (const [e] of audit.log.mock.calls as [Record<string, unknown>][]) {
+        expect(e).not.toHaveProperty('actorId');
+        expect(e).not.toHaveProperty('ip');
+        expect(JSON.stringify(e)).not.toContain(GROUP_ID);
+      }
+    };
+
+    beforeEach(() => {
+      prisma.group.findUnique.mockResolvedValue(BIF);
+      prisma.groupMembership.findUnique.mockResolvedValue(mockMembership);
+      prisma.proposal.findUnique.mockResolvedValue(mockProposal);
+    });
+
+    it('crear un tema no deja actor, ip ni el id del grupo', async () => {
+      prisma.forum.findFirst.mockResolvedValue({ id: 'forum-uuid-1', groupId: GROUP_ID });
+      prisma.proposal.create.mockResolvedValue({ id: PROPOSAL_ID });
+      await service.createProposal(GROUP_ID, { title: 'Un tema dentro de la iniciativa', body: 'Cuerpo del tema.' }, PROFILE_ID, IP);
+      await flush();
+      sinRastro();
+    });
+
+    it('comentar y dar una señal tampoco', async () => {
+      prisma.proposalComment.create.mockResolvedValue({ id: COMMENT_ID });
+      await service.addComment(PROPOSAL_ID, { body: 'Un comentario dentro.' }, PROFILE_ID, IP);
+      prisma.consensusSignal.upsert.mockResolvedValue({});
+      await service.setSignal(PROPOSAL_ID, { signal: SignalType.support }, PROFILE_ID, IP);
+      await flush();
+      sinRastro();
+    });
+
+    it('archivar un tema tampoco', async () => {
+      prisma.proposal.update.mockResolvedValue({});
+      await service.updateProposalStatus(PROPOSAL_ID, { status: ProposalStatus.archived }, PROFILE_ID, IP);
+      await flush();
+      sinRastro();
+    });
+
+    it('fuera de lo reservado se audita con actor e ip, como siempre', async () => {
+      prisma.group.findUnique.mockResolvedValue({ type: 'territorial_origin', parentGroupId: null, trabajoEstado: null, trabajoTipo: null });
+      prisma.proposalComment.create.mockResolvedValue({ id: COMMENT_ID });
+      await service.addComment(PROPOSAL_ID, { body: 'Un comentario fuera.' }, PROFILE_ID, IP);
+      await flush();
+      expect(audit.log.mock.calls[0]![0]).toMatchObject({ actorId: 'user-uuid-1', ip: IP });
     });
   });
 

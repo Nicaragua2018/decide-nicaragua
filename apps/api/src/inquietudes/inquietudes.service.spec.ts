@@ -139,6 +139,27 @@ describe('InquietudesService', () => {
     });
   });
 
+  describe('llevadas desde una bifurcación', () => {
+    it('no muestran el nombre de quien la llevó (delataría su voto); las demás sí', async () => {
+      const p = prisma as unknown as Record<string, unknown>;
+      p['group'] = {
+        ...prisma.group,
+        findMany: vi.fn(async ({ where }: { where: { origenSolucionId: { in: string[] } } }) =>
+          where.origenSolucionId.in.includes('s-bif') ? [{ origenSolucionId: 's-bif' }] : [],
+        ),
+      };
+      p['solucion'] = { findMany: vi.fn().mockResolvedValue([]) };
+      prisma.inquietud.findMany.mockResolvedValue([
+        fila({ id: 'i1', origenSolucionId: 's-bif', author: { displayName: 'Zoe Secreta' } }),
+        fila({ id: 'i2', origenSolucionId: 's-sub', author: { displayName: 'Ana' } }),
+        fila({ id: 'i3', origenSolucionId: null, author: { displayName: 'Beto' } }),
+      ]);
+      const r = await service.list(YO, G);
+      expect(r.map((i) => i.authorDisplayName)).toEqual(['Iniciativa de un grupo', 'Ana', 'Beto']);
+      expect(JSON.stringify(r)).not.toContain('Zoe');
+    });
+  });
+
   describe('create()', () => {
     it('crea y audita con solo el id del grupo', async () => {
       prisma.inquietud.create.mockResolvedValue({ id: 'i9' });

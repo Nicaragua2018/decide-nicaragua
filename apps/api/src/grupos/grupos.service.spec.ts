@@ -60,7 +60,8 @@ function buildPrisma(tx: ReturnType<typeof buildTx>) {
     groupMembership: { findUnique: vi.fn(), findMany: vi.fn().mockResolvedValue([]), count: vi.fn().mockResolvedValue(1) },
     forum: { findFirst: vi.fn().mockResolvedValue(null) },
     profile: { findUnique: vi.fn().mockResolvedValue({ userId: 'u-yo' }) },
-    solucion: { findUnique: vi.fn().mockResolvedValue(null) },
+    solucion: { findUnique: vi.fn().mockResolvedValue(null), findMany: vi.fn().mockResolvedValue([]) },
+    comisionInforme: { findMany: vi.fn().mockResolvedValue([]) },
     $transaction: vi.fn(async (fn: (t: unknown) => unknown) => fn(tx)),
   };
 }
@@ -74,9 +75,16 @@ describe('GruposService', () => {
     requireParticipant: ReturnType<typeof vi.fn>;
     requireMember: ReturnType<typeof vi.fn>;
     canRead: ReturnType<typeof vi.fn>;
+    esReservado: ReturnType<typeof vi.fn>;
   };
   let rules: { getInt: ReturnType<typeof vi.fn> };
   let audit: { log: ReturnType<typeof vi.fn> };
+  let comisiones: { vista: ReturnType<typeof vi.fn> };
+  let bifurcaciones: {
+    vista: ReturnType<typeof vi.fn>;
+    elegible: ReturnType<typeof vi.fn>;
+    puedePausarEn: ReturnType<typeof vi.fn>;
+  };
   let service: GruposService;
   /** Miembros por grupo, para las comprobaciones de membresía. */
   let miembroDe: Set<string>;
@@ -95,10 +103,24 @@ describe('GruposService', () => {
         if (!miembroDe.has(groupId)) throw new ForbiddenException('No participa.');
       }),
       canRead: vi.fn().mockResolvedValue(true),
+      esReservado: vi.fn().mockResolvedValue(false),
     };
     rules = { getInt: vi.fn(async (key: string) => (key === 'subgrupo.minimo_personas' ? 5 : 14)) };
     audit = { log: vi.fn().mockResolvedValue(undefined) };
-    service = new GruposService(prisma as never, access as never, rules as never, audit as never);
+    comisiones = { vista: vi.fn().mockResolvedValue({ tarea: 'vista de la comisión' }) };
+    bifurcaciones = {
+      vista: vi.fn().mockResolvedValue({ solucionTitulo: 'vista de la bifurcación' }),
+      elegible: vi.fn().mockResolvedValue(false),
+      puedePausarEn: vi.fn().mockResolvedValue(false),
+    };
+    service = new GruposService(
+      prisma as never,
+      access as never,
+      rules as never,
+      audit as never,
+      comisiones as never,
+      bifurcaciones as never,
+    );
     prisma.group.findUnique.mockImplementation(async ({ where }: { where: { id: string } }) =>
       where.id === AMBITO ? ambito() : trabajo(),
     );
@@ -166,11 +188,14 @@ describe('GruposService', () => {
       expect(tx.groupMembership.upsert).not.toHaveBeenCalled();
     });
 
-    it('quien no puede leer el grupo recibe 403 antes de cualquier consulta', async () => {
+    it('quien no puede leer un subgrupo recibe el mismo 403 de lectura, sin transacción', async () => {
       access.requireReader.mockRejectedValue(new ForbiddenException('x'));
-      await expect(service.entrar(YO, GT, '1.1.1.1', NOW)).rejects.toBeInstanceOf(ForbiddenException);
+      const e = await service.entrar(YO, GT, '1.1.1.1', NOW).catch((x: unknown) => x);
+      expect(e).toBeInstanceOf(ForbiddenException);
+      expect((e as ForbiddenException).message).toBe('x');
       expect(access.requireReader).toHaveBeenCalledWith(GT, YO);
-      expect(prisma.group.findUnique).not.toHaveBeenCalled();
+      // Solo se mira si es una bifurcación (a la que se entra por elegibilidad, no por lectura).
+      expect(bifurcaciones.elegible).not.toHaveBeenCalled();
       expect(prisma.$transaction).not.toHaveBeenCalled();
     });
 
@@ -343,6 +368,107 @@ describe('GruposService', () => {
     });
   });
 
+  describe('comisiones en entrar, salir y plazos', () => {
+    it('a una comisión no se entra (400)', async () => {
+      prisma.group.findUnique.mockResolvedValue(trabajo({ trabajoTipo: 'comision' }));
+      await expect(service.entrar(YO, GT, '1.1.1.1', NOW)).rejects.toBeInstanceOf(BadRequestException);
+      expect(prisma.$transaction).not.toHaveBeenCalled();
+    });
+
+    it('salir de una comisión convocando no la archiva', async () => {
+      tx.group.findUnique.mockResolvedValue(trabajo({ trabajoTipo: 'comision' }));
+      tx.groupMembership.deleteMany.mockResolvedValue({ count: 0 });
+      tx.groupMembership.count.mockResolvedValue(0);
+      await service.salir(YO, GT, '1.1.1.1', NOW);
+      expect(tx.group.updateMany).not.toHaveBeenCalled();
+      expect(acciones()).toEqual([]);
+    });
+
+    it('salir de la comisión de una bifurcación (reservada) se audita sin actor ni ip', async () => {
+      access.esReservado.mockResolvedValue(true);
+      tx.group.findUnique.mockResolvedValue(trabajo({ trabajoTipo: 'comision', trabajoEstado: 'activo' }));
+      await service.salir(YO, GT, '1.1.1.1', NOW);
+      expect(acciones()).toEqual(['grupo.left']);
+      expect(audit.log.mock.calls[0]![0]).not.toHaveProperty('actorId');
+      expect(audit.log.mock.calls[0]![0]).not.toHaveProperty('ip');
+    });
+
+    it('los plazos de subgrupos dejan fuera a las comisiones (filtro positivo, sin depender de NULL)', async () => {
+      await service.processDeadlines(NOW);
+      for (const call of prisma.group.findMany.mock.calls) {
+        expect(call[0].where).toMatchObject({ trabajoTipo: { in: ['subgrupo', 'bifurcacion'] } });
+      }
+      expect(prisma.group.findMany).toHaveBeenCalledTimes(3);
+    });
+
+    it('la lista trae el último informe no oculto de cada comisión, en una sola consulta', async () => {
+      prisma.groupMembership.findMany.mockImplementation(async ({ where }: { where: Record<string, unknown> }) =>
+        where['profileId'] && !where['groupId'] ? [{ groupId: AMBITO, group: ambito() }] : [],
+      );
+      prisma.group.findMany.mockResolvedValue([
+        { ...trabajo({ id: 'g-com', trabajoTipo: 'comision', trabajoEstado: 'activo' }), _count: { memberships: 3 } },
+        { ...trabajo({ id: 'g-com2', trabajoTipo: 'comision', trabajoEstado: 'activo' }), _count: { memberships: 3 } },
+        { ...trabajo(), _count: { memberships: 2 } },
+      ]);
+      const fecha = new Date('2026-11-09T00:00:00Z');
+      (prisma as Record<string, unknown>)['comisionInforme'] = {
+        findMany: vi.fn().mockResolvedValue([{ grupoId: 'g-com', texto: 'Compramos la tubería.', createdAt: fecha }]),
+      };
+      const res = await service.list(YO);
+      const [c1, c2, sub] = res.ambitos[0]!.grupos;
+      expect(c1!.ultimoInforme).toEqual({ texto: 'Compramos la tubería.', createdAt: fecha.toISOString() });
+      expect(c2!.ultimoInforme).toBeNull();
+      expect(sub!.ultimoInforme).toBeNull();
+      const consulta = (prisma as unknown as { comisionInforme: { findMany: ReturnType<typeof vi.fn> } }).comisionInforme.findMany;
+      expect(consulta).toHaveBeenCalledTimes(1);
+      expect(consulta.mock.calls[0]![0]).toMatchObject({
+        where: { grupoId: { in: ['g-com', 'g-com2'] }, hidden: false },
+        orderBy: { createdAt: 'desc' },
+        distinct: ['grupoId'],
+      });
+    });
+
+    it('I4: con la solución de origen oculta, la comisión no repite su título en la lista ni en el detalle', async () => {
+      prisma.groupMembership.findMany.mockImplementation(async ({ where }: { where: Record<string, unknown> }) =>
+        where['profileId'] && !where['groupId'] ? [{ groupId: AMBITO, group: ambito() }] : [],
+      );
+      const com = trabajo({
+        trabajoTipo: 'comision',
+        name: 'Comisión: Agua potable',
+        proposito: 'Agua potable para el norte.',
+        tarea: 'Agua potable para el norte.',
+        origenSolucionId: 's-oculta',
+      });
+      prisma.group.findMany.mockResolvedValue([{ ...com, _count: { memberships: 0 } }]);
+      prisma.solucion.findMany.mockResolvedValue([{ id: 's-oculta' }]);
+      const res = await service.list(YO);
+      expect(res.ambitos[0]!.grupos[0]).toMatchObject({
+        name: 'Comisión: Solución oculta por moderación',
+        proposito: 'Solución oculta por moderación',
+      });
+      expect(JSON.stringify(res)).not.toContain('Agua potable');
+
+      prisma.group.findUnique.mockResolvedValue({ ...com, parent: ambito() });
+      const d = await service.detail(YO, GT);
+      expect(d.name).toBe('Comisión: Solución oculta por moderación');
+      expect(comisiones.vista).toHaveBeenCalledWith(
+        expect.objectContaining({ tarea: 'Solución oculta por moderación', proposito: 'Solución oculta por moderación' }),
+        YO,
+        true,
+      );
+    });
+
+    it('si esReservado falla tras salir, se audita sin actor ni ip y no hay 500', async () => {
+      access.esReservado.mockRejectedValue(new Error('caída'));
+      tx.group.findUnique.mockResolvedValue(trabajo({ trabajoEstado: 'activo' }));
+      tx.groupMembership.count.mockResolvedValue(5);
+      await expect(service.salir(YO, GT, '1.1.1.1', NOW)).resolves.toBeDefined();
+      expect(acciones()).toEqual(['grupo.left']);
+      expect(audit.log.mock.calls[0]![0]).not.toHaveProperty('actorId');
+      expect(audit.log.mock.calls[0]![0]).not.toHaveProperty('ip');
+    });
+  });
+
   describe('processDeadlines', () => {
     it('archiva al vencer la convocatoria sin el mínimo', async () => {
       prisma.group.findMany.mockResolvedValueOnce([{ id: GT }]).mockResolvedValueOnce([]);
@@ -397,6 +523,7 @@ describe('GruposService', () => {
       expect(n).toBe(0);
       expect(prisma.group.findMany.mock.calls[2]![0].where).toEqual({
         type: 'trabajo',
+        trabajoTipo: { in: ['subgrupo', 'bifurcacion'] },
         trabajoEstado: 'activo',
         pocosMiembrosDesde: null,
       });
@@ -615,9 +742,239 @@ describe('GruposService', () => {
       });
     });
 
+    it('el detalle de una comisión trae su vista y no ofrece entrar', async () => {
+      const g = { ...trabajo({ trabajoTipo: 'comision' }), parent: ambito() };
+      prisma.group.findUnique.mockResolvedValue(g);
+      const d = await service.detail(YO, GT);
+      expect(comisiones.vista).toHaveBeenCalledWith(g, YO, true);
+      expect(d.comision).toEqual({ tarea: 'vista de la comisión' });
+      expect(d.puedoEntrar).toBe(false);
+      expect(d.faltan).toBeNull();
+    });
+
+    it('el detalle de un subgrupo no trae vista de comisión', async () => {
+      prisma.group.findUnique.mockResolvedValue({ ...trabajo(), parent: ambito() });
+      const d = await service.detail(YO, GT);
+      expect(d.comision).toBeNull();
+      expect(comisiones.vista).not.toHaveBeenCalled();
+    });
+
     it('el detalle de un grupo que no es de trabajo es 404', async () => {
       prisma.group.findUnique.mockResolvedValue(ambito());
       await expect(service.detail(YO, AMBITO)).rejects.toBeInstanceOf(NotFoundException);
+    });
+  });
+
+  describe('bifurcaciones', () => {
+    const BIF = 'g-bif';
+    const S = 's-origen';
+    const OTRA = 'p-otra-persona';
+    const NO_ELEGIBLE = 'Solo quienes apoyaron esta solución pueden sumarse.';
+    const bif = (over: Record<string, unknown> = {}) =>
+      trabajo({
+        id: BIF,
+        name: 'Iniciativa de un grupo',
+        slug: `trabajo-${BIF}`,
+        trabajoTipo: 'bifurcacion',
+        proposito: 'Huerto comunitario',
+        origenSolucionId: S,
+        creadoPorProfileId: null,
+        ...over,
+      });
+
+    beforeEach(() => {
+      rules.getInt.mockImplementation(async (key: string) =>
+        key === 'bifurcacion.minimo_personas' ? 7 : key === 'subgrupo.minimo_personas' ? 5 : 10,
+      );
+      prisma.group.findUnique.mockImplementation(async ({ where }: { where: { id: string } }) =>
+        where.id === AMBITO ? ambito() : { ...bif(), parent: ambito() },
+      );
+      tx.group.findUnique.mockResolvedValue(bif());
+      // Si alguien pidiera los nombres de los miembros, aparecerían: las pruebas buscan que no.
+      prisma.groupMembership.findMany.mockImplementation(async ({ where }: { where: Record<string, unknown> }) =>
+        where['groupId'] === BIF ? [{ profileId: OTRA, profile: { displayName: 'Zoe Secreta' } }] : [],
+      );
+    });
+
+    it('quien no la lee pero la apoyó entra; nace con bifurcacion.minimo_personas y no se audita quién entró', async () => {
+      access.requireReader.mockRejectedValueOnce(new ForbiddenException('No lee.'));
+      bifurcaciones.elegible.mockResolvedValue(true);
+      tx.groupMembership.count.mockResolvedValue(7);
+      const d = await service.entrar(YO, BIF, '1.1.1.1', NOW);
+      expect(rules.getInt).toHaveBeenCalledWith('bifurcacion.minimo_personas', AMBITO);
+      expect(tx.group.updateMany).toHaveBeenCalledWith({
+        where: { id: BIF, trabajoEstado: 'convocando' },
+        data: { trabajoEstado: 'activo', convocatoriaEndsAt: null },
+      });
+      expect(acciones()).toEqual(['bifurcacion.activated']);
+      expect(audit.log.mock.calls[0]![0]).not.toHaveProperty('actorId');
+      expect(audit.log.mock.calls[0]![0].metadata).toEqual({ grupoId: BIF });
+      expect(d.miembrosNombres).toEqual([]);
+      expect(JSON.stringify(d)).not.toContain(OTRA);
+      expect(JSON.stringify(d)).not.toContain('Zoe');
+    });
+
+    it('con seis sigue convocando y sumarse no deja rastro en la auditoría', async () => {
+      access.requireReader.mockRejectedValueOnce(new ForbiddenException('No lee.'));
+      bifurcaciones.elegible.mockResolvedValue(true);
+      tx.groupMembership.count.mockResolvedValue(6);
+      await service.entrar(YO, BIF, '1.1.1.1', NOW);
+      expect(tx.group.updateMany).not.toHaveBeenCalled();
+      expect(audit.log).not.toHaveBeenCalled();
+    });
+
+    it('quien no es elegible recibe siempre el mismo 403, sin entrar', async () => {
+      access.requireReader.mockRejectedValue(new ForbiddenException('No lee.'));
+      const e1 = await service.entrar(YO, BIF, '1.1.1.1', NOW).catch((x: unknown) => x);
+      miembroDe.clear();
+      const e2 = await service.entrar('p-ajena', BIF, '1.1.1.1', NOW).catch((x: unknown) => x);
+      for (const e of [e1, e2]) {
+        expect(e).toBeInstanceOf(ForbiddenException);
+        expect((e as ForbiddenException).message).toBe(NO_ELEGIBLE);
+      }
+      expect(prisma.$transaction).not.toHaveBeenCalled();
+      expect(audit.log).not.toHaveBeenCalled();
+    });
+
+    it('salir de una bifurcación no se audita', async () => {
+      miembroDe.add(BIF);
+      tx.groupMembership.count.mockResolvedValue(4);
+      tx.group.findUnique.mockResolvedValue(bif({ trabajoEstado: 'activo', convocatoriaEndsAt: null }));
+      access.canRead.mockResolvedValue(false);
+      const d = await service.salir(YO, BIF, '1.1.1.1', NOW);
+      expect(tx.groupMembership.deleteMany).toHaveBeenCalled();
+      expect(acciones()).toEqual([]);
+      expect(JSON.stringify(d)).not.toContain(OTRA);
+    });
+
+    it('el detalle trae la vista de bifurcación, sin nombres ni ids de los miembros', async () => {
+      miembroDe.add(BIF);
+      const d = await service.detail(YO, BIF);
+      expect(bifurcaciones.vista).toHaveBeenCalledWith(expect.objectContaining({ id: BIF }), YO, true, true);
+      expect(d.bifurcacion).toEqual({ solucionTitulo: 'vista de la bifurcación' });
+      expect(d.name).toBe('Iniciativa de un grupo');
+      expect(d.miembrosNombres).toEqual([]);
+      expect(d.puedoEntrar).toBe(false);
+      expect(JSON.stringify(d)).not.toContain(OTRA);
+      expect(JSON.stringify(d)).not.toContain('Zoe');
+    });
+
+    it('en la lista sale como «Iniciativa de un grupo» con cuántos son, nunca quiénes', async () => {
+      prisma.groupMembership.findMany.mockImplementation(async ({ where }: { where: Record<string, unknown> }) =>
+        where['profileId'] && !where['groupId'] ? [{ groupId: AMBITO, group: ambito() }] : [],
+      );
+      prisma.group.findMany.mockResolvedValue([
+        { ...bif(), _count: { memberships: 3 } },
+        { ...trabajo(), _count: { memberships: 2 } },
+      ]);
+      const res = await service.list(YO);
+      expect(res.ambitos[0]!.grupos).toEqual([
+        expect.objectContaining({ id: BIF, name: 'Iniciativa de un grupo', proposito: 'Huerto comunitario', miembros: 3, faltan: 4, tipo: 'bifurcacion' }),
+        expect.objectContaining({ id: GT, miembros: 2, faltan: 3 }),
+      ]);
+      expect(JSON.stringify(res)).not.toContain(OTRA);
+    });
+
+    it('I2: quien organiza la comunidad ve «puedoPausar» en una bifurcación activa de la lista (sin nada de dentro)', async () => {
+      prisma.groupMembership.findMany.mockImplementation(async ({ where }: { where: Record<string, unknown> }) =>
+        where['profileId'] && !where['groupId'] ? [{ groupId: AMBITO, group: ambito() }] : [],
+      );
+      prisma.group.findMany.mockResolvedValue([
+        { ...bif({ trabajoEstado: 'activo' }), _count: { memberships: 8 } },
+        { ...bif({ id: 'g-bif2', trabajoEstado: 'convocando' }), _count: { memberships: 2 } },
+        { ...trabajo({ trabajoEstado: 'activo' }), _count: { memberships: 4 } },
+      ]);
+      let res = await service.list(YO);
+      expect(res.ambitos[0]!.grupos.map((g) => g.puedoPausar)).toEqual([false, false, false]);
+      bifurcaciones.puedePausarEn.mockResolvedValue(true);
+      res = await service.list(YO);
+      expect(bifurcaciones.puedePausarEn).toHaveBeenCalledWith(YO, AMBITO);
+      expect(res.ambitos[0]!.grupos.map((g) => g.puedoPausar)).toEqual([true, false, false]);
+      expect(JSON.stringify(res)).not.toContain(OTRA);
+    });
+
+    it('M1: si la solución de origen se ocultó, la lista no repite su título', async () => {
+      prisma.groupMembership.findMany.mockImplementation(async ({ where }: { where: Record<string, unknown> }) =>
+        where['profileId'] && !where['groupId'] ? [{ groupId: AMBITO, group: ambito() }] : [],
+      );
+      prisma.group.findMany.mockResolvedValue([{ ...bif(), _count: { memberships: 3 } }]);
+      (prisma.solucion as Record<string, unknown>)['findMany'] = vi.fn().mockResolvedValue([{ id: S }]);
+      const res = await service.list(YO);
+      expect(res.ambitos[0]!.grupos[0]!.proposito).toBe('Solución oculta por moderación');
+      expect(JSON.stringify(res)).not.toContain('Huerto');
+    });
+
+    describe('volver a la colmena', () => {
+      const origen = (over: Record<string, unknown> = {}) => ({
+        id: S,
+        title: 'Huerto comunitario',
+        description: 'Sembrar un huerto en el terreno baldío.',
+        hidden: false,
+        proposal: { groupId: AMBITO, hidden: false, decision: { fase: 'contada', resultado: 'aprobada', ganadoras: ['s-otra'] } },
+        ...over,
+      });
+
+      beforeEach(() => {
+        miembroDe.add(BIF);
+        prisma.group.findUnique.mockImplementation(async ({ where }: { where: { id: string } }) =>
+          where.id === AMBITO ? ambito() : bif({ trabajoEstado: 'activo', convocatoriaEndsAt: null }),
+        );
+        prisma.solucion.findUnique.mockResolvedValue(origen());
+      });
+
+      it('lleva la solución de origen al ámbito como inquietud en plazo; audita sin actor ni ip', async () => {
+        const r = await service.llevar(YO, BIF, S, '1.1.1.1', NOW);
+        expect(r).toEqual({ inquietudId: 'inq-1' });
+        expect(tx.inquietud.create.mock.calls[0]![0].data).toEqual({
+          groupId: AMBITO,
+          authorProfileId: YO,
+          title: 'Huerto comunitario',
+          body: 'Propuesta de una iniciativa de un grupo.\n\nSembrar un huerto en el terreno baldío.',
+          status: 'en_plazo',
+          thresholdReachedAt: NOW,
+          deadlineAt: new Date(NOW.getTime() + 10 * DIA_MS),
+          origenSolucionId: S,
+        });
+        expect(audit.log.mock.calls).toHaveLength(1);
+        expect(audit.log.mock.calls[0]![0]).toEqual({ action: 'bifurcacion.carried_back', resource: `group:${BIF}`, metadata: { grupoId: BIF } });
+      });
+
+      it('una sola vez: la segunda da 409 y no audita', async () => {
+        prisma.$transaction.mockRejectedValueOnce(
+          new Prisma.PrismaClientKnownRequestError('dup', { code: 'P2002', clientVersion: 'x' }),
+        );
+        const e = await service.llevar(YO, BIF, S, '1.1.1.1', NOW).catch((x: unknown) => x);
+        expect(e).toBeInstanceOf(ConflictException);
+        expect((e as ConflictException).message).toBe('Esta propuesta ya se llevó a la comunidad.');
+        expect(audit.log).not.toHaveBeenCalled();
+      });
+
+      it('pausada no lleva nada (409); otra solución del ámbito que no es la de origen da 400', async () => {
+        prisma.group.findUnique.mockImplementation(async ({ where }: { where: { id: string } }) =>
+          where.id === AMBITO ? ambito() : bif({ trabajoEstado: 'pausado', convocatoriaEndsAt: null }),
+        );
+        await expect(service.llevar(YO, BIF, S, '1.1.1.1', NOW)).rejects.toBeInstanceOf(ConflictException);
+        prisma.group.findUnique.mockImplementation(async ({ where }: { where: { id: string } }) =>
+          where.id === AMBITO ? ambito() : bif({ trabajoEstado: 'activo', convocatoriaEndsAt: null }),
+        );
+        prisma.solucion.findUnique.mockResolvedValue(origen({ id: 's-otra' }));
+        await expect(service.llevar(YO, BIF, 's-otra', '1.1.1.1', NOW)).rejects.toBeInstanceOf(BadRequestException);
+        expect(tx.inquietud.create).not.toHaveBeenCalled();
+      });
+    });
+
+    it('al vencer sin el mínimo se archiva como cualquier convocatoria', async () => {
+      prisma.group.findMany.mockImplementation(async ({ where }: { where: Record<string, unknown> }) =>
+        where['trabajoEstado'] === 'convocando' ? [{ id: BIF }] : [],
+      );
+      tx.group.updateMany.mockResolvedValue({ count: 1 });
+      expect(await service.processDeadlines(NOW)).toBe(1);
+      expect(prisma.group.findMany.mock.calls[0]![0].where).toMatchObject({ trabajoTipo: { in: ['subgrupo', 'bifurcacion'] }, trabajoEstado: 'convocando' });
+      expect(tx.group.updateMany).toHaveBeenCalledWith({
+        where: { id: BIF, trabajoEstado: 'convocando', convocatoriaEndsAt: { lte: NOW } },
+        data: { trabajoEstado: 'archivado' },
+      });
+      expect(acciones()).toEqual(['grupo.archived']);
     });
   });
 });

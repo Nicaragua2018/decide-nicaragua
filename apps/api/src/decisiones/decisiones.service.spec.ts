@@ -11,6 +11,7 @@ import { MergeSolucionDto } from './dto/merge-solucion.dto';
 import { ProposeModoDto } from './dto/propose-modo.dto';
 import { ObjecionDto } from './dto/objecion.dto';
 import { PapeletaDto } from './dto/papeleta.dto';
+import { GRUPO_EN_MARCHA, grupoEnMarcha } from '../grupos/bifurcacion-reglas';
 
 const YO = 'p-yo';
 const G = 'g1';
@@ -42,6 +43,7 @@ function buildPrisma() {
     profile: { findUnique: vi.fn() },
     moderationAction: { findMany: vi.fn().mockResolvedValue([]) },
     inquietud: { findMany: vi.fn().mockResolvedValue([]) },
+    comisionInforme: { findMany: vi.fn().mockResolvedValue([]) },
   };
 }
 
@@ -123,6 +125,23 @@ describe('DecisionesService', () => {
       expect(audit.log).toHaveBeenCalledWith(
         expect.objectContaining({ action: 'solucion.created', resource: 'solucion:s1', metadata: { proposalId: T } }),
       );
+    });
+    it('dentro de una bifurcación crear y juntar soluciones se auditan sin actor, ip ni el grupo', async () => {
+      prisma.group.findUnique.mockResolvedValue({ type: 'trabajo', parentGroupId: 'g-amb', trabajoEstado: 'activo', trabajoTipo: 'bifurcacion' });
+      prisma.solucion.create.mockResolvedValue({ id: 's1' });
+      await service.createSolucion(YO, T, dto, 'ip');
+      forums.canOrganize.mockResolvedValue(true);
+      prisma.solucion.findUnique.mockImplementation(async ({ where }: { where: { id: string } }) =>
+        sol(where.id, { proposal: { id: T, groupId: G, status: 'open', hidden: false, deliberationEndsAt: null } }),
+      );
+      prisma.solucion.updateMany.mockResolvedValue({ count: 1 });
+      await service.mergeSolucion(YO, 's1', 's2', 'ip');
+      expect(audit.log.mock.calls.map((c) => (c[0] as { action: string }).action)).toEqual(['solucion.created', 'solucion.merged']);
+      for (const [e] of audit.log.mock.calls as [Record<string, unknown>][]) {
+        expect(e).not.toHaveProperty('actorId');
+        expect(e).not.toHaveProperty('ip');
+        expect(JSON.stringify(e)).not.toContain(`"${G}"`);
+      }
     });
     it('un no miembro no propone', async () => {
       prisma.groupMembership.findUnique.mockResolvedValue(null);
@@ -334,7 +353,10 @@ describe('DecisionesService', () => {
       expect(rules.getInt).toHaveBeenCalledWith('debate.fraccion_objecion_modo', G);
       expect(r.decision).toEqual({
         fase: 'modo', modo: null, modoPropuesto: null, objecionEndsAt: null, votacionEndsAt: null,
-        candidatas: [{ id: 's1', title: 'Solución s1 de prueba', description: 'Descripción de s1', hidden: false }],
+        candidatas: [{
+          id: 's1', title: 'Solución s1 de prueba', description: 'Descripción de s1', hidden: false,
+          bifurcable: false, puedoIniciarBifurcacion: false, bifurcacionId: null,
+        }],
         miPapeleta: null, yoObjete: false, puedoObjetar: false, resultado: null, fraccionObjecionPct: 33,
       });
     });
@@ -361,6 +383,72 @@ describe('DecisionesService', () => {
       });
       const r = await service.getTema(YO, T);
       expect(r.puedeProponer).toBe(false);
+    });
+
+    describe('bifurcaciones en una decisión contada', () => {
+      const CONTADA = new Date(Date.now() - 2 * 86_400_000);
+      const contada = (over: Record<string, unknown> = {}) => ({
+        id: 'd1', proposalId: T, fase: 'contada', modo: 'excluyentes', modoPropuesto: 'excluyentes',
+        objecionEndsAt: null, votacionEndsAt: null, candidatas: ['s1', 's4'], ganadoras: ['s1'],
+        resultado: 'aprobada', aprobaciones: [3, 2], papeletasTotal: 5, abstenciones: 0, miembros: 9,
+        pairwiseMatrix: [], schulzeMatrix: [], contadaAt: CONTADA, updatedAt: CONTADA,
+        ...over,
+      });
+      beforeEach(() => {
+        prisma.solucion.findMany.mockResolvedValue([sol('s1'), sol('s4')]);
+        prisma.decision.findUnique.mockResolvedValue(contada());
+        rules.getInt.mockImplementation(async (key: string) => (key === 'bifurcacion.plazo_dias' ? 14 : 7));
+      });
+      const cand = (r: Awaited<ReturnType<DecisionesService['getTema']>>, id: string) =>
+        r.decision!.candidatas.find((c) => c.id === id)!;
+
+      it('la perdedora es bifurcable; solo quien la tenía en su orden puede iniciarla', async () => {
+        prisma.decisionPapeleta.findUnique.mockResolvedValue({ abstencion: false, orden: ['s4', 's1'] });
+        const r = await service.getTema(YO, T);
+        expect(cand(r, 's1')).toMatchObject({ bifurcable: false, puedoIniciarBifurcacion: false, bifurcacionId: null });
+        expect(cand(r, 's4')).toMatchObject({ bifurcable: true, puedoIniciarBifurcacion: true, bifurcacionId: null });
+        expect(rules.getInt).toHaveBeenCalledWith('bifurcacion.plazo_dias', G);
+      });
+
+      it('para quien votó otra cosa, no votó o se abstuvo, la respuesta es idéntica', async () => {
+        const respuestas: string[] = [];
+        for (const p of [{ abstencion: false, orden: ['s1'] }, null, { abstencion: true, orden: [] }]) {
+          prisma.decisionPapeleta.findUnique.mockResolvedValue(p);
+          const r = await service.getTema(YO, T);
+          respuestas.push(JSON.stringify(r.decision!.candidatas));
+        }
+        expect(new Set(respuestas).size).toBe(1);
+        expect(respuestas[0]).toContain('"puedoIniciarBifurcacion":false');
+      });
+
+      it('si ya existe, da su id y deja sumarse a quien la apoyó; no lista a nadie', async () => {
+        prisma.decisionPapeleta.findUnique.mockResolvedValue({ abstencion: false, orden: ['s4'] });
+        prisma.group.findMany.mockResolvedValue([
+          { id: 'g-bif', origenSolucionId: 's4', trabajoEstado: 'convocando', convocatoriaEndsAt: new Date(Date.now() + 86_400_000) },
+        ]);
+        let r = await service.getTema(YO, T);
+        expect(cand(r, 's4')).toMatchObject({ bifurcable: true, puedoIniciarBifurcacion: true, bifurcacionId: 'g-bif' });
+        expect(prisma.groupMembership.findMany).toHaveBeenCalledWith({
+          where: { profileId: YO, groupId: { in: ['g-bif'] } },
+          select: { groupId: true },
+        });
+        // Quien ya es miembro no se suma otra vez.
+        prisma.groupMembership.findMany.mockResolvedValue([{ groupId: 'g-bif' }]);
+        r = await service.getTema(YO, T);
+        expect(cand(r, 's4').puedoIniciarBifurcacion).toBe(false);
+        expect(JSON.stringify(r)).not.toContain('p-autor');
+      });
+
+      it('fuera de plazo no se inicia; en un grupo de trabajo nada es bifurcable', async () => {
+        prisma.decisionPapeleta.findUnique.mockResolvedValue({ abstencion: false, orden: ['s4'] });
+        prisma.decision.findUnique.mockResolvedValue(contada({ contadaAt: new Date(Date.now() - 15 * 86_400_000) }));
+        let r = await service.getTema(YO, T);
+        expect(cand(r, 's4')).toMatchObject({ bifurcable: true, puedoIniciarBifurcacion: false });
+        prisma.decision.findUnique.mockResolvedValue(contada());
+        prisma.group.findUnique.mockResolvedValue({ type: 'trabajo', parentGroupId: 'g-amb', trabajoEstado: 'activo', trabajoTipo: 'subgrupo' });
+        r = await service.getTema(YO, T);
+        expect(cand(r, 's4')).toMatchObject({ bifurcable: false, puedoIniciarBifurcacion: false });
+      });
     });
   });
 
@@ -391,8 +479,32 @@ describe('DecisionesService', () => {
       expect(prisma.proposal.findMany).toHaveBeenCalledWith(expect.objectContaining({
         where: {
           kind: 'propuesta', status: 'open', hidden: false, deliberationEndsAt: { lte: NOW }, decision: null, electionId: null,
+          group: GRUPO_EN_MARCHA,
         },
       }));
+    });
+
+    it('I3: las cuatro consultas de plazos filtran los grupos detenidos', async () => {
+      await service.processDeadlines(NOW);
+      const fases = prisma.decision.findMany.mock.calls.map((c) => c[0].where);
+      expect(fases).toHaveLength(3);
+      for (const where of fases) expect(where.proposal).toEqual({ group: GRUPO_EN_MARCHA });
+      expect(prisma.proposal.findMany.mock.calls[0]![0].where.group).toEqual(GRUPO_EN_MARCHA);
+    });
+
+    it('I3: los plazos se saltan los temas de un grupo de trabajo detenido o que cuelga de una bifurcación pausada', () => {
+      expect(GRUPO_EN_MARCHA).toEqual({
+        OR: [
+          { type: { not: 'trabajo' } },
+          { trabajoEstado: 'activo', parent: { is: { OR: [{ trabajoEstado: null }, { trabajoEstado: { not: 'pausado' } }] } } },
+        ],
+      });
+      const amb = { trabajoEstado: null };
+      expect(grupoEnMarcha({ type: 'territorial_origin', trabajoEstado: null, parent: null })).toBe(true);
+      expect(grupoEnMarcha({ type: 'trabajo', trabajoEstado: 'activo', parent: amb })).toBe(true);
+      expect(grupoEnMarcha({ type: 'trabajo', trabajoEstado: 'pausado', parent: amb })).toBe(false);
+      expect(grupoEnMarcha({ type: 'trabajo', trabajoEstado: 'cerrado', parent: amb })).toBe(false);
+      expect(grupoEnMarcha({ type: 'trabajo', trabajoEstado: 'activo', parent: { trabajoEstado: 'pausado' } })).toBe(false);
     });
 
     it('una propuesta del plan 2 con votación propia (electionId) no entra: ni la consulta ni el bloqueo la toman', async () => {
@@ -498,7 +610,9 @@ describe('DecisionesService', () => {
 
     it('busca las decisiones en fase modo y lee el plazo del grupo', async () => {
       await service.processDeadlines(NOW);
-      expect(prisma.decision.findMany).toHaveBeenCalledWith(expect.objectContaining({ where: { fase: 'modo' } }));
+      expect(prisma.decision.findMany).toHaveBeenCalledWith(expect.objectContaining({
+        where: { fase: 'modo', proposal: { group: GRUPO_EN_MARCHA } },
+      }));
       expect(rules.getInt).toHaveBeenCalledWith('debate.plazo_objecion_modo_dias', G);
     });
 
@@ -700,8 +814,18 @@ describe('DecisionesService', () => {
     it('busca las votaciones vencidas', async () => {
       await service.processDeadlines(NOW);
       expect(prisma.decision.findMany).toHaveBeenCalledWith(expect.objectContaining({
-        where: { fase: 'votacion', votacionEndsAt: { lte: NOW } },
+        where: { fase: 'votacion', votacionEndsAt: { lte: NOW }, proposal: { group: GRUPO_EN_MARCHA } },
       }));
+    });
+
+    it('I3: no cuenta la decisión de un grupo de trabajo pausado (aunque la consulta la trajera)', async () => {
+      prisma.decision.findUnique.mockResolvedValue({
+        id: 'd1', proposalId: T, fase: 'votacion', modo: 'excluyentes', candidatas: ['s1', 's2'],
+        proposal: { groupId: G, group: { type: 'trabajo', trabajoEstado: 'pausado', parent: { trabajoEstado: null } } },
+      });
+      expect(await service.processDeadlines(NOW)).toBe(0);
+      expect(prisma.decision.updateMany).not.toHaveBeenCalled();
+      expect(audit.log).not.toHaveBeenCalled();
     });
 
     it('cuenta solo papeletas y miembros actuales, congela el resultado y audita decision.counted', async () => {
@@ -820,6 +944,16 @@ describe('DecisionesService', () => {
       prisma.groupMembership.findUnique.mockResolvedValue(null);
       await expect(service.proposeModo(YO, T, 'excluyentes', 'ip')).rejects.toThrow(ForbiddenException);
       expect(prisma.decision.updateMany).not.toHaveBeenCalled();
+    });
+
+    it('dentro de una bifurcación se audita sin actor ni ip', async () => {
+      prisma.group.findUnique.mockResolvedValue({ type: 'trabajo', parentGroupId: 'g-amb', trabajoEstado: 'activo', trabajoTipo: 'bifurcacion' });
+      await service.proposeModo(YO, T, 'excluyentes', 'ip');
+      expect(audit.log).toHaveBeenCalled();
+      for (const [e] of audit.log.mock.calls as [Record<string, unknown>][]) {
+        expect(e).not.toHaveProperty('actorId');
+        expect(e).not.toHaveProperty('ip');
+      }
     });
 
     it('con una sola solución viva no hay objeción: abre la votación compatible y audita vote_opened', async () => {
@@ -1132,7 +1266,9 @@ describe('DecisionesService', () => {
         pairwiseMatrix: [[0, 1], [3, 0]], schulzeMatrix: [[0, 0], [3, 0]],
         contadaAt: '2026-11-20T00:05:00.000Z',
       });
-      expect(r.decision!.candidatas[1]).toEqual({ id: 's2', title: 'Solución oculta por moderación', description: '', hidden: true });
+      expect(r.decision!.candidatas[1]).toMatchObject({ id: 's2', title: 'Solución oculta por moderación', description: '', hidden: true });
+      // Una oculta nunca es bifurcable.
+      expect(r.decision!.candidatas[1]!.bifurcable).toBe(false);
       const json = JSON.stringify(r);
       expect(json).not.toContain('secreto');
       expect(json).not.toContain(OTRO);
@@ -1270,11 +1406,64 @@ describe('DecisionesService', () => {
         {
           id: 'g-sub', name: 'Agua potable', proposito: 'Agua para el barrio norte.', tipo: 'subgrupo', estado: 'convocando',
           miembros: 2, faltan: 3, convocatoriaEndsAt: '2026-11-20T00:00:00.000Z', soyMiembro: true,
+          puedoPausar: false, ultimoInforme: null,
         },
       ]);
       expect(r.comunidades[1]!.grupos).toEqual([
         expect.objectContaining({ id: 'g-sub2', estado: 'activo', miembros: 6, faltan: null, soyMiembro: false }),
       ]);
+      expect(prisma.comisionInforme.findMany).not.toHaveBeenCalled();
+    });
+
+    it('una comisión trae su último informe no oculto (una consulta para todas)', async () => {
+      const COM = {
+        id: 'g-com', name: 'Comisión: Agua potable', type: 'trabajo', slug: 'trabajo-g-com', parentGroupId: ORIGEN.id,
+        trabajoTipo: 'comision', trabajoEstado: 'activo', proposito: 'Agua para el barrio norte.',
+        convocatoriaEndsAt: null, pocosMiembrosDesde: null, origenSolucionId: null,
+      };
+      miembroDe(ORIGEN);
+      prisma.group.findMany.mockResolvedValue([COM]);
+      const fecha = new Date('2026-11-09T00:00:00Z');
+      prisma.comisionInforme.findMany.mockResolvedValue([{ grupoId: 'g-com', texto: 'Compramos la tubería.', createdAt: fecha }]);
+      const r = await service.getResumen(YO);
+      expect(r.comunidades[0]!.grupos[0]!.ultimoInforme).toEqual({ texto: 'Compramos la tubería.', createdAt: fecha.toISOString() });
+      expect(prisma.comisionInforme.findMany).toHaveBeenCalledTimes(1);
+      expect(prisma.comisionInforme.findMany.mock.calls[0]![0].where).toEqual({ grupoId: { in: ['g-com'] }, hidden: false });
+    });
+
+    it('una bifurcación sale como «Iniciativa de un grupo», con su mínimo y cuántos son, sin miembros', async () => {
+      const BIF = {
+        id: 'g-bif', name: 'Iniciativa de un grupo', type: 'trabajo', slug: 'trabajo-g-bif', parentGroupId: ORIGEN.id,
+        trabajoTipo: 'bifurcacion', trabajoEstado: 'convocando', proposito: 'Huerto comunitario',
+        convocatoriaEndsAt: new Date('2026-11-20T00:00:00Z'), pocosMiembrosDesde: null,
+      };
+      miembroDe(ORIGEN);
+      prisma.group.findMany.mockResolvedValue([BIF]);
+      prisma.groupMembership.groupBy.mockResolvedValue([{ groupId: 'g-bif', _count: { _all: 3 } }]);
+      rules.getInt.mockImplementation(async (key: string) => (key === 'bifurcacion.minimo_personas' ? 7 : 5));
+      const r = await service.getResumen(YO);
+      expect(rules.getInt).toHaveBeenCalledWith('bifurcacion.minimo_personas', ORIGEN.id);
+      expect(r.comunidades[0]!.grupos).toEqual([
+        expect.objectContaining({ id: 'g-bif', name: 'Iniciativa de un grupo', proposito: 'Huerto comunitario', miembros: 3, faltan: 4 }),
+      ]);
+      expect(JSON.stringify(r)).not.toContain('p-');
+    });
+
+    it('M1: si la solución de origen de una bifurcación se ocultó, no repite su título', async () => {
+      const BIF = {
+        id: 'g-bif', name: 'Iniciativa de un grupo', type: 'trabajo', slug: 'trabajo-g-bif', parentGroupId: ORIGEN.id,
+        trabajoTipo: 'bifurcacion', trabajoEstado: 'convocando', proposito: 'Huerto comunitario',
+        convocatoriaEndsAt: new Date('2026-11-20T00:00:00Z'), pocosMiembrosDesde: null, origenSolucionId: 's-origen',
+      };
+      miembroDe(ORIGEN);
+      prisma.group.findMany.mockResolvedValue([BIF]);
+      prisma.solucion.findMany.mockImplementation(async ({ where }: { where: { hidden?: boolean } }) =>
+        where.hidden === true ? [{ id: 's-origen' }] : [],
+      );
+      const r = await service.getResumen(YO);
+      expect(r.comunidades[0]!.grupos[0]!.proposito).toBe('Solución oculta por moderación');
+      expect(JSON.stringify(r)).not.toContain('Huerto');
+      expect(prisma.group.findMany.mock.calls[0]![0].select).toMatchObject({ origenSolucionId: true });
     });
 
     it('solo consulta las comunidades de quien pregunta y excluye los temas ocultos', async () => {
