@@ -4,7 +4,7 @@ import { useActionState, useState } from 'react';
 import { MODERACION_CAUSAS } from '@decide/shared';
 import { hideContent, type ActionResult } from '@/lib/actions';
 
-type Objetivo = 'tema' | 'respuesta' | 'inquietud' | 'frase' | 'solucion';
+type Objetivo = 'tema' | 'respuesta' | 'inquietud' | 'frase' | 'solucion' | 'informe';
 
 const MENSAJE_ESTADO: Record<string, string> = {
   oculto: 'Contenido ocultado.',
@@ -23,6 +23,7 @@ export function ModerarForm({
   targetId,
   topicId,
   inquietudId,
+  grupoId,
   titulo,
   boton = 'Ocultar',
   colapsable = false,
@@ -32,6 +33,7 @@ export function ModerarForm({
   targetId: string;
   topicId?: string;
   inquietudId?: string;
+  grupoId?: string;
   titulo?: string;
   boton?: string;
   colapsable?: boolean;
@@ -55,6 +57,7 @@ export function ModerarForm({
       <input type="hidden" name="targetId" value={targetId} />
       {topicId && <input type="hidden" name="topicId" value={topicId} />}
       {inquietudId && <input type="hidden" name="inquietudId" value={inquietudId} />}
+      {grupoId && <input type="hidden" name="grupoId" value={grupoId} />}
       <label className="form-label" htmlFor={`causa-${targetId}`}>Causa</label>
       <select id={`causa-${targetId}`} name="causa" className="form-select" required defaultValue="">
         <option value="" disabled>Elige una causa</option>

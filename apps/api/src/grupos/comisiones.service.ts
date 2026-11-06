@@ -393,6 +393,8 @@ export class ComisionesService {
     const atrasada = activa && estaAtrasada(g.proximoInformeAt, dias, now);
     const yoApoyoRenovar = apoyo !== null;
     const voluntarios = filas.map((f) => ({
+      // El id solo sale mientras se elige: la papeleta ordena voluntarios por él.
+      id: g.trabajoEstado === 'eligiendo' ? f.profileId : null,
       nombre: f.profile.displayName,
       experiencia: f.experiencia,
       soyYo: f.profileId === profileId,

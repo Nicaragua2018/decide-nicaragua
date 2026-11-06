@@ -277,6 +277,7 @@ export class BifurcacionesService {
     ]);
     return {
       solucionTitulo: s ? (s.hidden ? 'Solución oculta por moderación' : s.title) : '',
+      solucionId: S ?? '',
       proposalId: s?.proposalId ?? '',
       pausa:
         pausada && g.pausaCausa

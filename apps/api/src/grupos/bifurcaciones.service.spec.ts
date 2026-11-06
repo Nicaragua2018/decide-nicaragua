@@ -428,6 +428,7 @@ describe('BifurcacionesService', () => {
       const v = await service.vista(g, YO, true, true);
       expect(v).toEqual({
         solucionTitulo: 'Huerto comunitario',
+        solucionId: S,
         proposalId: 't-1',
         pausa: { causa: 'spam', detalle: 'Publicidad.', apelada: false },
         puedoApelar: true,

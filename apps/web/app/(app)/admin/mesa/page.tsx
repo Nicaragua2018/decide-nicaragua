@@ -1,20 +1,22 @@
 import type { Metadata } from 'next';
-import type { BoardActionSummary, BoardSeatSummary, ModeracionPorConfirmar, ModerationAppeal, UserListResponse } from '@decide/shared';
+import type { BoardActionSummary, BoardSeatSummary, ModeracionPorConfirmar, ModerationAppeal, PausaApeladaItem, UserListResponse } from '@decide/shared';
 import { serverFetch } from '@/lib/api';
 import { AppealsList } from './AppealsList';
+import { PausasApeladas } from './PausasApeladas';
 import { PorConfirmarList } from './PorConfirmarList';
 import { AssignSeatForm, ProposeActionForm, ROLE_LABEL, VoteButtons } from './MesaForms';
 
 export const metadata: Metadata = { title: 'Mesa directiva' };
 
 export default async function MesaPage() {
-  const [seatsRes, meRes, actionsRes, usersRes, appealsRes, porConfirmarRes] = await Promise.all([
+  const [seatsRes, meRes, actionsRes, usersRes, appealsRes, porConfirmarRes, pausasRes] = await Promise.all([
     serverFetch('/api/board/seats'),
     serverFetch('/api/board/me'),
     serverFetch('/api/board/actions'),
     serverFetch('/api/users?status=verified_citizen'),
     serverFetch('/api/forums/moderation/appeals'),
     serverFetch('/api/forums/moderation/por-confirmar'),
+    serverFetch('/api/grupos/pausas/apeladas'),
   ]);
   const seats = seatsRes.ok ? ((await seatsRes.json()) as BoardSeatSummary[]) : [];
   const me = meRes.ok ? ((await meRes.json()) as { role: string | null }) : { role: null };
@@ -24,6 +26,7 @@ export default async function MesaPage() {
   const users = usersRes.ok ? ((await usersRes.json()) as UserListResponse).users : [];
   const appeals = appealsRes.ok ? ((await appealsRes.json()) as ModerationAppeal[]) : [];
   const porConfirmar = porConfirmarRes.ok ? ((await porConfirmarRes.json()) as ModeracionPorConfirmar[]) : [];
+  const pausas = pausasRes.ok ? ((await pausasRes.json()) as PausaApeladaItem[]) : [];
   const noElected = seats.every((s) => s.source !== 'eleccion');
 
   return (
@@ -81,6 +84,11 @@ export default async function MesaPage() {
       <section className="mt-2">
         <h2 className="section-title">Apelaciones de moderación</h2>
         <AppealsList appeals={appeals} />
+      </section>
+
+      <section className="mt-2">
+        <h2 className="section-title">Pausas de iniciativas de un grupo apeladas</h2>
+        <PausasApeladas items={pausas} />
       </section>
     </>
   );

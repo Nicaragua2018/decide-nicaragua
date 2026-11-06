@@ -85,6 +85,9 @@ function Comunidad({ c }: { c: ComunidadDecisiones }) {
                   <span className="group-card-name">{g.name}</span>
                 </Link>
                 <p className="card-meta">{g.proposito}</p>
+                {g.tipo === 'bifurcacion' && (
+                  <p className="card-meta">Iniciativa de un grupo · {g.miembros} {g.miembros === 1 ? 'persona' : 'personas'}</p>
+                )}
               </li>
             ))}
           </ul>

@@ -65,7 +65,8 @@ export interface ComisionView {
   puestos: number;
   forma: 'sorteo' | 'preferencias';
   /** Nombres visibles en el ámbito. */
-  voluntarios: { nombre: string; experiencia: string; soyYo: boolean }[];
+  /** `id` solo llega durante la elección (la papeleta ordena por él); después es null. */
+  voluntarios: { id: string | null; nombre: string; experiencia: string; soyYo: boolean }[];
   yoVoluntario: boolean;
   ampliada: boolean;
   seleccion: { semilla: string; pool: string[]; algoritmo: string } | null;
@@ -84,6 +85,8 @@ export interface ComisionView {
 
 export interface BifurcacionView {
   solucionTitulo: string;
+  /** Solución de origen (pública): la que «Volver a la colmena» lleva a la comunidad. */
+  solucionId: string;
   proposalId: string;
   pausa: { causa: string; detalle: string; apelada: boolean } | null;
   puedoApelar: boolean;

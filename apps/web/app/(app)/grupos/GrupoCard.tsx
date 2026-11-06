@@ -22,6 +22,8 @@ export function lineaGrupo(g: GrupoTrabajoItem): string {
     const hasta = g.convocatoriaEndsAt ? ` · hasta el ${new Date(g.convocatoriaEndsAt).toLocaleDateString('es-NI')}` : '';
     return `Se forma con ${g.miembros + faltan}: faltan ${faltan}${hasta}`;
   }
+  // Una iniciativa de un grupo nunca muestra nombres: solo cuántas personas son.
+  if (g.tipo === 'bifurcacion') return `Iniciativa de un grupo · ${g.miembros} ${g.miembros === 1 ? 'persona' : 'personas'}`;
   return `${g.miembros} ${g.miembros === 1 ? 'miembro' : 'miembros'}`;
 }
 

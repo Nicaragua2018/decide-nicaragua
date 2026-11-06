@@ -923,13 +923,19 @@ describe('ComisionesService', () => {
       ]);
       const v = await service.vista(grupoActual as never, YO, true, NOW);
       expect(v.voluntarios).toEqual([
-        { nombre: 'Ana', experiencia: 'Fontanero', soyYo: true },
-        { nombre: 'Beto', experiencia: '', soyYo: false },
+        { id: null, nombre: 'Ana', experiencia: 'Fontanero', soyYo: true },
+        { id: null, nombre: 'Beto', experiencia: '', soyYo: false },
       ]);
       expect(v.yoVoluntario).toBe(true);
       expect(v.seleccion).toEqual({ semilla: 'ab'.repeat(32), pool: sortPool(V), algoritmo: ALGORITHM_VERSION });
       expect(v.puedoAjustar).toBe(false);
       expect(JSON.stringify(v)).not.toContain(OTRA);
+    });
+
+    it('solo durante la elección los voluntarios llevan id (la papeleta ordena por él)', async () => {
+      prisma.comisionVoluntario.findMany.mockResolvedValue([{ profileId: OTRA, experiencia: '', profile: { displayName: 'Beto' } }]);
+      const v = await service.vista(comision({ trabajoEstado: 'eligiendo' }) as never, YO, true, NOW);
+      expect(v.voluntarios[0]?.id).toBe(OTRA);
     });
 
     it('puedoAjustar solo para quien organiza, es del ámbito y mientras convoca', async () => {

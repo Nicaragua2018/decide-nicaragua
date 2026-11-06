@@ -1,6 +1,8 @@
+import Link from 'next/link';
 import type { DecisionModoValue, DecisionResultadoView } from '@decide/shared';
+import { ImpulsarSolucion } from './ImpulsarSolucion';
 
-type Candidata = { id: string; title: string };
+type Candidata = { id: string; title: string; puedoIniciarBifurcacion?: boolean; bifurcacionId?: string | null };
 
 function frase(r: DecisionResultadoView, candidatas: Candidata[], modo: DecisionModoValue | null): string {
   switch (r.resultado) {
@@ -77,6 +79,16 @@ export function ResultadoDecision({
                   <span className="text-sm text-muted">
                     la incluyó el {pct} % de las papeletas válidas ({incluyen} de {resultado.validas})
                   </span>
+                  {/* Solo quien puede iniciar ve el botón; a las demás personas no se les insinúa nada. */}
+                  {c.puedoIniciarBifurcacion === true && (
+                    c.bifurcacionId ? (
+                      <Link href={`/grupos/${c.bifurcacionId}`} className="btn btn-ghost btn-sm mt-1">
+                        Impulsar esta solución como iniciativa de un grupo
+                      </Link>
+                    ) : (
+                      <ImpulsarSolucion solucionId={c.id} />
+                    )
+                  )}
                 </li>
               );
             })}
