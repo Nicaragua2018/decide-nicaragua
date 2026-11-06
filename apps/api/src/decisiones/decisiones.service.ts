@@ -1,7 +1,12 @@
 import { Prisma } from '@prisma/client';
 import { BadRequestException, ForbiddenException, Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { GENERAL_GROUP_SLUG } from '@decide/shared';
 import type {
+  ComunidadDecisiones,
+  ComunidadTipo,
+  DecisionesResumenResponse,
   DecisionModoValue,
+  DecisionResumenItem,
   DecisionResultadoView,
   DecisionTemaResponse,
   DecisionView,
@@ -21,6 +26,27 @@ const OBJECION_CERRADA = 'El plazo para objetar el modo no está abierto.';
 const VOTACION_CERRADA = 'La votación no está abierta.';
 
 const matriz = (v: Prisma.JsonValue | null | undefined): number[][] => (Array.isArray(v) ? (v as number[][]) : []);
+
+/** Página «Decisiones»: elementos por lista y comunidad. */
+const RESUMEN_MAX = 50;
+
+const DETALLE_RECHAZO: Record<string, string> = {
+  ninguna: 'Ninguna solución obtuvo más de la mitad',
+  empate: 'Empate: sin decisión',
+  sin_quorum: 'Sin decisión: no se alcanzó la participación mínima',
+  sin_soluciones: 'No se propusieron soluciones',
+};
+
+/** Orden de las comunidades: origen, acogida, la general y después las demás (como general). */
+function tipoDeComunidad(type: string, slug: string): { tipo: ComunidadTipo; rango: number } {
+  if (type === 'territorial_origin') return { tipo: 'origen', rango: 0 };
+  if (type === 'territorial_residence') return { tipo: 'acogida', rango: 1 };
+  return { tipo: 'general', rango: slug === GENERAL_GROUP_SLUG ? 2 : 3 };
+}
+
+const iso = (d: Date | null | undefined): string | null => (d ? d.toISOString() : null);
+
+type ListaResumen = { item: DecisionResumenItem; orden: number }[];
 
 /** El plazo del debate venció: las soluciones quedan fijas aunque el programador aún no haya pasado. */
 const debateVencido = (endsAt: Date | null, now: Date): boolean => endsAt !== null && endsAt.getTime() <= now.getTime();
@@ -746,5 +772,151 @@ export class DecisionesService {
       metadata: { proposalId, resultado },
     });
     return true;
+  }
+
+  // ─── Página «Decisiones» ──────────────────────────────────────────────────
+
+  /**
+   * Aprobadas, rechazadas y en curso de cada comunidad de quien consulta. Consultas fijas
+   * (membresías, temas con su decisión y títulos de las ganadoras), sin importar cuántos temas haya.
+   */
+  async getResumen(profileId: string): Promise<DecisionesResumenResponse> {
+    const membresias = await this.prisma.groupMembership.findMany({
+      where: { profileId },
+      select: { group: { select: { id: true, name: true, type: true, slug: true } } },
+    });
+    const grupos = membresias
+      .map(({ group }) => ({ ...group, ...tipoDeComunidad(group.type as string, group.slug) }))
+      .sort((a, b) => a.rango - b.rango || a.name.localeCompare(b.name, 'es'));
+    if (grupos.length === 0) return { comunidades: [] };
+
+    const temas = await this.prisma.proposal.findMany({
+      where: {
+        groupId: { in: grupos.map((g) => g.id) },
+        hidden: false,
+        OR: [
+          { decision: { isNot: null } },
+          { status: 'closed', conclusion: { not: null } },
+          { status: 'open', kind: 'propuesta', electionId: null },
+        ],
+      },
+      select: {
+        id: true, groupId: true, title: true, status: true, kind: true, hidden: true, electionId: true,
+        conclusion: true, closedAt: true, deliberationEndsAt: true, createdAt: true, updatedAt: true,
+        decision: {
+          select: {
+            fase: true, resultado: true, candidatas: true, ganadoras: true, aprobaciones: true,
+            papeletasTotal: true, abstenciones: true, contadaAt: true, objecionEndsAt: true,
+            votacionEndsAt: true, updatedAt: true,
+          },
+        },
+      },
+    });
+
+    const idsGanadoras = new Set<string>();
+    for (const t of temas) {
+      if (t.decision?.fase === 'contada' && t.decision.resultado === 'aprobada') {
+        for (const id of t.decision.ganadoras) idsGanadoras.add(id);
+      }
+    }
+    // Las ocultas por moderación salen enmascaradas para todas las personas.
+    const titulos = new Map<string, string>();
+    if (idsGanadoras.size > 0) {
+      const filas = await this.prisma.solucion.findMany({
+        where: { id: { in: [...idsGanadoras] } },
+        select: { id: true, title: true, hidden: true },
+      });
+      for (const s of filas) titulos.set(s.id, s.hidden ? OCULTA_TITULO : s.title);
+    }
+
+    const porGrupo = new Map<string, { aprobadas: ListaResumen; rechazadas: ListaResumen; enCurso: ListaResumen }>(
+      grupos.map((g) => [g.id, { aprobadas: [], rechazadas: [], enCurso: [] }]),
+    );
+
+    for (const t of temas) {
+      const listas = porGrupo.get(t.groupId);
+      if (!listas || t.hidden) continue;
+      const d = t.decision;
+      const base = { proposalId: t.id, title: t.title };
+      if (d) {
+        const fase = d.fase as string;
+        if (fase === 'contada') {
+          const fecha = d.contadaAt ?? d.updatedAt;
+          if (d.resultado === 'aprobada') {
+            const validas = (d.papeletasTotal ?? 0) - (d.abstenciones ?? 0);
+            const ganadoras = d.ganadoras.map((id) => {
+              const i = d.candidatas.indexOf(id);
+              const incluyen = i >= 0 ? d.aprobaciones[i] : undefined;
+              return {
+                title: titulos.get(id) ?? OCULTA_TITULO,
+                incluyenPct: validas > 0 && incluyen !== undefined ? Math.round((100 * incluyen) / validas) : null,
+              };
+            });
+            listas.aprobadas.push({
+              item: { ...base, estado: 'aprobada', detalle: 'Aprobada por votación', ganadoras, fecha: fecha.toISOString() },
+              orden: fecha.getTime(),
+            });
+          } else {
+            const detalle = DETALLE_RECHAZO[d.resultado ?? ''];
+            if (detalle) {
+              listas.rechazadas.push({
+                item: { ...base, estado: 'rechazada', detalle, ganadoras: [], fecha: fecha.toISOString() },
+                orden: fecha.getTime(),
+              });
+            }
+          }
+          continue;
+        }
+        // La cancelada (tema ocultado durante la decisión) no figura en ninguna lista.
+        let detalle: string;
+        let fecha: string | null;
+        if (fase === 'modo') {
+          detalle = 'Eligiendo cómo decidir';
+          fecha = null;
+        } else if (fase === 'objecion') {
+          fecha = iso(d.objecionEndsAt);
+          detalle = fecha ? 'Objeciones hasta el {fecha}' : 'Objeciones abiertas';
+        } else if (fase === 'votacion') {
+          fecha = iso(d.votacionEndsAt);
+          detalle = fecha ? 'Votación abierta hasta el {fecha}' : 'Votación abierta';
+        } else {
+          continue;
+        }
+        listas.enCurso.push({
+          item: { ...base, estado: 'en_curso', detalle, ganadoras: [], fecha },
+          orden: t.createdAt.getTime(),
+        });
+        continue;
+      }
+      if (t.status === 'closed' && t.conclusion !== null) {
+        const fecha = t.closedAt ?? t.updatedAt;
+        listas.aprobadas.push({
+          item: { ...base, estado: 'aprobada', detalle: 'Consenso del debate', ganadoras: [], fecha: fecha.toISOString() },
+          orden: fecha.getTime(),
+        });
+      } else if (t.status === 'open' && t.kind === 'propuesta' && t.electionId === null) {
+        const fecha = iso(t.deliberationEndsAt);
+        listas.enCurso.push({
+          item: { ...base, estado: 'en_curso', detalle: fecha ? 'En debate hasta el {fecha}' : 'En debate', ganadoras: [], fecha },
+          orden: t.createdAt.getTime(),
+        });
+      }
+    }
+
+    const recortar = (l: ListaResumen): DecisionResumenItem[] =>
+      l.sort((a, b) => b.orden - a.orden).slice(0, RESUMEN_MAX).map((x) => x.item);
+
+    const comunidades: ComunidadDecisiones[] = grupos.map((g) => {
+      const l = porGrupo.get(g.id) ?? { aprobadas: [], rechazadas: [], enCurso: [] };
+      return {
+        groupId: g.id,
+        name: g.name,
+        tipo: g.tipo,
+        aprobadas: recortar(l.aprobadas),
+        rechazadas: recortar(l.rechazadas),
+        enCurso: recortar(l.enCurso),
+      };
+    });
+    return { comunidades };
   }
 }

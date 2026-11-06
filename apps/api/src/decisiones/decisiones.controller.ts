@@ -1,6 +1,6 @@
 import { Body, Controller, ForbiddenException, Get, Param, ParseUUIDPipe, Post, Put, Req, UseGuards } from '@nestjs/common';
 import type { Request } from 'express';
-import type { DecisionTemaResponse, JwtPayload, PapeletaValue } from '@decide/shared';
+import type { DecisionesResumenResponse, DecisionTemaResponse, JwtPayload, PapeletaValue } from '@decide/shared';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { extractIp } from '../common/utils/ip.util';
@@ -19,6 +19,12 @@ export class DecisionesController {
   private perfil(user: JwtPayload): string {
     if (!user.profileId) throw new ForbiddenException('Perfil requerido');
     return user.profileId;
+  }
+
+  /** Página «Decisiones»: aprobadas, rechazadas y en curso de cada comunidad propia. */
+  @Get('resumen')
+  async getResumen(@CurrentUser() user: JwtPayload): Promise<DecisionesResumenResponse> {
+    return this.decisiones.getResumen(this.perfil(user));
   }
 
   @Get('temas/:proposalId')

@@ -55,6 +55,14 @@ export default function NavBar({ displayName, email, status }: NavBarProps) {
               Inquietudes
             </Link>
           )}
+          {status === 'verified_citizen' && (
+            <Link
+              href="/decisiones"
+              className={`navbar-link${isActive('/decisiones') ? ' navbar-link-active' : ''}`}
+            >
+              Decisiones
+            </Link>
+          )}
           <Link
             href="/reglas"
             className={`navbar-link${isActive('/reglas') ? ' navbar-link-active' : ''}`}

@@ -1087,4 +1087,152 @@ describe('DecisionesService', () => {
       });
     });
   });
+
+  describe('getResumen()', () => {
+    const ORIGEN = { id: 'g-origen', name: 'Matagalpa', type: 'territorial_origin', slug: 'matagalpa' };
+    const ACOGIDA = { id: 'g-acogida', name: 'Costa Rica', type: 'territorial_residence', slug: 'country-cr' };
+    const GENERAL = { id: 'g-general', name: 'Comunidad general', type: 'custom', slug: 'general' };
+    const OTRA = { id: 'g-otra', name: 'Jóvenes', type: 'custom', slug: 'jovenes' };
+
+    const dec = (over: Record<string, unknown> = {}) => ({
+      fase: 'contada', resultado: 'aprobada', candidatas: ['s1', 's2'], ganadoras: ['s1'], aprobaciones: [3, 1],
+      papeletasTotal: 5, abstenciones: 1, contadaAt: new Date('2026-11-20T00:00:00Z'),
+      objecionEndsAt: null, votacionEndsAt: null, updatedAt: new Date('2026-11-20T00:00:00Z'),
+      ...over,
+    });
+    const tema = (id: string, groupId: string, over: Record<string, unknown> = {}) => ({
+      id, groupId, title: `Tema ${id}`, status: 'closed', kind: 'propuesta', hidden: false, electionId: null,
+      conclusion: null, closedAt: null, deliberationEndsAt: null,
+      createdAt: new Date('2026-11-01T00:00:00Z'), updatedAt: new Date('2026-11-01T00:00:00Z'), decision: null,
+      ...over,
+    });
+    const miembroDe = (...gs: (typeof ORIGEN)[]) =>
+      prisma.groupMembership.findMany.mockResolvedValue(gs.map((group) => ({ group })));
+
+    it('ordena origen, acogida, general y las demás comunidades al final como general', async () => {
+      miembroDe(OTRA, GENERAL, ACOGIDA, ORIGEN);
+      const r = await service.getResumen(YO);
+      expect(r.comunidades.map((c) => [c.groupId, c.tipo])).toEqual([
+        ['g-origen', 'origen'], ['g-acogida', 'acogida'], ['g-general', 'general'], ['g-otra', 'general'],
+      ]);
+      expect(r.comunidades[0]?.name).toBe('Matagalpa');
+    });
+
+    it('solo consulta las comunidades de quien pregunta y excluye los temas ocultos', async () => {
+      miembroDe(ORIGEN);
+      prisma.proposal.findMany.mockResolvedValue([
+        tema('t-oculto', ORIGEN.id, { hidden: true, decision: dec() }),
+        tema('t-ajeno', 'g-ajeno', { decision: dec() }),
+      ]);
+      const r = await service.getResumen(YO);
+      expect(prisma.groupMembership.findMany).toHaveBeenCalledWith(expect.objectContaining({ where: { profileId: YO } }));
+      const where = prisma.proposal.findMany.mock.calls[0]?.[0]?.where;
+      expect(where.groupId).toEqual({ in: ['g-origen'] });
+      expect(where.hidden).toBe(false);
+      expect(r.comunidades).toHaveLength(1);
+      const c = r.comunidades[0]!;
+      expect([...c.aprobadas, ...c.rechazadas, ...c.enCurso]).toEqual([]);
+    });
+
+    it('sin comunidades no consulta temas', async () => {
+      const r = await service.getResumen(YO);
+      expect(r.comunidades).toEqual([]);
+      expect(prisma.proposal.findMany).not.toHaveBeenCalled();
+    });
+
+    it('clasifica aprobadas, rechazadas y en curso, con porcentajes y fechas', async () => {
+      miembroDe(ORIGEN);
+      prisma.proposal.findMany.mockResolvedValue([
+        tema('t-votada', ORIGEN.id, { decision: dec() }),
+        tema('t-consenso', ORIGEN.id, { conclusion: 'Acordamos X', closedAt: new Date('2026-11-10T00:00:00Z') }),
+        tema('t-ninguna', ORIGEN.id, { decision: dec({ resultado: 'ninguna', ganadoras: [], contadaAt: new Date('2026-11-21T00:00:00Z') }) }),
+        tema('t-empate', ORIGEN.id, { decision: dec({ resultado: 'empate', ganadoras: [] }) }),
+        tema('t-quorum', ORIGEN.id, { decision: dec({ resultado: 'sin_quorum', ganadoras: [] }) }),
+        tema('t-vacia', ORIGEN.id, { decision: dec({ resultado: 'sin_soluciones', ganadoras: [], candidatas: [], aprobaciones: [] }) }),
+        tema('t-debate', ORIGEN.id, { status: 'open', deliberationEndsAt: new Date('2026-11-30T00:00:00Z') }),
+        tema('t-modo', ORIGEN.id, { status: 'open', decision: dec({ fase: 'modo', resultado: null }) }),
+        tema('t-objecion', ORIGEN.id, {
+          status: 'open', decision: dec({ fase: 'objecion', resultado: null, objecionEndsAt: new Date('2026-12-01T00:00:00Z') }),
+        }),
+        tema('t-votacion', ORIGEN.id, {
+          status: 'open', decision: dec({ fase: 'votacion', resultado: null, votacionEndsAt: new Date('2026-12-02T00:00:00Z') }),
+        }),
+      ]);
+      prisma.solucion.findMany.mockResolvedValue([{ id: 's1', title: 'Mesa de salud', hidden: false }]);
+      const c = (await service.getResumen(YO)).comunidades[0]!;
+
+      expect(c.aprobadas).toEqual([
+        {
+          proposalId: 't-votada', title: 'Tema t-votada', estado: 'aprobada', detalle: 'Aprobada por votación',
+          ganadoras: [{ title: 'Mesa de salud', incluyenPct: 75 }], fecha: '2026-11-20T00:00:00.000Z',
+        },
+        {
+          proposalId: 't-consenso', title: 'Tema t-consenso', estado: 'aprobada', detalle: 'Consenso del debate',
+          ganadoras: [], fecha: '2026-11-10T00:00:00.000Z',
+        },
+      ]);
+      expect(c.rechazadas.map((i) => [i.proposalId, i.estado, i.detalle])).toEqual([
+        ['t-ninguna', 'rechazada', 'Ninguna solución obtuvo más de la mitad'],
+        ['t-empate', 'rechazada', 'Empate: sin decisión'],
+        ['t-quorum', 'rechazada', 'Sin decisión: no se alcanzó la participación mínima'],
+        ['t-vacia', 'rechazada', 'No se propusieron soluciones'],
+      ]);
+      expect(c.enCurso.map((i) => [i.proposalId, i.estado, i.detalle, i.fecha])).toEqual([
+        ['t-debate', 'en_curso', 'En debate hasta el {fecha}', '2026-11-30T00:00:00.000Z'],
+        ['t-modo', 'en_curso', 'Eligiendo cómo decidir', null],
+        ['t-objecion', 'en_curso', 'Objeciones hasta el {fecha}', '2026-12-01T00:00:00.000Z'],
+        ['t-votacion', 'en_curso', 'Votación abierta hasta el {fecha}', '2026-12-02T00:00:00.000Z'],
+      ]);
+      // Los títulos de las ganadoras salen de una sola consulta.
+      expect(prisma.solucion.findMany).toHaveBeenCalledTimes(1);
+    });
+
+    it('la decisión cancelada no aparece en ninguna lista', async () => {
+      miembroDe(ORIGEN);
+      prisma.proposal.findMany.mockResolvedValue([
+        tema('t-cancelada', ORIGEN.id, { status: 'open', decision: dec({ fase: 'cancelada', resultado: null }) }),
+        tema('t-cerrada-cancelada', ORIGEN.id, { conclusion: 'Algo', decision: dec({ fase: 'cancelada', resultado: null }) }),
+      ]);
+      const c = (await service.getResumen(YO)).comunidades[0]!;
+      expect([...c.aprobadas, ...c.rechazadas, ...c.enCurso]).toEqual([]);
+    });
+
+    it('enmascara el título de una ganadora oculta por moderación', async () => {
+      miembroDe(ORIGEN);
+      prisma.proposal.findMany.mockResolvedValue([tema('t-votada', ORIGEN.id, { decision: dec() })]);
+      prisma.solucion.findMany.mockResolvedValue([{ id: 's1', title: 'Texto ofensivo', hidden: true }]);
+      const c = (await service.getResumen(YO)).comunidades[0]!;
+      expect(c.aprobadas[0]?.ganadoras).toEqual([{ title: 'Solución oculta por moderación', incluyenPct: 75 }]);
+    });
+
+    it('sin papeletas válidas el porcentaje es null', async () => {
+      miembroDe(ORIGEN);
+      prisma.proposal.findMany.mockResolvedValue([
+        tema('t-votada', ORIGEN.id, { decision: dec({ papeletasTotal: 2, abstenciones: 2 }) }),
+      ]);
+      prisma.solucion.findMany.mockResolvedValue([{ id: 's1', title: 'Mesa de salud', hidden: false }]);
+      const c = (await service.getResumen(YO)).comunidades[0]!;
+      expect(c.aprobadas[0]?.ganadoras).toEqual([{ title: 'Mesa de salud', incluyenPct: null }]);
+    });
+
+    it('cada lista trae como máximo 50, las más recientes primero', async () => {
+      miembroDe(ORIGEN);
+      prisma.proposal.findMany.mockResolvedValue(
+        Array.from({ length: 60 }, (_, i) =>
+          tema(`t${i}`, ORIGEN.id, { conclusion: 'Acuerdo', closedAt: new Date(Date.UTC(2026, 10, 1, 0, i)) }),
+        ),
+      );
+      const c = (await service.getResumen(YO)).comunidades[0]!;
+      expect(c.aprobadas).toHaveLength(50);
+      expect(c.aprobadas[0]?.proposalId).toBe('t59');
+      expect(c.aprobadas[49]?.proposalId).toBe('t10');
+    });
+
+    it('un tema de votación del plan 2 abierto no figura como debate en curso', async () => {
+      miembroDe(ORIGEN);
+      prisma.proposal.findMany.mockResolvedValue([tema('t-eleccion', ORIGEN.id, { status: 'open', electionId: 'e1' })]);
+      const c = (await service.getResumen(YO)).comunidades[0]!;
+      expect(c.enCurso).toEqual([]);
+    });
+  });
 });

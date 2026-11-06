@@ -56,3 +56,30 @@ export interface DecisionTemaResponse {
   soluciones: SolucionItem[];
   decision: DecisionView | null;
 }
+
+/** Tipo de comunidad en la página «Decisiones». */
+export type ComunidadTipo = 'origen' | 'acogida' | 'general';
+
+export interface DecisionResumenItem {
+  proposalId: string;
+  title: string;
+  estado: 'aprobada' | 'rechazada' | 'en_curso';
+  /** Texto llano. Si contiene «{fecha}», la web lo sustituye por `fecha` formateada. */
+  detalle: string;
+  ganadoras: { title: string; incluyenPct: number | null }[];
+  /** ISO: contadaAt/closedAt, o la fecha de cierre de la fase en curso. */
+  fecha: string | null;
+}
+
+export interface ComunidadDecisiones {
+  groupId: string;
+  name: string;
+  tipo: ComunidadTipo;
+  aprobadas: DecisionResumenItem[];
+  rechazadas: DecisionResumenItem[];
+  enCurso: DecisionResumenItem[];
+}
+
+export interface DecisionesResumenResponse {
+  comunidades: ComunidadDecisiones[];
+}
