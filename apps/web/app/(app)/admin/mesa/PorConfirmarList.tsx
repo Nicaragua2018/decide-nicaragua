@@ -11,6 +11,7 @@ const TIPO: Record<ModeracionPorConfirmar['target'], string> = {
   inquietud: 'Inquietud',
   frase: 'Frase',
   solucion: 'Solución',
+  informe: 'Informe',
 };
 
 export function PorConfirmarList({ items }: { items: ModeracionPorConfirmar[] }) {

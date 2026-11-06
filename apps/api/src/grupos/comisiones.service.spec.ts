@@ -4,12 +4,13 @@ import { BadRequestException, ConflictException, ForbiddenException } from '@nes
 import { Prisma } from '@prisma/client';
 import { plainToInstance } from 'class-transformer';
 import { validate } from 'class-validator';
-import { ComisionesService } from './comisiones.service';
+import { ComisionesService, estaAtrasada } from './comisiones.service';
 import { elegirPuestos } from './elegir-puestos';
 import { ALGORITHM_VERSION, selectMembers, sortPool, verifySelection } from '../sortition/sortition-algorithm';
 import { VoluntarioDto } from './dto/voluntario.dto';
 import { AjustarComisionDto } from './dto/ajustar-comision.dto';
 import { PapeletaComisionDto } from './dto/papeleta-comision.dto';
+import { InformeComisionDto } from './dto/informe-comision.dto';
 
 const YO = 'p-yo';
 const OTRA = 'p-otra';
@@ -66,7 +67,18 @@ function buildPrisma() {
       create: vi.fn().mockResolvedValue({ id: 'nuevo' }),
       updateMany: vi.fn().mockResolvedValue({ count: 1 }),
     },
-    groupMembership: { createMany: vi.fn().mockResolvedValue({ count: 0 }) },
+    groupMembership: { createMany: vi.fn().mockResolvedValue({ count: 0 }), findMany: vi.fn().mockResolvedValue([]) },
+    comisionInforme: { create: vi.fn().mockResolvedValue({ id: 'i-1' }), findMany: vi.fn().mockResolvedValue([]) },
+    comisionRenovacionApoyo: {
+      createMany: vi.fn().mockResolvedValue({ count: 1 }),
+      deleteMany: vi.fn().mockResolvedValue({ count: 1 }),
+      count: vi.fn().mockResolvedValue(0),
+      findUnique: vi.fn().mockResolvedValue(null),
+    },
+    proposalComment: { findMany: vi.fn().mockResolvedValue([]) },
+    consensusSignal: { findMany: vi.fn().mockResolvedValue([]) },
+    frase: { findMany: vi.fn().mockResolvedValue([]) },
+    fraseVoto: { findMany: vi.fn().mockResolvedValue([]) },
     forum: { findFirst: vi.fn().mockResolvedValue(null), create: vi.fn().mockResolvedValue({ id: 'f1' }) },
     comisionVoluntario: {
       findMany: vi.fn().mockResolvedValue([]),
@@ -91,11 +103,16 @@ const REGLAS: Record<string, number> = {
   'comision.plazo_convocatoria_dias': 7,
   'comision.informe_cada_dias': 30,
   'votacion.plazo_dias': 5,
+  'debate.fraccion_objecion_modo': 50,
 };
 
 describe('ComisionesService', () => {
   let prisma: ReturnType<typeof buildPrisma>;
-  let access: { isParticipant: ReturnType<typeof vi.fn>; requireReader: ReturnType<typeof vi.fn> };
+  let access: {
+    isParticipant: ReturnType<typeof vi.fn>;
+    requireReader: ReturnType<typeof vi.fn>;
+    requireParticipant: ReturnType<typeof vi.fn>;
+  };
   let rules: { getInt: ReturnType<typeof vi.fn>; getChoice: ReturnType<typeof vi.fn> };
   let audit: { log: ReturnType<typeof vi.fn> };
   let forums: { canOrganize: ReturnType<typeof vi.fn> };
@@ -113,6 +130,10 @@ describe('ComisionesService', () => {
         const parent = groupId === COM ? (grupoActual['parentGroupId'] as string) : null;
         if (!miembroDe.has(groupId) && !(parent && miembroDe.has(parent))) throw new ForbiddenException('No lee.');
         return { participa: miembroDe.has(groupId) };
+      }),
+      requireParticipant: vi.fn(async (groupId: string) => {
+        if (!miembroDe.has(groupId)) throw new ForbiddenException('No participa.');
+        if (groupId === COM && grupoActual['trabajoEstado'] !== 'activo') throw new ConflictException('No activo.');
       }),
     };
     rules = {
@@ -580,6 +601,251 @@ describe('ComisionesService', () => {
 
   // ─── Vista y verificación ─────────────────────────────────────────────────
 
+  // ─── Informes ─────────────────────────────────────────────────────────────
+
+  const activa = (over: Record<string, unknown> = {}) =>
+    comision({
+      trabajoEstado: 'activo',
+      convocatoriaEndsAt: null,
+      activadaAt: new Date(NOW.getTime() - 20 * DIA_MS),
+      proximoInformeAt: new Date(NOW.getTime() + 10 * DIA_MS),
+      ...over,
+    });
+  /** Atrasada: faltó a dos informes (now > proximoInformeAt + 30 días). */
+  const atrasadaFila = (over: Record<string, unknown> = {}) =>
+    activa({ activadaAt: new Date(NOW.getTime() - 90 * DIA_MS), proximoInformeAt: new Date(NOW.getTime() - 31 * DIA_MS), ...over });
+
+  describe('publicarInforme', () => {
+    const TEXTO = 'Avanzamos con la compra de tubería para el barrio.';
+
+    beforeEach(() => {
+      miembroDe = new Set([AMBITO, COM]);
+      grupoActual = activa();
+    });
+
+    it('un miembro publica en una comisión activa: guarda, recalcula el próximo informe y audita sin texto', async () => {
+      await service.publicarInforme(YO, COM, `  ${TEXTO}  `, false, 'ip', NOW);
+      expect(prisma.$queryRaw).toHaveBeenCalled();
+      expect(prisma.comisionInforme.create).toHaveBeenCalledWith({
+        data: { grupoId: COM, autorProfileId: YO, texto: TEXTO, final: false },
+      });
+      expect(prisma.group.updateMany).toHaveBeenCalledWith({
+        where: { id: COM, trabajoEstado: 'activo' },
+        data: { proximoInformeAt: new Date(NOW.getTime() + 30 * DIA_MS) },
+      });
+      expect(acciones()).toEqual(['comision.report_published']);
+      expect(metadatas()).toEqual([{ grupoId: COM }]);
+      expect(JSON.stringify(audit.log.mock.calls)).not.toContain('tubería');
+    });
+
+    it('409 si la comisión no está activa (convocando, cerrada o archivada); nada se guarda', async () => {
+      for (const estado of ['convocando', 'cerrado', 'archivado']) {
+        grupoActual = activa({ trabajoEstado: estado });
+        await expect(service.publicarInforme(YO, COM, TEXTO, false, 'ip', NOW)).rejects.toBeInstanceOf(ConflictException);
+      }
+      expect(prisma.comisionInforme.create).not.toHaveBeenCalled();
+    });
+
+    it('409 si se cerró justo antes: se relee con la fila bloqueada', async () => {
+      // requireParticipant la vio activa; al bloquear la fila ya está cerrada.
+      access.requireParticipant.mockResolvedValue(undefined);
+      grupoActual = activa({ trabajoEstado: 'cerrado' });
+      await expect(service.publicarInforme(YO, COM, TEXTO, false, 'ip', NOW)).rejects.toBeInstanceOf(ConflictException);
+      expect(prisma.comisionInforme.create).not.toHaveBeenCalled();
+    });
+
+    it('quien no es miembro de la comisión recibe 403', async () => {
+      miembroDe = new Set([AMBITO]);
+      await expect(service.publicarInforme(YO, COM, TEXTO, false, 'ip', NOW)).rejects.toBeInstanceOf(ForbiddenException);
+    });
+
+    it('un informe normal admite hasta 2000; el final, hasta 5000 (400)', async () => {
+      await expect(service.publicarInforme(YO, COM, 'x'.repeat(2001), false, 'ip', NOW)).rejects.toBeInstanceOf(BadRequestException);
+      await expect(service.publicarInforme(YO, COM, 'x'.repeat(19), true, 'ip', NOW)).rejects.toBeInstanceOf(BadRequestException);
+      await service.publicarInforme(YO, COM, 'x'.repeat(2001), true, 'ip', NOW);
+      expect(prisma.comisionInforme.create).toHaveBeenCalledTimes(1);
+    });
+
+    it('el informe final cierra la comisión con updateMany condicionado a activo y audita el cierre', async () => {
+      await service.publicarInforme(YO, COM, TEXTO, true, 'ip', NOW);
+      expect(prisma.comisionInforme.create).toHaveBeenCalledWith({
+        data: { grupoId: COM, autorProfileId: YO, texto: TEXTO, final: true },
+      });
+      expect(prisma.group.updateMany).toHaveBeenCalledWith({
+        where: { id: COM, trabajoEstado: 'activo' },
+        data: { trabajoEstado: 'cerrado' },
+      });
+      expect(acciones()).toEqual(['comision.report_published', 'comision.closed']);
+      expect(metadatas()).toEqual([{ grupoId: COM }, { grupoId: COM }]);
+    });
+
+    it('si otra escritura la cerró antes (count 0), el final da 409 y no audita', async () => {
+      prisma.group.updateMany.mockResolvedValue({ count: 0 });
+      await expect(service.publicarInforme(YO, COM, TEXTO, true, 'ip', NOW)).rejects.toBeInstanceOf(ConflictException);
+      expect(acciones()).toEqual([]);
+    });
+  });
+
+  describe('atraso', () => {
+    it('atrasada solo si now > proximoInformeAt + informe_cada_dias (faltó a dos informes)', () => {
+      const prox = new Date(NOW.getTime() - 30 * DIA_MS);
+      expect(estaAtrasada(prox, 30, NOW)).toBe(false);
+      expect(estaAtrasada(new Date(prox.getTime() - 1), 30, NOW)).toBe(true);
+      expect(estaAtrasada(new Date(NOW.getTime() + DIA_MS), 30, NOW)).toBe(false);
+      expect(estaAtrasada(null, 30, NOW)).toBe(false);
+    });
+  });
+
+  // ─── Renovación ───────────────────────────────────────────────────────────
+
+  describe('apoyarRenovacion', () => {
+    beforeEach(() => {
+      grupoActual = atrasadaFila();
+      prisma.solucion.findUnique.mockResolvedValue({ proposalId: PROP, title: 'Agua potable' });
+      // Participaron cinco personas en el debate; dos ya no son miembros del ámbito.
+      prisma.proposalComment.findMany.mockResolvedValue(['a', 'b', 'c', 'd', 'e'].map((id) => ({ authorProfileId: id })));
+      prisma.groupMembership.findMany.mockResolvedValue(['a', 'b', 'c'].map((profileId) => ({ profileId })));
+      // Las escrituras condicionadas se comportan como en la base: solo cambian si el estado coincide.
+      prisma.group.updateMany.mockImplementation(async ({ where, data }: { where: Record<string, unknown>; data: Record<string, unknown> }) => {
+        if (where['trabajoEstado'] && where['trabajoEstado'] !== grupoActual['trabajoEstado']) return { count: 0 };
+        grupoActual = { ...grupoActual, ...data };
+        return { count: 1 };
+      });
+    });
+
+    it('409 si la comisión no está atrasada; 403 si no es miembro actual del ámbito', async () => {
+      grupoActual = activa();
+      await expect(service.apoyarRenovacion(YO, COM, 'ip', NOW)).rejects.toBeInstanceOf(ConflictException);
+      grupoActual = atrasadaFila({ trabajoEstado: 'cerrado' });
+      await expect(service.apoyarRenovacion(YO, COM, 'ip', NOW)).rejects.toBeInstanceOf(ConflictException);
+      // Miembro de la comisión que se mudó del ámbito: ya no apoya.
+      grupoActual = atrasadaFila();
+      miembroDe = new Set([COM]);
+      await expect(service.apoyarRenovacion(YO, COM, 'ip', NOW)).rejects.toBeInstanceOf(ForbiddenException);
+      expect(prisma.comisionRenovacionApoyo.createMany).not.toHaveBeenCalled();
+    });
+
+    it('guarda el apoyo una vez por persona y audita sin texto; bajo el umbral no renueva', async () => {
+      prisma.comisionRenovacionApoyo.count.mockResolvedValue(1);
+      await service.apoyarRenovacion(YO, COM, 'ip', NOW);
+      expect(prisma.comisionRenovacionApoyo.createMany).toHaveBeenCalledWith({
+        data: [{ grupoId: COM, profileId: YO }],
+        skipDuplicates: true,
+      });
+      expect(prisma.group.create).not.toHaveBeenCalled();
+      expect(acciones()).toEqual(['comision.renewal_supported']);
+      expect(metadatas()).toEqual([{ grupoId: COM }]);
+    });
+
+    it('el umbral cuenta solo a miembros actuales: P = participantes que siguen, apoyos del ámbito', async () => {
+      // P = 3 (no 5): ceil(50 × 3 / 100) = 2 apoyos bastan.
+      prisma.comisionRenovacionApoyo.count.mockResolvedValue(2);
+      await service.apoyarRenovacion(YO, COM, 'ip', NOW);
+      expect(prisma.groupMembership.findMany).toHaveBeenCalledWith({
+        where: { groupId: AMBITO, profileId: { in: ['a', 'b', 'c', 'd', 'e'] } },
+        select: { profileId: true },
+      });
+      expect(rules.getInt).toHaveBeenCalledWith('debate.fraccion_objecion_modo', AMBITO);
+      expect(prisma.comisionRenovacionApoyo.count).toHaveBeenCalledWith({
+        where: { grupoId: COM, profile: { memberships: { some: { groupId: AMBITO } } } },
+      });
+      expect(prisma.group.create).toHaveBeenCalledTimes(1);
+    });
+
+    it('al llegar al umbral: cierra la comisión y crea otra para la misma solución con convocatoria nueva', async () => {
+      prisma.comisionRenovacionApoyo.count.mockResolvedValue(2);
+      await service.apoyarRenovacion(YO, COM, 'ip', NOW);
+      expect(prisma.group.updateMany).toHaveBeenCalledWith({
+        where: { id: COM, trabajoEstado: 'activo' },
+        data: { trabajoEstado: 'cerrado' },
+      });
+      expect(grupoActual['trabajoEstado']).toBe('cerrado');
+      const data = prisma.group.create.mock.calls[0]![0].data as Record<string, unknown>;
+      expect(data).toMatchObject({
+        name: 'Comisión: Agua potable',
+        type: 'trabajo',
+        parentGroupId: AMBITO,
+        trabajoTipo: 'comision',
+        trabajoEstado: 'convocando',
+        tarea: 'Llevar agua potable a los barrios del norte.',
+        puestos: 3,
+        forma: 'sorteo',
+        origenSolucionId: SOL,
+        convocatoriaEndsAt: new Date(NOW.getTime() + 7 * DIA_MS),
+      });
+      expect(data['id']).not.toBe(COM);
+      expect(acciones()).toEqual(['comision.renewal_supported', 'comision.renewed', 'comision.created']);
+      expect(metadatas()).toEqual([{ grupoId: COM }, { grupoId: COM }, { grupoId: data['id'] }]);
+    });
+
+    it('sin participantes que sigan en el ámbito, el umbral mínimo es 1', async () => {
+      prisma.groupMembership.findMany.mockResolvedValue([]);
+      prisma.comisionRenovacionApoyo.count.mockResolvedValue(1);
+      await service.apoyarRenovacion(YO, COM, 'ip', NOW);
+      expect(prisma.group.create).toHaveBeenCalledTimes(1);
+    });
+
+    it('una sola renovación aunque lleguen dos apoyos a la vez', async () => {
+      prisma.comisionRenovacionApoyo.count.mockResolvedValue(3);
+      const r = await Promise.allSettled([
+        service.apoyarRenovacion(YO, COM, 'ip', NOW),
+        service.apoyarRenovacion(OTRA, COM, 'ip', NOW),
+      ]);
+      expect(r.some((x) => x.status === 'fulfilled')).toBe(true);
+      expect(prisma.group.create).toHaveBeenCalledTimes(1);
+      expect(acciones().filter((a) => a === 'comision.renewed')).toHaveLength(1);
+    });
+  });
+
+  describe('retirarApoyoRenovacion', () => {
+    it('borra solo el apoyo propio', async () => {
+      grupoActual = atrasadaFila();
+      await service.retirarApoyoRenovacion(YO, COM);
+      expect(prisma.comisionRenovacionApoyo.deleteMany).toHaveBeenCalledWith({ where: { grupoId: COM, profileId: YO } });
+    });
+  });
+
+  describe('vista (informes y renovación)', () => {
+    it('lista los informes sin el texto de los ocultos; puedoInformar solo a miembros de una activa', async () => {
+      miembroDe = new Set([AMBITO, COM]);
+      const fecha = new Date(NOW.getTime() - DIA_MS);
+      prisma.comisionInforme.findMany.mockResolvedValue([
+        { id: 'i-2', texto: 'Texto oculto por la mesa', final: false, hidden: true, createdAt: fecha },
+        { id: 'i-1', texto: 'Compramos la tubería.', final: false, hidden: false, createdAt: fecha },
+      ]);
+      const v = await service.vista(activa() as never, YO, true, NOW);
+      expect(v.informes).toEqual([
+        { id: 'i-2', texto: '', final: false, createdAt: fecha.toISOString(), oculto: true },
+        { id: 'i-1', texto: 'Compramos la tubería.', final: false, createdAt: fecha.toISOString(), oculto: false },
+      ]);
+      expect(JSON.stringify(v)).not.toContain('oculto por la mesa');
+      expect(v.puedoInformar).toBe(true);
+      expect(v.atrasada).toBe(false);
+      expect((await service.vista(activa({ trabajoEstado: 'cerrado' }) as never, YO, true, NOW)).puedoInformar).toBe(false);
+      miembroDe = new Set([AMBITO]);
+      expect((await service.vista(activa() as never, YO, true, NOW)).puedoInformar).toBe(false);
+    });
+
+    it('atrasada: puedoApoyarRenovar para miembros del ámbito que aún no apoyan', async () => {
+      const v = await service.vista(atrasadaFila() as never, YO, true, NOW);
+      expect(v.atrasada).toBe(true);
+      expect(v.puedoApoyarRenovar).toBe(true);
+      expect(v.yoApoyoRenovar).toBe(false);
+      prisma.comisionRenovacionApoyo.findUnique.mockResolvedValue({ id: 'ap-1' });
+      const w = await service.vista(atrasadaFila() as never, YO, true, NOW);
+      expect(w.yoApoyoRenovar).toBe(true);
+      expect(w.puedoApoyarRenovar).toBe(false);
+      miembroDe.clear();
+      prisma.comisionRenovacionApoyo.findUnique.mockResolvedValue(null);
+      expect((await service.vista(atrasadaFila() as never, YO, true, NOW)).puedoApoyarRenovar).toBe(false);
+    });
+
+    it('sin lectura completa no muestra informes', async () => {
+      prisma.comisionInforme.findMany.mockResolvedValue([{ id: 'i-1', texto: 'x', final: false, hidden: false, createdAt: NOW }]);
+      expect((await service.vista(activa() as never, YO, false, NOW)).informes).toEqual([]);
+    });
+  });
+
   describe('vista', () => {
     it('nunca devuelve la papeleta de otra persona: solo lee la propia', async () => {
       grupoActual = comision({ trabajoEstado: 'eligiendo', eleccionEndsAt: new Date(NOW.getTime() + DIA_MS) });
@@ -673,6 +939,16 @@ describe('ComisionesService', () => {
       expect(await validate(plainToInstance(AjustarComisionDto, { tarea: 'x'.repeat(2001) }))).not.toHaveLength(0);
       expect(await validate(plainToInstance(AjustarComisionDto, { puestos: 2.5 }))).not.toHaveLength(0);
       expect(await validate(plainToInstance(AjustarComisionDto, { tarea: 'x'.repeat(20), puestos: 4 }))).toHaveLength(0);
+    });
+
+    it('el informe se recorta, tiene entre 20 y 5000 y final es booleano opcional', async () => {
+      const d = plainToInstance(InformeComisionDto, { texto: `  ${'x'.repeat(20)}  ` });
+      expect(await validate(d)).toHaveLength(0);
+      expect(d.texto).toBe('x'.repeat(20));
+      expect(await validate(plainToInstance(InformeComisionDto, { texto: 'x'.repeat(19) }))).not.toHaveLength(0);
+      expect(await validate(plainToInstance(InformeComisionDto, { texto: 'x'.repeat(5001), final: true }))).not.toHaveLength(0);
+      expect(await validate(plainToInstance(InformeComisionDto, { texto: 'x'.repeat(30), final: 'si' }))).not.toHaveLength(0);
+      expect(await validate(plainToInstance(InformeComisionDto, { texto: 'x'.repeat(30), final: true }))).toHaveLength(0);
     });
 
     it('la papeleta es una lista de identificadores', async () => {

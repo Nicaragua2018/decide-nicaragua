@@ -21,6 +21,7 @@ function buildPrisma() {
     proposalComment: { findUnique: vi.fn(), update: vi.fn() },
     inquietud: { findUnique: vi.fn(), update: vi.fn() },
     frase: { findUnique: vi.fn(), update: vi.fn() },
+    comisionInforme: { findUnique: vi.fn(), findMany: vi.fn().mockResolvedValue([]), update: vi.fn() },
     solucion: { findUnique: vi.fn(), findMany: vi.fn().mockResolvedValue([]), update: vi.fn(), count: vi.fn(), create: vi.fn() },
     election: { create: vi.fn(), findUnique: vi.fn(), update: vi.fn() },
     electionResult: { findUnique: vi.fn() },
@@ -137,6 +138,68 @@ describe('ForumsService', () => {
       expect(r[0]?.winningOption).toBeNull();
       expect(r[1]?.approvedSolutions).toEqual([]);
       expect(JSON.stringify(r)).not.toContain('secreto');
+    });
+
+    it('informeFinal: el más reciente no oculto de una comisión cerrada de una ganadora, en una sola consulta', async () => {
+      prisma.proposal.findMany.mockResolvedValue([
+        {
+          id: 't3', title: 'Agua', kind: 'propuesta', conclusion: 'Se aprueba.', objections: null,
+          closedAt: new Date('2026-11-22T00:00:00Z'), electionId: null, group: { name: 'Estelí' }, signals: [],
+        },
+        {
+          id: 't4', title: 'Luz', kind: 'propuesta', conclusion: 'Se aprueba.', objections: null,
+          closedAt: new Date('2026-11-21T00:00:00Z'), electionId: null, group: { name: 'Estelí' }, signals: [],
+        },
+      ]);
+      prisma.decision.findMany.mockResolvedValue([
+        { proposalId: 't3', ganadoras: ['s1'] },
+        { proposalId: 't4', ganadoras: ['s2'] },
+      ]);
+      prisma.solucion.findMany.mockResolvedValue([
+        { id: 's1', title: 'Pozos', hidden: false },
+        { id: 's2', title: 'Paneles', hidden: false },
+      ]);
+      // Ordenados del más reciente al más antiguo, como los pide la consulta.
+      prisma.comisionInforme.findMany.mockResolvedValue([
+        { texto: 'Informe final reciente de los pozos', grupo: { origenSolucionId: 's1' } },
+        { texto: 'Informe final viejo de los pozos', grupo: { origenSolucionId: 's1' } },
+      ]);
+      const r = await service.publicConsensus();
+      expect(prisma.comisionInforme.findMany).toHaveBeenCalledTimes(1);
+      expect(prisma.comisionInforme.findMany).toHaveBeenCalledWith(expect.objectContaining({
+        where: {
+          final: true,
+          hidden: false,
+          grupo: { trabajoTipo: 'comision', trabajoEstado: 'cerrado', origenSolucionId: { in: ['s1', 's2'] } },
+        },
+        orderBy: { createdAt: 'desc' },
+      }));
+      expect(r[0]?.informeFinal).toBe('Informe final reciente de los pozos');
+      expect(r[1]?.informeFinal).toBeNull();
+      expect(JSON.stringify(r)).not.toMatch(/autor|displayName/);
+    });
+
+    it('un informe final oculto no sale: la consulta lo excluye y sin otro queda null', async () => {
+      prisma.proposal.findMany.mockResolvedValue([
+        {
+          id: 't3', title: 'Agua', kind: 'propuesta', conclusion: 'Se aprueba.', objections: null,
+          closedAt: new Date('2026-11-22T00:00:00Z'), electionId: null, group: { name: 'Estelí' }, signals: [],
+        },
+      ]);
+      prisma.decision.findMany.mockResolvedValue([{ proposalId: 't3', ganadoras: ['s1'] }]);
+      prisma.solucion.findMany.mockResolvedValue([{ id: 's1', title: 'Pozos', hidden: false }]);
+      prisma.comisionInforme.findMany.mockImplementation(async ({ where }: { where: { hidden?: boolean } }) =>
+        where.hidden === false ? [] : [{ texto: 'Texto oculto del informe', grupo: { origenSolucionId: 's1' } }],
+      );
+      const r = await service.publicConsensus();
+      expect(r[0]?.informeFinal).toBeNull();
+      expect(JSON.stringify(r)).not.toContain('oculto del informe');
+    });
+
+    it('sin ganadoras no consulta informes', async () => {
+      prisma.proposal.findMany.mockResolvedValue([]);
+      await service.publicConsensus();
+      expect(prisma.comisionInforme.findMany).not.toHaveBeenCalled();
     });
   });
 
@@ -625,6 +688,55 @@ describe('ForumsService', () => {
         prisma.frase.findUnique.mockResolvedValue(fr());
         const r = await service.listAppeals(YO);
         expect(r[0]).toMatchObject({ target: 'frase', originalText: 'Una frase de prueba' });
+      });
+    });
+
+    describe('informes de comisión', () => {
+      const inf = (over: Record<string, unknown> = {}) => ({
+        id: 'i1', grupoId: 'g-com', autorProfileId: YO, texto: 'Informe con datos de la obra', final: false, hidden: false, ...over,
+      });
+
+      it('un informe se oculta con una sola firma (sin quórum), en el grupo de la comisión', async () => {
+        board.roleOf.mockResolvedValue('administrador');
+        prisma.comisionInforme.findUnique.mockResolvedValue(inf({ final: true }));
+        prisma.comisionInforme.update.mockResolvedValue({});
+        prisma.moderationAction.create.mockResolvedValue({ id: 'ma1' });
+        expect(await service.hide(YO, { target: 'informe', targetId: 'i1', causa: 'insultos_amenazas' }, 'ip')).toEqual({ id: 'ma1', estado: 'oculto' });
+        expect(prisma.comisionInforme.update).toHaveBeenCalledWith({ where: { id: 'i1' }, data: { hidden: true } });
+        expect(prisma.moderationAction.create).toHaveBeenCalledWith({
+          data: expect.objectContaining({ target: 'informe', targetId: 'i1', status: 'oculto', venceAt: null }),
+        });
+        expect(prisma.proposalComment.update).not.toHaveBeenCalled();
+      });
+
+      it('un informe ya oculto da 409; uno inexistente da 404', async () => {
+        board.roleOf.mockResolvedValue('administrador');
+        prisma.comisionInforme.findUnique.mockResolvedValue(inf({ hidden: true }));
+        await expect(service.hide(YO, { target: 'informe', targetId: 'i1', causa: 'insultos_amenazas' }, 'ip')).rejects.toThrow(ConflictException);
+        prisma.comisionInforme.findUnique.mockResolvedValue(null);
+        await expect(service.hide(YO, { target: 'informe', targetId: 'i1', causa: 'insultos_amenazas' }, 'ip')).rejects.toThrow('Informe no encontrado');
+      });
+
+      it('su autor apela; restaurar lo vuelve visible; la mesa ve su texto', async () => {
+        prisma.moderationAction.findUnique.mockResolvedValue({ id: 'ma1', target: 'informe', targetId: 'i1', status: 'oculto', reason: '' });
+        prisma.comisionInforme.findUnique.mockResolvedValue(inf());
+        await service.appeal(YO, 'ma1', 'No fue mi intención ofender', 'ip');
+        expect(prisma.groupMembership.findUnique).toHaveBeenCalledWith({ where: { groupId_profileId: { groupId: 'g-com', profileId: YO } } });
+        board.roleOf.mockResolvedValue('secretario');
+        prisma.moderationAction.findUnique.mockResolvedValue({ id: 'ma1', target: 'informe', targetId: 'i1', status: 'apelado', reason: '' });
+        prisma.comisionInforme.update.mockResolvedValue({});
+        prisma.moderationAction.update.mockResolvedValue({});
+        await service.resolveAppeal(YO, 'ma1', true, 'ip');
+        expect(prisma.comisionInforme.update).toHaveBeenCalledWith({ where: { id: 'i1' }, data: { hidden: false } });
+        prisma.moderationAction.findMany.mockResolvedValue([
+          { id: 'ma1', target: 'informe', targetId: 'i1', reason: '', appealText: 'No', appealedAt: new Date(), createdAt: new Date() },
+        ]);
+        expect((await service.listAppeals(YO))[0]).toMatchObject({ target: 'informe', originalText: 'Informe con datos de la obra' });
+      });
+
+      it('el DTO de moderación acepta informe', async () => {
+        const dto = plainToInstance(ModerateDto, { target: 'informe', targetId: '11111111-1111-4111-8111-111111111111', causa: 'insultos_amenazas' });
+        expect(await validate(dto)).toHaveLength(0);
       });
     });
 

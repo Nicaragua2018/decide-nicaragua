@@ -81,6 +81,7 @@ enum ModerationTarget {
   inquietud
   frase
   solucion
+  informe
 }
 
 enum Origen {

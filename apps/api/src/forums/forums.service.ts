@@ -30,11 +30,20 @@ const DIA_MS = 86_400_000;
 /** Título que toma la votación de un tema oculto, para que no repita el título del tema. */
 const HIDDEN_VOTE_TITLE = 'Votación de un tema oculto';
 
-type ModTarget = 'tema' | 'respuesta' | 'inquietud' | 'frase' | 'solucion';
+type ModTarget = 'tema' | 'respuesta' | 'inquietud' | 'frase' | 'solucion' | 'informe';
 
 /** Cada tipo de contenido tiene su propia rama: ninguno cae en otro por descarte. */
 function checkTarget(target: string): ModTarget {
-  if (target === 'tema' || target === 'respuesta' || target === 'inquietud' || target === 'frase' || target === 'solucion') return target;
+  if (
+    target === 'tema' ||
+    target === 'respuesta' ||
+    target === 'inquietud' ||
+    target === 'frase' ||
+    target === 'solucion' ||
+    target === 'informe'
+  ) {
+    return target;
+  }
   throw new BadRequestException('Tipo de contenido no válido.');
 }
 
@@ -341,6 +350,12 @@ export class ForumsService {
       if (!so) throw new NotFoundException('Solución no encontrada');
       if (so.hidden) throw new ConflictException('Este contenido ya está oculto.');
       groupId = so.proposal.groupId;
+    } else if (target === 'informe') {
+      // Informe de una comisión: se modera en el grupo de la comisión, con una sola firma.
+      const inf = await this.prisma.comisionInforme.findUnique({ where: { id: dto.targetId } });
+      if (!inf) throw new NotFoundException('Informe no encontrado');
+      if (inf.hidden) throw new ConflictException('Este contenido ya está oculto.');
+      groupId = inf.grupoId;
     } else {
       const c = await this.prisma.proposalComment.findUnique({
         where: { id: dto.targetId },
@@ -611,6 +626,8 @@ export class ForumsService {
    */
   private async requiereQuorumTx(tx: Tx, target: ModTarget, targetId: string): Promise<boolean> {
     if (target === 'solucion') return true;
+    // Los informes de comisión, como frases y respuestas, se ocultan con una sola firma.
+    if (target === 'informe') return false;
     if (target !== 'tema') return false;
     return (await this.bloquearTemaTx(tx, targetId))?.kind === 'propuesta';
   }
@@ -701,6 +718,8 @@ export class ForumsService {
       await tx.frase.update({ where: { id: targetId }, data: { hidden: true } });
     } else if (target === 'solucion') {
       await tx.solucion.update({ where: { id: targetId }, data: { hidden: true } });
+    } else if (target === 'informe') {
+      await tx.comisionInforme.update({ where: { id: targetId }, data: { hidden: true } });
     } else {
       await tx.proposalComment.update({ where: { id: targetId }, data: { hidden: true } });
     }
@@ -720,6 +739,8 @@ export class ForumsService {
       await tx.frase.update({ where: { id: targetId }, data: { hidden: false } });
     } else if (target === 'solucion') {
       await tx.solucion.update({ where: { id: targetId }, data: { hidden: false } });
+    } else if (target === 'informe') {
+      await tx.comisionInforme.update({ where: { id: targetId }, data: { hidden: false } });
     } else {
       await tx.proposalComment.update({ where: { id: targetId }, data: { hidden: false } });
     }
@@ -940,6 +961,10 @@ export class ForumsService {
       });
       return so ? { authorProfileId: so.authorProfileId, groupId: so.proposal.groupId } : null;
     }
+    if (target === 'informe') {
+      const inf = await this.prisma.comisionInforme.findUnique({ where: { id } });
+      return inf ? { authorProfileId: inf.autorProfileId, groupId: inf.grupoId } : null;
+    }
     const c = await this.prisma.proposalComment.findUnique({
       where: { id },
       include: { proposal: { select: { groupId: true } } },
@@ -962,6 +987,9 @@ export class ForumsService {
     if (target === 'solucion') {
       const so = await this.prisma.solucion.findUnique({ where: { id } });
       return so ? `${so.title}\n\n${so.description}` : '';
+    }
+    if (target === 'informe') {
+      return (await this.prisma.comisionInforme.findUnique({ where: { id } }))?.texto ?? '';
     }
     return (await this.prisma.proposalComment.findUnique({ where: { id } }))?.body ?? '';
   }
@@ -994,6 +1022,21 @@ export class ForumsService {
           select: { id: true, title: true, hidden: true },
         })
       : [];
+    // Informes finales no ocultos de comisiones cerradas de esas soluciones, en una sola consulta
+    // y del más reciente al más antiguo: por tema vale el primero de una de sus ganadoras.
+    const informes = idsGanadoras.length
+      ? await this.prisma.comisionInforme.findMany({
+          where: {
+            final: true,
+            hidden: false,
+            grupo: { trabajoTipo: 'comision', trabajoEstado: 'cerrado', origenSolucionId: { in: idsGanadoras } },
+          },
+          select: { texto: true, grupo: { select: { origenSolucionId: true } } },
+          orderBy: { createdAt: 'desc' },
+        })
+      : [];
+    const informeFinalDe = (ganadoras: string[]): string | null =>
+      informes.find((i) => i.grupo.origenSolucionId !== null && ganadoras.includes(i.grupo.origenSolucionId))?.texto ?? null;
     // Una solución ocultada después del conteo sale enmascarada.
     const tituloDe = new Map(
       soluciones.map((s) => [s.id, s.hidden ? 'Solución oculta por moderación' : s.title]),
@@ -1026,7 +1069,7 @@ export class ForumsService {
           const titulo = tituloDe.get(id);
           return titulo === undefined ? [] : [titulo];
         }),
-        informeFinal: null,
+        informeFinal: informeFinalDe(ganadorasDe.get(t.id) ?? []),
       });
     }
     return result;

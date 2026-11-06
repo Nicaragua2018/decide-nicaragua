@@ -20,6 +20,7 @@ import {
   sortPool,
   verifySelection,
 } from '../sortition/sortition-algorithm';
+import { participantesDelDebate } from '../decisiones/participantes-del-debate';
 import { elegirPuestos } from './elegir-puestos';
 import type { GrupoFila } from './grupo-item';
 
@@ -29,6 +30,9 @@ const DIAS_AMPLIACION = 7;
 const NOMBRE_MAX = 80;
 const TAREA_INICIAL_MAX = 1000;
 const EXPERIENCIA_MAX = 500;
+const INFORME_MIN = 20;
+const INFORME_MAX = 2000;
+const INFORME_FINAL_MAX = 5000;
 
 const NO_ES_TRABAJO = 'Esto no es un grupo de trabajo.';
 const NO_ES_COMISION = 'Esto no es una comisión.';
@@ -38,6 +42,8 @@ const NO_CONVOCA = 'La convocatoria de esta comisión está cerrada.';
 const NO_ELIGE = 'La elección de esta comisión no está abierta.';
 const NO_VOLUNTARIO = 'Solo se puede ordenar a quienes se ofrecieron como voluntarios.';
 const REPETIDO = 'Cada voluntario puede aparecer una sola vez en el orden.';
+const NO_ACTIVA = 'Los informes solo se publican mientras la comisión está activa.';
+const NO_ATRASADA = 'Solo se puede apoyar la renovación de una comisión atrasada.';
 
 type Tx = Prisma.TransactionClient;
 type Forma = 'sorteo' | 'preferencias';
@@ -45,6 +51,7 @@ type Forma = 'sorteo' | 'preferencias';
 /** Campos de una comisión que usa este servicio. */
 export interface ComisionFila extends GrupoFila {
   origenSolucionId: string | null;
+  origenGrupoId: string | null;
   tarea: string | null;
   puestos: number | null;
   forma: string | null;
@@ -66,6 +73,14 @@ const formaDe = (v: string | null): Forma => (v === 'preferencias' ? 'preferenci
 
 const listaDeTexto = (v: unknown): string[] | null =>
   Array.isArray(v) && v.every((x) => typeof x === 'string') ? (v as string[]) : null;
+
+/**
+ * Atraso: la comisión faltó a dos informes, es decir, `now > proximoInformeAt + informe_cada_dias`.
+ * Sin fecha del próximo informe (no activada) nunca está atrasada.
+ */
+export function estaAtrasada(proximoInformeAt: Date | null, dias: number, now: Date): boolean {
+  return proximoInformeAt !== null && now.getTime() > proximoInformeAt.getTime() + dias * DIA_MS;
+}
 
 /** Voluntarios (o papeletas) de quienes siguen siendo miembros del ámbito. */
 const delAmbito = (grupoId: string, ambitoId: string) => ({
@@ -225,13 +240,121 @@ export class ComisionesService {
     });
   }
 
+  // ─── Informes ─────────────────────────────────────────────────────────────
+
+  /**
+   * Un miembro de una comisión `activa` publica un informe (20 a 2000) o el final (20 a 5000).
+   * Con la fila bloqueada: un informe normal recalcula `proximoInformeAt`; el final cierra la
+   * comisión con un `updateMany` condicionado a `activo` (si otra escritura la cerró, 409).
+   */
+  async publicarInforme(
+    profileId: string,
+    id: string,
+    texto: string,
+    final: boolean,
+    ip: string,
+    now: Date = new Date(),
+  ): Promise<void> {
+    const g = await this.comisionLegible(id, profileId);
+    // Miembro de la comisión y comisión activa (403 / 409).
+    await this.access.requireParticipant(id, profileId);
+    const limpio = texto.trim();
+    const max = final ? INFORME_FINAL_MAX : INFORME_MAX;
+    if (limpio.length < INFORME_MIN || limpio.length > max) {
+      throw new BadRequestException(
+        final
+          ? `El informe final necesita entre ${INFORME_MIN} y ${INFORME_FINAL_MAX} caracteres.`
+          : `El informe necesita entre ${INFORME_MIN} y ${INFORME_MAX} caracteres.`,
+      );
+    }
+    const dias = await this.rules.getInt('comision.informe_cada_dias', await this.comunidadDe(g.parentGroupId));
+    await this.prisma.$transaction(async (tx) => {
+      const actual = await this.bloquear(tx, id);
+      if (actual.trabajoEstado !== 'activo') throw new ConflictException(NO_ACTIVA);
+      await tx.comisionInforme.create({ data: { grupoId: id, autorProfileId: profileId, texto: limpio, final } });
+      const res = await tx.group.updateMany({
+        where: { id, trabajoEstado: 'activo' },
+        data: final ? { trabajoEstado: 'cerrado' } : { proximoInformeAt: new Date(now.getTime() + dias * DIA_MS) },
+      });
+      if (res.count !== 1) throw new ConflictException(NO_ACTIVA);
+    });
+    await this.auditar('comision.report_published', id, profileId, ip);
+    if (final) await this.auditar('comision.closed', id, profileId, ip);
+  }
+
+  // ─── Renovación ───────────────────────────────────────────────────────────
+
+  /**
+   * Umbral de renovación: `ceil(debate.fraccion_objecion_modo × P / 100)`, mínimo 1, con P =
+   * participantes del debate original que siguen siendo miembros del ámbito.
+   */
+  private async umbralRenovacion(g: ComisionFila & { parentGroupId: string }, comunidad: string): Promise<number> {
+    const [solucion, f] = await Promise.all([
+      g.origenSolucionId
+        ? this.prisma.solucion.findUnique({ where: { id: g.origenSolucionId }, select: { proposalId: true } })
+        : Promise.resolve(null),
+      this.rules.getInt('debate.fraccion_objecion_modo', comunidad),
+    ]);
+    const P = solucion ? (await participantesDelDebate(this.prisma, solucion.proposalId, g.parentGroupId)).size : 0;
+    return Math.max(1, Math.ceil((f * P) / 100));
+  }
+
+  /**
+   * Un miembro actual del ámbito apoya renovar una comisión atrasada (un apoyo por persona).
+   * Con la fila bloqueada se cuentan los apoyos de miembros actuales; si llegan al umbral, la
+   * comisión pasa a `cerrado` (updateMany condicionado) y nace otra para la misma solución.
+   */
+  async apoyarRenovacion(profileId: string, id: string, ip: string, now: Date = new Date()): Promise<void> {
+    const g = await this.comisionLegible(id, profileId);
+    await this.exigirAmbito(g, profileId);
+    const comunidad = await this.comunidadDe(g.parentGroupId);
+    const dias = await this.rules.getInt('comision.informe_cada_dias', comunidad);
+    if (g.trabajoEstado !== 'activo' || !estaAtrasada(g.proximoInformeAt, dias, now)) throw new ConflictException(NO_ATRASADA);
+    const [umbral, datos] = await Promise.all([this.umbralRenovacion(g, comunidad), this.datosNuevaComision(comunidad, now)]);
+
+    const r = await this.prisma.$transaction(async (tx) => {
+      const actual = await this.bloquear(tx, id);
+      if (actual.trabajoEstado !== 'activo' || !estaAtrasada(actual.proximoInformeAt, dias, now)) {
+        throw new ConflictException(NO_ATRASADA);
+      }
+      const nuevo = await tx.comisionRenovacionApoyo.createMany({ data: [{ grupoId: id, profileId }], skipDuplicates: true });
+      const apoyoNuevo = nuevo.count > 0;
+      // Quien se mudó o fue suspendido no cuenta.
+      const apoyos = await tx.comisionRenovacionApoyo.count({ where: delAmbito(id, g.parentGroupId) });
+      const origenSolucionId = actual.origenSolucionId;
+      if (apoyos < umbral || !origenSolucionId) return { apoyoNuevo, nuevaId: null };
+      const res = await tx.group.updateMany({ where: { id, trabajoEstado: 'activo' }, data: { trabajoEstado: 'cerrado' } });
+      if (res.count !== 1) return { apoyoNuevo, nuevaId: null };
+      const nuevaId = await this.crearComisionTx(tx, {
+        ...datos,
+        nombre: actual.name,
+        tarea: actual.tarea ?? actual.proposito ?? '',
+        ambitoId: g.parentGroupId,
+        origenSolucionId,
+        origenGrupoId: actual.origenGrupoId ?? null,
+      });
+      return { apoyoNuevo, nuevaId };
+    });
+    if (r.apoyoNuevo) await this.auditar('comision.renewal_supported', id, profileId, ip);
+    if (r.nuevaId) {
+      await this.auditar('comision.renewed', id, null);
+      await this.auditar('comision.created', r.nuevaId, null);
+    }
+  }
+
+  /** Retira el apoyo propio a la renovación. */
+  async retirarApoyoRenovacion(profileId: string, id: string): Promise<void> {
+    await this.comisionLegible(id, profileId);
+    await this.prisma.comisionRenovacionApoyo.deleteMany({ where: { grupoId: id, profileId } });
+  }
+
   // ─── Vista y verificación ─────────────────────────────────────────────────
 
-  /** `completo = false` para quien ya no lee la comisión: sin nombres de voluntarios. */
+  /** `completo = false` para quien ya no lee la comisión: sin nombres de voluntarios ni informes. */
   async vista(g: ComisionFila, profileId: string, completo: boolean, now: Date = new Date()): Promise<ComisionView> {
-    void now;
     const ambitoId = g.parentGroupId ?? '';
-    const [enAmbito, organiza, filas, mia, solucion] = await Promise.all([
+    const activa = g.trabajoEstado === 'activo';
+    const [enAmbito, organiza, filas, mia, solucion, informes, miembro, apoyo, dias] = await Promise.all([
       this.access.isParticipant(ambitoId, profileId),
       g.trabajoEstado === 'convocando' ? this.forums.canOrganize(profileId, ambitoId) : Promise.resolve(false),
       completo
@@ -249,7 +372,24 @@ export class ComisionesService {
       g.origenSolucionId
         ? this.prisma.solucion.findUnique({ where: { id: g.origenSolucionId }, select: { title: true, proposalId: true } })
         : Promise.resolve(null),
+      completo
+        ? this.prisma.comisionInforme.findMany({
+            where: { grupoId: g.id },
+            select: { id: true, texto: true, final: true, hidden: true, createdAt: true },
+            orderBy: { createdAt: 'desc' },
+          })
+        : Promise.resolve([]),
+      activa ? this.access.isParticipant(g.id, profileId) : Promise.resolve(false),
+      activa
+        ? this.prisma.comisionRenovacionApoyo.findUnique({
+            where: { grupoId_profileId: { grupoId: g.id, profileId } },
+            select: { id: true },
+          })
+        : Promise.resolve(null),
+      activa ? this.comunidadDe(ambitoId).then((c) => this.rules.getInt('comision.informe_cada_dias', c)) : Promise.resolve(0),
     ]);
+    const atrasada = activa && estaAtrasada(g.proximoInformeAt, dias, now);
+    const yoApoyoRenovar = apoyo !== null;
     const voluntarios = filas.map((f) => ({
       nombre: f.profile.displayName,
       experiencia: f.experiencia,
@@ -269,13 +409,20 @@ export class ComisionesService {
           : null,
       eleccionEndsAt: g.eleccionEndsAt ? g.eleccionEndsAt.toISOString() : null,
       miPapeleta: mia?.orden ?? null,
-      informes: [],
+      // Un informe oculto por moderación sale sin texto.
+      informes: informes.map((i) => ({
+        id: i.id,
+        texto: i.hidden ? '' : i.texto,
+        final: i.final,
+        createdAt: i.createdAt.toISOString(),
+        oculto: i.hidden,
+      })),
       proximoInformeAt: g.proximoInformeAt ? g.proximoInformeAt.toISOString() : null,
-      atrasada: false,
-      yoApoyoRenovar: false,
-      puedoApoyarRenovar: false,
+      atrasada,
+      yoApoyoRenovar,
+      puedoApoyarRenovar: atrasada && enAmbito && !yoApoyoRenovar,
       puedoAjustar: g.trabajoEstado === 'convocando' && enAmbito && organiza,
-      puedoInformar: false,
+      puedoInformar: activa && miembro,
       origen: solucion ? { proposalId: solucion.proposalId, solucionTitulo: solucion.title } : null,
     };
   }
@@ -349,31 +496,17 @@ export class ComisionesService {
       if (!s || hechas.has(s.id)) continue;
       hechas.add(s.id);
       try {
-        const [puestos, plazo, forma] = await Promise.all([
-          this.rules.getInt('comision.puestos_min', p.ambitoId),
-          this.rules.getInt('comision.plazo_convocatoria_dias', p.ambitoId),
-          this.rules.getChoice('comision.forma', p.ambitoId),
-        ]);
-        const id = randomUUID();
-        const tarea = s.description.slice(0, TAREA_INICIAL_MAX);
+        const datos = await this.datosNuevaComision(p.ambitoId, now);
+        let id: string;
         try {
-          await this.prisma.$transaction((tx) =>
-            tx.group.create({
-              data: {
-                id,
-                name: `Comisión: ${s.title}`.slice(0, NOMBRE_MAX),
-                slug: `trabajo-${id}`,
-                type: 'trabajo',
-                parentGroupId: p.ambitoId,
-                trabajoTipo: 'comision',
-                trabajoEstado: 'convocando',
-                proposito: tarea,
-                tarea,
-                puestos,
-                forma: formaDe(forma),
-                convocatoriaEndsAt: new Date(now.getTime() + plazo * DIA_MS),
-                origenSolucionId: s.id,
-              },
+          id = await this.prisma.$transaction((tx) =>
+            this.crearComisionTx(tx, {
+              ...datos,
+              nombre: `Comisión: ${s.title}`,
+              tarea: s.description.slice(0, TAREA_INICIAL_MAX),
+              ambitoId: p.ambitoId,
+              origenSolucionId: s.id,
+              origenGrupoId: null,
             }),
           );
         } catch (err) {
@@ -388,6 +521,58 @@ export class ComisionesService {
       }
     }
     return creadas;
+  }
+
+  /** Puestos, forma y fin de la convocatoria de una comisión que nace ahora (reglas de la comunidad). */
+  private async datosNuevaComision(
+    reglasDe: string,
+    now: Date,
+  ): Promise<{ puestos: number; forma: Forma; convocatoriaEndsAt: Date }> {
+    const [puestos, plazo, forma] = await Promise.all([
+      this.rules.getInt('comision.puestos_min', reglasDe),
+      this.rules.getInt('comision.plazo_convocatoria_dias', reglasDe),
+      this.rules.getChoice('comision.forma', reglasDe),
+    ]);
+    return { puestos, forma: formaDe(forma), convocatoriaEndsAt: new Date(now.getTime() + plazo * DIA_MS) };
+  }
+
+  /**
+   * Crea una comisión en `convocando`. La usan el nacimiento (R1) y la renovación; el índice
+   * parcial único impide dos comisiones vivas para la misma solución (P2002).
+   */
+  private async crearComisionTx(
+    tx: Tx,
+    c: {
+      nombre: string;
+      tarea: string;
+      ambitoId: string;
+      origenSolucionId: string;
+      origenGrupoId: string | null;
+      puestos: number;
+      forma: Forma;
+      convocatoriaEndsAt: Date;
+    },
+  ): Promise<string> {
+    const id = randomUUID();
+    await tx.group.create({
+      data: {
+        id,
+        name: c.nombre.slice(0, NOMBRE_MAX),
+        slug: `trabajo-${id}`,
+        type: 'trabajo',
+        parentGroupId: c.ambitoId,
+        trabajoTipo: 'comision',
+        trabajoEstado: 'convocando',
+        proposito: c.tarea,
+        tarea: c.tarea,
+        puestos: c.puestos,
+        forma: c.forma,
+        convocatoriaEndsAt: c.convocatoriaEndsAt,
+        origenSolucionId: c.origenSolucionId,
+        ...(c.origenGrupoId ? { origenGrupoId: c.origenGrupoId } : {}),
+      },
+    });
+    return id;
   }
 
   /**

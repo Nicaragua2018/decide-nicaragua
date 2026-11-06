@@ -26,6 +26,7 @@ import { ComisionesService } from './comisiones.service';
 import { VoluntarioDto } from './dto/voluntario.dto';
 import { AjustarComisionDto } from './dto/ajustar-comision.dto';
 import { PapeletaComisionDto } from './dto/papeleta-comision.dto';
+import { InformeComisionDto } from './dto/informe-comision.dto';
 
 @Controller('grupos')
 @UseGuards(JwtAuthGuard)
@@ -121,6 +122,37 @@ export class GruposController {
   ): Promise<GrupoTrabajoDetail> {
     const profileId = this.perfil(user);
     await this.comisiones.votar(profileId, id, dto.orden);
+    return this.grupos.detail(profileId, id);
+  }
+
+  @Post(':id/informes')
+  async informar(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: InformeComisionDto,
+    @CurrentUser() user: JwtPayload,
+    @Req() req: Request,
+  ): Promise<GrupoTrabajoDetail> {
+    const profileId = this.perfil(user);
+    await this.comisiones.publicarInforme(profileId, id, dto.texto, dto.final === true, extractIp(req));
+    return this.grupos.detail(profileId, id);
+  }
+
+  @Post(':id/renovacion')
+  @HttpCode(HttpStatus.OK)
+  async apoyarRenovacion(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() user: JwtPayload,
+    @Req() req: Request,
+  ): Promise<GrupoTrabajoDetail> {
+    const profileId = this.perfil(user);
+    await this.comisiones.apoyarRenovacion(profileId, id, extractIp(req));
+    return this.grupos.detail(profileId, id);
+  }
+
+  @Delete(':id/renovacion')
+  async retirarApoyoRenovacion(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() user: JwtPayload): Promise<GrupoTrabajoDetail> {
+    const profileId = this.perfil(user);
+    await this.comisiones.retirarApoyoRenovacion(profileId, id);
     return this.grupos.detail(profileId, id);
   }
 

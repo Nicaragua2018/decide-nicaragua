@@ -71,7 +71,8 @@ export interface ComisionView {
   seleccion: { semilla: string; pool: string[]; algoritmo: string } | null;
   eleccionEndsAt: string | null;
   miPapeleta: string[] | null;
-  informes: { texto: string; final: boolean; createdAt: string; oculto: boolean }[];
+  /** Del más reciente al más antiguo; un informe oculto llega con texto vacío. */
+  informes: { id: string; texto: string; final: boolean; createdAt: string; oculto: boolean }[];
   proximoInformeAt: string | null;
   atrasada: boolean;
   yoApoyoRenovar: boolean;

@@ -21,6 +21,7 @@ import { ForumsService } from '../forums/forums.service';
 import { RulesService } from '../rules/rules.service';
 import { GroupAccessService } from '../groups/group-access.service';
 import { tallyDecision } from './decision-tally';
+import { participantesDelDebate } from './participantes-del-debate';
 
 const OCULTA_TITULO = 'Solución oculta por moderación';
 const FIJAS = 'Las soluciones ya quedaron fijas.';
@@ -546,31 +547,9 @@ export class DecisionesService {
     return valor;
   }
 
-  /**
-   * Miembros actuales del grupo que en este tema comentaron, señalaron, escribieron
-   * o votaron una frase, o propusieron una solución.
-   */
-  private async participantes(proposalId: string, groupId: string): Promise<Set<string>> {
-    const [comentarios, senales, frases, votos, soluciones] = await Promise.all([
-      this.prisma.proposalComment.findMany({ where: { proposalId }, select: { authorProfileId: true }, distinct: ['authorProfileId'] }),
-      this.prisma.consensusSignal.findMany({ where: { proposalId }, select: { profileId: true } }),
-      this.prisma.frase.findMany({ where: { proposalId }, select: { authorProfileId: true }, distinct: ['authorProfileId'] }),
-      this.prisma.fraseVoto.findMany({ where: { frase: { proposalId } }, select: { profileId: true }, distinct: ['profileId'] }),
-      this.prisma.solucion.findMany({ where: { proposalId }, select: { authorProfileId: true }, distinct: ['authorProfileId'] }),
-    ]);
-    const ids = new Set<string>([
-      ...comentarios.map((c) => c.authorProfileId),
-      ...senales.map((s) => s.profileId),
-      ...frases.map((f) => f.authorProfileId),
-      ...votos.map((v) => v.profileId),
-      ...soluciones.map((s) => s.authorProfileId),
-    ]);
-    if (ids.size === 0) return new Set();
-    const miembros = await this.prisma.groupMembership.findMany({
-      where: { groupId, profileId: { in: [...ids] } },
-      select: { profileId: true },
-    });
-    return new Set(miembros.map((m) => m.profileId));
+  /** Miembros actuales del grupo que participaron en el debate del tema (ver participantes-del-debate). */
+  private participantes(proposalId: string, groupId: string): Promise<Set<string>> {
+    return participantesDelDebate(this.prisma, proposalId, groupId);
   }
 
   // ─── Plazos ───────────────────────────────────────────────────────────────
