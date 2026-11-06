@@ -524,21 +524,27 @@ export class ComisionesService {
   /**
    * R1: una comisión por cada solución ganadora (no oculta, de un tema no oculto) de una decisión
    * contada y aprobada, si esa solución nunca tuvo comisión. Las de subgrupos nacen en su ámbito;
-   * las decisiones dentro de comisiones o bifurcaciones no crean comisiones solas.
+   * las decisiones dentro de comisiones o bifurcaciones no crean comisiones solas. Un cambio de
+   * regla tampoco: no hay nada que llevar a cabo (se aplica solo o lo aplica la mesa).
    */
   async crearComisiones(now: Date): Promise<number> {
     const decisiones = await this.prisma.decision.findMany({
-      where: { fase: 'contada', resultado: 'aprobada', proposal: { hidden: false } },
+      where: { fase: 'contada', resultado: 'aprobada', proposal: { hidden: false, cambioRegla: { is: null } } },
       select: {
         ganadoras: true,
         proposal: {
-          select: { groupId: true, hidden: true, group: { select: { type: true, parentGroupId: true, trabajoTipo: true } } },
+          select: {
+            groupId: true,
+            hidden: true,
+            cambioRegla: { select: { id: true } },
+            group: { select: { type: true, parentGroupId: true, trabajoTipo: true } },
+          },
         },
       },
     });
     const pendientes: { solucionId: string; ambitoId: string }[] = [];
     for (const d of decisiones) {
-      if (d.proposal.hidden) continue;
+      if (d.proposal.hidden || d.proposal.cambioRegla) continue;
       const grupo = d.proposal.group;
       let ambitoId: string | null = d.proposal.groupId;
       if ((grupo.type as string) === 'trabajo') {

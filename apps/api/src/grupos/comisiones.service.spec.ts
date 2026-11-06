@@ -234,6 +234,16 @@ describe('ComisionesService', () => {
       expect(prisma.group.create).not.toHaveBeenCalled();
     });
 
+    it('no crea comisiones de un cambio de regla (no hay nada que llevar a cabo)', async () => {
+      prisma.decision.findMany.mockResolvedValue([
+        decision({ proposal: { groupId: AMBITO, hidden: false, cambioRegla: { id: 'c-1' }, group: ambito() } }),
+      ]);
+      prisma.solucion.findMany.mockResolvedValue([sol()]);
+      expect(await service.crearComisiones(NOW)).toBe(0);
+      expect(prisma.group.create).not.toHaveBeenCalled();
+      expect(prisma.decision.findMany.mock.calls[0]![0].where).toMatchObject({ proposal: { cambioRegla: { is: null } } });
+    });
+
     it('no crea otra si la solución ya tuvo comisión, aunque esté archivada', async () => {
       prisma.decision.findMany.mockResolvedValue([decision()]);
       prisma.solucion.findMany.mockResolvedValue([sol()]);

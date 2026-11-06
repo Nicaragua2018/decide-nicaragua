@@ -25,6 +25,6 @@ export class RulesController {
       });
       if (!member) throw new ForbiddenException('Solo los miembros de esta comunidad pueden ver sus reglas.');
     }
-    return this.rules.list(groupId ?? null);
+    return this.rules.list(groupId ?? null, user.profileId);
   }
 }

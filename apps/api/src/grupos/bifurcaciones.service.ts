@@ -139,6 +139,7 @@ export class BifurcacionesService {
             groupId: true,
             hidden: true,
             group: { select: { type: true } },
+            cambioRegla: { select: { id: true } },
             decision: {
               select: {
                 id: true, fase: true, resultado: true, modo: true, ganadoras: true, candidatas: true,
@@ -150,7 +151,15 @@ export class BifurcacionesService {
       },
     });
     const d = s?.proposal.decision;
-    if (!s || !d || s.hidden || s.proposal.hidden || !esBifurcable(d, s.id, s.proposal.group.type as string)) {
+    // Un cambio de regla no se bifurca (ni siquiera sin quórum).
+    if (
+      !s ||
+      !d ||
+      s.hidden ||
+      s.proposal.hidden ||
+      s.proposal.cambioRegla ||
+      !esBifurcable(d, s.id, s.proposal.group.type as string)
+    ) {
       throw new BadRequestException(NO_BIFURCABLE);
     }
     const ambitoId = s.proposal.groupId;

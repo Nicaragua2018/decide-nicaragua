@@ -129,6 +129,8 @@ interface TemaRow {
   status: string;
   hidden: boolean;
   deliberationEndsAt: Date | null;
+  /** Presente si el tema es un cambio de regla: ni otras soluciones, ni comisión, ni bifurcación. */
+  cambioRegla?: { id: string } | null;
   /** Es miembro del grupo; si es false, solo lee desde el ámbito de un grupo de trabajo. */
   participa: boolean;
 }
@@ -152,7 +154,9 @@ export class DecisionesService {
   private async tema(profileId: string, proposalId: string, modo: 'leer' | 'participar'): Promise<TemaRow> {
     const tema = await this.prisma.proposal.findUnique({
       where: { id: proposalId },
-      select: { id: true, groupId: true, status: true, hidden: true, deliberationEndsAt: true },
+      select: {
+        id: true, groupId: true, status: true, hidden: true, deliberationEndsAt: true, cambioRegla: { select: { id: true } },
+      },
     });
     if (!tema) throw new NotFoundException('Tema no encontrado.');
     if (modo === 'participar') {
@@ -180,6 +184,8 @@ export class DecisionesService {
   ): Promise<{ id: string }> {
     const tema = await this.tema(profileId, proposalId, 'participar');
     await this.assertDebate(tema);
+    // Lo que se vota es el valor propuesto: otra solución cambiaría la pregunta.
+    if (tema.cambioRegla) throw new BadRequestException('Un cambio de regla se vota con su única solución.');
     const created = await this.prisma.$transaction(async (tx) => {
       await bloquearDebate(tx, proposalId);
       return tx.solucion.create({
@@ -334,7 +340,10 @@ export class DecisionesService {
         (await this.participantes(proposalId, tema.groupId)).has(profileId);
 
       if (fase === 'contada' && candidatas.length > 0) {
-        await this.marcarBifurcaciones(candidatas, decision, tema.groupId, participa ? profileId : null, papeleta);
+        // Un cambio de regla no se bifurca: sus candidatas se quedan con SIN_BIFURCACION.
+        if (!tema.cambioRegla) {
+          await this.marcarBifurcaciones(candidatas, decision, tema.groupId, participa ? profileId : null, papeleta);
+        }
       }
 
       // Antes del conteo no sale ninguna cifra; después, el resultado congelado.
@@ -374,7 +383,11 @@ export class DecisionesService {
     return {
       debateEndsAt: tema.deliberationEndsAt ? tema.deliberationEndsAt.toISOString() : null,
       puedeProponer:
-        participa && tema.status === 'open' && decision === null && !debateVencido(tema.deliberationEndsAt, new Date()),
+        participa &&
+        tema.status === 'open' &&
+        decision === null &&
+        !tema.cambioRegla &&
+        !debateVencido(tema.deliberationEndsAt, new Date()),
       canOrganize: participa && organiza,
       soluciones,
       decision: vista,
@@ -803,6 +816,7 @@ export class DecisionesService {
           select: {
             groupId: true,
             group: { select: { type: true, trabajoEstado: true, parent: { select: { trabajoEstado: true } } } },
+            cambioRegla: { select: { id: true } },
           },
         },
       },
@@ -822,7 +836,11 @@ export class DecisionesService {
     }
     const { proposalId } = previa;
     const groupId = previa.proposal.groupId;
-    const quorumPct = await this.rules.getInt('votacion.quorum_porcentaje', groupId);
+    let quorumPct = await this.rules.getInt('votacion.quorum_porcentaje', groupId);
+    // Un cambio de regla exige además la participación mínima de la colmena (30 % por defecto).
+    if (previa.proposal.cambioRegla) {
+      quorumPct = Math.max(quorumPct, await this.rules.getInt('reglas.participacion_minima', null));
+    }
 
     const resultado = await this.prisma.$transaction(async (tx) => {
       // Un tema oculto no se cuenta: si la ocultación es provisional, se cuenta al volver a
