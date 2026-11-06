@@ -80,6 +80,23 @@ export function ruleDefinition(key: string): RuleDefinition {
   return def;
 }
 
+/** Un valor con su unidad, para los textos del tema y de la mesa: «30 %», «10 días», «sorteo». */
+export function conUnidad(def: RuleDefinition, valor: string): string {
+  const uno = valor === '1';
+  switch (def.unit) {
+    case 'porcentaje':
+      return `${valor} %`;
+    case 'dias':
+      return uno ? '1 día' : `${valor} días`;
+    case 'personas':
+      return uno ? '1 persona' : `${valor} personas`;
+    case 'meses':
+      return uno ? '1 mes' : `${valor} meses`;
+    default:
+      return valor;
+  }
+}
+
 export type CambioReglaEstadoValue =
   | 'en_votacion'
   | 'pendiente_mesa'

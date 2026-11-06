@@ -49,23 +49,6 @@ export async function guardarValor(
   else await tx.ruleValue.create({ data: { key, groupId, value } });
 }
 
-/** Un valor con su unidad, para los textos del tema: «30 %», «10 días», «sorteo». */
-export function conUnidad(def: RuleDefinition, valor: string): string {
-  const uno = valor === '1';
-  switch (def.unit) {
-    case 'porcentaje':
-      return `${valor} %`;
-    case 'dias':
-      return uno ? '1 día' : `${valor} días`;
-    case 'personas':
-      return uno ? '1 persona' : `${valor} personas`;
-    case 'meses':
-      return uno ? '1 mes' : `${valor} meses`;
-    default:
-      return valor;
-  }
-}
-
 /** Reglas que se comprueban juntas: el mínimo de puestos de una comisión no pasa del máximo. */
 const PAR_DE_PUESTOS: Readonly<Record<string, string>> = {
   'comision.puestos_min': 'comision.puestos_max',

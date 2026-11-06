@@ -6,7 +6,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
-import { GENERAL_GROUP_NAME, RULE_DEFINITIONS } from '@decide/shared';
+import { GENERAL_GROUP_NAME, RULE_DEFINITIONS, conUnidad } from '@decide/shared';
 import type { RuleDefinition } from '@decide/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
@@ -15,7 +15,6 @@ import { GroupAccessService } from '../groups/group-access.service';
 import { RulesService } from './rules.service';
 import {
   PUESTOS_INCOHERENTES,
-  conUnidad,
   esAmbitoDeReglas,
   esNivelGeneral,
   guardarValor,

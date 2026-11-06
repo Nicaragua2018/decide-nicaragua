@@ -1,5 +1,5 @@
 import type { Metadata } from 'next';
-import { ruleDefinition } from '@decide/shared';
+import { conUnidad, ruleDefinition } from '@decide/shared';
 import type { BoardActionSummary, BoardSeatSummary, ModeracionPorConfirmar, ModerationAppeal, PausaApeladaItem, UserListResponse } from '@decide/shared';
 import { serverFetch } from '@/lib/api';
 import { AppealsList } from './AppealsList';
@@ -11,13 +11,17 @@ export const metadata: Metadata = { title: 'Mesa directiva' };
 
 function descripcionCambioRegla(a: BoardActionSummary): string {
   const key = String(a.params['key']);
+  const valor = String(a.params['valor']);
   let label = key;
+  let conSuUnidad = valor;
   try {
-    label = ruleDefinition(key).label;
+    const def = ruleDefinition(key);
+    label = def.label;
+    conSuUnidad = conUnidad(def, valor);
   } catch {
-    // regla desconocida: se muestra la clave
+    // regla desconocida: se muestra la clave y el valor tal cual
   }
-  return `Cambiar la regla de la colmena «${label}» a ${String(a.params['valor'])}`;
+  return `Cambiar la regla de la colmena «${label}» a ${conSuUnidad}`;
 }
 
 export default async function MesaPage() {
