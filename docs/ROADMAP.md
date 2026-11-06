@@ -32,6 +32,18 @@ Base del diseño «Primeros 200» entregada en las tareas 1 a 9:
 
 ---
 
+## Primeros 200 — Plan 3A-4b (comisiones e iniciativas de un grupo): COMPLETO
+
+Quién lleva a cabo lo aprobado y cómo una minoría impulsa su solución (ADR-023):
+
+- [x] Comisiones que nacen solas, con voluntarios, sorteo verificable o votación por preferencias
+- [x] Informes, aviso de atraso, renovación y informe final público
+- [x] Iniciativas de un grupo solo para quienes apoyaron la solución, sin revelar nunca quiénes son
+- [x] Pausa con apelación a la mesa y vuelta a la colmena
+- [x] Web: comisiones, iniciativas y apelaciones de pausa en «Mesa»
+
+---
+
 ## Primeros 200 — Plan 3A-4a (grupos de trabajo y subgrupos): COMPLETO
 
 Grupos dentro de cada comunidad y del nivel general (ADR-022):
