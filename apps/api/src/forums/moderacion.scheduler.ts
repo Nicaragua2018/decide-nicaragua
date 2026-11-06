@@ -1,10 +1,11 @@
 import { Injectable, Logger, OnApplicationBootstrap, OnModuleDestroy } from '@nestjs/common';
 import { ForumsService } from './forums.service';
 
-const HORA_MS = 3_600_000;
+/** Cada 15 minutos: una ocultación provisional no debe durar mucho más de sus 48 h. */
+export const MODERACION_INTERVALO_MS = 15 * 60_000;
 
 /**
- * Cada hora cierra las solicitudes de moderación vencidas: una provisional sin segunda firma
+ * Cada 15 minutos cierra las solicitudes de moderación vencidas: una provisional sin segunda firma
  * vuelve a mostrar el contenido y una pendiente se cierra sin tocarlo.
  */
 @Injectable()
@@ -18,7 +19,7 @@ export class ModeracionScheduler implements OnApplicationBootstrap, OnModuleDest
   onApplicationBootstrap(): void {
     if (process.env['NODE_ENV'] === 'test' || process.env['VITEST']) return;
     void this.run();
-    this.timer = setInterval(() => void this.run(), HORA_MS);
+    this.timer = setInterval(() => void this.run(), MODERACION_INTERVALO_MS);
     this.timer.unref();
   }
 

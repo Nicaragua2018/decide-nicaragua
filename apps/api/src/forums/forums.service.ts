@@ -66,6 +66,13 @@ const PLAZO_PENDIENTE_MS = 7 * DIA_MS;
 
 const SOLICITUD_ABIERTA = 'Ya hay una solicitud de moderación abierta para este contenido.';
 const YA_RESUELTA = 'Esta solicitud ya fue resuelta.';
+const YA_VENCIO = 'Esta solicitud ya venció.';
+
+/** Debate abierto por la comunidad que se modera junto con su inquietud, y cómo queda. */
+type Vinculo = { topicId: string; estado: EstadoSolicitud };
+
+const plazoDe = (estado: EstadoSolicitud): number | null =>
+  estado === 'provisional' ? PLAZO_PROVISIONAL_MS : estado === 'pendiente' ? PLAZO_PENDIENTE_MS : null;
 
 const esUrgente = (causa: string): boolean => MODERACION_CAUSAS.some((c) => c.value === causa && c.urgente);
 
@@ -353,20 +360,20 @@ export class ForumsService {
 
     const causa = dto.causa;
     const canceladas: string[] = [];
-    let resultado: { id: string; estado: EstadoSolicitud };
+    let resultado: { id: string; estado: EstadoSolicitud; vinculada: (Vinculo & { id: string }) | null };
     try {
       resultado = await this.prisma.$transaction(async (tx) => {
         // Se lee dentro de la transacción: un tema formalizado justo antes ya cuenta como propuesta.
         const estado: EstadoSolicitud = (await this.requiereQuorumTx(tx, target, dto.targetId))
           ? esUrgente(causa) ? 'provisional' : 'pendiente'
           : 'oculto';
-        let linkedTopicId: string | null = null;
+        let vinculo: Vinculo | null = null;
         if (estado !== 'pendiente') {
-          const o = await this.aplicarOcultacion(tx, target, dto.targetId);
+          const o = await this.aplicarOcultacion(tx, target, dto.targetId, causa);
           canceladas.push(...o.canceladas);
-          linkedTopicId = o.linkedTopicId;
+          vinculo = o.vinculo;
         }
-        const plazo = estado === 'provisional' ? PLAZO_PROVISIONAL_MS : estado === 'pendiente' ? PLAZO_PENDIENTE_MS : null;
+        const plazo = plazoDe(estado);
         const created = await tx.moderationAction.create({
           data: {
             target,
@@ -378,8 +385,8 @@ export class ForumsService {
             venceAt: plazo === null ? null : new Date(Date.now() + plazo),
           },
         });
-        if (linkedTopicId) await this.crearVinculadaTx(tx, linkedTopicId, causa, profileId);
-        return { id: created.id, estado };
+        const vinculada = vinculo ? { ...vinculo, id: await this.crearVinculadaTx(tx, vinculo, causa, profileId) } : null;
+        return { id: created.id, estado, vinculada };
       });
     } catch (err) {
       // Otra solicitud abierta se registró a la vez (índice único parcial).
@@ -389,18 +396,12 @@ export class ForumsService {
       throw err;
     }
     const actor = await this.actorId(profileId);
-    void this.audit.log({
-      ...actor,
-      action: resultado.estado === 'pendiente' ? 'moderation.requested' : 'moderation.hidden',
-      resource: `${target}:${dto.targetId}`,
-      ip,
-      metadata:
-        resultado.estado === 'pendiente'
-          ? { moderationId: resultado.id, causa }
-          : { moderationId: resultado.id, causa, estado: resultado.estado },
-    });
+    this.auditarSolicitud(actor, ip, `${target}:${dto.targetId}`, resultado.id, causa, resultado.estado);
+    // La moderación vinculada de una propuesta formal es una solicitud propia: queda en la auditoría.
+    const v = resultado.vinculada;
+    if (v && v.estado !== 'oculto') this.auditarSolicitud(actor, ip, `tema:${v.topicId}`, v.id, causa, v.estado);
     this.auditarCanceladas(canceladas, actor, ip);
-    return resultado;
+    return { id: resultado.id, estado: resultado.estado };
   }
 
   /**
@@ -417,20 +418,25 @@ export class ForumsService {
     const previo = action.status as string;
     if (previo !== 'pendiente' && previo !== 'provisional') throw new ConflictException(YA_RESUELTA);
     if (action.moderatorProfileId === profileId) throw new ForbiddenException('No puedes confirmar tu propia solicitud.');
+    const now = new Date();
+    // Pasado el plazo nadie firma ni rechaza: el vencimiento la cierra (aunque aún no haya corrido).
+    const vencida = (al: Date): boolean => action.venceAt === null || action.venceAt.getTime() <= al.getTime();
+    if (vencida(now)) throw new ConflictException(YA_VENCIO);
     const target = checkTarget(action.target);
     const canceladas: string[] = [];
     await this.prisma.$transaction(async (tx) => {
       const r = await tx.moderationAction.updateMany({
-        where: { id: moderationId, status: previo },
+        where: { id: moderationId, status: previo, venceAt: { gt: now } },
         data: aprobar
           ? { status: 'oculto', confirmadorProfileId: profileId }
-          : { status: 'rechazado', confirmadorProfileId: profileId, resolvedAt: new Date() },
+          : { status: 'rechazado', confirmadorProfileId: profileId, resolvedAt: now },
       });
-      if (r.count === 0) throw new ConflictException(YA_RESUELTA);
+      if (r.count === 0) throw new ConflictException(vencida(new Date()) ? YA_VENCIO : YA_RESUELTA);
       if (aprobar && previo === 'pendiente') {
-        const o = await this.aplicarOcultacion(tx, target, action.targetId);
+        // Solo llegan aquí soluciones y temas: no arrastran una moderación vinculada.
+        const o = await this.aplicarOcultacion(tx, target, action.targetId, action.causa);
         canceladas.push(...o.canceladas);
-        if (o.linkedTopicId) await this.crearVinculadaTx(tx, o.linkedTopicId, action.causa, action.moderatorProfileId);
+        if (o.vinculo) await this.crearVinculadaTx(tx, o.vinculo, action.causa, action.moderatorProfileId);
       } else if (!aprobar && previo === 'provisional') {
         await this.aplicarRestauracion(tx, target, action.targetId);
       }
@@ -575,26 +581,33 @@ export class ForumsService {
     });
   }
 
-  /** Soluciones y propuestas formales necesitan la segunda firma; el resto, una sola persona. */
+  /**
+   * Soluciones y propuestas formales necesitan la segunda firma; el resto, una sola persona.
+   * El tema se bloquea antes de leer su tipo: una formalización simultánea espera a esta decisión.
+   */
   private async requiereQuorumTx(tx: Tx, target: ModTarget, targetId: string): Promise<boolean> {
     if (target === 'solucion') return true;
     if (target !== 'tema') return false;
-    const t = await tx.proposal.findUnique({ where: { id: targetId }, select: { kind: true } });
-    return (t?.kind as string | undefined) === 'propuesta';
+    const filas = await tx.$queryRaw<{ kind: string }[]>(
+      Prisma.sql`SELECT kind FROM proposals WHERE id = ${targetId}::uuid FOR UPDATE`,
+    );
+    return filas[0]?.kind === 'propuesta';
   }
 
   /**
-   * Oculta el contenido. Un tema cancela su votación y su decisión activas; una inquietud
-   * oculta también el debate que abrió la comunidad con su texto (devuelve su id para
-   * registrar la moderación vinculada).
+   * Oculta el contenido. Un tema cancela su votación y su decisión activas. Una inquietud
+   * arrastra al debate que abrió la comunidad con su texto (devuelve cómo queda, para registrar
+   * la moderación vinculada): si ese debate ya es una propuesta formal, sigue la regla de la
+   * segunda firma con la misma causa; si ya tiene una solicitud abierta, no se toca.
    */
   private async aplicarOcultacion(
     tx: Tx,
     target: ModTarget,
     targetId: string,
-  ): Promise<{ canceladas: string[]; linkedTopicId: string | null }> {
+    causa: ModeracionCausaValue | null,
+  ): Promise<{ canceladas: string[]; vinculo: Vinculo | null }> {
     const canceladas: string[] = [];
-    let linkedTopicId: string | null = null;
+    let vinculo: Vinculo | null = null;
     if (target === 'tema') {
       if (await this.hideTopicTx(tx, targetId)) canceladas.push(targetId);
     } else if (target === 'inquietud') {
@@ -605,11 +618,23 @@ export class ForumsService {
       if (proposalId) {
         const p = await tx.proposal.findUnique({
           where: { id: proposalId },
-          select: { abiertoPorComunidad: true, hidden: true },
+          select: { abiertoPorComunidad: true, hidden: true, kind: true },
         });
         if (p?.abiertoPorComunidad === true && p.hidden === false) {
-          if (await this.hideTopicTx(tx, proposalId)) canceladas.push(proposalId);
-          linkedTopicId = proposalId;
+          if ((p.kind as string) !== 'propuesta') {
+            if (await this.hideTopicTx(tx, proposalId)) canceladas.push(proposalId);
+            vinculo = { topicId: proposalId, estado: 'oculto' };
+          } else {
+            const abierta = await tx.moderationAction.findFirst({
+              where: { target: 'tema', targetId: proposalId, status: { in: [...ABIERTAS] } },
+              select: { id: true },
+            });
+            if (!abierta) {
+              const estado: EstadoSolicitud = causa !== null && esUrgente(causa) ? 'provisional' : 'pendiente';
+              if (estado === 'provisional' && (await this.hideTopicTx(tx, proposalId))) canceladas.push(proposalId);
+              vinculo = { topicId: proposalId, estado };
+            }
+          }
         }
       }
     } else if (target === 'frase') {
@@ -619,7 +644,7 @@ export class ForumsService {
     } else {
       await tx.proposalComment.update({ where: { id: targetId }, data: { hidden: true } });
     }
-    return { canceladas, linkedTopicId };
+    return { canceladas, vinculo };
   }
 
   /** Vuelve a mostrar el contenido. Una decisión o votación cancelada no se reabre. */
@@ -640,23 +665,43 @@ export class ForumsService {
     }
   }
 
-  /** Moderación del debate ocultado junto con su inquietud; copia la causa de la de origen. */
+  /** Moderación del debate moderado junto con su inquietud; copia la causa de la de origen. */
   private async crearVinculadaTx(
     tx: Tx,
-    topicId: string,
+    vinculo: Vinculo,
     causa: ModeracionCausaValue | null,
     moderatorProfileId: string,
-  ): Promise<void> {
-    await tx.moderationAction.create({
+  ): Promise<string> {
+    const plazo = plazoDe(vinculo.estado);
+    const created = await tx.moderationAction.create({
       data: {
         target: 'tema',
-        targetId: topicId,
+        targetId: vinculo.topicId,
         causa,
         reason: LINKED_TOPIC_REASON,
         moderatorProfileId,
-        status: 'oculto',
-        venceAt: null,
+        status: vinculo.estado,
+        venceAt: plazo === null ? null : new Date(Date.now() + plazo),
       },
+    });
+    return created.id;
+  }
+
+  /** Audita una moderación nueva: «requested» si espera la firma, «hidden» si ya ocultó. Sin texto. */
+  private auditarSolicitud(
+    actor: { actorId: string } | Record<never, never>,
+    ip: string,
+    resource: string,
+    moderationId: string,
+    causa: ModeracionCausaValue,
+    estado: EstadoSolicitud,
+  ): void {
+    void this.audit.log({
+      ...actor,
+      action: estado === 'pendiente' ? 'moderation.requested' : 'moderation.hidden',
+      resource,
+      ip,
+      metadata: estado === 'pendiente' ? { moderationId, causa } : { moderationId, causa, estado },
     });
   }
 
@@ -725,6 +770,16 @@ export class ForumsService {
       select: { id: true, reason: true, status: true },
     });
     if (!latest || latest.reason !== LINKED_TOPIC_REASON || (latest.status as string) !== 'oculto') return;
+    // Otra moderación del tema que sigue en pie (oculta, apelada, confirmada o abierta) lo mantiene oculto.
+    const otras = await tx.moderationAction.count({
+      where: {
+        target: 'tema',
+        targetId: topicId,
+        id: { not: latest.id },
+        status: { in: ['oculto', 'apelado', 'confirmado', 'provisional', 'pendiente'] },
+      },
+    });
+    if (otras > 0) return;
     await tx.moderationAction.update({
       where: { id: latest.id },
       data: { status: 'restaurado', resolvedAt: new Date() },
