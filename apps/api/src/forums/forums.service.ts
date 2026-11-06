@@ -763,7 +763,7 @@ export class ForumsService {
     tx: Tx,
     vinculo: Vinculo,
     causa: ModeracionCausaValue | null,
-    moderatorProfileId: string,
+    moderatorProfileId: string | null,
   ): Promise<string> {
     const plazo = plazoDe(vinculo.estado);
     const created = await tx.moderationAction.create({
