@@ -189,6 +189,18 @@ describe('ForumsService', () => {
       await expect(service.getForum(YO, 'f-sub')).resolves.toMatchObject({ soloLectura: false });
     });
 
+    it('el autor apela aunque el subgrupo esté archivado (apelar no es participar)', async () => {
+      miembroDe(['g-sub', 'g-ambito']);
+      prisma.group.findUnique.mockResolvedValue({ type: 'trabajo', parentGroupId: 'g-ambito', trabajoEstado: 'archivado' });
+      prisma.moderationAction.findUnique.mockResolvedValue({ id: 'ma1', target: 'respuesta', targetId: 'c1', reason: 'x', status: 'oculto' });
+      prisma.proposalComment.findUnique.mockResolvedValue({ authorProfileId: YO, proposal: { groupId: 'g-sub' } });
+      prisma.moderationAction.update.mockResolvedValue({});
+      await service.appeal(YO, 'ma1', 'No fue mi intención ofender', 'ip');
+      expect(prisma.moderationAction.update).toHaveBeenCalledWith(
+        expect.objectContaining({ data: expect.objectContaining({ status: 'apelado' }) }),
+      );
+    });
+
     it('un miembro del ámbito no apela en el subgrupo (403)', async () => {
       miembroDe(['g-ambito']);
       prisma.moderationAction.findUnique.mockResolvedValue({ id: 'ma1', target: 'respuesta', targetId: 'c1', reason: 'x', status: 'oculto' });

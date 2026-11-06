@@ -539,7 +539,8 @@ export class ForumsService {
     if (!contenido || contenido.authorProfileId !== profileId) {
       throw new ForbiddenException('Solo quien escribió el contenido puede apelar.');
     }
-    await this.access.requireParticipant(contenido.groupId, profileId);
+    // Apelar es defenderse de la moderación, no participar: vale aunque el grupo de trabajo ya no esté activo.
+    await this.access.requireMember(contenido.groupId, profileId);
     // Solo se apela lo ya ocultado en firme: una solicitud pendiente o provisional aún no lo está.
     if ((action.status as string) !== 'oculto') throw new ConflictException('Esta moderación ya fue apelada o resuelta.');
     await this.prisma.moderationAction.update({
