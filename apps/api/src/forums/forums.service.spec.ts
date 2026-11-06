@@ -645,7 +645,7 @@ describe('ForumsService', () => {
           board.roleOf.mockResolvedValue('administrador');
           prisma.inquietud.findUnique.mockResolvedValue(inq({ status: 'abierta_por_la_comunidad', proposalId: 't1' }));
           prisma.inquietud.update.mockResolvedValue(inq({ hidden: true, proposalId: 't1' }));
-          prisma.proposal.findUnique.mockResolvedValue({ id: 't1', abiertoPorComunidad: true, hidden: false });
+          prisma.$queryRaw.mockResolvedValue([{ abiertoPorComunidad: true, hidden: false, kind: 'tema' }]);
           prisma.proposal.update.mockResolvedValue({ id: 't1', electionId: 'e1' });
           prisma.election.findUnique.mockResolvedValue({ status: 'open' });
           prisma.election.update.mockResolvedValue({});
@@ -667,7 +667,7 @@ describe('ForumsService', () => {
           board.roleOf.mockResolvedValue('administrador');
           prisma.inquietud.findUnique.mockResolvedValue(inq({ status: 'en_debate', proposalId: 't1' }));
           prisma.inquietud.update.mockResolvedValue(inq({ hidden: true, proposalId: 't1' }));
-          prisma.proposal.findUnique.mockResolvedValue({ id: 't1', abiertoPorComunidad: false, hidden: false });
+          prisma.$queryRaw.mockResolvedValue([{ abiertoPorComunidad: false, hidden: false, kind: 'tema' }]);
           prisma.moderationAction.create.mockResolvedValue({ id: 'ma1' });
           await service.hide(YO, { target: 'inquietud', targetId: 'q1', causa: 'insultos_amenazas', reason: 'Lenguaje ofensivo' }, 'ip');
           expect(prisma.proposal.update).not.toHaveBeenCalled();
@@ -794,8 +794,12 @@ describe('ForumsService', () => {
         data: { target: 'solucion', targetId: 's1', causa: 'spam', reason: '', moderatorProfileId: YO, status: 'pendiente', venceAt: SIETE_DIAS },
       });
       expect(audit.log).toHaveBeenCalledWith(expect.objectContaining({
-        action: 'moderation.requested', metadata: { moderationId: 'ma1', causa: 'spam' },
+        action: 'moderation.requested', resource: 'moderation:ma1', metadata: {},
       }));
+      // La auditoría la leen todas las personas verificadas: una solicitud abierta no dice qué contenido ni por qué.
+      const requested = JSON.stringify(audit.log.mock.calls.filter(([e]) => e.action === 'moderation.requested'));
+      expect(requested).not.toContain('s1');
+      expect(requested).not.toContain('spam');
       expect(audit.log).not.toHaveBeenCalledWith(expect.objectContaining({ action: 'moderation.hidden' }));
     });
 
@@ -809,7 +813,7 @@ describe('ForumsService', () => {
       expect(prisma.moderationAction.create).toHaveBeenCalledWith({
         data: {
           target: 'solucion', targetId: 's1', causa: 'datos_personales', reason: 'Publica un teléfono', moderatorProfileId: YO,
-          status: 'provisional', venceAt: new Date(AHORA.getTime() + 48 * HORA),
+          status: 'provisional', venceAt: new Date(AHORA.getTime() + 48 * HORA), fueProvisional: true,
         },
       });
       expect(audit.log).toHaveBeenCalledWith(expect.objectContaining({
@@ -823,7 +827,7 @@ describe('ForumsService', () => {
       prisma.proposal.findUnique.mockResolvedValue({ id: 't1', groupId: 'g1', hidden: false, kind: 'tema' });
       prisma.$queryRaw.mockResolvedValue([{ kind: 'propuesta' }]);
       expect(await service.hide(YO, { target: 'tema', targetId: 't1', causa: 'spam' }, 'ip')).toEqual({ id: 'ma1', estado: 'pendiente' });
-      expect(String(prisma.$queryRaw.mock.calls[0]?.[0]?.sql ?? '')).toMatch(/SELECT kind FROM proposals WHERE id = .*FOR UPDATE/);
+      expect(String(prisma.$queryRaw.mock.calls[0]?.[0]?.sql ?? '')).toMatch(/SELECT kind, hidden, "abiertoPorComunidad" FROM proposals WHERE id = .*FOR UPDATE/);
       expect(prisma.proposal.update).not.toHaveBeenCalled();
       expect(prisma.decision.updateMany).not.toHaveBeenCalled();
 
@@ -831,7 +835,9 @@ describe('ForumsService', () => {
       prisma.decision.updateMany.mockResolvedValue({ count: 1 });
       expect(await service.hide(YO, { target: 'tema', targetId: 't1', causa: 'ilegal_violencia' }, 'ip')).toEqual({ id: 'ma1', estado: 'provisional' });
       expect(prisma.proposal.update).toHaveBeenCalledWith({ where: { id: 't1' }, data: { hidden: true } });
-      expect(audit.log).toHaveBeenCalledWith(expect.objectContaining({ action: 'decision.cancelled', metadata: { proposalId: 't1' } }));
+      // Provisional solo pausa: la decisión sigue en su fase hasta que se confirme.
+      expect(prisma.decision.updateMany).not.toHaveBeenCalled();
+      expect(audit.log).not.toHaveBeenCalledWith(expect.objectContaining({ action: 'decision.cancelled' }));
 
       prisma.proposal.findUnique.mockResolvedValue({ id: 't2', groupId: 'g1', hidden: false, kind: 'tema' });
       prisma.$queryRaw.mockResolvedValue([{ kind: 'tema' }]);
@@ -1037,7 +1043,7 @@ describe('ForumsService', () => {
       beforeEach(() => {
         prisma.inquietud.findUnique.mockResolvedValue({ id: 'q1', groupId: 'g1', hidden: false, proposalId: 't1' });
         prisma.inquietud.update.mockResolvedValue({ id: 'q1', proposalId: 't1' });
-        prisma.proposal.findUnique.mockResolvedValue({ id: 't1', abiertoPorComunidad: true, hidden: false, kind: 'propuesta' });
+        prisma.$queryRaw.mockResolvedValue([{ abiertoPorComunidad: true, hidden: false, kind: 'propuesta' }]);
         prisma.proposal.update.mockResolvedValue({ id: 't1', electionId: null });
         prisma.moderationAction.create.mockResolvedValueOnce({ id: 'ma1' }).mockResolvedValueOnce({ id: 'ma2' });
       });
@@ -1055,21 +1061,23 @@ describe('ForumsService', () => {
           },
         });
         expect(audit.log).toHaveBeenCalledWith(expect.objectContaining({
-          action: 'moderation.requested', resource: 'tema:t1', metadata: { moderationId: 'ma2', causa: 'spam' },
+          action: 'moderation.requested', resource: 'moderation:ma2', metadata: {},
         }));
+        expect(audit.log).not.toHaveBeenCalledWith(expect.objectContaining({ resource: 'tema:t1' }));
       });
 
-      it('con causa urgente la propuesta se oculta ya, provisional por 48 h, y cancela su decisión', async () => {
+      it('con causa urgente la propuesta se oculta ya, provisional por 48 h, sin cancelar su decisión', async () => {
         prisma.decision.updateMany.mockResolvedValue({ count: 1 });
         await service.hide(YO, { target: 'inquietud', targetId: 'q1', causa: 'datos_personales' }, 'ip');
         expect(prisma.proposal.update).toHaveBeenCalledWith({ where: { id: 't1' }, data: { hidden: true } });
         expect(prisma.moderationAction.create).toHaveBeenLastCalledWith({
           data: {
             target: 'tema', targetId: 't1', causa: 'datos_personales', reason: LINKED_TOPIC_REASON, moderatorProfileId: YO,
-            status: 'provisional', venceAt: new Date(AHORA.getTime() + 48 * HORA),
+            status: 'provisional', venceAt: new Date(AHORA.getTime() + 48 * HORA), fueProvisional: true,
           },
         });
-        expect(audit.log).toHaveBeenCalledWith(expect.objectContaining({ action: 'decision.cancelled', metadata: { proposalId: 't1' } }));
+        expect(prisma.decision.updateMany).not.toHaveBeenCalled();
+        expect(audit.log).not.toHaveBeenCalledWith(expect.objectContaining({ action: 'decision.cancelled' }));
         expect(audit.log).toHaveBeenCalledWith(expect.objectContaining({
           action: 'moderation.hidden', resource: 'tema:t1',
           metadata: { moderationId: 'ma2', causa: 'datos_personales', estado: 'provisional' },
@@ -1118,7 +1126,7 @@ describe('ForumsService', () => {
     it('la ocultación vinculada de un debate común copia la causa y se oculta directo', async () => {
       prisma.inquietud.findUnique.mockResolvedValue({ id: 'q1', groupId: 'g1', hidden: false, proposalId: 't1' });
       prisma.inquietud.update.mockResolvedValue({ id: 'q1', proposalId: 't1' });
-      prisma.proposal.findUnique.mockResolvedValue({ id: 't1', abiertoPorComunidad: true, hidden: false, kind: 'tema' });
+      prisma.$queryRaw.mockResolvedValue([{ abiertoPorComunidad: true, hidden: false, kind: 'tema' }]);
       prisma.proposal.update.mockResolvedValue({ id: 't1', electionId: null });
       prisma.moderationAction.create.mockResolvedValueOnce({ id: 'ma1' }).mockResolvedValueOnce({ id: 'ma2' });
       const r = await service.hide(YO, { target: 'inquietud', targetId: 'q1', causa: 'suplantacion', reason: 'Firma como la alcaldía' }, 'ip');
@@ -1161,9 +1169,182 @@ describe('ForumsService', () => {
       }));
       expect(r[0]).toEqual({
         id: 'ma1', target: 'solucion', targetId: 's1', causa: 'spam', detalle: '', originalText: 'Una solución\n\nDetalle',
-        estado: 'pendiente', venceAt: SIETE_DIAS.toISOString(), createdAt: AHORA.toISOString(), esMia: false,
+        estado: 'pendiente', venceAt: SIETE_DIAS.toISOString(), createdAt: AHORA.toISOString(), esMia: false, contexto: null,
       });
       expect(r[1]).toMatchObject({ id: 'ma2', estado: 'provisional', detalle: 'Teléfono', esMia: true });
+    });
+
+    it('la cola por confirmar da contexto: propuesta formal o debate vinculado a una inquietud oculta', async () => {
+      prisma.moderationAction.findMany.mockResolvedValue([
+        accion({ id: 'ma1', target: 'tema', targetId: 't1' }),
+        accion({ id: 'ma2', target: 'tema', targetId: 't2', reason: LINKED_TOPIC_REASON, status: 'provisional', causa: 'datos_personales' }),
+      ]);
+      prisma.proposal.findUnique.mockResolvedValue({ id: 't1', title: 'Fondo', body: 'Texto', kind: 'propuesta' });
+      const r = await service.listPorConfirmar(YO);
+      expect(r[0]?.contexto).toBe('Propuesta formal');
+      expect(r[1]?.contexto).toBe('Debate vinculado a una inquietud oculta');
+    });
+
+    describe('correcciones finales: provisional repetida, pausa y fugas', () => {
+      it('C1: si el contenido ya tuvo una provisional rechazada o vencida, la nueva solicitud urgente queda pendiente y visible', async () => {
+        prisma.solucion.findUnique.mockResolvedValue(so());
+        prisma.moderationAction.count.mockResolvedValue(1);
+        const r = await service.hide(YO, { target: 'solucion', targetId: 's1', causa: 'datos_personales' }, 'ip');
+        expect(r).toEqual({ id: 'ma1', estado: 'pendiente' });
+        expect(prisma.moderationAction.count).toHaveBeenCalledWith({
+          where: { target: 'solucion', targetId: 's1', status: 'rechazado', fueProvisional: true },
+        });
+        expect(prisma.solucion.update).not.toHaveBeenCalled();
+        expect(prisma.moderationAction.create).toHaveBeenCalledWith({
+          data: {
+            target: 'solucion', targetId: 's1', causa: 'datos_personales', reason: '', moderatorProfileId: YO,
+            status: 'pendiente', venceAt: SIETE_DIAS,
+          },
+        });
+      });
+
+      it('C1: vence una provisional y se vuelve a pedir urgente: queda pendiente y el contenido no se oculta', async () => {
+        prisma.moderationAction.findMany.mockResolvedValue([accion({ status: 'provisional', causa: 'datos_personales' })]);
+        prisma.solucion.update.mockResolvedValue({});
+        expect(await service.processModerationDeadlines(AHORA)).toBe(1);
+        expect(prisma.solucion.update).toHaveBeenLastCalledWith({ where: { id: 's1' }, data: { hidden: false } });
+        prisma.solucion.update.mockClear();
+        prisma.solucion.findUnique.mockResolvedValue(so());
+        prisma.moderationAction.count.mockResolvedValue(1);
+        expect(await service.hide(YO, { target: 'solucion', targetId: 's1', causa: 'ilegal_violencia' }, 'ip'))
+          .toEqual({ id: 'ma1', estado: 'pendiente' });
+        expect(prisma.solucion.update).not.toHaveBeenCalled();
+      });
+
+      it('C1: en la ocultación vinculada, una propuesta que ya tuvo provisional rechazada queda pendiente', async () => {
+        prisma.inquietud.findUnique.mockResolvedValue({ id: 'q1', groupId: 'g1', hidden: false, proposalId: 't1' });
+        prisma.inquietud.update.mockResolvedValue({ id: 'q1', proposalId: 't1' });
+        prisma.$queryRaw.mockResolvedValue([{ abiertoPorComunidad: true, hidden: false, kind: 'propuesta' }]);
+        prisma.moderationAction.count.mockResolvedValue(1);
+        prisma.moderationAction.create.mockResolvedValueOnce({ id: 'ma1' }).mockResolvedValueOnce({ id: 'ma2' });
+        await service.hide(YO, { target: 'inquietud', targetId: 'q1', causa: 'datos_personales' }, 'ip');
+        expect(prisma.proposal.update).not.toHaveBeenCalled();
+        expect(prisma.moderationAction.create).toHaveBeenLastCalledWith({
+          data: {
+            target: 'tema', targetId: 't1', causa: 'datos_personales', reason: LINKED_TOPIC_REASON, moderatorProfileId: YO,
+            status: 'pendiente', venceAt: SIETE_DIAS,
+          },
+        });
+      });
+
+      it('I1: ocultar provisionalmente una propuesta con votación del plan 2 solo le quita el título, sin cancelarla', async () => {
+        prisma.proposal.findUnique.mockResolvedValue({ id: 't1', groupId: 'g1', hidden: false, kind: 'propuesta' });
+        prisma.$queryRaw.mockResolvedValue([{ kind: 'propuesta', hidden: false, abiertoPorComunidad: false }]);
+        prisma.proposal.update.mockResolvedValue({ id: 't1', electionId: 'e1' });
+        prisma.election.findUnique.mockResolvedValue({ status: 'open' });
+        prisma.election.update.mockResolvedValue({});
+        await service.hide(YO, { target: 'tema', targetId: 't1', causa: 'datos_personales' }, 'ip');
+        expect(prisma.election.update).toHaveBeenCalledWith({ where: { id: 'e1' }, data: { title: 'Votación de un tema oculto' } });
+        expect(prisma.decision.updateMany).not.toHaveBeenCalled();
+      });
+
+      it('I1: confirmar la provisional de una propuesta cancela su decisión y su votación, y lo audita', async () => {
+        prisma.moderationAction.findUnique.mockResolvedValue(
+          accion({ target: 'tema', targetId: 't1', status: 'provisional', causa: 'datos_personales' }),
+        );
+        prisma.proposal.findUnique.mockResolvedValue({ id: 't1', electionId: 'e1' });
+        prisma.election.findUnique.mockResolvedValue({ status: 'open' });
+        prisma.election.update.mockResolvedValue({});
+        prisma.decision.updateMany.mockResolvedValue({ count: 1 });
+        await service.confirmar(YO, 'ma1', true, 'ip');
+        expect(prisma.proposal.update).not.toHaveBeenCalled();
+        expect(prisma.decision.updateMany).toHaveBeenCalledWith({
+          where: { proposalId: 't1', fase: { in: ['modo', 'objecion', 'votacion'] } },
+          data: { fase: 'cancelada' },
+        });
+        expect(prisma.election.update).toHaveBeenCalledWith({
+          where: { id: 'e1' },
+          data: { title: 'Votación de un tema oculto', status: 'cancelled' },
+        });
+        expect(audit.log).toHaveBeenCalledWith(expect.objectContaining({ action: 'decision.cancelled', metadata: { proposalId: 't1' } }));
+      });
+
+      it('I1: rechazar la provisional de una propuesta la restaura sin tocar su decisión', async () => {
+        prisma.moderationAction.findUnique.mockResolvedValue(
+          accion({ target: 'tema', targetId: 't1', status: 'provisional', causa: 'datos_personales' }),
+        );
+        prisma.proposal.update.mockResolvedValue({ id: 't1', title: 'Fondo', electionId: null });
+        await service.confirmar(YO, 'ma1', false, 'ip');
+        expect(prisma.proposal.update).toHaveBeenCalledWith({ where: { id: 't1' }, data: { hidden: false } });
+        expect(prisma.decision.updateMany).not.toHaveBeenCalled();
+      });
+
+      it('I1: al vencer la provisional de una propuesta, el tema vuelve y su decisión sigue donde estaba', async () => {
+        prisma.moderationAction.findMany.mockResolvedValue([
+          accion({ target: 'tema', targetId: 't1', status: 'provisional', causa: 'datos_personales' }),
+        ]);
+        prisma.proposal.update.mockResolvedValue({ id: 't1', title: 'Fondo', electionId: null });
+        expect(await service.processModerationDeadlines(AHORA)).toBe(1);
+        expect(prisma.proposal.update).toHaveBeenCalledWith({ where: { id: 't1' }, data: { hidden: false } });
+        expect(prisma.decision.updateMany).not.toHaveBeenCalled();
+      });
+
+      it('I3: restaurar la inquietud cierra la solicitud vinculada provisional y vuelve a mostrar el debate', async () => {
+        prisma.moderationAction.findUnique.mockResolvedValue({ id: 'ma1', target: 'inquietud', targetId: 'q1', status: 'apelado', reason: 'x' });
+        prisma.inquietud.update.mockResolvedValue({ id: 'q1', proposalId: 't1' });
+        prisma.proposal.findUnique.mockResolvedValue({ id: 't1', abiertoPorComunidad: true, hidden: true });
+        prisma.moderationAction.findFirst.mockResolvedValue({ id: 'ma2', reason: LINKED_TOPIC_REASON, status: 'provisional' });
+        prisma.moderationAction.count.mockResolvedValue(0);
+        prisma.proposal.update.mockResolvedValue({ id: 't1', title: 'Fondo', electionId: null });
+        await service.resolveAppeal(YO, 'ma1', true, 'ip');
+        expect(prisma.moderationAction.findFirst).toHaveBeenCalledWith(expect.objectContaining({
+          where: { target: 'tema', targetId: 't1', reason: LINKED_TOPIC_REASON, status: { in: ['pendiente', 'provisional'] } },
+        }));
+        expect(prisma.moderationAction.updateMany).toHaveBeenCalledWith({
+          where: { id: 'ma2', status: 'provisional' },
+          data: { status: 'rechazado', resolvedAt: AHORA },
+        });
+        expect(prisma.moderationAction.count).toHaveBeenCalledWith({
+          where: { target: 'tema', targetId: 't1', id: { not: 'ma2' }, status: { in: ['oculto', 'apelado', 'confirmado'] } },
+        });
+        expect(prisma.proposal.update).toHaveBeenCalledWith({ where: { id: 't1' }, data: { hidden: false } });
+      });
+
+      it('I3: una solicitud vinculada pendiente se cierra sin tocar el debate; si otra ocultación firme lo tiene, sigue oculto', async () => {
+        prisma.moderationAction.findUnique.mockResolvedValue({ id: 'ma1', target: 'inquietud', targetId: 'q1', status: 'apelado', reason: 'x' });
+        prisma.inquietud.update.mockResolvedValue({ id: 'q1', proposalId: 't1' });
+        prisma.proposal.findUnique.mockResolvedValue({ id: 't1', abiertoPorComunidad: true, hidden: false });
+        prisma.moderationAction.findFirst.mockResolvedValue({ id: 'ma2', reason: LINKED_TOPIC_REASON, status: 'pendiente' });
+        await service.resolveAppeal(YO, 'ma1', true, 'ip');
+        expect(prisma.moderationAction.updateMany).toHaveBeenCalledWith({
+          where: { id: 'ma2', status: 'pendiente' },
+          data: { status: 'rechazado', resolvedAt: AHORA },
+        });
+        expect(prisma.proposal.update).not.toHaveBeenCalled();
+
+        prisma.moderationAction.updateMany.mockClear();
+        prisma.proposal.findUnique.mockResolvedValue({ id: 't1', abiertoPorComunidad: true, hidden: true });
+        prisma.moderationAction.findFirst.mockResolvedValue({ id: 'ma2', reason: LINKED_TOPIC_REASON, status: 'provisional' });
+        prisma.moderationAction.count.mockResolvedValue(1);
+        await service.resolveAppeal(YO, 'ma1', true, 'ip');
+        expect(prisma.moderationAction.updateMany).toHaveBeenCalledTimes(1);
+        expect(prisma.proposal.update).not.toHaveBeenCalled();
+      });
+
+      it('I4 y M1: el debate vinculado se lee con FOR UPDATE antes de buscar su solicitud abierta', async () => {
+        prisma.inquietud.findUnique.mockResolvedValue({ id: 'q1', groupId: 'g1', hidden: false, proposalId: 't1' });
+        prisma.inquietud.update.mockResolvedValue({ id: 'q1', proposalId: 't1' });
+        prisma.$queryRaw.mockResolvedValue([{ abiertoPorComunidad: true, hidden: false, kind: 'propuesta' }]);
+        // La primera búsqueda es la de la inquietud (fuera de la transacción); la segunda, la del debate bajo bloqueo.
+        prisma.moderationAction.findFirst.mockResolvedValueOnce(null).mockResolvedValueOnce({ id: 'ma0' });
+        const r = await service.hide(YO, { target: 'inquietud', targetId: 'q1', causa: 'datos_personales' }, 'ip');
+        expect(r).toEqual({ id: 'ma1', estado: 'oculto' });
+        const sql = String(prisma.$queryRaw.mock.calls[0]?.[0]?.sql ?? '');
+        expect(sql).toMatch(/SELECT kind, hidden, "abiertoPorComunidad" FROM proposals WHERE id = .*FOR UPDATE/);
+        expect(prisma.$queryRaw.mock.calls[0]?.[0]?.values).toEqual(['t1']);
+        expect(prisma.proposal.findUnique).not.toHaveBeenCalled();
+        expect(prisma.$queryRaw.mock.invocationCallOrder[0]!).toBeLessThan(
+          prisma.moderationAction.findFirst.mock.invocationCallOrder[1]!,
+        );
+        // Ya hay una solicitud abierta del debate: queda la suya y la inquietud se oculta igual.
+        expect(prisma.moderationAction.create).toHaveBeenCalledTimes(1);
+        expect(prisma.inquietud.update).toHaveBeenCalledWith({ where: { id: 'q1' }, data: { hidden: true } });
+      });
     });
   });
 });

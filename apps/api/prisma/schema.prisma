@@ -707,7 +707,13 @@ model ModerationAction {
   confirmadorProfileId String?          @db.Uuid
   /// Plazo de una solicitud pendiente o provisional.
   venceAt              DateTime?        @db.Timestamptz
+  /// Nació «provisional» (causa urgente). Si se rechaza o vence, una nueva solicitud urgente
+  /// sobre el mismo contenido ya no lo oculta de inmediato: queda «pendiente».
+  fueProvisional       Boolean          @default(false)
 
+  // El índice único parcial `moderation_actions_abierta_key` (una sola solicitud pendiente o
+  // provisional por contenido) vive solo en SQL: Prisma no modela índices parciales
+  // (migración 20261106140100_una_solicitud_abierta_por_contenido).
   @@index([target, targetId])
   @@index([status])
   @@index([status, venceAt])

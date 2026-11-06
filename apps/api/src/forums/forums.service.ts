@@ -365,11 +365,11 @@ export class ForumsService {
       resultado = await this.prisma.$transaction(async (tx) => {
         // Se lee dentro de la transacción: un tema formalizado justo antes ya cuenta como propuesta.
         const estado: EstadoSolicitud = (await this.requiereQuorumTx(tx, target, dto.targetId))
-          ? esUrgente(causa) ? 'provisional' : 'pendiente'
+          ? await this.estadoConQuorumTx(tx, target, dto.targetId, causa)
           : 'oculto';
         let vinculo: Vinculo | null = null;
         if (estado !== 'pendiente') {
-          const o = await this.aplicarOcultacion(tx, target, dto.targetId, causa);
+          const o = await this.aplicarOcultacion(tx, target, dto.targetId, causa, estado === 'oculto');
           canceladas.push(...o.canceladas);
           vinculo = o.vinculo;
         }
@@ -383,6 +383,7 @@ export class ForumsService {
             moderatorProfileId: profileId,
             status: estado,
             venceAt: plazo === null ? null : new Date(Date.now() + plazo),
+            ...(estado === 'provisional' ? { fueProvisional: true } : {}),
           },
         });
         const vinculada = vinculo ? { ...vinculo, id: await this.crearVinculadaTx(tx, vinculo, causa, profileId) } : null;
@@ -434,9 +435,13 @@ export class ForumsService {
       if (r.count === 0) throw new ConflictException(vencida(new Date()) ? YA_VENCIO : YA_RESUELTA);
       if (aprobar && previo === 'pendiente') {
         // Solo llegan aquí soluciones y temas: no arrastran una moderación vinculada.
-        const o = await this.aplicarOcultacion(tx, target, action.targetId, action.causa);
+        const o = await this.aplicarOcultacion(tx, target, action.targetId, action.causa, true);
         canceladas.push(...o.canceladas);
         if (o.vinculo) await this.crearVinculadaTx(tx, o.vinculo, action.causa, action.moderatorProfileId);
+      } else if (aprobar && previo === 'provisional' && target === 'tema') {
+        // La provisional solo pausaba la decisión: con la segunda firma se cancela (y la votación del plan 2).
+        const t = await tx.proposal.findUnique({ where: { id: action.targetId }, select: { electionId: true } });
+        if (await this.cancelarVotacionesTx(tx, action.targetId, t?.electionId ?? null, true)) canceladas.push(action.targetId);
       } else if (!aprobar && previo === 'provisional') {
         await this.aplicarRestauracion(tx, target, action.targetId);
       }
@@ -472,12 +477,13 @@ export class ForumsService {
         target,
         targetId: a.targetId,
         causa: a.causa as ModeracionCausaValue,
-        detalle: a.reason,
+        detalle: a.reason === LINKED_TOPIC_REASON ? '' : a.reason,
         originalText: await this.textOf(target, a.targetId),
         estado,
         venceAt: (a.venceAt ?? a.createdAt).toISOString(),
         createdAt: a.createdAt.toISOString(),
         esMia: a.moderatorProfileId === profileId,
+        contexto: await this.contextoDe(target, a.targetId, a.reason),
       });
     }
     return result;
@@ -588,50 +594,86 @@ export class ForumsService {
   private async requiereQuorumTx(tx: Tx, target: ModTarget, targetId: string): Promise<boolean> {
     if (target === 'solucion') return true;
     if (target !== 'tema') return false;
-    const filas = await tx.$queryRaw<{ kind: string }[]>(
-      Prisma.sql`SELECT kind FROM proposals WHERE id = ${targetId}::uuid FOR UPDATE`,
+    return (await this.bloquearTemaTx(tx, targetId))?.kind === 'propuesta';
+  }
+
+  /** Lee el tema bloqueando su fila: formalizaciones y otras moderaciones del mismo tema esperan. */
+  private async bloquearTemaTx(
+    tx: Tx,
+    topicId: string,
+  ): Promise<{ kind: string; hidden: boolean; abiertoPorComunidad: boolean } | null> {
+    const filas = await tx.$queryRaw<{ kind: string; hidden: boolean; abiertoPorComunidad: boolean }[]>(
+      Prisma.sql`SELECT kind, hidden, "abiertoPorComunidad" FROM proposals WHERE id = ${topicId}::uuid FOR UPDATE`,
     );
-    return filas[0]?.kind === 'propuesta';
+    return filas[0] ?? null;
   }
 
   /**
-   * Oculta el contenido. Un tema cancela su votación y su decisión activas. Una inquietud
-   * arrastra al debate que abrió la comunidad con su texto (devuelve cómo queda, para registrar
-   * la moderación vinculada): si ese debate ya es una propuesta formal, sigue la regla de la
-   * segunda firma con la misma causa; si ya tiene una solicitud abierta, no se toca.
+   * Estado de una solicitud que necesita la segunda firma. Una causa urgente oculta ya
+   * («provisional»), salvo que el contenido ya haya tenido una provisional rechazada o vencida:
+   * entonces queda «pendiente» y sigue visible, para que repetir la urgencia no lo oculte sin fin.
+   */
+  private async estadoConQuorumTx(
+    tx: Tx,
+    target: ModTarget,
+    targetId: string,
+    causa: ModeracionCausaValue | null,
+  ): Promise<'provisional' | 'pendiente'> {
+    if (causa === null || !esUrgente(causa)) return 'pendiente';
+    const previas = await tx.moderationAction.count({
+      where: { target, targetId, status: 'rechazado', fueProvisional: true },
+    });
+    return previas > 0 ? 'pendiente' : 'provisional';
+  }
+
+  /** Contexto de una solicitud para la mesa: qué tipo de tema es o por qué llegó. */
+  private async contextoDe(target: ModTarget, targetId: string, reason: string): Promise<string | null> {
+    if (target !== 'tema') return null;
+    if (reason === LINKED_TOPIC_REASON) return 'Debate vinculado a una inquietud oculta';
+    const t = await this.prisma.proposal.findUnique({ where: { id: targetId }, select: { kind: true } });
+    return (t?.kind as string | undefined) === 'propuesta' ? 'Propuesta formal' : null;
+  }
+
+  /**
+   * Oculta el contenido. Un tema ocultado en firme cancela su votación y su decisión activas;
+   * uno provisional solo las pausa (`firme = false`). Una inquietud arrastra al debate que abrió
+   * la comunidad con su texto (devuelve cómo queda, para registrar la moderación vinculada): si
+   * ese debate ya es una propuesta formal, sigue la regla de la segunda firma con la misma causa;
+   * si ya tiene una solicitud abierta, no se toca.
    */
   private async aplicarOcultacion(
     tx: Tx,
     target: ModTarget,
     targetId: string,
     causa: ModeracionCausaValue | null,
+    firme: boolean,
   ): Promise<{ canceladas: string[]; vinculo: Vinculo | null }> {
     const canceladas: string[] = [];
     let vinculo: Vinculo | null = null;
     if (target === 'tema') {
-      if (await this.hideTopicTx(tx, targetId)) canceladas.push(targetId);
+      if (await this.hideTopicTx(tx, targetId, firme)) canceladas.push(targetId);
     } else if (target === 'inquietud') {
       const q = await tx.inquietud.update({ where: { id: targetId }, data: { hidden: true } });
       // El debate que abrió la comunidad copia el título y el texto de la inquietud: se oculta con ella.
       // Un debate abierto a mano por quien organiza tiene su propio texto y no se toca.
       const proposalId = (q as { proposalId?: string | null } | undefined)?.proposalId ?? null;
       if (proposalId) {
-        const p = await tx.proposal.findUnique({
-          where: { id: proposalId },
-          select: { abiertoPorComunidad: true, hidden: true, kind: true },
-        });
+        // Con la fila bloqueada: una formalización u otra moderación del debate espera a esta.
+        const p = await this.bloquearTemaTx(tx, proposalId);
         if (p?.abiertoPorComunidad === true && p.hidden === false) {
-          if ((p.kind as string) !== 'propuesta') {
-            if (await this.hideTopicTx(tx, proposalId)) canceladas.push(proposalId);
+          if (p.kind !== 'propuesta') {
+            if (await this.hideTopicTx(tx, proposalId, true)) canceladas.push(proposalId);
             vinculo = { topicId: proposalId, estado: 'oculto' };
           } else {
+            // Bajo el bloqueo: si el debate ya tiene su propia solicitud abierta, queda esa y no se
+            // crea la vinculada (así no choca con el índice único ni hace fallar la de la inquietud).
             const abierta = await tx.moderationAction.findFirst({
               where: { target: 'tema', targetId: proposalId, status: { in: [...ABIERTAS] } },
               select: { id: true },
             });
             if (!abierta) {
-              const estado: EstadoSolicitud = causa !== null && esUrgente(causa) ? 'provisional' : 'pendiente';
-              if (estado === 'provisional' && (await this.hideTopicTx(tx, proposalId))) canceladas.push(proposalId);
+              const estado = await this.estadoConQuorumTx(tx, 'tema', proposalId, causa);
+              if (estado === 'provisional') await this.hideTopicTx(tx, proposalId, false);
               vinculo = { topicId: proposalId, estado };
             }
           }
@@ -682,12 +724,17 @@ export class ForumsService {
         moderatorProfileId,
         status: vinculo.estado,
         venceAt: plazo === null ? null : new Date(Date.now() + plazo),
+        ...(vinculo.estado === 'provisional' ? { fueProvisional: true } : {}),
       },
     });
     return created.id;
   }
 
-  /** Audita una moderación nueva: «requested» si espera la firma, «hidden» si ya ocultó. Sin texto. */
+  /**
+   * Audita una moderación nueva: «requested» si espera la firma, «hidden» si ya ocultó. Sin texto.
+   * La auditoría la lee cualquier persona verificada: una solicitud pendiente no dice qué contenido
+   * ni por qué causa (el contenido sigue visible); eso se registra al confirmarse, rechazarse o vencer.
+   */
   private auditarSolicitud(
     actor: { actorId: string } | Record<never, never>,
     ip: string,
@@ -696,13 +743,11 @@ export class ForumsService {
     causa: ModeracionCausaValue,
     estado: EstadoSolicitud,
   ): void {
-    void this.audit.log({
-      ...actor,
-      action: estado === 'pendiente' ? 'moderation.requested' : 'moderation.hidden',
-      resource,
-      ip,
-      metadata: estado === 'pendiente' ? { moderationId, causa } : { moderationId, causa, estado },
-    });
+    if (estado === 'pendiente') {
+      void this.audit.log({ ...actor, action: 'moderation.requested', resource: `moderation:${moderationId}`, ip, metadata: {} });
+      return;
+    }
+    void this.audit.log({ ...actor, action: 'moderation.hidden', resource, ip, metadata: { moderationId, causa, estado } });
   }
 
   private auditarCanceladas(
@@ -722,22 +767,31 @@ export class ForumsService {
   }
 
   /**
-   * Oculta un tema; su votación pierde el título y, si sigue activa, se cancela.
-   * También cancela su decisión activa (plan 3); devuelve si canceló alguna.
+   * Oculta un tema; su votación pierde el título. En firme (`firme`), además se cancelan su
+   * votación del plan 2 si sigue activa y su decisión activa (plan 3); devuelve si canceló una
+   * decisión. Una ocultación provisional solo pausa: con el tema oculto ningún paso de la
+   * decisión avanza (bloquearTema exige hidden = false) y nadie vota ni objeta.
    */
-  private async hideTopicTx(tx: Tx, topicId: string): Promise<boolean> {
+  private async hideTopicTx(tx: Tx, topicId: string, firme: boolean): Promise<boolean> {
     // electionId se relee dentro de la transacción: así se ve una votación abierta justo antes.
     const t = await tx.proposal.update({ where: { id: topicId }, data: { hidden: true } });
-    const electionId = t?.electionId ?? null;
+    return this.cancelarVotacionesTx(tx, topicId, t?.electionId ?? null, firme);
+  }
+
+  /**
+   * Quita el título a la votación del plan 2 (repetía el del tema) y, si `cancelar`, la cancela
+   * si sigue activa y cancela la decisión activa del tema. Devuelve si canceló una decisión.
+   */
+  private async cancelarVotacionesTx(tx: Tx, topicId: string, electionId: string | null, cancelar: boolean): Promise<boolean> {
     if (electionId) {
-      // La votación repetía el título del tema: se le quita y, si sigue activa, se cancela.
       const e = await tx.election.findUnique({ where: { id: electionId }, select: { status: true } });
       const activa = ['draft', 'open'].includes((e?.status as string | undefined) ?? '');
       await tx.election.update({
         where: { id: electionId },
-        data: activa ? { title: HIDDEN_VOTE_TITLE, status: 'cancelled' } : { title: HIDDEN_VOTE_TITLE },
+        data: activa && cancelar ? { title: HIDDEN_VOTE_TITLE, status: 'cancelled' } : { title: HIDDEN_VOTE_TITLE },
       });
     }
+    if (!cancelar) return false;
     const d = await tx.decision.updateMany({
       where: { proposalId: topicId, fase: { in: ['modo', 'objecion', 'votacion'] } },
       data: { fase: 'cancelada' },
@@ -756,14 +810,35 @@ export class ForumsService {
   /**
    * Al restaurar una inquietud, su debate abierto por la comunidad vuelve solo si se ocultó
    * junto con ella (última moderación del tema = la vinculada, aún en «oculto»). Si se ocultó
-   * por su propio motivo, sigue oculto.
+   * por su propio motivo, sigue oculto. Una vinculada que aún espera la segunda firma se cierra
+   * como «rechazado»; si era provisional, el debate vuelve salvo otra ocultación en firme.
    */
   private async restoreLinkedTopicTx(tx: Tx, topicId: string): Promise<void> {
     const p = await tx.proposal.findUnique({
       where: { id: topicId },
       select: { abiertoPorComunidad: true, hidden: true },
     });
-    if (p?.abiertoPorComunidad !== true || p.hidden !== true) return;
+    if (p?.abiertoPorComunidad !== true) return;
+    // Si la vinculada aún espera la segunda firma, se cierra («rechazado») con la inquietud restaurada.
+    const abierta = await tx.moderationAction.findFirst({
+      where: { target: 'tema', targetId: topicId, reason: LINKED_TOPIC_REASON, status: { in: [...ABIERTAS] } },
+      select: { id: true, status: true },
+    });
+    const previo = abierta?.status as string | undefined;
+    if (abierta && (previo === 'pendiente' || previo === 'provisional')) {
+      const r = await tx.moderationAction.updateMany({
+        where: { id: abierta.id, status: previo },
+        data: { status: 'rechazado', resolvedAt: new Date() },
+      });
+      if (r.count === 0 || previo !== 'provisional' || p.hidden !== true) return;
+      // La provisional lo había ocultado: vuelve, salvo que otra ocultación firme lo mantenga oculto.
+      const firmes = await tx.moderationAction.count({
+        where: { target: 'tema', targetId: topicId, id: { not: abierta.id }, status: { in: ['oculto', 'apelado', 'confirmado'] } },
+      });
+      if (firmes === 0) await this.restoreTopicTx(tx, topicId);
+      return;
+    }
+    if (p.hidden !== true) return;
     const latest = await tx.moderationAction.findFirst({
       where: { target: 'tema', targetId: topicId },
       orderBy: { createdAt: 'desc' },

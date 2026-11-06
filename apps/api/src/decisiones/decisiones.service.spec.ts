@@ -35,6 +35,7 @@ function buildPrisma() {
     frase: { findMany: vi.fn().mockResolvedValue([]) },
     fraseVoto: { findMany: vi.fn().mockResolvedValue([]) },
     profile: { findUnique: vi.fn() },
+    moderationAction: { findMany: vi.fn().mockResolvedValue([]) },
   };
 }
 
@@ -392,7 +393,7 @@ describe('DecisionesService', () => {
       prisma.solucion.findMany.mockResolvedValue([]);
       expect(await service.processDeadlines(NOW)).toBe(1);
       expect(prisma.solucion.findMany).toHaveBeenCalledWith(expect.objectContaining({
-        where: { proposalId: T, hidden: false, mergedIntoId: null },
+        where: { proposalId: T, mergedIntoId: null },
         orderBy: { createdAt: 'asc' },
       }));
       expect(prisma.decision.create).toHaveBeenCalledWith({
@@ -429,6 +430,28 @@ describe('DecisionesService', () => {
       prisma.$queryRaw.mockResolvedValue([]);
       expect(await service.processDeadlines(NOW)).toBe(0);
       expect(prisma.decision.create).not.toHaveBeenCalled();
+    });
+
+    it('una solución oculta en firme no entra; una oculta de forma provisional sí (solo pausa)', async () => {
+      prisma.solucion.findMany.mockResolvedValue([
+        { id: 's1', hidden: false }, { id: 's2', hidden: true }, { id: 's3', hidden: true },
+      ]);
+      prisma.moderationAction.findMany.mockResolvedValue([{ targetId: 's2' }]);
+      expect(await service.processDeadlines(NOW)).toBe(1);
+      expect(prisma.moderationAction.findMany).toHaveBeenCalledWith({
+        where: { target: 'solucion', targetId: { in: ['s2', 's3'] }, status: 'provisional' },
+        select: { targetId: true },
+      });
+      // Dos candidatas (s1 visible y s2 provisional): fase modo, no votación directa con una sola.
+      expect(prisma.decision.create).toHaveBeenCalledWith({ data: { proposalId: T, fase: 'modo' } });
+    });
+
+    it('sin ocultas provisionales, la oculta en firme queda fuera: votación directa con la única visible', async () => {
+      prisma.solucion.findMany.mockResolvedValue([{ id: 's1', hidden: false }, { id: 's3', hidden: true }]);
+      expect(await service.processDeadlines(NOW)).toBe(1);
+      expect(prisma.decision.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({ fase: 'votacion', candidatas: ['s1'] }),
+      });
     });
 
     it('si otra ejecución ya creó la decisión (P2002), se ignora y sigue con el resto', async () => {
@@ -735,6 +758,20 @@ describe('DecisionesService', () => {
         (where.hidden === true ? [{ id: 's1' }] : []));
       await service.processDeadlines(NOW);
       expect(prisma.decision.updateMany.mock.calls[0]![0].data).toMatchObject({ resultado: 'ninguna', ganadoras: [] });
+    });
+
+    it('si una candidata está oculta de forma provisional, no cuenta en esta pasada (reintenta la siguiente)', async () => {
+      prisma.moderationAction.findMany.mockResolvedValue([{ targetId: 's2' }]);
+      expect(await service.processDeadlines(NOW)).toBe(0);
+      expect(prisma.moderationAction.findMany).toHaveBeenCalledWith({
+        where: { target: 'solucion', targetId: { in: ['s1', 's2'] }, status: 'provisional' },
+        select: { targetId: true },
+      });
+      expect(prisma.decision.updateMany).not.toHaveBeenCalled();
+      expect(audit.log).not.toHaveBeenCalled();
+      // Confirmada (o vencida) la provisional, la pasada siguiente cuenta.
+      prisma.moderationAction.findMany.mockResolvedValue([]);
+      expect(await service.processDeadlines(NOW)).toBe(1);
     });
 
     it('si el tema ya no está vivo al bloquearlo, no cuenta ni audita', async () => {

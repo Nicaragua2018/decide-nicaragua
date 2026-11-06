@@ -61,4 +61,6 @@ export interface ModeracionPorConfirmar {
   createdAt: string;
   /** La pidió quien consulta: no puede confirmarla. */
   esMia: boolean;
+  /** Contexto para la mesa: «Propuesta formal», «Debate vinculado a una inquietud oculta» o null. */
+  contexto: string | null;
 }

@@ -54,12 +54,29 @@ const debateVencido = (endsAt: Date | null, now: Date): boolean => endsAt !== nu
 const esDuplicado = (err: unknown): boolean =>
   err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002';
 
-/** Soluciones que entran a la decisión: visibles y sin juntar, en orden de llegada. */
-const CANDIDATAS = (proposalId: string) => ({
-  where: { proposalId, hidden: false, mergedIntoId: null },
-  orderBy: { createdAt: 'asc' as const },
-  select: { id: true },
-});
+/** Ids de las soluciones (entre `ids`) ocultas de forma provisional: su ocultación aún espera la segunda firma. */
+async function provisionales(tx: Prisma.TransactionClient, ids: string[]): Promise<Set<string>> {
+  if (ids.length === 0) return new Set();
+  const filas = await tx.moderationAction.findMany({
+    where: { target: 'solucion', targetId: { in: ids }, status: 'provisional' },
+    select: { targetId: true },
+  });
+  return new Set(filas.map((f) => f.targetId));
+}
+
+/**
+ * Soluciones que entran a la decisión, en orden de llegada: sin juntar y visibles, o ocultas
+ * solo de forma provisional (eso pausa, no excluye). Una ocultación confirmada sí las deja fuera.
+ */
+async function candidatasDe(tx: Prisma.TransactionClient, proposalId: string): Promise<string[]> {
+  const filas = await tx.solucion.findMany({
+    where: { proposalId, mergedIntoId: null },
+    orderBy: { createdAt: 'asc' },
+    select: { id: true, hidden: true },
+  });
+  const enPausa = await provisionales(tx, filas.filter((s) => s.hidden).map((s) => s.id));
+  return filas.filter((s) => !s.hidden || enPausa.has(s.id)).map((s) => s.id);
+}
 
 /**
  * Bloquea la fila del tema mientras siga abierto, visible, como propuesta formal y sin
@@ -258,9 +275,13 @@ export class DecisionesService {
       const fase = decision.fase as DecisionView['fase'];
       const candidatas: DecisionView['candidatas'] = [];
       if (fase === 'modo' || fase === 'objecion') {
-        // Aún no están congeladas: se muestran las vivas (filas ya viene en orden de llegada).
+        // Aún no están congeladas: se muestran las que entrarían (filas ya viene en orden de llegada),
+        // también las ocultas de forma provisional, enmascaradas para quien no organiza.
+        const enPausa = await provisionales(this.prisma, filas.filter((s) => s.hidden).map((s) => s.id));
         for (const s of filas) {
-          if (!s.hidden && s.mergedIntoId === null) candidatas.push({ id: s.id, ...textoDe(s), hidden: s.hidden });
+          if (s.mergedIntoId === null && (!s.hidden || enPausa.has(s.id))) {
+            candidatas.push({ id: s.id, ...textoDe(s), hidden: s.hidden });
+          }
         }
       } else {
         for (const id of decision.candidatas) {
@@ -373,7 +394,7 @@ export class DecisionesService {
     modo: DecisionModoValue,
     plazos: { objecionDias: number; votacionDias: number },
   ): Promise<SalidaDelModo | null> {
-    const candidatas = (await tx.solucion.findMany(CANDIDATAS(proposalId))).map((s) => s.id);
+    const candidatas = await candidatasDe(tx, proposalId);
     let salida: SalidaDelModo;
     let data: Prisma.DecisionUpdateManyMutationInput;
     if (candidatas.length === 0) {
@@ -546,7 +567,7 @@ export class DecisionesService {
         const dias = await this.rules.getInt('votacion.plazo_dias', t.groupId);
         const hecho = await this.prisma.$transaction(async (tx) => {
           if (!(await bloquearTema(tx, t.id))) return null;
-          const ids = (await tx.solucion.findMany(CANDIDATAS(t.id))).map((s) => s.id);
+          const ids = await candidatasDe(tx, t.id);
           if (ids.length === 0) {
             const c = await tx.decision.create({
               data: { proposalId: t.id, fase: 'contada', resultado: 'sin_soluciones', contadaAt: now },
@@ -642,7 +663,7 @@ export class DecisionesService {
         const modoTrasObjecion = cambia ? contrario : propuesto;
         const hecho = await this.prisma.$transaction(async (tx) => {
           if (!(await bloquearTema(tx, d.proposalId))) return null;
-          const candidatas = (await tx.solucion.findMany(CANDIDATAS(d.proposalId))).map((s) => s.id);
+          const candidatas = await candidatasDe(tx, d.proposalId);
           if (candidatas.length === 0) {
             // Todas se ocultaron durante la objeción: igual que el fin del debate sin soluciones.
             const r = await tx.decision.updateMany({
@@ -714,7 +735,8 @@ export class DecisionesService {
     const quorumPct = await this.rules.getInt('votacion.quorum_porcentaje', groupId);
 
     const resultado = await this.prisma.$transaction(async (tx) => {
-      // Un tema ocultado a la vez ya canceló la decisión (hideTopicTx): aquí no se cuenta.
+      // Un tema oculto no se cuenta: si la ocultación es provisional, se cuenta al volver a
+      // mostrarse; si se confirmó, la decisión ya quedó cancelada (hideTopicTx).
       if (!(await bloquearTema(tx, proposalId))) return null;
       // Bloquea la decisión antes de leer las papeletas: una papeleta que ya pasó su
       // comprobación (FOR UPDATE en castPapeleta) termina de guardarse antes de contar.
@@ -724,6 +746,9 @@ export class DecisionesService {
         select: { fase: true, modo: true, candidatas: true },
       });
       if (!d || (d.fase as string) !== 'votacion') return null;
+      // Una candidata oculta de forma provisional espera la segunda firma (48 h como mucho):
+      // no se cuenta en esta pasada, sin escribir ni auditar; la siguiente lo reintenta.
+      if ((await provisionales(tx, d.candidatas)).size > 0) return null;
       const [filas, miembros] = await Promise.all([
         // Solo cuentan quienes siguen siendo miembros (la suspensión quita la membresía).
         tx.decisionPapeleta.findMany({
@@ -743,7 +768,8 @@ export class DecisionesService {
       if (d.candidatas.length === 1) modo = 'compatibles';
       else if (d.modo) modo = d.modo as DecisionModoValue;
       else throw new Error('Decisión en votación sin modo');
-      // Una candidata ocultada por moderación durante la votación sigue en las cifras, pero no gana.
+      // Una candidata ocultada en firme durante la votación sigue en las cifras, pero no gana
+      // (ya no queda ninguna provisional: las ocultas aquí son confirmadas).
       const ocultas = (
         await tx.solucion.findMany({ where: { id: { in: d.candidatas }, hidden: true }, select: { id: true } })
       ).map((s) => s.id);
