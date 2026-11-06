@@ -1,5 +1,6 @@
 import type { DecisionTemaResponse } from '@decide/shared';
 import { ModerarForm } from '@/components/ModerarForm';
+import { LlevarALaComunidad } from '../../grupos/[id]/LlevarALaComunidad';
 import { JuntarSolucion } from './JuntarSolucion';
 import { ObjecionPanel, ProponerModo } from './ModoPanel';
 import { NuevaSolucionForm } from './NuevaSolucionForm';
@@ -28,11 +29,14 @@ function Candidatas({ items }: { items: { id: string; title: string; description
 export function SolucionesSection({
   proposalId,
   data,
+  llevarGrupoId = null,
 }: {
   proposalId: string;
   data: DecisionTemaResponse;
+  /** Id del grupo de trabajo si quien mira es miembro y puede llevar las ganadoras a la comunidad. */
+  llevarGrupoId?: string | null;
 }) {
-  const { soluciones, decision } = data;
+  const { soluciones, decision, soloLectura } = data;
   if (!decision && soluciones.length === 0 && !data.puedeProponer) return null;
 
   const vivas = soluciones.filter((s) => s.mergedIntoTitle === null);
@@ -55,10 +59,10 @@ export function SolucionesSection({
                   ) : (
                     <>
                       <p className="comment-body">{s.description}</p>
-                      {data.canOrganize && !s.hidden && (
+                      {data.canOrganize && !soloLectura && !s.hidden && (
                         <ModerarForm target="solucion" targetId={s.id} topicId={proposalId} colapsable className="comment-reply-form" />
                       )}
-                      {data.canOrganize && (
+                      {data.canOrganize && !soloLectura && (
                         <JuntarSolucion
                           solucionId={s.id}
                           proposalId={proposalId}
@@ -74,14 +78,14 @@ export function SolucionesSection({
           {data.debateEndsAt && (
             <p className="text-sm text-muted mb-3">Las soluciones quedan fijas el {fecha(data.debateEndsAt)}</p>
           )}
-          {data.puedeProponer && <NuevaSolucionForm proposalId={proposalId} />}
+          {data.puedeProponer && !soloLectura && <NuevaSolucionForm proposalId={proposalId} />}
         </>
       )}
 
       {decision?.fase === 'modo' && (
         <div className="mt-3">
           <Candidatas items={decision.candidatas} />
-          {data.canOrganize ? (
+          {data.canOrganize && !soloLectura ? (
             <ProponerModo proposalId={proposalId} />
           ) : (
             <p className="text-sm text-muted">Esperando que se proponga cómo decidir</p>
@@ -95,7 +99,7 @@ export function SolucionesSection({
           <ObjecionPanel
             proposalId={proposalId}
             modoPropuesto={decision.modoPropuesto}
-            puedoObjetar={decision.puedoObjetar}
+            puedoObjetar={decision.puedoObjetar && !soloLectura}
             yoObjete={decision.yoObjete}
             fraccionObjecionPct={decision.fraccionObjecionPct}
           />
@@ -109,19 +113,35 @@ export function SolucionesSection({
               Puedes cambiar tu papeleta hasta el {fecha(decision.votacionEndsAt)}
             </p>
           )}
-          <Papeleta
-            key={JSON.stringify(decision.miPapeleta)}
-            proposalId={proposalId}
-            candidatas={decision.candidatas}
-            miPapeleta={decision.miPapeleta}
-          />
+          {soloLectura ? (
+            <Candidatas items={decision.candidatas} />
+          ) : (
+            <Papeleta
+              key={JSON.stringify(decision.miPapeleta)}
+              proposalId={proposalId}
+              candidatas={decision.candidatas}
+              miPapeleta={decision.miPapeleta}
+            />
+          )}
         </div>
       )}
 
       {decision?.fase === 'contada' && (
         <div className="mt-3">
           {decision.resultado ? (
-            <ResultadoDecision resultado={decision.resultado} candidatas={decision.candidatas} modo={decision.modo} />
+            <>
+              <ResultadoDecision resultado={decision.resultado} candidatas={decision.candidatas} modo={decision.modo} />
+              {llevarGrupoId && decision.resultado.resultado === 'aprobada' && !soloLectura && (
+                <div className="mt-3">
+                  {decision.resultado.ganadoras.map((gid) => (
+                    <div key={gid} className="comment-thread">
+                      <p className="font-medium">{decision.candidatas.find((c) => c.id === gid)?.title}</p>
+                      <LlevarALaComunidad grupoId={llevarGrupoId} solucionId={gid} />
+                    </div>
+                  ))}
+                </div>
+              )}
+            </>
           ) : (
             <p className="text-sm text-muted">No se propusieron soluciones</p>
           )}
