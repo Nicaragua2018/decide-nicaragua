@@ -1,4 +1,7 @@
 import type { GrupoTrabajoItem, TrabajoEstadoValue, TrabajoTipoValue } from '@decide/shared';
+import type { PrismaService } from '../prisma/prisma.service';
+
+type UltimoInforme = GrupoTrabajoItem['ultimoInforme'];
 
 /** Campos de un grupo de trabajo que usan las listas (`GET /api/grupos` y el resumen de «Decisiones»). */
 export interface GrupoFila {
@@ -11,8 +14,26 @@ export interface GrupoFila {
   proposito: string | null;
   convocatoriaEndsAt: Date | null;
   pocosMiembrosDesde: Date | null;
-  /** Solución de origen (comisiones y bifurcaciones); las listas no la seleccionan. */
+  /** Solución de origen (comisiones y bifurcaciones). */
   origenSolucionId?: string | null;
+}
+
+/**
+ * Último informe no oculto de cada comisión, en una sola consulta (`distinct` por comisión, del más
+ * reciente al más antiguo). Lo muestran las listas de «Grupos de trabajo» y de «Decisiones».
+ */
+export async function ultimosInformes(
+  prisma: Pick<PrismaService, 'comisionInforme'>,
+  ids: string[],
+): Promise<Map<string, NonNullable<UltimoInforme>>> {
+  if (ids.length === 0) return new Map();
+  const filas = await prisma.comisionInforme.findMany({
+    where: { grupoId: { in: ids }, hidden: false },
+    orderBy: { createdAt: 'desc' },
+    distinct: ['grupoId'],
+    select: { grupoId: true, texto: true, createdAt: true },
+  });
+  return new Map(filas.map((f) => [f.grupoId, { texto: f.texto, createdAt: f.createdAt.toISOString() }]));
 }
 
 /** Regla con las personas mínimas para activarse: la de las bifurcaciones o la de los subgrupos. */
@@ -26,7 +47,13 @@ export function faltanParaActivar(estado: string | null, miembros: number, minim
 }
 
 /** Función pura, sin inyección de Nest: la usan `GruposService` y `DecisionesService` sin depender uno del otro. */
-export function grupoTrabajoItem(g: GrupoFila, miembros: number, minimo: number, soyMiembro: boolean): GrupoTrabajoItem {
+export function grupoTrabajoItem(
+  g: GrupoFila,
+  miembros: number,
+  minimo: number,
+  soyMiembro: boolean,
+  extra: { puedoPausar?: boolean; ultimoInforme?: UltimoInforme } = {},
+): GrupoTrabajoItem {
   return {
     id: g.id,
     name: g.name,
@@ -38,5 +65,7 @@ export function grupoTrabajoItem(g: GrupoFila, miembros: number, minimo: number,
     faltan: g.trabajoTipo === 'comision' ? null : faltanParaActivar(g.trabajoEstado, miembros, minimo),
     convocatoriaEndsAt: g.convocatoriaEndsAt ? g.convocatoriaEndsAt.toISOString() : null,
     soyMiembro,
+    puedoPausar: extra.puedoPausar ?? false,
+    ultimoInforme: extra.ultimoInforme ?? null,
   };
 }

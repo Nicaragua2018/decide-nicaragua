@@ -46,6 +46,10 @@ export interface GrupoTrabajoItem {
   faltan: number | null;
   convocatoriaEndsAt: string | null;
   soyMiembro: boolean;
+  /** Bifurcación activa y quien mira organiza su comunidad: puede pausarla desde la lista (sin ver nada de dentro). */
+  puedoPausar: boolean;
+  /** Comisiones: último informe no oculto, en las listas; null en el detalle y en los demás grupos. */
+  ultimoInforme: { texto: string; createdAt: string } | null;
 }
 
 export interface GrupoTrabajoDetail extends GrupoTrabajoItem {
@@ -80,6 +84,8 @@ export interface ComisionView {
   puedoApoyarRenovar: boolean;
   puedoAjustar: boolean;
   puedoInformar: boolean;
+  /** Quien mira puede moderar (ocultar) los informes. */
+  canModerate: boolean;
   origen: { proposalId: string; solucionTitulo: string } | null;
 }
 

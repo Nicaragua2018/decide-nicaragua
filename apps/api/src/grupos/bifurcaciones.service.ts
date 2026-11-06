@@ -9,9 +9,12 @@ import { GroupAccessService } from '../groups/group-access.service';
 import { ForumsService } from '../forums/forums.service';
 import { ComisionesService } from './comisiones.service';
 import type { GrupoFila } from './grupo-item';
-import { NO_ELEGIBLE, NOMBRE_INICIATIVA, esBifurcable, esElegible, finDelPlazo } from './bifurcacion-reglas';
+import { NO_ELEGIBLE, NOMBRE_INICIATIVA, SOLUCION_OCULTA, esBifurcable, esElegible, finDelPlazo } from './bifurcacion-reglas';
 
 const PROPOSITO_MAX = 1000;
+const FASES_ACTIVAS = ['modo', 'objecion', 'votacion'] as const;
+
+type Tx = Prisma.TransactionClient;
 
 const NO_BIFURCABLE = 'Esta solución no se puede bifurcar.';
 const PLAZO_VENCIDO = 'El plazo para iniciar una iniciativa con esta solución ya venció.';
@@ -38,6 +41,47 @@ const esDuplicado = (err: unknown): boolean =>
   err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002';
 
 /**
+ * Al reanudar una bifurcación, todo lo que la pausa detuvo se corre lo que duró (`pausa` en ms):
+ * el debate de sus temas abiertos, la fase de sus decisiones activas (la base del plazo del modo es
+ * `createdAt`) y los plazos de lo que cuelga de ella (su comisión: convocatoria, elección e informes).
+ */
+async function correrPlazosTx(tx: Tx, bifId: string, pausa: number): Promise<void> {
+  const mas = (d: Date) => new Date(d.getTime() + pausa);
+  const hijos = await tx.group.findMany({
+    where: { parentGroupId: bifId, type: 'trabajo' },
+    select: { id: true, convocatoriaEndsAt: true, eleccionEndsAt: true, proximoInformeAt: true },
+  });
+  for (const h of hijos) {
+    const data: Prisma.GroupUpdateManyMutationInput = {};
+    if (h.convocatoriaEndsAt) data.convocatoriaEndsAt = mas(h.convocatoriaEndsAt);
+    if (h.eleccionEndsAt) data.eleccionEndsAt = mas(h.eleccionEndsAt);
+    if (h.proximoInformeAt) data.proximoInformeAt = mas(h.proximoInformeAt);
+    if (Object.keys(data).length > 0) await tx.group.updateMany({ where: { id: h.id }, data });
+  }
+  const ids = [bifId, ...hijos.map((h) => h.id)];
+  const decisiones = await tx.decision.findMany({
+    where: { proposal: { groupId: { in: ids } }, fase: { in: [...FASES_ACTIVAS] } },
+    select: { id: true, fase: true, createdAt: true, objecionEndsAt: true, votacionEndsAt: true },
+  });
+  for (const d of decisiones) {
+    const fase = d.fase as string;
+    let data: Prisma.DecisionUpdateManyMutationInput | null = null;
+    if (fase === 'modo') data = { createdAt: mas(d.createdAt) };
+    else if (fase === 'objecion' && d.objecionEndsAt) data = { objecionEndsAt: mas(d.objecionEndsAt) };
+    else if (fase === 'votacion' && d.votacionEndsAt) data = { votacionEndsAt: mas(d.votacionEndsAt) };
+    if (data) await tx.decision.updateMany({ where: { id: d.id, fase: d.fase }, data });
+  }
+  const debates = await tx.proposal.findMany({
+    where: { groupId: { in: ids }, status: 'open', decision: null, deliberationEndsAt: { not: null } },
+    select: { id: true, deliberationEndsAt: true },
+  });
+  for (const t of debates) {
+    if (!t.deliberationEndsAt) continue;
+    await tx.proposal.updateMany({ where: { id: t.id, status: 'open' }, data: { deliberationEndsAt: mas(t.deliberationEndsAt) } });
+  }
+}
+
+/**
  * Bifurcaciones (3A-4b): «iniciativas de un grupo» formadas solo por quienes apoyaron una solución
  * que perdió. Nunca se revela quiénes son: ni en respuestas ni en auditorías (R4).
  */
@@ -56,8 +100,13 @@ export class BifurcacionesService {
   private async auditar(action: string, grupoId: string, actorProfileId: string | null, ip?: string): Promise<void> {
     let actor: { actorId: string } | Record<never, never> = {};
     if (actorProfileId) {
-      const p = await this.prisma.profile.findUnique({ where: { id: actorProfileId }, select: { userId: true } });
-      if (p?.userId) actor = { actorId: p.userId };
+      try {
+        const p = await this.prisma.profile.findUnique({ where: { id: actorProfileId }, select: { userId: true } });
+        if (p?.userId) actor = { actorId: p.userId };
+      } catch {
+        // La escritura ya se hizo: ante la duda, sin actor ni ip (nunca un 500 después).
+        ip = undefined;
+      }
     }
     void this.audit.log({
       ...actor,
@@ -154,6 +203,14 @@ export class BifurcacionesService {
 
   // ─── Pausa ────────────────────────────────────────────────────────────────
 
+  /**
+   * Quien organiza la comunidad puede pausar sus bifurcaciones activas desde la lista de grupos
+   * (quien llama ya sabe que es miembro del ámbito). No lee nada de dentro de la bifurcación.
+   */
+  puedePausarEn(profileId: string, ambitoId: string): Promise<boolean> {
+    return this.forums.canOrganize(profileId, ambitoId);
+  }
+
   /** Quien organiza la comunidad (y es miembro de ella) pausa una bifurcación activa. */
   async pausar(
     profileId: string,
@@ -161,6 +218,7 @@ export class BifurcacionesService {
     causa: ModeracionCausaValue,
     detalle: string | undefined,
     ip: string,
+    now: Date = new Date(),
   ): Promise<void> {
     const g = await this.bifurcacion(id);
     const [organiza, enAmbito] = await Promise.all([
@@ -176,10 +234,19 @@ export class BifurcacionesService {
         pausaDetalle: detalle?.trim() ? detalle.trim() : null,
         pausaApelacion: null,
         pausaApeladaAt: null,
+        // Al reanudar, los plazos se corren lo que duró la pausa.
+        pausadaAt: now,
       },
     });
     if (res.count !== 1) throw new ConflictException(NO_ACTIVA);
-    await this.auditar('bifurcacion.paused', id, profileId, ip);
+    // Si quien pausa es miembro de la bifurcación, su nombre delataría su voto: sin actor ni ip.
+    let miembro = true;
+    try {
+      miembro = await this.access.isParticipant(id, profileId);
+    } catch {
+      // Ante la duda, sin rastro.
+    }
+    await this.auditar('bifurcacion.paused', id, miembro ? null : profileId, miembro ? undefined : ip);
   }
 
   /** Un miembro apela la pausa, una sola vez por pausa. */
@@ -203,16 +270,36 @@ export class BifurcacionesService {
    * La mesa resuelve una apelación pendiente. Reanudar vuelve a `activo` y limpia la pausa; mantener
    * solo la saca de la cola (`pausaApeladaAt = null`) y conserva el texto, así no se apela otra vez.
    */
-  async resolver(profileId: string, id: string, reanudar: boolean, ip: string): Promise<void> {
+  async resolver(profileId: string, id: string, reanudar: boolean, ip: string, now: Date = new Date()): Promise<void> {
     if (!(await this.forums.esMesa(profileId))) throw new ForbiddenException(NO_MESA);
-    const res = await this.prisma.group.updateMany({
-      where: { id, trabajoTipo: 'bifurcacion', trabajoEstado: 'pausado', pausaApeladaAt: { not: null } },
-      data: reanudar
-        ? { trabajoEstado: 'activo', pausaCausa: null, pausaDetalle: null, pausaApelacion: null, pausaApeladaAt: null }
-        : { pausaApeladaAt: null },
+    const pendiente = { id, trabajoTipo: 'bifurcacion' as const, trabajoEstado: 'pausado' as const, pausaApeladaAt: { not: null } };
+    if (!reanudar) {
+      const res = await this.prisma.group.updateMany({ where: pendiente, data: { pausaApeladaAt: null } });
+      if (res.count !== 1) throw new ConflictException(SIN_APELACION);
+      return;
+    }
+    const reanudada = await this.prisma.$transaction(async (tx) => {
+      // Con la fila bloqueada: el inicio de la pausa que se lee es el que se limpia.
+      await tx.$queryRaw(Prisma.sql`SELECT id FROM groups WHERE id = ${id}::uuid FOR UPDATE`);
+      const actual = await tx.group.findUnique({ where: { id }, select: { pausadaAt: true } });
+      const res = await tx.group.updateMany({
+        where: pendiente,
+        data: {
+          trabajoEstado: 'activo',
+          pausaCausa: null,
+          pausaDetalle: null,
+          pausaApelacion: null,
+          pausaApeladaAt: null,
+          pausadaAt: null,
+        },
+      });
+      if (res.count !== 1) return false;
+      const pausa = actual?.pausadaAt ? now.getTime() - actual.pausadaAt.getTime() : 0;
+      if (pausa > 0) await correrPlazosTx(tx, id, pausa);
+      return true;
     });
-    if (res.count !== 1) throw new ConflictException(SIN_APELACION);
-    if (reanudar) await this.auditar('bifurcacion.resumed', id, profileId, ip);
+    if (!reanudada) throw new ConflictException(SIN_APELACION);
+    await this.auditar('bifurcacion.resumed', id, profileId, ip);
   }
 
   /** Cola de la mesa: pausas apeladas pendientes, sin nada que identifique a los miembros. */
@@ -232,7 +319,8 @@ export class BifurcacionesService {
         : null;
       r.push({
         grupoId: g.id,
-        solucionTitulo: s?.title ?? '',
+        // La mesa no lee lo de dentro; una solución ocultada por moderación sale enmascarada.
+        solucionTitulo: s ? (s.hidden ? SOLUCION_OCULTA : s.title) : '',
         proposalId: s?.proposalId ?? '',
         causa: g.pausaCausa ?? '',
         detalle: g.pausaDetalle ?? '',

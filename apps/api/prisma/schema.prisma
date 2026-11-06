@@ -314,6 +314,8 @@ model Group {
   pausaDetalle       String?          @db.VarChar(500)
   pausaApelacion     String?          @db.VarChar(1000)
   pausaApeladaAt     DateTime?        @db.Timestamptz
+  /// Inicio de la pausa en curso: al reanudarse, los plazos se corren lo que duró.
+  pausadaAt          DateTime?        @db.Timestamptz
 
   createdAt DateTime @default(now()) @db.Timestamptz
   updatedAt DateTime @updatedAt @db.Timestamptz

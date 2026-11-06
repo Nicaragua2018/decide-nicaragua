@@ -14,7 +14,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { RulesService } from '../rules/rules.service';
 import { GroupAccessService } from '../groups/group-access.service';
-import { type GrupoFila, claveMinimo, grupoTrabajoItem } from './grupo-item';
+import { type GrupoFila, claveMinimo, grupoTrabajoItem, ultimosInformes } from './grupo-item';
 import { type ComisionFila, ComisionesService } from './comisiones.service';
 import { type BifurcacionFila, BifurcacionesService } from './bifurcaciones.service';
 import { NO_ELEGIBLE, enmascararOrigenOculto } from './bifurcacion-reglas';
@@ -24,6 +24,8 @@ const DIA_MS = 86_400_000;
 const MINIMO_ACTIVO = 3;
 const DIAS_CON_POCOS = 30;
 const FASES_ACTIVAS = ['modo', 'objecion', 'votacion'] as const;
+/** Grupos cuyos plazos revisa este servicio (filtro positivo: no depende de cómo trata Prisma un NULL). */
+const TIPOS_CON_PLAZOS = ['subgrupo', 'bifurcacion'] as const;
 
 const NO_AMBITO = 'Los grupos de trabajo cuelgan de una comunidad o del nivel general.';
 const NO_MIEMBRO_AMBITO = 'Solo los miembros de esta comunidad pueden proponer o entrar a sus grupos de trabajo.';
@@ -80,10 +82,19 @@ export class GruposService {
     ip?: string,
     extra: Record<string, string> = {},
   ): Promise<void> {
-    // En un grupo reservado (la comisión de una bifurcación) ni actor ni ip.
-    const reservado = profileId !== null || ip ? await this.access.esReservado(grupoId) : false;
+    // En un grupo reservado (la comisión de una bifurcación) ni actor ni ip. La escritura ya se hizo:
+    // si una consulta falla, se audita sin rastro y nunca hay un 500.
+    let reservado = true;
+    let actor: { actorId: string } | Record<never, never> = {};
+    try {
+      reservado = profileId !== null || ip ? await this.access.esReservado(grupoId) : false;
+      if (profileId && !reservado) actor = await this.actorId(profileId);
+    } catch {
+      reservado = true;
+      actor = {};
+    }
     void this.audit.log({
-      ...(profileId && !reservado ? await this.actorId(profileId) : {}),
+      ...actor,
       action,
       resource: `group:${grupoId}`,
       ...(ip && !reservado ? { ip } : {}),
@@ -102,8 +113,14 @@ export class GruposService {
     return g as GrupoFila & { parentGroupId: string };
   }
 
-  private item(g: GrupoFila, miembros: number, minimo: number, soyMiembro: boolean): GrupoTrabajoItem {
-    return grupoTrabajoItem(g, miembros, minimo, soyMiembro);
+  private item(
+    g: GrupoFila,
+    miembros: number,
+    minimo: number,
+    soyMiembro: boolean,
+    extra: Parameters<typeof grupoTrabajoItem>[4] = {},
+  ): GrupoTrabajoItem {
+    return grupoTrabajoItem(g, miembros, minimo, soyMiembro, extra);
   }
 
   /** Personas para activarse: las de una bifurcación o las de un subgrupo (reglas del ámbito). */
@@ -142,6 +159,10 @@ export class GruposService {
         })
       : [];
     const soy = new Set(mias.map((m) => m.groupId));
+    const informes = await ultimosInformes(
+      this.prisma,
+      grupos.filter((g) => g.trabajoTipo === 'comision').map((g) => g.id),
+    );
 
     const result: GruposAmbitoResponse['ambitos'] = [];
     for (const a of ambitos) {
@@ -150,13 +171,20 @@ export class GruposService {
       for (const clave of new Set(propios.map((g) => claveMinimo(g.trabajoTipo)))) {
         minimos.set(clave, await this.rules.getInt(clave, a.id));
       }
+      // I2: quien organiza la comunidad (y es miembro, como todo ámbito de esta lista) puede pausar sus
+      // bifurcaciones activas desde aquí, sin leer nada de dentro (la mesa decide solo con metadatos).
+      const activaBif = (g: GrupoFila) => g.trabajoTipo === 'bifurcacion' && g.trabajoEstado === 'activo';
+      const organiza = propios.some(activaBif) ? await this.bifurcaciones.puedePausarEn(profileId, a.id) : false;
       result.push({
         id: a.id,
         name: a.name,
         tipo: a.tipo,
         // Una bifurcación se ve como «Iniciativa de un grupo» con cuántos son, nunca quiénes.
         grupos: propios.map((g) =>
-          this.item(g, g._count.memberships, minimos.get(claveMinimo(g.trabajoTipo)) ?? 0, soy.has(g.id)),
+          this.item(g, g._count.memberships, minimos.get(claveMinimo(g.trabajoTipo)) ?? 0, soy.has(g.id), {
+            puedoPausar: organiza && activaBif(g),
+            ultimoInforme: informes.get(g.id) ?? null,
+          }),
         ),
       });
     }
@@ -195,8 +223,10 @@ export class GruposService {
       forumId = foro?.id ?? null;
     }
     const estado = g.trabajoEstado;
+    // Lo que repite el título de una solución de origen oculta sale enmascarado (bifurcación y comisión).
+    const gv = (await enmascararOrigenOculto(this.prisma, [g as GrupoFila & { tarea?: string | null }]))[0] ?? g;
     const esComision = g.trabajoTipo === 'comision';
-    const comision = esComision ? await this.comisiones.vista(g as unknown as ComisionFila, profileId, completo) : null;
+    const comision = esComision ? await this.comisiones.vista(gv as unknown as ComisionFila, profileId, completo) : null;
     const esBifurcacion = g.trabajoTipo === 'bifurcacion';
     const bifurcacion = esBifurcacion
       ? await this.bifurcaciones.vista(g as unknown as BifurcacionFila, profileId, soyMiembro, enAmbito)
@@ -206,7 +236,7 @@ export class GruposService {
     let puedoEntrar = !esComision && enAmbito && !soyMiembro && (estado === 'convocando' || estado === 'activo');
     if (puedoEntrar && esBifurcacion) puedoEntrar = await this.bifurcaciones.elegible(g, profileId);
     return {
-      ...this.item(esBifurcacion ? ((await enmascararOrigenOculto(this.prisma, [g]))[0] ?? g) : g, miembros, minimo, soyMiembro),
+      ...this.item(gv, miembros, minimo, soyMiembro, { puedoPausar: bifurcacion?.puedoPausar ?? false }),
       ambito: { id: g.parent.id, name: g.parent.name, tipo: ambito?.tipo ?? 'general' },
       // Nunca los nombres de quienes forman una bifurcación.
       miembrosNombres: esBifurcacion ? [] : miembrosNombres,
@@ -466,11 +496,11 @@ export class GruposService {
   async processDeadlines(now: Date): Promise<number> {
     const limite = new Date(now.getTime() - DIAS_CON_POCOS * DIA_MS);
     const vencidos = await this.prisma.group.findMany({
-      where: { type: 'trabajo', trabajoTipo: { not: 'comision' }, trabajoEstado: 'convocando', convocatoriaEndsAt: { lte: now } },
+      where: { type: 'trabajo', trabajoTipo: { in: [...TIPOS_CON_PLAZOS] }, trabajoEstado: 'convocando', convocatoriaEndsAt: { lte: now } },
       select: { id: true },
     });
     const conPocos = await this.prisma.group.findMany({
-      where: { type: 'trabajo', trabajoTipo: { not: 'comision' }, trabajoEstado: 'activo', pocosMiembrosDesde: { lte: limite } },
+      where: { type: 'trabajo', trabajoTipo: { in: [...TIPOS_CON_PLAZOS] }, trabajoEstado: 'activo', pocosMiembrosDesde: { lte: limite } },
       select: { id: true },
     });
     const casos: { id: string; where: Prisma.GroupWhereInput }[] = [
@@ -480,7 +510,7 @@ export class GruposService {
     // Los activos que quedaron con menos de 3 sin pasar por `salir` (p. ej., por una suspensión)
     // empiezan aquí a contar sus 30 días.
     const sinMarca = await this.prisma.group.findMany({
-      where: { type: 'trabajo', trabajoTipo: { not: 'comision' }, trabajoEstado: 'activo', pocosMiembrosDesde: null },
+      where: { type: 'trabajo', trabajoTipo: { in: [...TIPOS_CON_PLAZOS] }, trabajoEstado: 'activo', pocosMiembrosDesde: null },
       select: { id: true, _count: { select: { memberships: true } } },
     });
     for (const g of sinMarca) {

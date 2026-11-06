@@ -15,8 +15,15 @@ import type {
   PapeletaValue,
   SolucionItem,
 } from '@decide/shared';
-import { type GrupoFila, claveMinimo, grupoTrabajoItem } from '../grupos/grupo-item';
-import { type DecisionBifurcable, enmascararOrigenOculto, esBifurcable, finDelPlazo } from '../grupos/bifurcacion-reglas';
+import { type GrupoFila, claveMinimo, grupoTrabajoItem, ultimosInformes } from '../grupos/grupo-item';
+import {
+  type DecisionBifurcable,
+  GRUPO_EN_MARCHA,
+  enmascararOrigenOculto,
+  esBifurcable,
+  finDelPlazo,
+  grupoEnMarcha,
+} from '../grupos/bifurcacion-reglas';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { ForumsService } from '../forums/forums.service';
@@ -617,7 +624,11 @@ export class DecisionesService {
   private async finDelDebate(now: Date): Promise<number> {
     const temas = await this.prisma.proposal.findMany({
       // Una propuesta del plan 2 con votación propia (electionId) no pasa por este ciclo.
-      where: { kind: 'propuesta', status: 'open', hidden: false, deliberationEndsAt: { lte: now }, decision: null, electionId: null },
+      // Un grupo de trabajo detenido (pausado, cerrado) o que cuelga de una bifurcación pausada no avanza.
+      where: {
+        kind: 'propuesta', status: 'open', hidden: false, deliberationEndsAt: { lte: now }, decision: null, electionId: null,
+        group: GRUPO_EN_MARCHA,
+      },
       select: { id: true, groupId: true },
     });
     let n = 0;
@@ -675,7 +686,7 @@ export class DecisionesService {
    */
   private async finDelModo(now: Date): Promise<number> {
     const decisiones = await this.prisma.decision.findMany({
-      where: { fase: 'modo' },
+      where: { fase: 'modo', proposal: { group: GRUPO_EN_MARCHA } },
       select: { id: true, proposalId: true, createdAt: true, proposal: { select: { groupId: true } } },
     });
     let n = 0;
@@ -699,7 +710,7 @@ export class DecisionesService {
 
   private async finDeLaObjecion(now: Date): Promise<number> {
     const decisiones = await this.prisma.decision.findMany({
-      where: { fase: 'objecion', objecionEndsAt: { lte: now } },
+      where: { fase: 'objecion', objecionEndsAt: { lte: now }, proposal: { group: GRUPO_EN_MARCHA } },
       select: { id: true, proposalId: true, modoPropuesto: true, proposal: { select: { groupId: true } } },
     });
     let n = 0;
@@ -765,7 +776,7 @@ export class DecisionesService {
 
   private async finDeLaVotacion(now: Date): Promise<number> {
     const decisiones = await this.prisma.decision.findMany({
-      where: { fase: 'votacion', votacionEndsAt: { lte: now } },
+      where: { fase: 'votacion', votacionEndsAt: { lte: now }, proposal: { group: GRUPO_EN_MARCHA } },
       select: { id: true },
     });
     let n = 0;
@@ -786,9 +797,29 @@ export class DecisionesService {
   async contar(decisionId: string, now: Date): Promise<boolean> {
     const previa = await this.prisma.decision.findUnique({
       where: { id: decisionId },
-      select: { proposalId: true, proposal: { select: { groupId: true } } },
+      select: {
+        proposalId: true,
+        proposal: {
+          select: {
+            groupId: true,
+            group: { select: { type: true, trabajoEstado: true, parent: { select: { trabajoEstado: true } } } },
+          },
+        },
+      },
     });
     if (!previa) return false;
+    // Un grupo de trabajo pausado (o su comisión) no cuenta: se cuenta al reanudarse, con el plazo corrido.
+    const grupo = previa.proposal.group;
+    if (
+      grupo &&
+      !grupoEnMarcha({
+        type: grupo.type as string,
+        trabajoEstado: (grupo.trabajoEstado as string | null) ?? null,
+        parent: grupo.parent ? { trabajoEstado: (grupo.parent.trabajoEstado as string | null) ?? null } : null,
+      })
+    ) {
+      return false;
+    }
     const { proposalId } = previa;
     const groupId = previa.proposal.groupId;
     const quorumPct = await this.rules.getInt('votacion.quorum_porcentaje', groupId);
@@ -1039,6 +1070,11 @@ export class DecisionesService {
       _count: { _all: true },
     });
     const miembros = new Map(conteos.map((c) => [c.groupId, c._count._all]));
+    // Último informe de cada comisión: una consulta para todas.
+    const informes = await ultimosInformes(
+      this.prisma,
+      filas.filter((f) => f.trabajoTipo === 'comision').map((f) => f.id),
+    );
     const minimos = new Map<string, number>();
     // Mínimo por ámbito y tipo: las bifurcaciones tienen su propia regla.
     const claveDe = (f: GrupoFila) => `${f.parentGroupId ?? ''}|${claveMinimo(f.trabajoTipo)}`;
@@ -1050,7 +1086,11 @@ export class DecisionesService {
       const ambitoId = f.parentGroupId ?? '';
       const lista = porAmbito.get(ambitoId) ?? [];
       // Una bifurcación sale como «Iniciativa de un grupo» con cuántos son, nunca quiénes.
-      lista.push(grupoTrabajoItem(f, miembros.get(f.id) ?? 0, minimos.get(claveDe(f)) ?? 0, soy.has(f.id)));
+      lista.push(
+        grupoTrabajoItem(f, miembros.get(f.id) ?? 0, minimos.get(claveDe(f)) ?? 0, soy.has(f.id), {
+          ultimoInforme: informes.get(f.id) ?? null,
+        }),
+      );
       porAmbito.set(ambitoId, lista);
     }
     return porAmbito;

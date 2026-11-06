@@ -170,7 +170,8 @@ describe('ForumsService', () => {
         where: {
           final: true,
           hidden: false,
-          grupo: { trabajoTipo: 'comision', trabajoEstado: 'cerrado', origenSolucionId: { in: ['s1', 's2'] } },
+          // Solo comisiones de la comunidad: la de una bifurcación (origenGrupoId) no es pública.
+          grupo: { trabajoTipo: 'comision', trabajoEstado: 'cerrado', origenSolucionId: { in: ['s1', 's2'] }, origenGrupoId: null },
         },
         orderBy: { createdAt: 'desc' },
       }));
@@ -379,6 +380,27 @@ describe('ForumsService', () => {
       prisma.proposal.findUnique.mockResolvedValue({ ...tema, groupId: 'g-ambito' });
       await service.formalize(YO, 't1', 'ip');
       expect(audit.log.mock.calls[0]![0]).toMatchObject({ actorId: 'u-yo', ip: 'ip' });
+    });
+
+    it('si la consulta de iniciativa falla tras formalizar o apelar, se audita sin rastro y no hay 500', async () => {
+      prisma.groupMembership.findUnique.mockResolvedValue({ id: 'm' });
+      prisma.group.findUnique.mockResolvedValue({ type: 'territorial_origin', parentGroupId: null, trabajoEstado: null, trabajoTipo: null });
+      const p = prisma as unknown as Record<string, unknown>;
+      p['inquietud'] = {
+        ...prisma.inquietud,
+        findMany: vi.fn().mockRejectedValue(new Error('caída')),
+        findUnique: vi.fn().mockRejectedValue(new Error('caída')),
+      };
+      prisma.proposal.findUnique.mockResolvedValue({ ...tema, groupId: 'g-ambito', abiertoPorComunidad: true });
+      await expect(service.formalize(YO, 't1', 'ip')).resolves.toBeUndefined();
+      prisma.moderationAction.findUnique.mockResolvedValue({ id: 'ma2', target: 'inquietud', targetId: 'i1', reason: 'x', status: 'oculto' });
+      // authorOf usa findUnique de la inquietud: aquí responde y después falla la de iniciativa.
+      (p['inquietud'] as { findUnique: ReturnType<typeof vi.fn> }).findUnique
+        .mockResolvedValueOnce({ id: 'i1', authorProfileId: YO, groupId: 'g-ambito', origenSolucionId: 's-bif' })
+        .mockRejectedValueOnce(new Error('caída'));
+      prisma.moderationAction.update.mockResolvedValue({});
+      await expect(service.appeal(YO, 'ma2', 'No fue mi intención ofender', 'ip')).resolves.toBeUndefined();
+      sinRastro();
     });
   });
 

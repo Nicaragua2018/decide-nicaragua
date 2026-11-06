@@ -17,6 +17,8 @@ const NO_LEE = 'Solo los miembros de esta comunidad pueden ver esto.';
 const NO_PARTICIPA_COMUNIDAD = 'Solo los miembros de esta comunidad pueden participar.';
 const NO_PARTICIPA_GRUPO = 'Solo los miembros de este grupo pueden participar.';
 const GRUPO_NO_ACTIVO = 'Este grupo de trabajo no está activo.';
+/** Una bifurcación pausada (o lo que cuelga de ella, como su comisión) no admite escrituras. */
+export const EN_PAUSA = 'Esta iniciativa está en pausa.';
 
 /** Cómo accede una persona a un grupo: participa (es miembro), solo lee (desde el ámbito) o nada. */
 export type NivelDeAcceso = 'participa' | 'lee' | null;
@@ -100,12 +102,22 @@ export class GroupAccessService {
 
   /**
    * 403 si no es miembro; en un grupo de trabajo, además, 409 si no está activo
-   * (convocando, pausado, cerrado o archivado se leen pero no se escriben).
+   * (convocando, pausado, cerrado o archivado se leen pero no se escriben) o si cuelga de una
+   * bifurcación pausada (su comisión se detiene con ella).
    */
   async requireParticipant(groupId: string, profileId: string): Promise<void> {
     await this.requireMember(groupId, profileId);
     const grupo = await this.grupo(groupId);
-    if (grupo?.type === 'trabajo' && grupo.trabajoEstado !== 'activo') throw new ConflictException(GRUPO_NO_ACTIVO);
+    if (grupo?.type !== 'trabajo') return;
+    if (grupo.trabajoTipo === 'bifurcacion' && grupo.trabajoEstado === 'pausado') throw new ConflictException(EN_PAUSA);
+    if (grupo.trabajoEstado !== 'activo') throw new ConflictException(GRUPO_NO_ACTIVO);
+    if (grupo.parentGroupId && (await this.bifurcacionPausada(grupo.parentGroupId))) throw new ConflictException(EN_PAUSA);
+  }
+
+  /** El grupo es una bifurcación en pausa. */
+  async bifurcacionPausada(groupId: string): Promise<boolean> {
+    const g = await this.grupo(groupId);
+    return g?.type === 'trabajo' && g.trabajoTipo === 'bifurcacion' && g.trabajoEstado === 'pausado';
   }
 
   private async grupo(

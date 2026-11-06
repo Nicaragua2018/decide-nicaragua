@@ -164,4 +164,37 @@ describe('GroupAccessService', () => {
       expect(await service.rastro(AMBITO, YO, '1.1.1.1', true)).toEqual({ reservado: true, quien: {} });
     });
   });
+
+  describe('I3: una bifurcación en pausa detiene también lo que cuelga de ella', () => {
+    function prismaPausa(estadoBif: string) {
+      const grupos: Record<string, { type: string; parentGroupId: string | null; trabajoEstado: string | null; trabajoTipo: string | null }> = {
+        [AMBITO]: { type: 'territorial_residence', parentGroupId: null, trabajoEstado: null, trabajoTipo: null },
+        'g-bif': { type: 'trabajo', parentGroupId: AMBITO, trabajoEstado: estadoBif, trabajoTipo: 'bifurcacion' },
+        'g-com': { type: 'trabajo', parentGroupId: 'g-bif', trabajoEstado: 'activo', trabajoTipo: 'comision' },
+      };
+      return {
+        groupMembership: { findUnique: vi.fn().mockResolvedValue({ id: 'm' }) },
+        group: { findUnique: vi.fn(({ where }: { where: { id: string } }) => Promise.resolve(grupos[where.id] ?? null)) },
+      };
+    }
+
+    it('la bifurcación pausada y su comisión activa dan 409 «Esta iniciativa está en pausa.»', async () => {
+      service = new GroupAccessService(prismaPausa('pausado') as never);
+      await expect(service.requireParticipant('g-bif', YO)).rejects.toThrow('Esta iniciativa está en pausa.');
+      await expect(service.requireParticipant('g-com', YO)).rejects.toThrow(ConflictException);
+      await expect(service.requireParticipant('g-com', YO)).rejects.toThrow('Esta iniciativa está en pausa.');
+    });
+
+    it('con la bifurcación activa, su comisión activa sí participa', async () => {
+      service = new GroupAccessService(prismaPausa('activo') as never);
+      await expect(service.requireParticipant('g-com', YO)).resolves.toBeUndefined();
+    });
+
+    it('esReservado que falla no rompe: rastro queda sin actor', async () => {
+      const p = prismaPausa('activo');
+      p.group.findUnique.mockRejectedValue(new Error('caída'));
+      service = new GroupAccessService(p as never);
+      expect(await service.rastro('g-com', YO, '1.1.1.1')).toEqual({ reservado: true, quien: {} });
+    });
+  });
 });

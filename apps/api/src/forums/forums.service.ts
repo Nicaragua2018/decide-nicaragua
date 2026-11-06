@@ -955,12 +955,26 @@ export class ForumsService {
     profileId: string,
     ip: string,
   ): Promise<{ actorId?: string; ip?: string }> {
-    const forzar = (await temasDeIniciativa(this.prisma, [topic])).size > 0;
+    // La escritura ya se hizo: si la consulta falla, sin rastro (nunca un 500 después).
+    let forzar = true;
+    try {
+      forzar = (await temasDeIniciativa(this.prisma, [topic])).size > 0;
+    } catch {
+      forzar = true;
+    }
     return (await this.access.rastro(topic.groupId, profileId, ip, forzar)).quien;
   }
 
-  /** Inquietud o tema llevados a la colmena desde una bifurcación. */
+  /** Inquietud o tema llevados a la colmena desde una bifurcación. Si la consulta falla, true (sin rastro). */
   private async esDeIniciativa(target: ModTarget, id: string): Promise<boolean> {
+    try {
+      return await this.consultarIniciativa(target, id);
+    } catch {
+      return true;
+    }
+  }
+
+  private async consultarIniciativa(target: ModTarget, id: string): Promise<boolean> {
     if (target === 'tema') {
       const t = await this.prisma.proposal.findUnique({ where: { id }, select: { id: true, abiertoPorComunidad: true } });
       return t ? (await temasDeIniciativa(this.prisma, [t])).size > 0 : false;
@@ -1066,7 +1080,8 @@ export class ForumsService {
           where: {
             final: true,
             hidden: false,
-            grupo: { trabajoTipo: 'comision', trabajoEstado: 'cerrado', origenSolucionId: { in: idsGanadoras } },
+            // Solo comisiones de la comunidad: la de una bifurcación (origenGrupoId) no es pública.
+            grupo: { trabajoTipo: 'comision', trabajoEstado: 'cerrado', origenSolucionId: { in: idsGanadoras }, origenGrupoId: null },
           },
           select: { texto: true, grupo: { select: { origenSolucionId: true } } },
           orderBy: { createdAt: 'desc' },

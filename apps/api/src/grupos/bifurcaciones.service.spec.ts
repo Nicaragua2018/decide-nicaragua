@@ -70,8 +70,16 @@ function bif(over: Record<string, unknown> = {}) {
 
 function buildTx() {
   return {
-    group: { create: vi.fn().mockResolvedValue({}) },
+    $queryRaw: vi.fn().mockResolvedValue([]),
+    group: {
+      create: vi.fn().mockResolvedValue({}),
+      findUnique: vi.fn().mockResolvedValue(null),
+      findMany: vi.fn().mockResolvedValue([]),
+      updateMany: vi.fn().mockResolvedValue({ count: 1 }),
+    },
     groupMembership: { create: vi.fn().mockResolvedValue({}) },
+    decision: { findMany: vi.fn().mockResolvedValue([]), updateMany: vi.fn().mockResolvedValue({ count: 1 }) },
+    proposal: { findMany: vi.fn().mockResolvedValue([]), updateMany: vi.fn().mockResolvedValue({ count: 1 }) },
   };
 }
 
@@ -276,9 +284,9 @@ describe('BifurcacionesService', () => {
       prisma.group.updateMany.mockResolvedValue({ count: 1 });
     });
 
-    it('quien organiza y es del ámbito la pausa con causa y detalle; audita con su actor', async () => {
+    it('quien organiza y es del ámbito la pausa con causa, detalle y fecha de inicio; audita con su actor', async () => {
       forums.canOrganize.mockResolvedValue(true);
-      await service.pausar(YO, BIF, 'insultos_amenazas', 'Hubo amenazas en el foro.', '1.1.1.1');
+      await service.pausar(YO, BIF, 'insultos_amenazas', 'Hubo amenazas en el foro.', '1.1.1.1', NOW);
       expect(forums.canOrganize).toHaveBeenCalledWith(YO, AMBITO);
       expect(prisma.group.updateMany).toHaveBeenCalledWith({
         where: { id: BIF, trabajoTipo: 'bifurcacion', trabajoEstado: 'activo' },
@@ -288,10 +296,29 @@ describe('BifurcacionesService', () => {
           pausaDetalle: 'Hubo amenazas en el foro.',
           pausaApelacion: null,
           pausaApeladaAt: null,
+          pausadaAt: NOW,
         },
       });
       expect(acciones()).toEqual(['bifurcacion.paused']);
       expect(audit.log.mock.calls[0]![0].metadata).toEqual({ grupoId: BIF });
+      expect(audit.log.mock.calls[0]![0]).toMatchObject({ actorId: 'u-yo', ip: '1.1.1.1' });
+    });
+
+    it('I2: si quien organiza es miembro de la bifurcación, la pausa se audita sin actor ni ip', async () => {
+      forums.canOrganize.mockResolvedValue(true);
+      miembros.get(YO)!.add(BIF);
+      await service.pausar(YO, BIF, 'spam', undefined, '1.1.1.1', NOW);
+      expect(acciones()).toEqual(['bifurcacion.paused']);
+      expect(audit.log.mock.calls[0]![0]).not.toHaveProperty('actorId');
+      expect(audit.log.mock.calls[0]![0]).not.toHaveProperty('ip');
+    });
+
+    it('si la consulta del actor falla tras pausar, no hay 500: audita sin actor', async () => {
+      forums.canOrganize.mockResolvedValue(true);
+      prisma.profile.findUnique.mockRejectedValue(new Error('caída'));
+      await expect(service.pausar(YO, BIF, 'spam', undefined, '1.1.1.1', NOW)).resolves.toBeUndefined();
+      expect(acciones()).toEqual(['bifurcacion.paused']);
+      expect(audit.log.mock.calls[0]![0]).not.toHaveProperty('actorId');
     });
 
     it('sin organizar, o sin ser del ámbito, 403', async () => {
@@ -338,14 +365,71 @@ describe('BifurcacionesService', () => {
       await expect(service.apelar(YO, BIF, 'Texto de apelación.', NOW)).rejects.toBeInstanceOf(ConflictException);
     });
 
-    it('la mesa reanuda: vuelve a activo y limpia la pausa; audita resumed', async () => {
+    it('la mesa reanuda: vuelve a activo y limpia la pausa con la fila bloqueada; audita resumed', async () => {
       forums.esMesa.mockResolvedValue(true);
-      await service.resolver(YO, BIF, true, '1.1.1.1');
-      expect(prisma.group.updateMany).toHaveBeenCalledWith({
+      await service.resolver(YO, BIF, true, '1.1.1.1', NOW);
+      expect(tx.$queryRaw).toHaveBeenCalled();
+      expect(tx.group.updateMany).toHaveBeenCalledWith({
         where: { id: BIF, trabajoTipo: 'bifurcacion', trabajoEstado: 'pausado', pausaApeladaAt: { not: null } },
-        data: { trabajoEstado: 'activo', pausaCausa: null, pausaDetalle: null, pausaApelacion: null, pausaApeladaAt: null },
+        data: {
+          trabajoEstado: 'activo',
+          pausaCausa: null,
+          pausaDetalle: null,
+          pausaApelacion: null,
+          pausaApeladaAt: null,
+          pausadaAt: null,
+        },
       });
       expect(acciones()).toEqual(['bifurcacion.resumed']);
+    });
+
+    it('I3: al reanudar, los plazos de sus temas y de su comisión se corren lo que duró la pausa', async () => {
+      forums.esMesa.mockResolvedValue(true);
+      const pausa = 3 * DIA_MS;
+      const mas = (d: Date) => new Date(d.getTime() + pausa);
+      tx.group.findUnique.mockResolvedValue({ pausadaAt: new Date(NOW.getTime() - pausa) });
+      const finConv = new Date('2026-11-06T00:00:00Z');
+      const proximo = new Date('2026-11-20T00:00:00Z');
+      tx.group.findMany.mockResolvedValue([
+        { id: 'g-com', convocatoriaEndsAt: null, eleccionEndsAt: null, proximoInformeAt: proximo },
+        { id: 'g-com2', convocatoriaEndsAt: finConv, eleccionEndsAt: null, proximoInformeAt: null },
+      ]);
+      const creada = new Date('2026-11-01T00:00:00Z');
+      const finObj = new Date('2026-11-04T00:00:00Z');
+      const finVot = new Date('2026-11-07T00:00:00Z');
+      tx.decision.findMany.mockResolvedValue([
+        { id: 'd-modo', fase: 'modo', createdAt: creada, objecionEndsAt: null, votacionEndsAt: null },
+        { id: 'd-obj', fase: 'objecion', createdAt: creada, objecionEndsAt: finObj, votacionEndsAt: null },
+        { id: 'd-vot', fase: 'votacion', createdAt: creada, objecionEndsAt: null, votacionEndsAt: finVot },
+      ]);
+      const finDebate = new Date('2026-11-05T00:00:00Z');
+      tx.proposal.findMany.mockResolvedValue([{ id: 't-debate', deliberationEndsAt: finDebate }]);
+
+      await service.resolver(YO, BIF, true, '1.1.1.1', NOW);
+
+      expect(tx.group.findMany.mock.calls[0]![0].where).toEqual({ parentGroupId: BIF, type: 'trabajo' });
+      expect(tx.group.updateMany).toHaveBeenCalledWith({ where: { id: 'g-com' }, data: { proximoInformeAt: mas(proximo) } });
+      expect(tx.group.updateMany).toHaveBeenCalledWith({ where: { id: 'g-com2' }, data: { convocatoriaEndsAt: mas(finConv) } });
+      expect(tx.decision.findMany.mock.calls[0]![0].where).toEqual({
+        proposal: { groupId: { in: [BIF, 'g-com', 'g-com2'] } },
+        fase: { in: ['modo', 'objecion', 'votacion'] },
+      });
+      expect(tx.decision.updateMany).toHaveBeenCalledWith({ where: { id: 'd-modo', fase: 'modo' }, data: { createdAt: mas(creada) } });
+      expect(tx.decision.updateMany).toHaveBeenCalledWith({ where: { id: 'd-obj', fase: 'objecion' }, data: { objecionEndsAt: mas(finObj) } });
+      expect(tx.decision.updateMany).toHaveBeenCalledWith({ where: { id: 'd-vot', fase: 'votacion' }, data: { votacionEndsAt: mas(finVot) } });
+      expect(tx.proposal.updateMany).toHaveBeenCalledWith({
+        where: { id: 't-debate', status: 'open' },
+        data: { deliberationEndsAt: mas(finDebate) },
+      });
+    });
+
+    it('si otra resolución ganó (count 0), no corre plazos ni audita', async () => {
+      forums.esMesa.mockResolvedValue(true);
+      tx.group.findUnique.mockResolvedValue({ pausadaAt: new Date(NOW.getTime() - DIA_MS) });
+      tx.group.updateMany.mockResolvedValue({ count: 0 });
+      await expect(service.resolver(YO, BIF, true, '1.1.1.1', NOW)).rejects.toBeInstanceOf(ConflictException);
+      expect(tx.decision.findMany).not.toHaveBeenCalled();
+      expect(audit.log).not.toHaveBeenCalled();
     });
 
     it('la mesa mantiene: sigue pausada, la apelación sale de la cola y no se puede volver a apelar', async () => {
@@ -362,7 +446,20 @@ describe('BifurcacionesService', () => {
       await expect(service.resolver(YO, BIF, true, '1.1.1.1')).rejects.toBeInstanceOf(ForbiddenException);
       forums.esMesa.mockResolvedValue(true);
       prisma.group.updateMany.mockResolvedValue({ count: 0 });
+      tx.group.updateMany.mockResolvedValue({ count: 0 });
       await expect(service.resolver(YO, BIF, true, '1.1.1.1')).rejects.toBeInstanceOf(ConflictException);
+      await expect(service.resolver(YO, BIF, false, '1.1.1.1')).rejects.toBeInstanceOf(ConflictException);
+    });
+
+    it('I2: la cola de la mesa enmascara el título de una solución oculta', async () => {
+      forums.esMesa.mockResolvedValue(true);
+      prisma.group.findMany.mockResolvedValue([
+        bif({ trabajoEstado: 'pausado', pausaCausa: 'spam', pausaApelacion: 'No.', pausaApeladaAt: NOW }),
+      ]);
+      prisma.solucion.findUnique.mockResolvedValue({ title: 'Huerto comunitario', proposalId: 't-1', hidden: true });
+      const r = await service.apeladas(YO);
+      expect(r[0]!.solucionTitulo).toBe('Solución oculta por moderación');
+      expect(JSON.stringify(r)).not.toContain('Huerto');
     });
 
     it('la cola de la mesa trae las apeladas sin ids ni nombres de miembros; fuera de la mesa, 403', async () => {

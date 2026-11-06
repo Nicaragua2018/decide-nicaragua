@@ -11,7 +11,7 @@ import type { ComisionView } from '@decide/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { RulesService } from '../rules/rules.service';
-import { GroupAccessService } from '../groups/group-access.service';
+import { EN_PAUSA, GroupAccessService } from '../groups/group-access.service';
 import { ForumsService } from '../forums/forums.service';
 import {
   ALGORITHM_VERSION,
@@ -23,6 +23,7 @@ import {
 import { participantesDelDebate } from '../decisiones/participantes-del-debate';
 import { elegirPuestos } from './elegir-puestos';
 import type { GrupoFila } from './grupo-item';
+import { SOLUCION_OCULTA } from './bifurcacion-reglas';
 
 const DIA_MS = 86_400_000;
 /** R2: si faltan voluntarios, la convocatoria se amplía estos días, una sola vez. */
@@ -33,6 +34,7 @@ const EXPERIENCIA_MAX = 500;
 const INFORME_MIN = 20;
 const INFORME_MAX = 2000;
 const INFORME_FINAL_MAX = 5000;
+const FASES_ACTIVAS = ['modo', 'objecion', 'votacion'] as const;
 
 const NO_ES_TRABAJO = 'Esto no es un grupo de trabajo.';
 const NO_ES_COMISION = 'Esto no es una comisión.';
@@ -44,6 +46,11 @@ const NO_VOLUNTARIO = 'Solo se puede ordenar a quienes se ofrecieron como volunt
 const REPETIDO = 'Cada voluntario puede aparecer una sola vez en el orden.';
 const NO_ACTIVA = 'Los informes solo se publican mientras la comisión está activa.';
 const NO_ATRASADA = 'Solo se puede apoyar la renovación de una comisión atrasada.';
+const NO_ACTIVA_APOYO = 'Solo se puede retirar el apoyo mientras la comisión está activa.';
+const ORIGEN_OCULTO = 'La solución de origen está oculta por moderación: no puede tener comisión.';
+
+/** Sin pausa: el grupo no tiene estado de trabajo (una comunidad) o no está pausado (NULL incluido). */
+const PADRE_SIN_PAUSA: Prisma.GroupWhereInput = { OR: [{ trabajoEstado: null }, { trabajoEstado: { not: 'pausado' } }] };
 
 type Tx = Prisma.TransactionClient;
 type Forma = 'sorteo' | 'preferencias';
@@ -112,11 +119,18 @@ export class ComisionesService {
     extra: Record<string, string> = {},
   ): Promise<void> {
     // La comisión de una bifurcación es reservada: ni actor ni ip (delatarían quiénes la forman).
-    const reservado = await this.access.esReservado(grupoId);
+    // La escritura ya se hizo: si una consulta falla, se audita sin rastro y nunca hay un 500.
+    let reservado = true;
     let actor: { actorId: string } | Record<never, never> = {};
-    if (profileId && !reservado) {
-      const p = await this.prisma.profile.findUnique({ where: { id: profileId }, select: { userId: true } });
-      if (p?.userId) actor = { actorId: p.userId };
+    try {
+      reservado = await this.access.esReservado(grupoId);
+      if (profileId && !reservado) {
+        const p = await this.prisma.profile.findUnique({ where: { id: profileId }, select: { userId: true } });
+        if (p?.userId) actor = { actorId: p.userId };
+      }
+    } catch {
+      reservado = true;
+      actor = {};
     }
     void this.audit.log({
       ...actor,
@@ -142,8 +156,45 @@ export class ComisionesService {
     return g as ComisionFila & { parentGroupId: string };
   }
 
+  /** La bifurcación de la que cuelga la comisión (su ámbito), o null si cuelga de una comunidad. */
+  private async bifurcacionDe(ambitoId: string): Promise<{ parentGroupId: string | null; trabajoEstado: string | null } | null> {
+    const a = await this.prisma.group.findUnique({
+      where: { id: ambitoId },
+      select: { type: true, trabajoTipo: true, trabajoEstado: true, parentGroupId: true },
+    });
+    if ((a?.type as string | undefined) !== 'trabajo' || (a?.trabajoTipo as string | null | undefined) !== 'bifurcacion') return null;
+    return { parentGroupId: a?.parentGroupId ?? null, trabajoEstado: (a?.trabajoEstado as string | null | undefined) ?? null };
+  }
+
+  /**
+   * Puede actuar en la comisión (ofrecerse, votar, apoyar la renovación) quien es miembro actual de
+   * su ámbito; en la comisión de una bifurcación, además, de la comunidad de la bifurcación (M1).
+   */
+  private async puedeActuar(ambitoId: string, profileId: string): Promise<{ ok: boolean; pausada: boolean }> {
+    const [enAmbito, bif] = await Promise.all([this.access.isParticipant(ambitoId, profileId), this.bifurcacionDe(ambitoId)]);
+    if (!enAmbito) return { ok: false, pausada: false };
+    if (!bif) return { ok: true, pausada: false };
+    const enComunidad = bif.parentGroupId !== null && (await this.access.isParticipant(bif.parentGroupId, profileId));
+    return { ok: enComunidad, pausada: bif.trabajoEstado === 'pausado' };
+  }
+
+  /** 403 si no puede actuar; 409 si la comisión cuelga de una bifurcación pausada. */
   private async exigirAmbito(g: { parentGroupId: string }, profileId: string): Promise<void> {
-    if (!(await this.access.isParticipant(g.parentGroupId, profileId))) throw new ForbiddenException(NO_MIEMBRO_AMBITO);
+    const r = await this.puedeActuar(g.parentGroupId, profileId);
+    if (!r.ok) throw new ForbiddenException(NO_MIEMBRO_AMBITO);
+    if (r.pausada) throw new ConflictException(EN_PAUSA);
+  }
+
+  /**
+   * Al cerrarse la comisión (informe final o renovación), en la misma transacción: sus temas abiertos
+   * se cierran sin conclusión y sus decisiones activas se cancelan, como al archivar un grupo.
+   */
+  private async cerrarTemasTx(tx: Tx, id: string, now: Date): Promise<void> {
+    await tx.decision.updateMany({
+      where: { proposal: { groupId: id }, fase: { in: [...FASES_ACTIVAS] } },
+      data: { fase: 'cancelada' },
+    });
+    await tx.proposal.updateMany({ where: { groupId: id, status: 'open' }, data: { status: 'closed', closedAt: now } });
   }
 
   private async bloquear(tx: Tx, id: string): Promise<ComisionFila> {
@@ -191,11 +242,11 @@ export class ComisionesService {
   // ─── Ajuste por quien organiza ────────────────────────────────────────────
 
   async ajustar(profileId: string, id: string, dto: { tarea?: string; puestos?: number }, now: Date = new Date()): Promise<void> {
-    void now;
     const g = await this.comisionLegible(id, profileId);
     const organiza = await this.forums.canOrganize(profileId, g.parentGroupId);
     if (!organiza || !(await this.access.isParticipant(g.parentGroupId, profileId))) throw new ForbiddenException(NO_ORGANIZA);
-    if (g.trabajoEstado !== 'convocando') throw new ConflictException(NO_CONVOCA);
+    // Vencida aunque el programador aún no la haya cerrado: ya no se ajusta.
+    this.exigirConvocando(g, now);
 
     const data: { tarea?: string; puestos?: number } = {};
     if (dto.tarea !== undefined) data.tarea = dto.tarea.trim();
@@ -212,7 +263,7 @@ export class ComisionesService {
     }
     if (Object.keys(data).length === 0) return;
     const res = await this.prisma.group.updateMany({
-      where: { id, trabajoTipo: 'comision', trabajoEstado: 'convocando' },
+      where: { id, trabajoTipo: 'comision', trabajoEstado: 'convocando', convocatoriaEndsAt: { gt: now } },
       data,
     });
     if (res.count !== 1) throw new ConflictException(NO_CONVOCA);
@@ -230,8 +281,11 @@ export class ComisionesService {
       if (actual.trabajoEstado !== 'eligiendo' || !actual.eleccionEndsAt || actual.eleccionEndsAt.getTime() <= now.getTime()) {
         throw new ConflictException(NO_ELIGE);
       }
+      // Solo cuentan los voluntarios que siguen en el ámbito (los mismos que se cuentan al cerrar).
       const voluntarios = new Set(
-        (await tx.comisionVoluntario.findMany({ where: { grupoId: id }, select: { profileId: true } })).map((v) => v.profileId),
+        (await tx.comisionVoluntario.findMany({ where: delAmbito(id, g.parentGroupId), select: { profileId: true } })).map(
+          (v) => v.profileId,
+        ),
       );
       if (!orden.every((p) => voluntarios.has(p))) throw new BadRequestException(NO_VOLUNTARIO);
       await tx.comisionPapeleta.upsert({
@@ -279,6 +333,7 @@ export class ComisionesService {
         data: final ? { trabajoEstado: 'cerrado' } : { proximoInformeAt: new Date(now.getTime() + dias * DIA_MS) },
       });
       if (res.count !== 1) throw new ConflictException(NO_ACTIVA);
+      if (final) await this.cerrarTemasTx(tx, id, now);
     });
     await this.auditar('comision.report_published', id, profileId, ip);
     if (final) await this.auditar('comision.closed', id, profileId, ip);
@@ -288,7 +343,9 @@ export class ComisionesService {
 
   /**
    * Umbral de renovación: `ceil(debate.fraccion_objecion_modo × P / 100)`, mínimo 1, con P =
-   * participantes del debate original que siguen siendo miembros del ámbito.
+   * participantes del debate original que siguen siendo miembros del ámbito de la comisión
+   * (`parentGroupId`): la comunidad, o la bifurcación en la comisión de una bifurcación (cuyo debate
+   * original fue en la comunidad, así que P cuenta solo a quienes además forman la bifurcación).
    */
   private async umbralRenovacion(g: ComisionFila & { parentGroupId: string }, comunidad: string): Promise<number> {
     const [solucion, f] = await Promise.all([
@@ -327,6 +384,7 @@ export class ComisionesService {
       if (apoyos < umbral || !origenSolucionId) return { apoyoNuevo, nuevaId: null };
       const res = await tx.group.updateMany({ where: { id, trabajoEstado: 'activo' }, data: { trabajoEstado: 'cerrado' } });
       if (res.count !== 1) return { apoyoNuevo, nuevaId: null };
+      await this.cerrarTemasTx(tx, id, now);
       const nuevaId = await this.crearComisionTx(tx, {
         ...datos,
         nombre: actual.name,
@@ -344,10 +402,14 @@ export class ComisionesService {
     }
   }
 
-  /** Retira el apoyo propio a la renovación. */
+  /** Retira el apoyo propio a la renovación, solo mientras la comisión está activa (con la fila bloqueada). */
   async retirarApoyoRenovacion(profileId: string, id: string): Promise<void> {
     await this.comisionLegible(id, profileId);
-    await this.prisma.comisionRenovacionApoyo.deleteMany({ where: { grupoId: id, profileId } });
+    await this.prisma.$transaction(async (tx) => {
+      const actual = await this.bloquear(tx, id);
+      if (actual.trabajoEstado !== 'activo') throw new ConflictException(NO_ACTIVA_APOYO);
+      await tx.comisionRenovacionApoyo.deleteMany({ where: { grupoId: id, profileId } });
+    });
   }
 
   // ─── Vista y verificación ─────────────────────────────────────────────────
@@ -356,8 +418,8 @@ export class ComisionesService {
   async vista(g: ComisionFila, profileId: string, completo: boolean, now: Date = new Date()): Promise<ComisionView> {
     const ambitoId = g.parentGroupId ?? '';
     const activa = g.trabajoEstado === 'activo';
-    const [enAmbito, organiza, filas, mia, solucion, informes, miembro, apoyo, dias] = await Promise.all([
-      this.access.isParticipant(ambitoId, profileId),
+    const [actua, organiza, filas, mia, solucion, informes, miembro, apoyo, dias, modera] = await Promise.all([
+      this.puedeActuar(ambitoId, profileId),
       g.trabajoEstado === 'convocando' ? this.forums.canOrganize(profileId, ambitoId) : Promise.resolve(false),
       completo
         ? this.prisma.comisionVoluntario.findMany({
@@ -372,7 +434,7 @@ export class ComisionesService {
         select: { orden: true },
       }),
       g.origenSolucionId
-        ? this.prisma.solucion.findUnique({ where: { id: g.origenSolucionId }, select: { title: true, proposalId: true } })
+        ? this.prisma.solucion.findUnique({ where: { id: g.origenSolucionId }, select: { title: true, proposalId: true, hidden: true } })
         : Promise.resolve(null),
       completo
         ? this.prisma.comisionInforme.findMany({
@@ -389,19 +451,24 @@ export class ComisionesService {
           })
         : Promise.resolve(null),
       activa ? this.comunidadDe(ambitoId).then((c) => this.rules.getInt('comision.informe_cada_dias', c)) : Promise.resolve(0),
+      this.forums.canModerate(profileId, g.id),
     ]);
+    // Puede votar, ofrecerse y apoyar: miembro actual del ámbito (y de la comunidad, si cuelga de una bifurcación).
+    const enAmbito = actua.ok;
+    // Con la solución de origen ocultada por moderación, nada repite su título ni su texto.
+    const origenOculto = solucion?.hidden === true;
     const atrasada = activa && estaAtrasada(g.proximoInformeAt, dias, now);
     const yoApoyoRenovar = apoyo !== null;
     const voluntarios = filas.map((f) => ({
-      // El id solo sale mientras se elige: la papeleta ordena voluntarios por él.
-      id: g.trabajoEstado === 'eligiendo' ? f.profileId : null,
+      // El id solo sale mientras se elige y solo a quien puede votar: la papeleta ordena voluntarios por él.
+      id: g.trabajoEstado === 'eligiendo' && enAmbito ? f.profileId : null,
       nombre: f.profile.displayName,
       experiencia: f.experiencia,
       soyYo: f.profileId === profileId,
     }));
     const pool = listaDeTexto(g.seleccionPool);
     return {
-      tarea: g.tarea ?? '',
+      tarea: origenOculto ? SOLUCION_OCULTA : (g.tarea ?? ''),
       puestos: g.puestos ?? 0,
       forma: formaDe(g.forma),
       voluntarios,
@@ -427,7 +494,10 @@ export class ComisionesService {
       puedoApoyarRenovar: atrasada && enAmbito && !yoApoyoRenovar,
       puedoAjustar: g.trabajoEstado === 'convocando' && enAmbito && organiza,
       puedoInformar: activa && miembro,
-      origen: solucion ? { proposalId: solucion.proposalId, solucionTitulo: solucion.title } : null,
+      canModerate: modera,
+      origen: solucion
+        ? { proposalId: solucion.proposalId, solucionTitulo: origenOculto ? SOLUCION_OCULTA : solucion.title }
+        : null,
     };
   }
 
@@ -538,9 +608,11 @@ export class ComisionesService {
   ): Promise<string> {
     const s = await this.prisma.solucion.findUnique({
       where: { id: bif.origenSolucionId },
-      select: { title: true, description: true },
+      select: { title: true, description: true, hidden: true, proposal: { select: { hidden: true } } },
     });
     if (!s) throw new BadRequestException('La solución de origen ya no existe.');
+    // La comisión copia el título y el texto: no nace de una solución (o un tema) oculta por moderación.
+    if (s.hidden || s.proposal.hidden) throw new BadRequestException(ORIGEN_OCULTO);
     const datos = await this.datosNuevaComision(bif.parentGroupId, now);
     let id: string;
     try {
@@ -657,7 +729,14 @@ export class ComisionesService {
   /** Al vencer la convocatoria: ampliar (una vez), archivar, formar por sorteo o abrir la elección. */
   async cerrarConvocatorias(now: Date): Promise<number> {
     const vencidas = await this.prisma.group.findMany({
-      where: { type: 'trabajo', trabajoTipo: 'comision', trabajoEstado: 'convocando', convocatoriaEndsAt: { lte: now } },
+      // La comisión de una bifurcación pausada espera: al reanudarse, sus plazos se corren.
+      where: {
+        type: 'trabajo',
+        trabajoTipo: 'comision',
+        trabajoEstado: 'convocando',
+        convocatoriaEndsAt: { lte: now },
+        parent: { is: PADRE_SIN_PAUSA },
+      },
       select: { id: true },
     });
     let n = 0;
@@ -738,7 +817,13 @@ export class ComisionesService {
   /** Al vencer la elección: Schulze repetido sobre las papeletas de los miembros actuales del ámbito. */
   async cerrarElecciones(now: Date): Promise<number> {
     const vencidas = await this.prisma.group.findMany({
-      where: { type: 'trabajo', trabajoTipo: 'comision', trabajoEstado: 'eligiendo', eleccionEndsAt: { lte: now } },
+      where: {
+        type: 'trabajo',
+        trabajoTipo: 'comision',
+        trabajoEstado: 'eligiendo',
+        eleccionEndsAt: { lte: now },
+        parent: { is: PADRE_SIN_PAUSA },
+      },
       select: { id: true },
     });
     let n = 0;
