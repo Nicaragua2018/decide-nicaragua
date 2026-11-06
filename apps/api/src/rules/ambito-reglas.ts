@@ -65,3 +65,33 @@ export function conUnidad(def: RuleDefinition, valor: string): string {
       return valor;
   }
 }
+
+/** Reglas que se comprueban juntas: el mínimo de puestos de una comisión no pasa del máximo. */
+const PAR_DE_PUESTOS: Readonly<Record<string, string>> = {
+  'comision.puestos_min': 'comision.puestos_max',
+  'comision.puestos_max': 'comision.puestos_min',
+};
+
+export const PUESTOS_INCOHERENTES = 'El mínimo de puestos no puede ser mayor que el máximo.';
+
+/** La otra regla del par mínimo/máximo de puestos, o null si la regla no forma parte de él. */
+export function parDePuestos(key: string): string | null {
+  return PAR_DE_PUESTOS[key] ?? null;
+}
+
+/** true si, con `valor` para `key` y `otro` para su par, el mínimo quedaría por encima del máximo. */
+export function puestosIncoherentes(key: string, valor: string, otro: string): boolean {
+  if (key === 'comision.puestos_min') return Number(valor) > Number(otro);
+  if (key === 'comision.puestos_max') return Number(otro) > Number(valor);
+  return false;
+}
+
+/** Valor vigente de una regla dentro de la transacción: el guardado si cabe en la definición, o el de por defecto. */
+export async function valorVigenteTx(
+  tx: Prisma.TransactionClient,
+  def: RuleDefinition,
+  groupId: string | null,
+): Promise<string> {
+  const fila = await tx.ruleValue.findFirst({ where: { key: def.key, groupId } });
+  return (fila ? normalizarValor(def, fila.value) : null) ?? def.default;
+}

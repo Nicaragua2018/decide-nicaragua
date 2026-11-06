@@ -188,6 +188,19 @@ describe('CambiosReglaService', () => {
       noCrea();
     });
 
+    it('puestos de una comisión: el mínimo no puede pasar del máximo vigente (ni el máximo bajar del mínimo)', async () => {
+      // El doble de RulesService da 7 a ambas reglas.
+      const msg = new BadRequestException('El mínimo de puestos no puede ser mayor que el máximo.');
+      await expect(proponer({ key: 'comision.puestos_min', valor: '8' })).rejects.toThrow(msg);
+      expect(rules.getInt).toHaveBeenCalledWith('comision.puestos_max', ORIGEN);
+      await expect(proponer({ key: 'comision.puestos_max', valor: '6' })).rejects.toThrow(msg);
+      expect(rules.getInt).toHaveBeenCalledWith('comision.puestos_min', ORIGEN);
+      noCrea();
+      await proponer({ key: 'comision.puestos_min', valor: '5' });
+      await proponer({ key: 'comision.puestos_max', valor: '9' });
+      expect(tx.cambioRegla.create).toHaveBeenCalledTimes(2);
+    });
+
     it('una regla local también se cambia en el nivel general (con su valor local)', async () => {
       await proponer({ groupId: GENERAL });
       expect(rules.getInt).toHaveBeenCalledWith('inquietud.plazo_respuesta_dias', GENERAL);
@@ -409,6 +422,22 @@ describe('CambiosReglaService.procesarResultados()', () => {
     expect(db.cambioRegla.findMany).toHaveBeenCalledWith(expect.objectContaining({
       where: { estado: 'en_votacion', proposal: { decision: { fase: { in: ['contada', 'cancelada'] } } } },
     }));
+  });
+
+  it('puestos: un mínimo aprobado que ya pasa del máximo vigente del ámbito queda rechazado y no se guarda', async () => {
+    const { service, cambios, ruleValues } = crear([
+      fila({ id: 'c-min', key: 'comision.puestos_min', valorPropuesto: '6' }),
+      fila({ id: 'c-max', key: 'comision.puestos_max', ambitoGroupId: GENERAL, valorPropuesto: '3' }),
+      fila({ id: 'c-ok', key: 'comision.puestos_min', ambitoGroupId: 'g-otra', valorPropuesto: '4' }),
+    ]);
+    ruleValues.push({ id: 'rv-a', key: 'comision.puestos_max', groupId: ORIGEN, value: '5' });
+    ruleValues.push({ id: 'rv-b', key: 'comision.puestos_min', groupId: GENERAL, value: '4' });
+    await service.procesarResultados();
+    expect(cambios.get('c-min')!.estado).toBe('rechazado');
+    expect(cambios.get('c-max')!.estado).toBe('rechazado');
+    // Sin valor guardado, el máximo vigente es el de por defecto (7).
+    expect(cambios.get('c-ok')!.estado).toBe('aplicado');
+    expect(ruleValues.map((r) => r.id)).toEqual(['rv-a', 'rv-b', 'rv-3']);
   });
 
   it('dos pasadas a la vez aplican el cambio una sola vez', async () => {

@@ -13,7 +13,17 @@ import { AuditService } from '../audit/audit.service';
 import { DeliberationService } from '../deliberation/deliberation.service';
 import { GroupAccessService } from '../groups/group-access.service';
 import { RulesService } from './rules.service';
-import { conUnidad, esAmbitoDeReglas, esNivelGeneral, guardarValor, normalizarValor } from './ambito-reglas';
+import {
+  PUESTOS_INCOHERENTES,
+  conUnidad,
+  esAmbitoDeReglas,
+  esNivelGeneral,
+  guardarValor,
+  normalizarValor,
+  parDePuestos,
+  puestosIncoherentes,
+  valorVigenteTx,
+} from './ambito-reglas';
 import type { ProponerCambioDto } from './dto/proponer-cambio.dto';
 
 const DIA_MS = 86_400_000;
@@ -70,6 +80,10 @@ export class CambiosReglaService {
     const actual =
       def.type === 'int' ? String(await this.rules.getInt(def.key, scope)) : await this.rules.getChoice(def.key, scope);
     if (propuesto === actual) throw new BadRequestException('Ese ya es el valor vigente.');
+    const par = parDePuestos(def.key);
+    if (par && puestosIncoherentes(def.key, propuesto, String(await this.rules.getInt(par, scope)))) {
+      throw new BadRequestException(PUESTOS_INCOHERENTES);
+    }
 
     const motivo = dto.motivo?.trim() ?? '';
     const frase = `Se propone cambiar «${def.label}» de ${conUnidad(def, actual)} a ${conUnidad(def, propuesto)}.`;
@@ -211,6 +225,12 @@ export class CambiosReglaService {
       if (!def || valor === null) return rechazar('rechazado');
 
       if (def.level === 'local') {
+        // El par mínimo/máximo de puestos pudo cambiar mientras se votaba: se comprueba otra vez.
+        const par = parDePuestos(def.key);
+        const defPar = par ? RULE_DEFINITIONS.find((x) => x.key === par) : undefined;
+        if (defPar && puestosIncoherentes(def.key, valor, await valorVigenteTx(tx, defPar, c.ambitoGroupId))) {
+          return rechazar('rechazado');
+        }
         if (!(await tomar('aplicado', true))) return null;
         await guardarValor(tx, def.key, c.ambitoGroupId, valor);
         return { accion: 'regla.cambio_aplicado', key: c.key };
