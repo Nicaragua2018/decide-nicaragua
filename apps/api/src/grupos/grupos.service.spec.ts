@@ -150,6 +150,20 @@ describe('GruposService', () => {
       expect(tx.groupMembership.upsert).not.toHaveBeenCalled();
     });
 
+    it('quien no puede leer el grupo recibe 403 antes de cualquier consulta', async () => {
+      access.requireReader.mockRejectedValue(new ForbiddenException('x'));
+      await expect(service.entrar(YO, GT, '1.1.1.1')).rejects.toBeInstanceOf(ForbiddenException);
+      expect(access.requireReader).toHaveBeenCalledWith(GT, YO);
+      expect(prisma.group.findUnique).not.toHaveBeenCalled();
+      expect(prisma.$transaction).not.toHaveBeenCalled();
+    });
+
+    it('un id que no es de un grupo de trabajo es 403, como en el detalle', async () => {
+      prisma.group.findUnique.mockResolvedValue(ambito());
+      await expect(service.entrar(YO, AMBITO, '1.1.1.1')).rejects.toBeInstanceOf(ForbiddenException);
+      expect(prisma.$transaction).not.toHaveBeenCalled();
+    });
+
     it('no se entra a un archivado (409)', async () => {
       prisma.group.findUnique.mockImplementation(async ({ where }: { where: { id: string } }) =>
         where.id === AMBITO ? ambito() : trabajo({ trabajoEstado: 'archivado' }),
@@ -228,6 +242,22 @@ describe('GruposService', () => {
   describe('salir', () => {
     beforeEach(() => {
       miembroDe.add(GT);
+    });
+
+    it('quien no es del subgrupo ni del ámbito recibe 403 y no se borra ni devuelve nada', async () => {
+      access.requireReader.mockRejectedValue(new ForbiddenException('x'));
+      await expect(service.salir('p-ajena', GT, '1.1.1.1', NOW)).rejects.toBeInstanceOf(ForbiddenException);
+      expect(access.requireReader).toHaveBeenCalledWith(GT, 'p-ajena');
+      expect(prisma.$transaction).not.toHaveBeenCalled();
+      expect(tx.groupMembership.deleteMany).not.toHaveBeenCalled();
+      expect(prisma.group.findUnique).not.toHaveBeenCalled();
+      expect(acciones()).toEqual([]);
+    });
+
+    it('un id que no es de un grupo de trabajo es 403', async () => {
+      prisma.group.findUnique.mockResolvedValue(ambito());
+      await expect(service.salir(YO, AMBITO, '1.1.1.1', NOW)).rejects.toBeInstanceOf(ForbiddenException);
+      expect(tx.groupMembership.deleteMany).not.toHaveBeenCalled();
     });
 
     it('borra la membresía y audita', async () => {

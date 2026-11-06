@@ -31,6 +31,7 @@ const NO_AMBITO = 'Los grupos de trabajo cuelgan de una comunidad o del nivel ge
 const NO_MIEMBRO_AMBITO = 'Solo los miembros de esta comunidad pueden proponer o entrar a sus grupos de trabajo.';
 const NO_EXISTE = 'Grupo de trabajo no encontrado.';
 const NO_ADMITE = 'Este grupo de trabajo ya no admite nuevos miembros.';
+const NO_ES_TRABAJO = 'Esto no es un grupo de trabajo.';
 
 type AmbitoTipo = 'origen' | 'acogida' | 'general';
 type Tx = Prisma.TransactionClient;
@@ -81,10 +82,14 @@ export class GruposService {
     });
   }
 
-  /** Grupo de trabajo por id; 404 si no existe o no es de trabajo. */
-  private async grupoDeTrabajo(id: string): Promise<GrupoFila & { parentGroupId: string }> {
+  /**
+   * Grupo de trabajo que quien llama puede leer. Primero `requireReader` (403 para quien no lee,
+   * exista o no el grupo); un id legible que no es de trabajo también es 403, como en el detalle.
+   */
+  private async grupoDeTrabajoLegible(id: string, profileId: string): Promise<GrupoFila & { parentGroupId: string }> {
+    await this.access.requireReader(id, profileId);
     const g = (await this.prisma.group.findUnique({ where: { id } })) as GrupoFila | null;
-    if (!g || g.type !== 'trabajo' || !g.parentGroupId) throw new NotFoundException(NO_EXISTE);
+    if (!g || g.type !== 'trabajo' || !g.parentGroupId) throw new ForbiddenException(NO_ES_TRABAJO);
     return g as GrupoFila & { parentGroupId: string };
   }
 
@@ -236,7 +241,7 @@ export class GruposService {
   }
 
   async entrar(profileId: string, id: string, ip: string): Promise<GrupoTrabajoDetail> {
-    const g = await this.grupoDeTrabajo(id);
+    const g = await this.grupoDeTrabajoLegible(id, profileId);
     if (!(await this.access.isParticipant(g.parentGroupId, profileId))) throw new ForbiddenException(NO_MIEMBRO_AMBITO);
     const minimo = await this.rules.getInt('subgrupo.minimo_personas', g.parentGroupId);
 
@@ -274,7 +279,8 @@ export class GruposService {
   }
 
   async salir(profileId: string, id: string, ip: string, now: Date = new Date()): Promise<GrupoTrabajoDetail> {
-    await this.grupoDeTrabajo(id);
+    // Quien no es del subgrupo ni de su ámbito no sabe ni si existe: 403 antes de tocar nada.
+    await this.grupoDeTrabajoLegible(id, profileId);
     const { salio, archivado } = await this.prisma.$transaction(async (tx) => {
       const actual = await this.bloquear(tx, id);
       const res = await tx.groupMembership.deleteMany({ where: { groupId: id, profileId } });
