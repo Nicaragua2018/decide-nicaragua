@@ -41,6 +41,7 @@ function buildPrisma() {
     fraseVoto: { findMany: vi.fn().mockResolvedValue([]) },
     profile: { findUnique: vi.fn() },
     moderationAction: { findMany: vi.fn().mockResolvedValue([]) },
+    inquietud: { findMany: vi.fn().mockResolvedValue([]) },
   };
 }
 
@@ -303,6 +304,17 @@ describe('DecisionesService', () => {
       expect(r.soluciones[2]!.mergedIntoTitle).toBe('Solución oculta por moderación');
       expect(r.soluciones[0]).toMatchObject({ isAuthor: true, mergedIntoTitle: null, hidden: false });
       expect(JSON.stringify(r)).not.toContain('secreto');
+    });
+    it('llevadas: las soluciones del tema que ya se llevaron a la comunidad, en una consulta', async () => {
+      let r = await service.getTema(YO, T);
+      expect(r.llevadas).toEqual([]);
+      prisma.inquietud.findMany.mockResolvedValue([{ origenSolucionId: 's1' }]);
+      r = await service.getTema(YO, T);
+      expect(r.llevadas).toEqual(['s1']);
+      expect(prisma.inquietud.findMany).toHaveBeenLastCalledWith({
+        where: { origenSolucionId: { in: ['s1', 's2', 's3'] } },
+        select: { origenSolucionId: true },
+      });
     });
     it('quien organiza ve el texto de las ocultas', async () => {
       forums.canOrganize.mockResolvedValue(true);

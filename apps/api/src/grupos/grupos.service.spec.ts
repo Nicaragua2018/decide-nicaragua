@@ -47,7 +47,7 @@ function buildTx() {
       deleteMany: vi.fn().mockResolvedValue({ count: 1 }),
       count: vi.fn(),
     },
-    forum: { create: vi.fn().mockResolvedValue({ id: 'f1' }) },
+    forum: { create: vi.fn().mockResolvedValue({ id: 'f1' }), findFirst: vi.fn().mockResolvedValue(null) },
     proposal: { updateMany: vi.fn().mockResolvedValue({ count: 0 }) },
     decision: { updateMany: vi.fn().mockResolvedValue({ count: 0 }) },
     inquietud: { create: vi.fn().mockResolvedValue({ id: 'inq-1' }) },
@@ -56,7 +56,7 @@ function buildTx() {
 
 function buildPrisma(tx: ReturnType<typeof buildTx>) {
   return {
-    group: { findUnique: vi.fn(), findMany: vi.fn().mockResolvedValue([]) },
+    group: { findUnique: vi.fn(), findMany: vi.fn().mockResolvedValue([]), updateMany: vi.fn().mockResolvedValue({ count: 1 }) },
     groupMembership: { findUnique: vi.fn(), findMany: vi.fn().mockResolvedValue([]), count: vi.fn().mockResolvedValue(1) },
     forum: { findFirst: vi.fn().mockResolvedValue(null) },
     profile: { findUnique: vi.fn().mockResolvedValue({ userId: 'u-yo' }) },
@@ -72,6 +72,7 @@ describe('GruposService', () => {
     isParticipant: ReturnType<typeof vi.fn>;
     requireReader: ReturnType<typeof vi.fn>;
     requireParticipant: ReturnType<typeof vi.fn>;
+    requireMember: ReturnType<typeof vi.fn>;
     canRead: ReturnType<typeof vi.fn>;
   };
   let rules: { getInt: ReturnType<typeof vi.fn> };
@@ -88,6 +89,9 @@ describe('GruposService', () => {
       isParticipant: vi.fn(async (groupId: string) => miembroDe.has(groupId)),
       requireReader: vi.fn().mockResolvedValue({ participa: true }),
       requireParticipant: vi.fn(async (groupId: string) => {
+        if (!miembroDe.has(groupId)) throw new ForbiddenException('No participa.');
+      }),
+      requireMember: vi.fn(async (groupId: string) => {
         if (!miembroDe.has(groupId)) throw new ForbiddenException('No participa.');
       }),
       canRead: vi.fn().mockResolvedValue(true),
@@ -158,13 +162,13 @@ describe('GruposService', () => {
 
     it('exige ser miembro del ámbito', async () => {
       miembroDe.clear();
-      await expect(service.entrar(YO, GT, '1.1.1.1')).rejects.toBeInstanceOf(ForbiddenException);
+      await expect(service.entrar(YO, GT, '1.1.1.1', NOW)).rejects.toBeInstanceOf(ForbiddenException);
       expect(tx.groupMembership.upsert).not.toHaveBeenCalled();
     });
 
     it('quien no puede leer el grupo recibe 403 antes de cualquier consulta', async () => {
       access.requireReader.mockRejectedValue(new ForbiddenException('x'));
-      await expect(service.entrar(YO, GT, '1.1.1.1')).rejects.toBeInstanceOf(ForbiddenException);
+      await expect(service.entrar(YO, GT, '1.1.1.1', NOW)).rejects.toBeInstanceOf(ForbiddenException);
       expect(access.requireReader).toHaveBeenCalledWith(GT, YO);
       expect(prisma.group.findUnique).not.toHaveBeenCalled();
       expect(prisma.$transaction).not.toHaveBeenCalled();
@@ -172,7 +176,7 @@ describe('GruposService', () => {
 
     it('un id que no es de un grupo de trabajo es 403, como en el detalle', async () => {
       prisma.group.findUnique.mockResolvedValue(ambito());
-      await expect(service.entrar(YO, AMBITO, '1.1.1.1')).rejects.toBeInstanceOf(ForbiddenException);
+      await expect(service.entrar(YO, AMBITO, '1.1.1.1', NOW)).rejects.toBeInstanceOf(ForbiddenException);
       expect(prisma.$transaction).not.toHaveBeenCalled();
     });
 
@@ -181,20 +185,20 @@ describe('GruposService', () => {
         where.id === AMBITO ? ambito() : trabajo({ trabajoEstado: 'archivado' }),
       );
       tx.group.findUnique.mockResolvedValue(trabajo({ trabajoEstado: 'archivado' }));
-      await expect(service.entrar(YO, GT, '1.1.1.1')).rejects.toBeInstanceOf(ConflictException);
+      await expect(service.entrar(YO, GT, '1.1.1.1', NOW)).rejects.toBeInstanceOf(ConflictException);
       expect(tx.groupMembership.upsert).not.toHaveBeenCalled();
     });
 
     it('lee el estado con la fila bloqueada: si se archivó mientras esperaba, 409', async () => {
       tx.group.findUnique.mockResolvedValue(trabajo({ trabajoEstado: 'archivado' }));
-      await expect(service.entrar(YO, GT, '1.1.1.1')).rejects.toBeInstanceOf(ConflictException);
+      await expect(service.entrar(YO, GT, '1.1.1.1', NOW)).rejects.toBeInstanceOf(ConflictException);
       expect(tx.$queryRaw).toHaveBeenCalled();
       expect(tx.groupMembership.upsert).not.toHaveBeenCalled();
     });
 
     it('con cuatro miembros sigue convocando y no crea foro', async () => {
       tx.groupMembership.count.mockResolvedValue(4);
-      await service.entrar(YO, GT, '1.1.1.1');
+      await service.entrar(YO, GT, '1.1.1.1', NOW);
       expect(tx.$queryRaw).toHaveBeenCalled();
       expect(tx.groupMembership.upsert).toHaveBeenCalled();
       expect(tx.group.updateMany).not.toHaveBeenCalled();
@@ -204,7 +208,7 @@ describe('GruposService', () => {
 
     it('nace con el quinto miembro: pasa a activo, crea su foro y audita una vez', async () => {
       tx.groupMembership.count.mockResolvedValue(5);
-      await service.entrar(YO, GT, '1.1.1.1');
+      await service.entrar(YO, GT, '1.1.1.1', NOW);
       expect(rules.getInt).toHaveBeenCalledWith('subgrupo.minimo_personas', AMBITO);
       expect(tx.group.updateMany).toHaveBeenCalledWith({
         where: { id: GT, trabajoEstado: 'convocando' },
@@ -215,11 +219,30 @@ describe('GruposService', () => {
       expect(audit.log.mock.calls.every((c) => JSON.stringify(c[0].metadata) === JSON.stringify({ grupoId: GT }))).toBe(true);
     });
 
+    it('si ya existe un foro por defecto, la activación no crea otro', async () => {
+      tx.groupMembership.count.mockResolvedValue(5);
+      tx.forum.findFirst.mockResolvedValue({ id: 'f-previo' });
+      await service.entrar(YO, GT, '1.1.1.1', NOW);
+      expect(tx.forum.findFirst).toHaveBeenCalledWith({ where: { groupId: GT, isDefault: true }, select: { id: true } });
+      expect(tx.forum.create).not.toHaveBeenCalled();
+      expect(acciones().sort()).toEqual(['grupo.activated', 'grupo.joined']);
+    });
+
+    it('con la convocatoria vencida da 409 con el mensaje exacto y no entra', async () => {
+      tx.group.findUnique.mockResolvedValue(trabajo({ convocatoriaEndsAt: new Date(NOW.getTime() - 1) }));
+      const err = await service.entrar(YO, GT, '1.1.1.1', NOW).catch((e: unknown) => e);
+      expect(err).toBeInstanceOf(ConflictException);
+      expect((err as ConflictException).message).toBe('La convocatoria de este grupo ya venció.');
+      expect(tx.groupMembership.upsert).not.toHaveBeenCalled();
+      tx.group.findUnique.mockResolvedValue(trabajo({ convocatoriaEndsAt: NOW }));
+      await expect(service.entrar(YO, GT, '1.1.1.1', NOW)).rejects.toBeInstanceOf(ConflictException);
+    });
+
     it('dos que entran a la vez activan una sola vez', async () => {
       tx.groupMembership.count.mockResolvedValueOnce(5).mockResolvedValueOnce(6);
       tx.group.updateMany.mockResolvedValueOnce({ count: 1 }).mockResolvedValueOnce({ count: 0 });
-      await service.entrar(YO, GT, '1.1.1.1');
-      await service.entrar('p-otra', GT, '1.1.1.1');
+      await service.entrar(YO, GT, '1.1.1.1', NOW);
+      await service.entrar('p-otra', GT, '1.1.1.1', NOW);
       expect(tx.forum.create).toHaveBeenCalledTimes(1);
       expect(acciones().filter((a) => a === 'grupo.activated')).toHaveLength(1);
       expect(acciones().filter((a) => a === 'grupo.joined')).toHaveLength(2);
@@ -228,14 +251,14 @@ describe('GruposService', () => {
     it('quien ya es miembro no se vuelve a auditar', async () => {
       tx.groupMembership.findUnique.mockResolvedValue({ id: 'm1' });
       tx.groupMembership.count.mockResolvedValue(3);
-      await service.entrar(YO, GT, '1.1.1.1');
+      await service.entrar(YO, GT, '1.1.1.1', NOW);
       expect(acciones()).toEqual([]);
     });
 
     it('un activo con pocos miembros que vuelve a tener 3 limpia pocosMiembrosDesde', async () => {
       tx.group.findUnique.mockResolvedValue(trabajo({ trabajoEstado: 'activo', convocatoriaEndsAt: null, pocosMiembrosDesde: NOW }));
       tx.groupMembership.count.mockResolvedValue(3);
-      await service.entrar(YO, GT, '1.1.1.1');
+      await service.entrar(YO, GT, '1.1.1.1', NOW);
       expect(tx.group.updateMany).toHaveBeenCalledWith({
         where: { id: GT, trabajoEstado: 'activo' },
         data: { pocosMiembrosDesde: null },
@@ -246,7 +269,7 @@ describe('GruposService', () => {
     it('un activo con pocos miembros que sigue con 2 no lo limpia', async () => {
       tx.group.findUnique.mockResolvedValue(trabajo({ trabajoEstado: 'activo', convocatoriaEndsAt: null, pocosMiembrosDesde: NOW }));
       tx.groupMembership.count.mockResolvedValue(2);
-      await service.entrar(YO, GT, '1.1.1.1');
+      await service.entrar(YO, GT, '1.1.1.1', NOW);
       expect(tx.group.updateMany).not.toHaveBeenCalled();
     });
   });
@@ -362,6 +385,28 @@ describe('GruposService', () => {
       });
     });
 
+    it('marca pocosMiembrosDesde en los activos que quedaron con menos de 3 (p. ej., por suspensiones)', async () => {
+      prisma.group.findMany
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([
+          { id: GT, _count: { memberships: 2 } },
+          { id: 'g-lleno', _count: { memberships: 3 } },
+        ]);
+      const n = await service.processDeadlines(NOW);
+      expect(n).toBe(0);
+      expect(prisma.group.findMany.mock.calls[2]![0].where).toEqual({
+        type: 'trabajo',
+        trabajoEstado: 'activo',
+        pocosMiembrosDesde: null,
+      });
+      expect(prisma.group.updateMany).toHaveBeenCalledTimes(1);
+      expect(prisma.group.updateMany).toHaveBeenCalledWith({
+        where: { id: GT, trabajoEstado: 'activo', pocosMiembrosDesde: null },
+        data: { pocosMiembrosDesde: NOW },
+      });
+    });
+
     it('si otro proceso ya lo cambió (count 0), no audita ni cierra nada', async () => {
       prisma.group.findMany.mockResolvedValueOnce([{ id: GT }]).mockResolvedValueOnce([]);
       tx.group.updateMany.mockResolvedValue({ count: 0 });
@@ -382,7 +427,7 @@ describe('GruposService', () => {
       description: 'Perforar un pozo y organizar turnos de mantenimiento.',
       hidden: false,
       mergedIntoId: null,
-      proposal: { id: 't-sub', groupId: GT, decision: { fase: 'contada', resultado: 'aprobada', ganadoras: [SOL] } },
+      proposal: { id: 't-sub', groupId: GT, hidden: false, decision: { fase: 'contada', resultado: 'aprobada', ganadoras: [SOL] } },
       ...over,
     });
 
@@ -483,8 +528,34 @@ describe('GruposService', () => {
     it('quien solo lee (miembro del ámbito, no del subgrupo) recibe 403', async () => {
       miembroDe.delete(GT);
       await expect(service.llevar(YO, GT, SOL, '1.1.1.1', NOW)).rejects.toBeInstanceOf(ForbiddenException);
-      expect(access.requireParticipant).toHaveBeenCalledWith(GT, YO);
+      expect(access.requireMember).toHaveBeenCalledWith(GT, YO);
       expect(tx.inquietud.create).not.toHaveBeenCalled();
+    });
+
+    it('un tema oculto por moderación da 400 con el mensaje exacto', async () => {
+      prisma.solucion.findUnique.mockResolvedValue(
+        solucion({ proposal: { id: 't-sub', groupId: GT, hidden: true, decision: { fase: 'contada', resultado: 'aprobada', ganadoras: [SOL] } } }),
+      );
+      const err = await service.llevar(YO, GT, SOL, '1.1.1.1', NOW).catch((e: unknown) => e);
+      expect(err).toBeInstanceOf(BadRequestException);
+      expect((err as BadRequestException).message).toBe('Este tema está oculto por moderación.');
+      expect(tx.inquietud.create).not.toHaveBeenCalled();
+      const select = prisma.solucion.findUnique.mock.calls[0]![0].select as { proposal: { select: Record<string, unknown> } };
+      expect(select.proposal.select.hidden).toBe(true);
+    });
+
+    it('quien ya no es miembro de la comunidad no la lleva (403)', async () => {
+      miembroDe.delete(AMBITO);
+      const err = await service.llevar(YO, GT, SOL, '1.1.1.1', NOW).catch((e: unknown) => e);
+      expect(err).toBeInstanceOf(ForbiddenException);
+      expect((err as ForbiddenException).message).toBe('Solo los miembros de la comunidad pueden llevar propuestas a ella.');
+      expect(tx.inquietud.create).not.toHaveBeenCalled();
+    });
+
+    it('el 409 de no activo es el propio de llevar', async () => {
+      prisma.group.findUnique.mockResolvedValue(trabajo({ trabajoEstado: 'pausado' }));
+      const err = await service.llevar(YO, GT, SOL, '1.1.1.1', NOW).catch((e: unknown) => e);
+      expect((err as ConflictException).message).toBe('Solo un grupo de trabajo activo puede llevar propuestas a la comunidad.');
     });
 
     it('quien no lee el grupo recibe 403 antes de cualquier consulta', async () => {

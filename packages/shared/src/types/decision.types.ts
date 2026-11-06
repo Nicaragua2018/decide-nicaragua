@@ -1,6 +1,6 @@
 import type { GrupoTrabajoItem } from './group.types';
 
-export type DecisionFaseValue ='modo' | 'objecion' | 'votacion' | 'contada' | 'cancelada';
+export type DecisionFaseValue = 'modo' | 'objecion' | 'votacion' | 'contada' | 'cancelada';
 export type DecisionModoValue = 'excluyentes' | 'compatibles';
 export type DecisionResultadoValue = 'aprobada' | 'ninguna' | 'empate' | 'sin_quorum' | 'sin_soluciones';
 
@@ -59,6 +59,8 @@ export interface DecisionTemaResponse {
   decision: DecisionView | null;
   /** Quien lee desde el ámbito de un grupo de trabajo sin ser miembro: no participa. */
   soloLectura: boolean;
+  /** Ids de las soluciones de este tema que ya se llevaron a la comunidad. */
+  llevadas: string[];
 }
 
 /** Tipo de comunidad en la página «Decisiones». */

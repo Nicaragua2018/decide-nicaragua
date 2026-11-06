@@ -79,7 +79,7 @@ describe('ForumsService', () => {
       const r = await service.publicConsensus();
       expect(prisma.proposal.findMany).toHaveBeenCalledWith(
         expect.objectContaining({
-          where: { status: 'closed', hidden: false, conclusion: { not: null } },
+          where: { status: 'closed', hidden: false, conclusion: { not: null }, group: { type: { not: 'trabajo' } } },
         }),
       );
       expect(r).toEqual([
@@ -91,6 +91,13 @@ describe('ForumsService', () => {
         },
       ]);
       expect(JSON.stringify(r)).not.toMatch(/author|displayName|email/);
+    });
+
+    it('excluye los temas de los grupos de trabajo: lo suyo llega a la comunidad al llevarlo', async () => {
+      prisma.proposal.findMany.mockResolvedValue([]);
+      await service.publicConsensus();
+      const where = (prisma.proposal.findMany.mock.calls[0]![0] as { where: Record<string, unknown> }).where;
+      expect(where.group).toEqual({ type: { not: 'trabajo' } });
     });
 
     it('si hubo votación contada, incluye la opción ganadora', async () => {
@@ -174,7 +181,12 @@ describe('ForumsService', () => {
 
     it('un miembro del ámbito lee el foro del subgrupo', async () => {
       miembroDe(['g-ambito']);
-      await expect(service.getForum(YO, 'f-sub')).resolves.toMatchObject({ id: 'f-sub', groupId: 'g-sub' });
+      await expect(service.getForum(YO, 'f-sub')).resolves.toMatchObject({ id: 'f-sub', groupId: 'g-sub', soloLectura: true });
+    });
+
+    it('un miembro del subgrupo no es solo lectura', async () => {
+      miembroDe(['g-sub', 'g-ambito']);
+      await expect(service.getForum(YO, 'f-sub')).resolves.toMatchObject({ soloLectura: false });
     });
 
     it('un miembro del ámbito no apela en el subgrupo (403)', async () => {

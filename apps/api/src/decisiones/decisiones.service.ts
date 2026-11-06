@@ -264,6 +264,17 @@ export class DecisionesService {
     const textoDe = (s: (typeof filas)[number]): { title: string; description: string } =>
       s.hidden && !organiza ? { title: OCULTA_TITULO, description: '' } : { title: s.title, description: s.description };
     const porId = new Map(filas.map((s) => [s.id, s]));
+    // Soluciones de este tema que ya se llevaron a la comunidad (cada una a lo sumo una vez).
+    const llevadas = filas.length
+      ? (
+          await this.prisma.inquietud.findMany({
+            where: { origenSolucionId: { in: filas.map((s) => s.id) } },
+            select: { origenSolucionId: true },
+          })
+        )
+          .map((i) => i.origenSolucionId)
+          .filter((x): x is string => x !== null)
+      : [];
 
     const soluciones: SolucionItem[] = filas.map((s) => {
       const destino = s.mergedIntoId ? porId.get(s.mergedIntoId) : undefined;
@@ -357,6 +368,7 @@ export class DecisionesService {
       soluciones,
       decision: vista,
       soloLectura: !participa,
+      llevadas,
     };
   }
 

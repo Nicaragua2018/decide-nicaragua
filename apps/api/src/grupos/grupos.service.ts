@@ -31,6 +31,9 @@ const YA_LLEVADA = 'Esta propuesta ya se llevó a la comunidad.';
 const NO_GANADORA = 'Solo se puede llevar a la comunidad una propuesta ganadora de una decisión aprobada de este grupo.';
 const OCULTA = 'Esta propuesta fue ocultada por moderación y no se puede llevar a la comunidad.';
 const NO_ACTIVO = 'Solo un grupo de trabajo activo puede llevar propuestas a la comunidad.';
+const TEMA_OCULTO = 'Este tema está oculto por moderación.';
+const NO_MIEMBRO_PARA_LLEVAR = 'Solo los miembros de la comunidad pueden llevar propuestas a ella.';
+const CONVOCATORIA_VENCIDA = 'La convocatoria de este grupo ya venció.';
 const CUERPO_MAX = 2000;
 
 type AmbitoTipo = 'origen' | 'acogida' | 'general';
@@ -223,7 +226,7 @@ export class GruposService {
     return g;
   }
 
-  async entrar(profileId: string, id: string, ip: string): Promise<GrupoTrabajoDetail> {
+  async entrar(profileId: string, id: string, ip: string, now: Date = new Date()): Promise<GrupoTrabajoDetail> {
     const g = await this.grupoDeTrabajoLegible(id, profileId);
     if (!(await this.access.isParticipant(g.parentGroupId, profileId))) throw new ForbiddenException(NO_MIEMBRO_AMBITO);
     const minimo = await this.rules.getInt('subgrupo.minimo_personas', g.parentGroupId);
@@ -232,6 +235,10 @@ export class GruposService {
       // Con la fila bloqueada, dos que entran a la vez se cuentan uno tras otro.
       const actual = await this.bloquear(tx, id);
       if (actual.trabajoEstado !== 'convocando' && actual.trabajoEstado !== 'activo') throw new ConflictException(NO_ADMITE);
+      // Vencida pero aún sin archivar (el proceso de plazos corre cada cierto tiempo): ya no se entra.
+      if (actual.trabajoEstado === 'convocando' && actual.convocatoriaEndsAt && actual.convocatoriaEndsAt.getTime() <= now.getTime()) {
+        throw new ConflictException(CONVOCATORIA_VENCIDA);
+      }
       const ya = await tx.groupMembership.findUnique({ where: { groupId_profileId: { groupId: id, profileId } } });
       await tx.groupMembership.upsert({
         where: { groupId_profileId: { groupId: id, profileId } },
@@ -246,8 +253,9 @@ export class GruposService {
           data: { trabajoEstado: 'activo', convocatoriaEndsAt: null },
         });
         if (res.count === 1) {
-          // Solo la transacción que hizo el cambio crea el foro: hay uno solo.
-          await tx.forum.create({ data: { groupId: id, title: actual.name, isDefault: true } });
+          // Solo la transacción que hizo el cambio crea el foro, y solo si no existe ya uno por defecto.
+          const foro = await tx.forum.findFirst({ where: { groupId: id, isDefault: true }, select: { id: true } });
+          if (!foro) await tx.forum.create({ data: { groupId: id, title: actual.name, isDefault: true } });
           activado = true;
         }
       } else if (actual.trabajoEstado === 'activo' && actual.pocosMiembrosDesde && miembros >= MINIMO_ACTIVO) {
@@ -303,7 +311,11 @@ export class GruposService {
   ): Promise<{ inquietudId: string }> {
     // Quien no lee el subgrupo recibe 403 sin saber si existe; quien solo lee, 403 al participar.
     const g = await this.grupoDeTrabajoLegible(id, profileId);
-    await this.access.requireParticipant(id, profileId);
+    // Solo la membresía: el estado se comprueba aquí abajo con su propio mensaje.
+    await this.access.requireMember(id, profileId);
+    if (!(await this.access.isParticipant(g.parentGroupId, profileId))) {
+      throw new ForbiddenException(NO_MIEMBRO_PARA_LLEVAR);
+    }
     if (g.trabajoEstado !== 'activo') throw new ConflictException(NO_ACTIVO);
 
     const s = await this.prisma.solucion.findUnique({
@@ -313,11 +325,12 @@ export class GruposService {
         title: true,
         description: true,
         hidden: true,
-        proposal: { select: { groupId: true, decision: { select: { fase: true, resultado: true, ganadoras: true } } } },
+        proposal: { select: { groupId: true, hidden: true, decision: { select: { fase: true, resultado: true, ganadoras: true } } } },
       },
     });
     if (!s || s.proposal.groupId !== id) throw new BadRequestException(NO_GANADORA);
     if (s.hidden) throw new BadRequestException(OCULTA);
+    if (s.proposal.hidden) throw new BadRequestException(TEMA_OCULTO);
     const d = s.proposal.decision;
     if (!d || d.fase !== 'contada' || d.resultado !== 'aprobada' || !d.ganadoras.includes(s.id)) {
       throw new BadRequestException(NO_GANADORA);
@@ -384,6 +397,19 @@ export class GruposService {
       ...vencidos.map((g) => ({ id: g.id, where: { id: g.id, trabajoEstado: 'convocando' as const, convocatoriaEndsAt: { lte: now } } })),
       ...conPocos.map((g) => ({ id: g.id, where: { id: g.id, trabajoEstado: 'activo' as const, pocosMiembrosDesde: { lte: limite } } })),
     ];
+    // Los activos que quedaron con menos de 3 sin pasar por `salir` (p. ej., por una suspensión)
+    // empiezan aquí a contar sus 30 días.
+    const sinMarca = await this.prisma.group.findMany({
+      where: { type: 'trabajo', trabajoEstado: 'activo', pocosMiembrosDesde: null },
+      select: { id: true, _count: { select: { memberships: true } } },
+    });
+    for (const g of sinMarca) {
+      if (g._count.memberships >= MINIMO_ACTIVO) continue;
+      await this.prisma.group.updateMany({
+        where: { id: g.id, trabajoEstado: 'activo', pocosMiembrosDesde: null },
+        data: { pocosMiembrosDesde: now },
+      });
+    }
     let archivados = 0;
     for (const c of casos) {
       try {

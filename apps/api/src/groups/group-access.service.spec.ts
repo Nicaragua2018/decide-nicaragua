@@ -1,6 +1,6 @@
 import 'reflect-metadata';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { ForbiddenException } from '@nestjs/common';
+import { ConflictException, ForbiddenException } from '@nestjs/common';
 import { GroupAccessService } from './group-access.service';
 
 const YO = 'p-yo';
@@ -9,7 +9,7 @@ const SUB = 'g-sub';
 const COMUNIDAD = 'g-comunidad';
 
 /** Membresías por grupo: la persona es miembro de los grupos de `de`. */
-function prismaCon(de: string[]) {
+function prismaCon(de: string[], trabajoEstado = 'activo') {
   return {
     groupMembership: {
       findUnique: vi.fn(({ where }: { where: { groupId_profileId: { groupId: string; profileId: string } } }) =>
@@ -22,9 +22,9 @@ function prismaCon(de: string[]) {
       findUnique: vi.fn(({ where }: { where: { id: string } }) =>
         Promise.resolve(
           where.id === SUB
-            ? { type: 'trabajo', parentGroupId: AMBITO }
+            ? { type: 'trabajo', parentGroupId: AMBITO, trabajoEstado }
             : where.id === COMUNIDAD || where.id === AMBITO
-              ? { type: 'territorial_residence', parentGroupId: null }
+              ? { type: 'territorial_residence', parentGroupId: null, trabajoEstado: null }
               : null,
         ),
       ),
@@ -86,6 +86,28 @@ describe('GroupAccessService', () => {
     it('un grupo inexistente no se lee', async () => {
       service = new GroupAccessService(prismaCon([AMBITO]) as never);
       expect(await service.canRead('g-otro', YO)).toBe(false);
+    });
+  });
+
+  describe('grupo de trabajo que no está activo', () => {
+    it('un miembro no participa en convocando, pausado, cerrado ni archivado (409)', async () => {
+      for (const estado of ['convocando', 'pausado', 'cerrado', 'archivado']) {
+        service = new GroupAccessService(prismaCon([SUB, AMBITO], estado) as never);
+        await expect(service.requireParticipant(SUB, YO)).rejects.toThrow(ConflictException);
+        await expect(service.requireParticipant(SUB, YO)).rejects.toThrow('Este grupo de trabajo no está activo.');
+        // Leer sigue permitido.
+        await expect(service.requireReader(SUB, YO)).resolves.toEqual({ participa: true });
+      }
+    });
+    it('quien no es miembro recibe 403 antes que el 409', async () => {
+      service = new GroupAccessService(prismaCon([AMBITO], 'archivado') as never);
+      await expect(service.requireParticipant(SUB, YO)).rejects.toThrow(ForbiddenException);
+    });
+    it('requireMember solo mira la membresía', async () => {
+      service = new GroupAccessService(prismaCon([SUB, AMBITO], 'archivado') as never);
+      await expect(service.requireMember(SUB, YO)).resolves.toBeUndefined();
+      service = new GroupAccessService(prismaCon([AMBITO], 'activo') as never);
+      await expect(service.requireMember(SUB, YO)).rejects.toThrow('Solo los miembros de este grupo pueden participar.');
     });
   });
 });

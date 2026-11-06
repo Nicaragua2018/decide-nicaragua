@@ -166,7 +166,7 @@ export class ForumsService {
     });
     if (!forum) throw new NotFoundException('Foro no encontrado');
     // Lo leen los miembros y, si es de un grupo de trabajo, los miembros de su ámbito.
-    await this.access.requireReader(forum.groupId, profileId);
+    const { participa } = await this.access.requireReader(forum.groupId, profileId);
 
     const topics = await this.prisma.proposal.findMany({
       where: { forumId },
@@ -187,6 +187,7 @@ export class ForumsService {
       isDefault: forum.isDefault,
       topicCount: forum._count.proposals,
       canModerate: await this.canModerate(profileId, forum.groupId),
+      soloLectura: !participa,
       topics: topics.map((t): ProposalSummary => {
         const counts = { support: 0, neutral: 0, object: 0 };
         for (const s of t.signals) counts[s.signal as keyof typeof counts] += 1;
@@ -967,7 +968,8 @@ export class ForumsService {
   /** Consensos publicados para cualquier visitante (spec §3 y §7). Sin nombres. */
   async publicConsensus(): Promise<PublicConsensus[]> {
     const topics = await this.prisma.proposal.findMany({
-      where: { status: 'closed', hidden: false, conclusion: { not: null } },
+      // Lo de un grupo de trabajo no es público por sí solo: llega a la comunidad al llevarlo.
+      where: { status: 'closed', hidden: false, conclusion: { not: null }, group: { type: { not: 'trabajo' } } },
       select: {
         id: true, title: true, kind: true, conclusion: true, objections: true, closedAt: true, electionId: true,
         group: { select: { name: true } },
