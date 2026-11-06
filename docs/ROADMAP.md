@@ -32,6 +32,18 @@ Base del diseño «Primeros 200» entregada en las tareas 1 a 9:
 
 ---
 
+## Primeros 200 — Plan 3A-4a (grupos de trabajo y subgrupos): COMPLETO
+
+Grupos dentro de cada comunidad y del nivel general (ADR-022):
+
+- [x] Grupo de trabajo como grupo hijo; el ámbito lee y solo sus miembros participan
+- [x] Subgrupos por tema que nacen con 5 personas en 14 días y se archivan solos
+- [x] «Llevar a la comunidad»: lo aprobado en un subgrupo pasa como inquietud que pide respuesta
+- [x] Nivel general «Exilio y diáspora» (antes «Toda la comunidad»)
+- [x] Web: «Grupos de trabajo», página de cada grupo y bloque en «Decisiones»
+
+---
+
 ## Primeros 200 — Plan 3A-3 (soluciones y papeleta): COMPLETO
 
 Votación de las soluciones de cada debate (ADR-020):
