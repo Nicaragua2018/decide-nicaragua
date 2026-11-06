@@ -27,6 +27,8 @@ function buildPrisma() {
     electionResult: { findUnique: vi.fn() },
     electionCandidate: { findUnique: vi.fn() },
     decision: { findUnique: vi.fn(), findMany: vi.fn().mockResolvedValue([]), updateMany: vi.fn() },
+    cambioRegla: { findFirst: vi.fn().mockResolvedValue(null), updateMany: vi.fn().mockResolvedValue({ count: 0 }) },
+    boardAction: { updateMany: vi.fn().mockResolvedValue({ count: 0 }) },
     moderationAction: { create: vi.fn(), findUnique: vi.fn(), findFirst: vi.fn(), findMany: vi.fn(), update: vi.fn(), updateMany: vi.fn(), count: vi.fn() },
     $queryRaw: vi.fn().mockResolvedValue([]),
     profile: { findUnique: vi.fn() },
@@ -615,6 +617,51 @@ describe('ForumsService', () => {
       prisma.moderationAction.create.mockResolvedValue({ id: 'ma1' });
       await service.hide(YO, { target: 'tema', targetId: 't1', causa: 'insultos_amenazas', reason: 'Lenguaje ofensivo' }, 'ip');
       expect(audit.log).not.toHaveBeenCalledWith(expect.objectContaining({ action: 'decision.cancelled' }));
+    });
+
+    describe('un tema de cambio de regla ocultado en firme', () => {
+      beforeEach(() => {
+        board.roleOf.mockResolvedValue('administrador');
+        prisma.proposal.findUnique.mockResolvedValue({ id: 't1', groupId: 'g1', hidden: false, electionId: null, title: 'Cambiar la regla' });
+        prisma.proposal.update.mockResolvedValue({ id: 't1', electionId: null });
+        prisma.moderationAction.create.mockResolvedValue({ id: 'ma1' });
+      });
+      const ocultar = () =>
+        service.hide(YO, { target: 'tema', targetId: 't1', causa: 'insultos_amenazas', reason: 'Lenguaje ofensivo' }, 'ip');
+
+      it('antes de la decisión: el cambio en votación queda anulado, en la misma transacción', async () => {
+        await ocultar();
+        expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+        expect(prisma.cambioRegla.updateMany).toHaveBeenCalledWith({
+          where: { proposalId: 't1', estado: 'en_votacion' },
+          data: { estado: 'anulado', resueltoAt: expect.any(Date) },
+        });
+      });
+
+      it('esperando a la mesa: el cambio queda anulado y su acción de la mesa, rechazada', async () => {
+        prisma.cambioRegla.findFirst.mockResolvedValue({ id: 'c-1', boardActionId: 'ba-1' });
+        await ocultar();
+        expect(prisma.cambioRegla.findFirst).toHaveBeenCalledWith({
+          where: { proposalId: 't1', estado: 'pendiente_mesa' },
+          select: { id: true, boardActionId: true },
+        });
+        expect(prisma.boardAction.updateMany).toHaveBeenCalledWith({
+          where: { id: 'ba-1', status: 'pending' },
+          data: { status: 'rejected', resolvedAt: expect.any(Date) },
+        });
+        expect(prisma.cambioRegla.updateMany).toHaveBeenCalledWith({
+          where: { id: 'c-1', estado: 'pendiente_mesa' },
+          data: { estado: 'anulado', resueltoAt: expect.any(Date) },
+        });
+      });
+
+      it('una ocultación provisional no anula el cambio (solo pausa)', async () => {
+        prisma.moderationAction.findFirst.mockResolvedValue(null);
+        await (service as unknown as { cancelarVotacionesTx: (tx: unknown, id: string, e: null, c: boolean) => Promise<boolean> })
+          .cancelarVotacionesTx(prisma, 't1', null, false);
+        expect(prisma.cambioRegla.updateMany).not.toHaveBeenCalled();
+        expect(prisma.boardAction.updateMany).not.toHaveBeenCalled();
+      });
     });
 
     it('ocultar un tema con votación ya contada solo le quita el título', async () => {

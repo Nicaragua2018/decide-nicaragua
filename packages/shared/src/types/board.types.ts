@@ -15,6 +15,7 @@ export const BOARD_ROLES: BoardRole[] = [
 export enum BoardActionType {
   suspend_user = 'suspend_user',
   change_origin = 'change_origin',
+  change_rule = 'change_rule',
 }
 
 export interface BoardSeatSummary {
@@ -31,7 +32,7 @@ export interface BoardActionSummary {
   params: Record<string, unknown>;
   reason: string;
   status: 'pending' | 'approved' | 'rejected' | 'executed';
-  proposedBy: string;
+  proposedBy: string | null;
   approvals: { role: BoardRole; approve: boolean }[];
   createdAt: string;
 }

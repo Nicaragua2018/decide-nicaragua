@@ -38,8 +38,7 @@ export const US_STATES = [
 /** Miembros verificados para que una comunidad se active (plan 3 lo hace votable). */
 export const MIN_ACTIVE_MEMBERS = 7;
 
-/** Invitaciones pendientes (invited o pending_verification) por miembro. El administrador no tiene límite. */
-export const MAX_PENDING_INVITES = 5;
+// Las invitaciones pendientes por miembro son la regla de la colmena «invitaciones.pendientes_max».
 
 /** Mientras haya menos cuentas verificadas que esto, una referencia del administrador basta (fundación). */
 export const BOOTSTRAP_VERIFIED_LIMIT = 4;

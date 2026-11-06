@@ -171,6 +171,17 @@ enum ReferenceKind {
 enum BoardActionType {
   suspend_user
   change_origin
+  change_rule
+}
+
+enum CambioReglaEstado {
+  en_votacion
+  pendiente_mesa
+  aplicado
+  rechazado
+  rechazado_mesa
+  sin_participacion
+  anulado
 }
 
 enum BoardActionStatus {
@@ -331,6 +342,7 @@ model Group {
   sortitionDraws SortitionDraw[]
   forums         Forum[]
   ruleValues     RuleValue[]
+  cambiosRegla   CambioRegla[]
   inquietudes    Inquietud[]
 
   @@index([type])
@@ -395,6 +407,7 @@ model Proposal {
   frases      Frase[]
   soluciones  Solucion[]
   decision    Decision?
+  cambioRegla CambioRegla?
 
   @@index([forumId])
   @@index([groupId, status])
@@ -699,12 +712,12 @@ model VerificationReference {
 model BoardAction {
   id                  String            @id @default(uuid()) @db.Uuid
   type                BoardActionType
-  targetUserId        String            @db.Uuid
+  targetUserId        String?           @db.Uuid
   params              Json
   reason              String            @db.VarChar(500)
   status              BoardActionStatus @default(pending)
-  proposedByProfileId String            @db.Uuid
-  proposedBy          Profile           @relation("BoardActionProposer", fields: [proposedByProfileId], references: [id])
+  proposedByProfileId String?           @db.Uuid
+  proposedBy          Profile?          @relation("BoardActionProposer", fields: [proposedByProfileId], references: [id], onDelete: Restrict)
   createdAt           DateTime          @default(now()) @db.Timestamptz
   resolvedAt          DateTime?         @db.Timestamptz
 
@@ -832,6 +845,31 @@ model RuleValue {
   updatedAt DateTime @updatedAt @db.Timestamptz
 
   @@map("rule_values")
+}
+
+/**
+ * CambioRegla — propuesta de cambiar una regla votable (de colmena o de un grupo).
+ * Índice único parcial hecho a mano en SQL (Prisma no lo conoce; no lo borre en migraciones futuras):
+ *  - cambios_regla_abierto_key: UNIQUE ("key", "ambitoGroupId") WHERE "estado" IN ('en_votacion','pendiente_mesa')
+ * autorProfileId es columna simple (sin relación).
+ */
+model CambioRegla {
+  id             String            @id @default(uuid()) @db.Uuid
+  key            String            @db.VarChar(80)
+  nivel          String
+  ambitoGroupId  String            @db.Uuid
+  ambitoGroup    Group             @relation(fields: [ambitoGroupId], references: [id], onDelete: Cascade)
+  valorAnterior  String            @db.VarChar(40)
+  valorPropuesto String            @db.VarChar(40)
+  proposalId     String            @unique @db.Uuid
+  proposal       Proposal          @relation(fields: [proposalId], references: [id], onDelete: Cascade)
+  autorProfileId String            @db.Uuid
+  estado         CambioReglaEstado @default(en_votacion)
+  boardActionId  String?           @db.Uuid
+  createdAt      DateTime          @default(now()) @db.Timestamptz
+  resueltoAt     DateTime?         @db.Timestamptz
+
+  @@map("cambios_regla")
 }
 
 /**

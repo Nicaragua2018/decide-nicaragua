@@ -10,6 +10,11 @@ export interface RuleDefinition {
   max?: number;
   options?: string[];
   unit?: 'personas' | 'porcentaje' | 'dias' | 'meses';
+  /**
+   * false si ningún código lee todavía la regla (se conecta con las elecciones, plan 3C):
+   * no se puede proponer cambiarla, porque la votación no tendría efecto.
+   */
+  conectada: boolean;
 }
 
 type IntUnit = NonNullable<RuleDefinition['unit']>;
@@ -22,9 +27,13 @@ function int(
   min: number,
   max: number,
   unit: IntUnit,
+  conectada = true,
 ): RuleDefinition {
-  return { key, level, label, type: 'int', default: String(def), min, max, unit };
+  return { key, level, label, type: 'int', default: String(def), min, max, unit, conectada };
 }
+
+/** Regla de la colmena que aún no tiene efecto (ver `conectada`). */
+const SIN_CONECTAR = false;
 
 export const RULE_DEFINITIONS: readonly RuleDefinition[] = [
   int('inquietud.apoyo_minimo_personas', 'local', 'Apoyo mínimo para que una inquietud pida respuesta (personas)', 3, 2, 50, 'personas'),
@@ -51,23 +60,62 @@ export const RULE_DEFINITIONS: readonly RuleDefinition[] = [
     type: 'choice',
     default: 'sorteo',
     options: ['sorteo', 'preferencias'],
+    conectada: true,
   },
   int('reglas.participacion_minima', 'colmena', 'Participación mínima para cambiar las reglas (%)', 30, 10, 100, 'porcentaje'),
-  int('observadores.numero', 'colmena', 'Número de observadores (personas)', 7, 3, 15, 'personas'),
-  int('comunidad.minimo_activacion', 'colmena', 'Personas mínimas para activar una comunidad (personas)', 7, 3, 50, 'personas'),
-  int('eleccion.minimo_primera', 'colmena', 'Personas mínimas para la primera elección (personas)', 12, 5, 100, 'personas'),
+  int('observadores.numero', 'colmena', 'Número de observadores (personas)', 7, 3, 15, 'personas', SIN_CONECTAR),
+  int('comunidad.minimo_activacion', 'colmena', 'Personas mínimas para activar una comunidad (personas)', 7, 3, 50, 'personas', SIN_CONECTAR),
+  int('eleccion.minimo_primera', 'colmena', 'Personas mínimas para la primera elección (personas)', 12, 5, 100, 'personas', SIN_CONECTAR),
   int('invitaciones.pendientes_max', 'colmena', 'Invitaciones pendientes por persona (máximo)', 5, 1, 20, 'personas'),
-  int('revocacion.fraccion', 'colmena', 'Apoyos necesarios para revocar un cargo (%)', 33, 10, 50, 'porcentaje'),
-  int('cargos.periodo_mesa_meses', 'colmena', 'Duración del cargo en la mesa (meses)', 12, 6, 24, 'meses'),
-  int('cargos.periodo_coordinadores_meses', 'colmena', 'Duración del cargo de coordinación (meses)', 6, 3, 12, 'meses'),
-  int('eleccion.plazo_candidaturas_dias', 'colmena', 'Plazo para presentar candidaturas (días)', 7, 3, 30, 'dias'),
-  int('eleccion.plazo_votacion_dias', 'colmena', 'Plazo de votación de una elección (días)', 7, 3, 30, 'dias'),
+  int('revocacion.fraccion', 'colmena', 'Apoyos necesarios para revocar un cargo (%)', 33, 10, 50, 'porcentaje', SIN_CONECTAR),
+  int('cargos.periodo_mesa_meses', 'colmena', 'Duración del cargo en la mesa (meses)', 12, 6, 24, 'meses', SIN_CONECTAR),
+  int('cargos.periodo_coordinadores_meses', 'colmena', 'Duración del cargo de coordinación (meses)', 6, 3, 12, 'meses', SIN_CONECTAR),
+  int('eleccion.plazo_candidaturas_dias', 'colmena', 'Plazo para presentar candidaturas (días)', 7, 3, 30, 'dias', SIN_CONECTAR),
+  int('eleccion.plazo_votacion_dias', 'colmena', 'Plazo de votación de una elección (días)', 7, 3, 30, 'dias', SIN_CONECTAR),
 ];
 
 export function ruleDefinition(key: string): RuleDefinition {
   const def = RULE_DEFINITIONS.find((d) => d.key === key);
   if (!def) throw new Error(`Regla desconocida: ${key}`);
   return def;
+}
+
+/** Un valor con su unidad, para los textos del tema y de la mesa: «30 %», «10 días», «sorteo». */
+export function conUnidad(def: RuleDefinition, valor: string): string {
+  const uno = valor === '1';
+  switch (def.unit) {
+    case 'porcentaje':
+      return `${valor} %`;
+    case 'dias':
+      return uno ? '1 día' : `${valor} días`;
+    case 'personas':
+      return uno ? '1 persona' : `${valor} personas`;
+    case 'meses':
+      return uno ? '1 mes' : `${valor} meses`;
+    default:
+      return valor;
+  }
+}
+
+export type CambioReglaEstadoValue =
+  | 'en_votacion'
+  | 'pendiente_mesa'
+  | 'aplicado'
+  | 'rechazado'
+  | 'rechazado_mesa'
+  | 'sin_participacion'
+  | 'anulado';
+
+export interface CambioReglaView {
+  id: string;
+  key: string;
+  nivel: 'colmena' | 'local';
+  valorAnterior: string;
+  valorPropuesto: string;
+  estado: CambioReglaEstadoValue;
+  proposalId: string | null;
+  createdAt: string;
+  resueltoAt: string | null;
 }
 
 export interface RuleView {
@@ -81,5 +129,10 @@ export interface RuleView {
   min?: number;
   max?: number;
   options?: string[];
+  /** false: la regla aún no tiene efecto (se conecta con las elecciones) y no se puede proponer. */
+  conectada: boolean;
   isDefault: boolean;
+  enCurso: CambioReglaView | null;
+  historial: CambioReglaView[];
+  puedoProponer: boolean;
 }

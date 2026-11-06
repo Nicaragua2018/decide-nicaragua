@@ -1,7 +1,44 @@
 import { Injectable } from '@nestjs/common';
-import { RULE_DEFINITIONS, ruleDefinition } from '@decide/shared';
-import type { RuleDefinition, RuleView } from '@decide/shared';
+import { Prisma } from '@prisma/client';
+import { GENERAL_GROUP_SLUG, RULE_DEFINITIONS, ruleDefinition } from '@decide/shared';
+import type { CambioReglaView, CambioReglaEstadoValue, RuleDefinition, RuleView } from '@decide/shared';
 import { PrismaService } from '../prisma/prisma.service';
+import { CAMBIO_ABIERTO, esAmbitoDeReglas } from './ambito-reglas';
+
+/** Cambios resueltos que se muestran por regla. */
+const HISTORIAL_MAX = 10;
+
+interface CambioFila {
+  id: string;
+  key: string;
+  nivel: string;
+  valorAnterior: string;
+  valorPropuesto: string;
+  estado: string;
+  proposalId: string;
+  createdAt: Date;
+  resueltoAt: Date | null;
+}
+
+/** Vista pública de un cambio: sin autor ni ámbito. */
+function vistaCambio(c: CambioFila): CambioReglaView {
+  return {
+    id: c.id,
+    key: c.key,
+    nivel: c.nivel === 'colmena' ? 'colmena' : 'local',
+    valorAnterior: c.valorAnterior,
+    valorPropuesto: c.valorPropuesto,
+    estado: c.estado as CambioReglaEstadoValue,
+    proposalId: c.proposalId,
+    createdAt: c.createdAt.toISOString(),
+    resueltoAt: c.resueltoAt ? c.resueltoAt.toISOString() : null,
+  };
+}
+
+const abierto = (c: CambioFila): boolean => (CAMBIO_ABIERTO as readonly string[]).includes(c.estado);
+/** Más reciente primero: por fecha de resolución y, a falta de ella, de creación. */
+const masReciente = (a: CambioFila, b: CambioFila): number =>
+  (b.resueltoAt ?? b.createdAt).getTime() - (a.resueltoAt ?? a.createdAt).getTime();
 
 /** Lectura de reglas en dos niveles: colmena y comunidad (local). */
 @Injectable()
@@ -22,12 +59,70 @@ export class RulesService {
     return this.effectiveChoice(def, raw);
   }
 
-  async list(groupId: string | null): Promise<RuleView[]> {
+  /**
+   * Reglas con su valor vigente, el cambio en curso y los últimos cambios resueltos. Sin `profileId`
+   * (página pública) `puedoProponer` es siempre false. Las de la colmena se cambian en el nivel
+   * general; las locales, en `groupId` si es una comunidad ámbito (no un grupo de trabajo).
+   */
+  async list(groupId: string | null, profileId?: string): Promise<RuleView[]> {
     const defs = RULE_DEFINITIONS.filter((d) => d.level === 'colmena' || groupId !== null);
-    const rows = await this.prisma.ruleValue.findMany({
-      where: { OR: groupId ? [{ groupId: null }, { groupId }] : [{ groupId: null }] },
-    });
+    const [rows, abiertos, resueltos, general, grupo] = await Promise.all([
+      this.prisma.ruleValue.findMany({
+        where: { OR: groupId ? [{ groupId: null }, { groupId }] : [{ groupId: null }] },
+      }),
+      // Lecturas acotadas: los abiertos (como mucho uno por regla) y, de los resueltos, los últimos por regla.
+      this.prisma.cambioRegla.findMany({
+        where: {
+          estado: { in: [...CAMBIO_ABIERTO] },
+          OR: [{ nivel: 'colmena' }, ...(groupId ? [{ nivel: 'local', ambitoGroupId: groupId }] : [])],
+        },
+        select: {
+          id: true, key: true, nivel: true, valorAnterior: true, valorPropuesto: true, estado: true,
+          proposalId: true, createdAt: true, resueltoAt: true,
+        },
+      }),
+      this.prisma.$queryRaw<CambioFila[]>(Prisma.sql`
+        SELECT id, key, nivel, "valorAnterior", "valorPropuesto", estado::text AS estado,
+               "proposalId", "createdAt", "resueltoAt"
+        FROM (
+          SELECT c.*, ROW_NUMBER() OVER (PARTITION BY c.key, c.nivel
+                                         ORDER BY COALESCE(c."resueltoAt", c."createdAt") DESC, c."createdAt" DESC) AS n
+          FROM cambios_regla c
+          WHERE c.estado NOT IN ('en_votacion', 'pendiente_mesa')
+            AND (c.nivel = 'colmena' OR (c.nivel = 'local' AND c."ambitoGroupId" = ${groupId}::uuid))
+        ) r
+        WHERE r.n <= ${HISTORIAL_MAX}`),
+      profileId ? this.prisma.group.findUnique({ where: { slug: GENERAL_GROUP_SLUG }, select: { id: true } }) : null,
+      profileId && groupId ? this.prisma.group.findUnique({ where: { id: groupId }, select: { type: true, slug: true } }) : null,
+    ]);
+    const cambios: CambioFila[] = [...abiertos, ...resueltos];
+
+    // Dónde puede proponer quien consulta: miembro actual del nivel general (colmena) y del ámbito (locales).
+    let puedeColmena = false;
+    let puedeLocal = false;
+    if (profileId) {
+      const ambitoLocal = groupId && grupo && esAmbitoDeReglas({ type: grupo.type as string, slug: grupo.slug }) ? groupId : null;
+      const buscar = [general?.id, ambitoLocal].filter((x): x is string => typeof x === 'string');
+      const mias =
+        buscar.length > 0
+          ? new Set(
+              (
+                await this.prisma.groupMembership.findMany({
+                  where: { profileId, groupId: { in: buscar } },
+                  select: { groupId: true },
+                })
+              ).map((m) => m.groupId),
+            )
+          : new Set<string>();
+      puedeColmena = general !== null && general !== undefined && mias.has(general.id);
+      puedeLocal = ambitoLocal !== null && mias.has(ambitoLocal);
+    }
+
     return defs.map((def) => {
+      const deLaRegla = cambios.filter((c) => c.key === def.key && c.nivel === def.level);
+      const enCurso = deLaRegla.find(abierto) ?? null;
+      const historial = deLaRegla.filter((c) => !abierto(c)).sort(masReciente).slice(0, HISTORIAL_MAX).map(vistaCambio);
+      const puede = def.level === 'colmena' ? puedeColmena : puedeLocal;
       const wanted = def.level === 'local' ? groupId : null;
       const row = rows.find((r) => r.key === def.key && r.groupId === wanted);
       const raw = row?.value ?? null;
@@ -43,7 +138,11 @@ export class RulesService {
         ...(def.min !== undefined && { min: def.min }),
         ...(def.max !== undefined && { max: def.max }),
         ...(def.options !== undefined && { options: def.options }),
+        conectada: def.conectada,
         isDefault: row === undefined,
+        enCurso: enCurso ? vistaCambio(enCurso) : null,
+        historial,
+        puedoProponer: puede && def.conectada && enCurso === null,
       };
     });
   }

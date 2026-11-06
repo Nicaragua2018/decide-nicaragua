@@ -16,6 +16,7 @@ import { RedisService } from '../redis/redis.service';
 import { EmailService } from '../email/email.service';
 import { AuditService } from '../audit/audit.service';
 import { GroupsService } from '../groups/groups.service';
+import { RulesService } from '../rules/rules.service';
 import { InviteUserDto } from './dto/invite-user.dto';
 import { AcceptInviteDto } from './dto/accept-invite.dto';
 import { LoginDto } from './dto/login.dto';
@@ -23,7 +24,6 @@ import { UpdateProfileDto } from './dto/update-profile.dto';
 import {
   AccountStatus,
   LOGIN_STATUSES,
-  MAX_PENDING_INVITES,
   INVITE_TOKEN_TTL_HOURS,
   type JwtPayload,
   type AuthResponse,
@@ -56,6 +56,7 @@ export class AuthService {
     private readonly audit: AuditService,
     private readonly config: ConfigService,
     private readonly groups: GroupsService,
+    private readonly rules: RulesService,
   ) {}
 
   // ─── Invitación ────────────────────────────────────────────────────────────
@@ -95,9 +96,11 @@ export class AuthService {
           ],
         },
       });
-      if (pendientes >= MAX_PENDING_INVITES) {
+      // El máximo es una regla de la colmena: se cambia por votación en el nivel general.
+      const maximo = await this.rules.getInt('invitaciones.pendientes_max', null);
+      if (pendientes >= maximo) {
         throw new ForbiddenException(
-          `Ya tienes ${MAX_PENDING_INVITES.toString()} invitaciones pendientes. Podrás invitar a más cuando esas personas se registren y se verifiquen.`,
+          `Ya tienes ${maximo.toString()} invitaciones pendientes. Podrás invitar a más cuando esas personas se registren y se verifiquen.`,
         );
       }
     }

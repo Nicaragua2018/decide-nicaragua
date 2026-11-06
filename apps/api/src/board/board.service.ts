@@ -10,6 +10,7 @@ import {
   BOARD_ROLES,
   BoardActionType,
   NICARAGUA_DEPARTMENTS,
+  RULE_DEFINITIONS,
   type BoardActionSummary,
   type BoardRole,
   type BoardSeatSummary,
@@ -18,10 +19,17 @@ import {
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { GroupsService } from '../groups/groups.service';
+// Funciones puras: no importa RulesModule (cerraría un ciclo de módulos).
+import { guardarValor, normalizarValor } from '../rules/ambito-reglas';
 import type { ProposeActionDto } from './dto/propose-action.dto';
 
 /** Aprobaciones (o rechazos) de personas distintas para resolver una acción. */
 const VOTOS_PARA_RESOLVER = 2;
+
+interface ResultadoCambioRegla {
+  status: 'executed' | 'rejected';
+  cambio: { id: string; key: string } | null;
+}
 
 @Injectable()
 export class BoardService {
@@ -114,6 +122,11 @@ export class BoardService {
     const role = actor.profileId ? await this.roleOf(actor.profileId) : null;
     if (!role) throw new ForbiddenException('Solo la mesa directiva puede proponer esta acción.');
 
+    // change_rule solo lo crea el sistema cuando la comunidad aprueba un cambio de regla.
+    if (dto.type === BoardActionType.change_rule) {
+      throw new BadRequestException('Los cambios de regla llegan a la mesa desde una votación de la comunidad.');
+    }
+
     const target = await this.prisma.user.findUnique({ where: { id: dto.targetUserId } });
     if (!target) throw new NotFoundException('Persona no encontrada');
 
@@ -159,6 +172,30 @@ export class BoardService {
       throw new ConflictException('Ya votaste esta acción.');
     }
 
+    if ((action.type as string) === BoardActionType.change_rule) {
+      const r = await this.votarCambioRegla(actionId, actor.profileId!, role, approve);
+      if (r === null) {
+        void this.audit.log({ actorId: actor.sub, action: 'board.action_voted', resource: `board_action:${actionId}`, ip, metadata: { approve } });
+        return;
+      }
+      const ejecutada = r.status === 'executed';
+      void this.audit.log({
+        actorId: actor.sub,
+        action: ejecutada ? 'board.action_executed' : 'board.action_rejected',
+        resource: `board_action:${actionId}`,
+        ip,
+        metadata: { type: action.type },
+      });
+      if (r.cambio) {
+        void this.audit.log({
+          action: ejecutada ? 'regla.cambio_aplicado' : 'regla.cambio_rechazado',
+          resource: `cambio_regla:${r.cambio.id}`,
+          metadata: { cambioId: r.cambio.id, key: r.cambio.key },
+        });
+      }
+      return;
+    }
+
     await this.prisma.boardApproval.create({
       data: { actionId, profileId: actor.profileId!, role, approve },
     });
@@ -195,7 +232,11 @@ export class BoardService {
       },
     });
     const targets = await Promise.all(
-      actions.map((a) => this.prisma.profile.findUnique({ where: { userId: a.targetUserId }, select: { displayName: true } })),
+      actions.map((a) =>
+        a.targetUserId === null
+          ? Promise.resolve(null)
+          : this.prisma.profile.findUnique({ where: { userId: a.targetUserId }, select: { displayName: true } }),
+      ),
     );
     return actions.map((a, i) => ({
       id: a.id,
@@ -204,13 +245,88 @@ export class BoardService {
       params: a.params as Record<string, unknown>,
       reason: a.reason,
       status: a.status as BoardActionSummary['status'],
-      proposedBy: a.proposedBy.displayName,
+      proposedBy: a.proposedBy?.displayName ?? null,
       approvals: a.approvals.map((x) => ({ role: x.role as unknown as BoardRole, approve: x.approve })),
       createdAt: a.createdAt.toISOString(),
     }));
   }
 
-  private async execute(type: BoardActionType, targetUserId: string, params: Record<string, unknown>): Promise<void> {
+  /**
+   * Voto sobre una acción `change_rule`, en una sola transacción con la fila de la acción
+   * bloqueada: se registra el voto, se cuentan los votos desde la base y, con 2 a favor o 2 en
+   * contra, se resuelve. Así dos primeros votos a la vez se ven entre sí (el segundo espera al
+   * primero y resuelve), y si algo falla no queda un voto suelto. Devuelve null si aún no se resuelve.
+   */
+  private async votarCambioRegla(
+    actionId: string,
+    profileId: string,
+    role: BoardRole,
+    approve: boolean,
+  ): Promise<ResultadoCambioRegla | null> {
+    try {
+      return await this.prisma.$transaction(async (tx) => {
+        await tx.$queryRaw(Prisma.sql`SELECT id FROM board_actions WHERE id = ${actionId}::uuid FOR UPDATE`);
+        const a = await tx.boardAction.findUnique({ where: { id: actionId }, select: { status: true, params: true } });
+        if (!a || (a.status as string) !== 'pending') throw new BadRequestException('Esta acción ya se resolvió.');
+        await tx.boardApproval.create({ data: { actionId, profileId, role, approve } });
+        const votos = await tx.boardApproval.findMany({ where: { actionId }, select: { approve: true } });
+        const aFavor = votos.filter((v) => v.approve).length;
+        const enContra = votos.length - aFavor;
+        if (aFavor < VOTOS_PARA_RESOLVER && enContra < VOTOS_PARA_RESOLVER) return null;
+        return this.resolverCambioReglaTx(tx, actionId, a.params as Record<string, unknown>, aFavor >= VOTOS_PARA_RESOLVER);
+      });
+    } catch (err) {
+      // Índice único (acción, persona): el mismo voto llegó dos veces a la vez.
+      if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
+        throw new ConflictException('Ya votaste esta acción.');
+      }
+      throw err;
+    }
+  }
+
+  /**
+   * Resuelve una acción `change_rule` dentro de la transacción del voto. Solo vale para el cambio
+   * de la colmena ligado a esta acción y pendiente de la mesa (nunca uno local). Al aprobarse
+   * valida otra vez el valor con la definición actual de la regla: si ya no cabe, o el cambio no
+   * existe, la acción queda rechazada. El `updateMany` condicionado a `pending` evita resolverla dos veces.
+   */
+  private async resolverCambioReglaTx(
+    tx: Prisma.TransactionClient,
+    actionId: string,
+    params: Record<string, unknown>,
+    aprobar: boolean,
+  ): Promise<ResultadoCambioRegla> {
+    const cambioId = typeof params['cambioId'] === 'string' ? params['cambioId'] : null;
+    const cambio = cambioId
+      ? await tx.cambioRegla.findFirst({
+          where: { id: cambioId, boardActionId: actionId, nivel: 'colmena', estado: 'pendiente_mesa' },
+          select: { id: true, key: true, valorPropuesto: true },
+        })
+      : null;
+    const def = cambio ? RULE_DEFINITIONS.find((d) => d.key === cambio.key) : undefined;
+    const valor = aprobar && cambio && def?.level === 'colmena' ? normalizarValor(def, cambio.valorPropuesto) : null;
+    const status = valor !== null ? 'executed' : 'rejected';
+    const ahora = new Date();
+
+    const tomada = await tx.boardAction.updateMany({
+      where: { id: actionId, status: 'pending' },
+      data: { status, resolvedAt: ahora },
+    });
+    if (tomada.count === 0) throw new BadRequestException('Esta acción ya se resolvió.');
+    if (!cambio) return { status, cambio: null };
+
+    const cerrado = await tx.cambioRegla.updateMany({
+      where: { id: cambio.id, estado: 'pendiente_mesa' },
+      data: { estado: valor !== null ? 'aplicado' : 'rechazado_mesa', resueltoAt: ahora },
+    });
+    if (cerrado.count === 0) throw new ConflictException('El cambio de regla ya se resolvió.');
+    if (valor !== null) await guardarValor(tx, cambio.key, null, valor);
+    return { status, cambio: { id: cambio.id, key: cambio.key } };
+  }
+
+  private async execute(type: BoardActionType, targetUserId: string | null, params: Record<string, unknown>): Promise<void> {
+    // change_rule se resuelve aparte (votarCambioRegla); las demás acciones exigen persona objetivo.
+    if (targetUserId === null) throw new BadRequestException('La acción no tiene persona objetivo');
     if (type === BoardActionType.suspend_user) {
       // Los guards de participación miran la membresía: suspender también la quita.
       await this.prisma.$transaction(async (tx) => {

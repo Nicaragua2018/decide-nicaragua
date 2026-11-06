@@ -18,6 +18,7 @@ import { VerificationModule } from './verification/verification.module';
 import { ForumsModule } from './forums/forums.module';
 import { NewsletterModule } from './newsletter/newsletter.module';
 import { RulesModule } from './rules/rules.module';
+import { CambiosReglaModule } from './rules/cambios-regla.module';
 import { InquietudesModule } from './inquietudes/inquietudes.module';
 import { FrasesModule } from './frases/frases.module';
 import { DecisionesModule } from './decisiones/decisiones.module';
@@ -59,6 +60,7 @@ import { GruposModule } from './grupos/grupos.module';
     ForumsModule,
     NewsletterModule,
     RulesModule,
+    CambiosReglaModule,
     InquietudesModule,
     FrasesModule,
     DecisionesModule,

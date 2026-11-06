@@ -12,6 +12,7 @@ import { EmailModule } from '../email/email.module';
 import { AuditModule } from '../audit/audit.module';
 import { UsersModule } from '../users/users.module';
 import { GroupsModule } from '../groups/groups.module';
+import { RulesModule } from '../rules/rules.module';
 
 @Module({
   imports: [
@@ -29,6 +30,7 @@ import { GroupsModule } from '../groups/groups.module';
     AuditModule,
     UsersModule,
     GroupsModule,
+    RulesModule,
   ],
   controllers: [AuthController],
   providers: [AuthService, JwtStrategy, JwtAuthGuard, VerifiedCitizenGuard],

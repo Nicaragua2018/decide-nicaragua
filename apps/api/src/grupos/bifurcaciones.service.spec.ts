@@ -266,6 +266,14 @@ describe('BifurcacionesService', () => {
       papeletas.set(YO, { abstencion: false, orden: [S] });
       await expect(service.iniciar(YO, S, NOW)).resolves.toHaveProperty('id');
     });
+
+    it('la solución de un cambio de regla no se bifurca, ni siquiera sin quórum (400)', async () => {
+      const s = solucion({}, { resultado: 'sin_quorum', modo: null, candidatas: [S], ganadoras: [] });
+      prisma.solucion.findUnique.mockResolvedValue({ ...s, proposal: { ...s.proposal, cambioRegla: { id: 'c-1' } } });
+      papeletas.set(YO, { abstencion: false, orden: [S] });
+      await expect(service.iniciar(YO, S, NOW)).rejects.toBeInstanceOf(BadRequestException);
+      expect(tx.group.create).not.toHaveBeenCalled();
+    });
   });
 
   describe('elegible', () => {

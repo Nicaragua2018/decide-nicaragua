@@ -32,6 +32,17 @@ Base del diseño «Primeros 200» entregada en las tareas 1 a 9:
 
 ---
 
+## Primeros 200 — Plan 3A-5 (cambio de reglas por votación): COMPLETO
+
+La comunidad ajusta sus propias reglas (ADR-024):
+
+- [x] Proponer un cambio desde «Reglas», con límites de la colmena y un solo cambio abierto por regla
+- [x] Debate y votación automáticos con participación mínima del 30 %
+- [x] Las reglas locales se aplican solas; las de la colmena, con 2 de 3 de la mesa
+- [x] Historial de cambios por regla, sin nombres
+
+---
+
 ## Primeros 200 — Plan 3A-4b (comisiones e iniciativas de un grupo): COMPLETO
 
 Quién lleva a cabo lo aprobado y cómo una minoría impulsa su solución (ADR-023):

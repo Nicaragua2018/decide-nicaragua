@@ -377,6 +377,17 @@ describe('DecisionesService', () => {
       expect(r.puedeProponer).toBe(false);
       expect(r.debateEndsAt).toBeNull();
     });
+    it('en un cambio de regla no se proponen otras soluciones (puedeProponer false y 400)', async () => {
+      prisma.proposal.findUnique.mockResolvedValue({
+        id: T, groupId: G, status: 'open', hidden: false, deliberationEndsAt: new Date('2099-11-12T00:00:00Z'),
+        cambioRegla: { id: 'c-1' },
+      });
+      expect((await service.getTema(YO, T)).puedeProponer).toBe(false);
+      await expect(
+        service.createSolucion(YO, T, { title: 'Cambiar a otro valor', description: 'Otra cosa.' }, 'ip'),
+      ).rejects.toThrow(new BadRequestException('Un cambio de regla se vota con su única solución.'));
+      expect(prisma.solucion.create).not.toHaveBeenCalled();
+    });
     it('con el plazo del debate vencido no se puede proponer', async () => {
       prisma.proposal.findUnique.mockResolvedValue({
         id: T, groupId: G, status: 'open', hidden: false, deliberationEndsAt: new Date(Date.now() - 1000),
@@ -449,6 +460,19 @@ describe('DecisionesService', () => {
         r = await service.getTema(YO, T);
         expect(cand(r, 's4')).toMatchObject({ bifurcable: false, puedoIniciarBifurcacion: false });
       });
+
+      it('un tema de cambio de regla no es bifurcable, ni siquiera sin quórum', async () => {
+        prisma.proposal.findUnique.mockResolvedValue({
+          id: T, groupId: G, status: 'open', hidden: false, deliberationEndsAt: null, cambioRegla: { id: 'c-1' },
+        });
+        prisma.solucion.findMany.mockResolvedValue([sol('s1')]);
+        prisma.decision.findUnique.mockResolvedValue(
+          contada({ modo: 'compatibles', candidatas: ['s1'], ganadoras: [], resultado: 'sin_quorum', aprobaciones: [1] }),
+        );
+        prisma.decisionPapeleta.findUnique.mockResolvedValue({ abstencion: false, orden: ['s1'] });
+        const r = await service.getTema(YO, T);
+        expect(cand(r, 's1')).toMatchObject({ bifurcable: false, puedoIniciarBifurcacion: false });
+      });
     });
   });
 
@@ -480,8 +504,17 @@ describe('DecisionesService', () => {
         where: {
           kind: 'propuesta', status: 'open', hidden: false, deliberationEndsAt: { lte: NOW }, decision: null, electionId: null,
           group: GRUPO_EN_MARCHA,
+          OR: [{ cambioRegla: { is: null } }, { cambioRegla: { is: { estado: 'en_votacion' } } }],
         },
       }));
+    });
+
+    it('un cambio de regla anulado (tema ocultado y luego restaurado) no abre una votación que no aplicaría nada', async () => {
+      prisma.proposal.findMany.mockResolvedValue([]);
+      await service.processDeadlines(NOW);
+      const where = prisma.proposal.findMany.mock.calls[0]![0].where;
+      expect(where.OR).toContainEqual({ cambioRegla: { is: { estado: 'en_votacion' } } });
+      expect(where.OR).not.toContainEqual({ cambioRegla: { is: { estado: 'anulado' } } });
     });
 
     it('I3: las cuatro consultas de plazos filtran los grupos detenidos', async () => {
@@ -920,6 +953,40 @@ describe('DecisionesService', () => {
       expect(await service.processDeadlines(NOW)).toBe(0);
       expect(prisma.decision.updateMany).not.toHaveBeenCalled();
       expect(audit.log).not.toHaveBeenCalled();
+    });
+
+    describe('tema de cambio de regla: participación mínima de la colmena', () => {
+      // 3 papeletas de 12 miembros = 25 %: alcanza el quórum del ámbito (20) pero no el 30 de la colmena.
+      const reglas = (participacion: number) =>
+        rules.getInt.mockImplementation(async (key: string) =>
+          key === 'votacion.quorum_porcentaje' ? 20 : key === 'reglas.participacion_minima' ? participacion : 7);
+      const decision = (cambioRegla: { id: string } | null) => ({
+        id: 'd1', proposalId: T, fase: 'votacion', modo: null, candidatas: ['s1'],
+        proposal: { groupId: G, cambioRegla },
+      });
+      beforeEach(() => prisma.groupMembership.count.mockResolvedValue(12));
+
+      it('aplica 30 cuando el quórum del ámbito es 20 (sin_quorum con 25 %)', async () => {
+        reglas(30);
+        prisma.decision.findUnique.mockResolvedValue(decision({ id: 'c-1' }));
+        expect(await service.processDeadlines(NOW)).toBe(1);
+        expect(rules.getInt).toHaveBeenCalledWith('reglas.participacion_minima', null);
+        expect(prisma.decision.updateMany.mock.calls[0]![0].data).toMatchObject({ resultado: 'sin_quorum', ganadoras: [] });
+      });
+
+      it('si el quórum del ámbito es mayor, manda el del ámbito; un tema normal no lee la regla de la colmena', async () => {
+        reglas(10);
+        prisma.decision.findUnique.mockResolvedValue(decision({ id: 'c-1' }));
+        await service.processDeadlines(NOW);
+        expect(prisma.decision.updateMany.mock.calls[0]![0].data).toMatchObject({ resultado: 'aprobada' });
+        rules.getInt.mockClear();
+        prisma.decision.updateMany.mockClear();
+        reglas(30);
+        prisma.decision.findUnique.mockResolvedValue(decision(null));
+        await service.processDeadlines(NOW);
+        expect(rules.getInt).not.toHaveBeenCalledWith('reglas.participacion_minima', null);
+        expect(prisma.decision.updateMany.mock.calls[0]![0].data).toMatchObject({ resultado: 'aprobada', ganadoras: ['s1'] });
+      });
     });
 
     it('si dentro de la transacción la decisión ya no está en votación, no cuenta', async () => {
