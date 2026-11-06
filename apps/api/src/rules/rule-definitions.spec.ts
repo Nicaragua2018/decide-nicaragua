@@ -33,4 +33,11 @@ describe('RULE_DEFINITIONS', () => {
     expect(def.default).toBe('sorteo');
     expect(def.options).toEqual(['sorteo', 'preferencias']);
   });
+
+  it('las reglas de subgrupo tienen los límites esperados', () => {
+    const min = ruleDefinition('subgrupo.minimo_personas');
+    expect([min.level, min.default, min.min, min.max, min.unit]).toEqual(['local', '5', 3, 50, 'personas']);
+    const plazo = ruleDefinition('subgrupo.plazo_dias');
+    expect([plazo.level, plazo.default, plazo.min, plazo.max, plazo.unit]).toEqual(['local', '14', 7, 60, 'dias']);
+  });
 });

@@ -14,6 +14,7 @@ const GROUP_TYPE_LABEL: Record<GroupType, string> = {
   territorial_origin:    'Dpto. de origen',
   territorial_residence: 'País de residencia',
   custom:                'Grupo personalizado',
+  trabajo:               'Grupo de trabajo',
 };
 
 const PIPELINE_STEPS = [

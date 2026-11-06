@@ -26,6 +26,21 @@ enum GroupType {
   territorial_origin // Agrupado por departamento de Nicaragua de nacimiento
   territorial_residence // Agrupado por país de residencia
   custom // Creado manualmente por un administrador
+  trabajo // Grupo de trabajo (subgrupo, comisión o bifurcación) que cuelga de una comunidad
+}
+
+enum TrabajoTipo {
+  subgrupo
+  comision
+  bifurcacion
+}
+
+enum TrabajoEstado {
+  convocando
+  activo
+  pausado
+  cerrado
+  archivado
 }
 
 enum SortitionStatus {
@@ -260,6 +275,18 @@ model Group {
   description String?
   isActive    Boolean   @default(true)
 
+  /// Grupos de trabajo: comunidad (o nivel general) de la que cuelga.
+  parentGroupId String? @db.Uuid
+  parent        Group?  @relation("GrupoTrabajo", fields: [parentGroupId], references: [id], onDelete: Cascade)
+  hijos         Group[] @relation("GrupoTrabajo")
+
+  trabajoTipo        TrabajoTipo?
+  trabajoEstado      TrabajoEstado?
+  proposito          String?        @db.VarChar(1000)
+  convocatoriaEndsAt DateTime?      @db.Timestamptz
+  pocosMiembrosDesde DateTime?      @db.Timestamptz
+  creadoPorProfileId String?        @db.Uuid
+
   createdAt DateTime @default(now()) @db.Timestamptz
   updatedAt DateTime @updatedAt @db.Timestamptz
 
@@ -273,6 +300,7 @@ model Group {
 
   @@index([type])
   @@index([isActive])
+  @@index([parentGroupId, trabajoEstado])
   @@map("groups")
 }
 
@@ -792,6 +820,8 @@ model Inquietud {
   respondedAt          DateTime?       @db.Timestamptz
   proposalId           String?         @db.Uuid
   proposal             Proposal?       @relation(fields: [proposalId], references: [id], onDelete: SetNull)
+  /// Solución de un subgrupo que originó esta inquietud ("llevar a la comunidad").
+  origenSolucionId     String?         @unique @db.Uuid
 
   createdAt DateTime @default(now()) @db.Timestamptz
   updatedAt DateTime @updatedAt @db.Timestamptz
