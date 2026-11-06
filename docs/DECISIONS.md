@@ -598,6 +598,8 @@ El spec 3A (§8) pide que las reglas no las fije nadie por su cuenta: la comunid
   - Las reglas locales se cambian en su comunidad: origen, acogida o el nivel general.
   - Las de la colmena solo se cambian en «Exilio y diáspora».
   - Hay un solo cambio abierto por regla y comunidad.
+  - Las reglas de la colmena que todavía no usa ninguna parte del sistema (observadores, activación de comunidades, primera elección, revocación, duración de los cargos y plazos de las elecciones) no se pueden proponer hasta 3C, cuando se conecten con las elecciones. La página las marca «Aún no tiene efecto»: ninguna votación debe quedar sin efecto.
+  - El mínimo de puestos de una comisión no puede ser mayor que el máximo de la misma comunidad. Se comprueba al proponer y otra vez al aplicar; si al aplicar ya no se cumple, el cambio queda rechazado.
 - **Debatir y votar.** El cambio abre un tema que ya es propuesta formal, con una única solución («Cambiar a …»). Pasa por el plazo de debate y después por la votación automática de 3A-3, con «Apruebo / No apruebo / Me abstengo».
   - No admite otras soluciones.
   - No genera comisiones ni iniciativas de grupo.
@@ -606,6 +608,8 @@ El spec 3A (§8) pide que las reglas no las fije nadie por su cuenta: la comunid
   - una **regla local** aprobada se guarda al instante, después de comprobar de nuevo sus límites;
   - una **regla de la colmena** aprobada crea una acción de la mesa, que la aplica con 2 aprobaciones (o la rechaza con 2), comprobando otra vez los límites.
   - Nadie puede crear a mano una acción de la mesa para cambiar una regla.
+  - Si la mesa no la resuelve en 30 días, la acción vence: el cambio queda «Rechazado por la mesa» y la regla queda libre para otra propuesta.
+  - Si el tema del cambio se oculta en firme por moderación, el cambio queda anulado (y, si esperaba a la mesa, su acción queda rechazada).
 - **Historial.** Cada regla muestra su cambio en curso y los últimos cambios resueltos (aplicado, rechazado, rechazado por la mesa, sin participación o anulado), sin nombres.
 
 ### Consecuencias
