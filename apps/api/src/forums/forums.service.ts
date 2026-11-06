@@ -847,7 +847,36 @@ export class ForumsService {
       where: { proposalId: topicId, fase: { in: ['modo', 'objecion', 'votacion'] } },
       data: { fase: 'cancelada' },
     });
+    await this.anularCambioReglaTx(tx, topicId);
     return d.count > 0;
+  }
+
+  /**
+   * Un tema de cambio de regla ocultado en firme anula su cambio abierto, haya o no decisión:
+   * en votación queda «anulado»; si esperaba a la mesa, también, y su acción de la mesa queda
+   * rechazada. Primero la acción y luego el cambio, el mismo orden de bloqueo que usa la mesa.
+   */
+  private async anularCambioReglaTx(tx: Tx, topicId: string): Promise<void> {
+    const ahora = new Date();
+    await tx.cambioRegla.updateMany({
+      where: { proposalId: topicId, estado: 'en_votacion' },
+      data: { estado: 'anulado', resueltoAt: ahora },
+    });
+    const enMesa = await tx.cambioRegla.findFirst({
+      where: { proposalId: topicId, estado: 'pendiente_mesa' },
+      select: { id: true, boardActionId: true },
+    });
+    if (!enMesa) return;
+    if (enMesa.boardActionId) {
+      await tx.boardAction.updateMany({
+        where: { id: enMesa.boardActionId, status: 'pending' },
+        data: { status: 'rejected', resolvedAt: ahora },
+      });
+    }
+    await tx.cambioRegla.updateMany({
+      where: { id: enMesa.id, estado: 'pendiente_mesa' },
+      data: { estado: 'anulado', resueltoAt: ahora },
+    });
   }
 
   /** Vuelve a mostrar un tema; su votación recupera el título, pero una cancelada no se reabre. */
