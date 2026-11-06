@@ -34,7 +34,7 @@ export interface GroupListResponse {
 }
 
 export type TrabajoTipoValue = 'subgrupo' | 'comision' | 'bifurcacion';
-export type TrabajoEstadoValue = 'convocando' | 'activo' | 'pausado' | 'cerrado' | 'archivado';
+export type TrabajoEstadoValue = 'convocando' | 'activo' | 'pausado' | 'cerrado' | 'archivado' | 'eligiendo';
 
 export interface GrupoTrabajoItem {
   id: string;
@@ -56,6 +56,39 @@ export interface GrupoTrabajoDetail extends GrupoTrabajoItem {
   forumId: string | null;
   puedoEntrar: boolean;
   puedoSalir: boolean;
+  comision: ComisionView | null;
+  bifurcacion: BifurcacionView | null;
+}
+
+export interface ComisionView {
+  tarea: string;
+  puestos: number;
+  forma: 'sorteo' | 'preferencias';
+  /** Nombres visibles en el ámbito. */
+  voluntarios: { nombre: string; experiencia: string; soyYo: boolean }[];
+  yoVoluntario: boolean;
+  ampliada: boolean;
+  seleccion: { semilla: string; pool: string[]; algoritmo: string } | null;
+  eleccionEndsAt: string | null;
+  miPapeleta: string[] | null;
+  informes: { texto: string; final: boolean; createdAt: string; oculto: boolean }[];
+  proximoInformeAt: string | null;
+  atrasada: boolean;
+  yoApoyoRenovar: boolean;
+  puedoApoyarRenovar: boolean;
+  puedoAjustar: boolean;
+  puedoInformar: boolean;
+  origen: { proposalId: string; solucionTitulo: string } | null;
+}
+
+export interface BifurcacionView {
+  solucionTitulo: string;
+  proposalId: string;
+  pausa: { causa: string; detalle: string; apelada: boolean } | null;
+  puedoApelar: boolean;
+  puedoPausar: boolean;
+  puedoPedirComision: boolean;
+  yaLlevada: boolean;
 }
 
 export interface GruposAmbitoResponse {

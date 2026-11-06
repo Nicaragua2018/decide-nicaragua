@@ -180,6 +180,8 @@ export class GruposService {
       forumId,
       puedoEntrar: enAmbito && !soyMiembro && (estado === 'convocando' || estado === 'activo'),
       puedoSalir: soyMiembro,
+      comision: null,
+      bifurcacion: null,
     };
   }
 

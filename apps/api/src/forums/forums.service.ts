@@ -1026,6 +1026,7 @@ export class ForumsService {
           const titulo = tituloDe.get(id);
           return titulo === undefined ? [] : [titulo];
         }),
+        informeFinal: null,
       });
     }
     return result;

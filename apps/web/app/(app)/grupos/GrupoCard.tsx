@@ -8,6 +8,7 @@ const ESTADO_LABEL: Record<GrupoTrabajoItem['estado'], string> = {
   pausado: 'Pausado',
   cerrado: 'Cerrado',
   archivado: 'Archivado',
+  eligiendo: 'Eligiendo integrantes',
 };
 
 export function estadoGrupo(g: GrupoTrabajoItem): string {

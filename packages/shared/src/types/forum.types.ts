@@ -33,6 +33,8 @@ export interface PublicConsensus {
   winningOption: string | null;
   /** Títulos de las soluciones aprobadas (vacío si no aplica). */
   approvedSolutions: string[];
+  /** Informe final de la comisión, si lo hubo. */
+  informeFinal: string | null;
 }
 
 /** Apelación pendiente, para la cola de la mesa. */

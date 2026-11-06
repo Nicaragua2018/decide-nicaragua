@@ -41,6 +41,7 @@ enum TrabajoEstado {
   pausado
   cerrado
   archivado
+  eligiendo
 }
 
 enum SortitionStatus {
@@ -242,18 +243,21 @@ model Profile {
   proposals             Proposal[]
   comments              ProposalComment[]
   signals               ConsensusSignal[]
-  electionsCreated      Election[]              @relation("ElectionCreator")
+  electionsCreated      Election[]                @relation("ElectionCreator")
   ballots               Ballot[]
-  sortitionDrawsCreated SortitionDraw[]         @relation("SortitionCreator")
+  sortitionDrawsCreated SortitionDraw[]           @relation("SortitionCreator")
   sortitionSelections   SortitionMember[]
   boardSeats            BoardSeat[]
-  referencesGiven       VerificationReference[] @relation("ReferencesGiven")
+  referencesGiven       VerificationReference[]   @relation("ReferencesGiven")
   boardApprovals        BoardApproval[]
-  boardActionsProposed  BoardAction[]           @relation("BoardActionProposer")
-  forumsCreated         Forum[]                 @relation("ForumCreator")
-  moderationsDone       ModerationAction[]      @relation("Moderator")
+  boardActionsProposed  BoardAction[]             @relation("BoardActionProposer")
+  forumsCreated         Forum[]                   @relation("ForumCreator")
+  moderationsDone       ModerationAction[]        @relation("Moderator")
   inquietudes           Inquietud[]
   inquietudApoyos       InquietudApoyo[]
+  comisionVoluntarios   ComisionVoluntario[]
+  comisionRenovaciones  ComisionRenovacionApoyo[]
+  comisionPapeletas     ComisionPapeleta[]
   frases                Frase[]
   frasesVotos           FraseVoto[]
   soluciones            Solucion[]
@@ -287,8 +291,36 @@ model Group {
   pocosMiembrosDesde DateTime?      @db.Timestamptz
   creadoPorProfileId String?        @db.Uuid
 
+  /// Comisiones y bifurcaciones. NOTA: dos índices únicos parciales hechos a mano en SQL
+  /// (Prisma no los conoce; no los borre en migraciones futuras):
+  ///  - grupos_comision_viva_por_solucion: UNIQUE ("origenSolucionId") WHERE "trabajoTipo" = 'comision'
+  ///    AND "trabajoEstado" NOT IN ('cerrado','archivado')
+  ///  - grupos_bifurcacion_por_solucion: UNIQUE ("origenSolucionId") WHERE "trabajoTipo" = 'bifurcacion'
+  origenSolucionId   String?          @db.Uuid
+  origenGrupoId      String?          @db.Uuid
+  tarea              String?          @db.VarChar(2000)
+  puestos            Int?
+  forma              String?          @db.VarChar(20)
+  ampliada           Boolean          @default(false)
+  eleccionEndsAt     DateTime?        @db.Timestamptz
+  seleccionSemilla   String?
+  seleccionPool      Json?
+  seleccionAlgoritmo String?
+  eleccionResultado  Json?
+  activadaAt         DateTime?        @db.Timestamptz
+  proximoInformeAt   DateTime?        @db.Timestamptz
+  pausaCausa         ModeracionCausa?
+  pausaDetalle       String?          @db.VarChar(500)
+  pausaApelacion     String?          @db.VarChar(1000)
+  pausaApeladaAt     DateTime?        @db.Timestamptz
+
   createdAt DateTime @default(now()) @db.Timestamptz
   updatedAt DateTime @updatedAt @db.Timestamptz
+
+  comisionVoluntarios  ComisionVoluntario[]
+  comisionInformes     ComisionInforme[]
+  comisionRenovaciones ComisionRenovacionApoyo[]
+  comisionPapeletas    ComisionPapeleta[]
 
   memberships    GroupMembership[]
   proposals      Proposal[]
@@ -718,17 +750,17 @@ model Forum {
  * ModerationAction — un ocultamiento con su motivo, apelación y resolución.
  */
 model ModerationAction {
-  id                 String           @id @default(uuid()) @db.Uuid
-  target             ModerationTarget
-  targetId           String           @db.Uuid
-  reason             String           @db.VarChar(500)
-  moderatorProfileId String           @db.Uuid
-  moderator          Profile          @relation("Moderator", fields: [moderatorProfileId], references: [id])
-  status             ModerationStatus @default(oculto)
-  appealText         String?          @db.VarChar(1000)
-  appealedAt         DateTime?        @db.Timestamptz
-  resolvedAt         DateTime?        @db.Timestamptz
-  createdAt          DateTime         @default(now()) @db.Timestamptz
+  id                   String           @id @default(uuid()) @db.Uuid
+  target               ModerationTarget
+  targetId             String           @db.Uuid
+  reason               String           @db.VarChar(500)
+  moderatorProfileId   String           @db.Uuid
+  moderator            Profile          @relation("Moderator", fields: [moderatorProfileId], references: [id])
+  status               ModerationStatus @default(oculto)
+  appealText           String?          @db.VarChar(1000)
+  appealedAt           DateTime?        @db.Timestamptz
+  resolvedAt           DateTime?        @db.Timestamptz
+  createdAt            DateTime         @default(now()) @db.Timestamptz
   /// Null en las moderaciones anteriores a las causas cerradas.
   causa                ModeracionCausa?
   /// Segunda persona de la mesa que confirmó o rechazó (columna simple, sin relación).
@@ -906,29 +938,29 @@ model Solucion {
  * papeleta ordenada y resultado (Schulze / aprobaciones).
  */
 model Decision {
-  id                String             @id @default(uuid()) @db.Uuid
-  proposalId        String             @unique @db.Uuid
-  proposal          Proposal           @relation(fields: [proposalId], references: [id], onDelete: Cascade)
-  fase              DecisionFase
-  modo              DecisionModo?
-  modoPropuesto     DecisionModo?
-  objecionEndsAt    DateTime?          @db.Timestamptz
-  votacionStartsAt  DateTime?          @db.Timestamptz
-  votacionEndsAt    DateTime?          @db.Timestamptz
+  id               String             @id @default(uuid()) @db.Uuid
+  proposalId       String             @unique @db.Uuid
+  proposal         Proposal           @relation(fields: [proposalId], references: [id], onDelete: Cascade)
+  fase             DecisionFase
+  modo             DecisionModo?
+  modoPropuesto    DecisionModo?
+  objecionEndsAt   DateTime?          @db.Timestamptz
+  votacionStartsAt DateTime?          @db.Timestamptz
+  votacionEndsAt   DateTime?          @db.Timestamptz
   /// Orden congelado al abrir la votación.
-  candidatas        String[]           @default([]) @db.Uuid
-  resultado         DecisionResultado?
-  ganadoras         String[]           @default([]) @db.Uuid
+  candidatas       String[]           @default([]) @db.Uuid
+  resultado        DecisionResultado?
+  ganadoras        String[]           @default([]) @db.Uuid
   /// Aprobaciones por índice de `candidatas`.
-  aprobaciones      Int[]              @default([])
-  pairwiseMatrix    Json?
-  schulzeMatrix     Json?
-  papeletasTotal    Int?
-  abstenciones      Int?
-  miembros          Int?
-  contadaAt         DateTime?          @db.Timestamptz
-  createdAt         DateTime           @default(now()) @db.Timestamptz
-  updatedAt         DateTime           @updatedAt @db.Timestamptz
+  aprobaciones     Int[]              @default([])
+  pairwiseMatrix   Json?
+  schulzeMatrix    Json?
+  papeletasTotal   Int?
+  abstenciones     Int?
+  miembros         Int?
+  contadaAt        DateTime?          @db.Timestamptz
+  createdAt        DateTime           @default(now()) @db.Timestamptz
+  updatedAt        DateTime           @updatedAt @db.Timestamptz
 
   papeletas  DecisionPapeleta[]
   objeciones ObjecionModo[]
@@ -961,4 +993,67 @@ model ObjecionModo {
 
   @@unique([decisionId, profileId])
   @@map("objeciones_modo")
+}
+
+/**
+ * ComisionVoluntario — persona que se ofrece para una comisión, con su experiencia.
+ */
+model ComisionVoluntario {
+  id          String   @id @default(uuid()) @db.Uuid
+  grupoId     String   @db.Uuid
+  grupo       Group    @relation(fields: [grupoId], references: [id], onDelete: Cascade)
+  profileId   String   @db.Uuid
+  profile     Profile  @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  experiencia String   @db.VarChar(500)
+  createdAt   DateTime @default(now()) @db.Timestamptz
+
+  @@unique([grupoId, profileId])
+  @@map("comision_voluntarios")
+}
+
+/**
+ * ComisionInforme — informe periódico o final de una comisión. autorProfileId es columna simple.
+ */
+model ComisionInforme {
+  id             String   @id @default(uuid()) @db.Uuid
+  grupoId        String   @db.Uuid
+  grupo          Group    @relation(fields: [grupoId], references: [id], onDelete: Cascade)
+  autorProfileId String   @db.Uuid
+  texto          String   @db.VarChar(5000)
+  final          Boolean
+  hidden         Boolean  @default(false)
+  createdAt      DateTime @default(now()) @db.Timestamptz
+
+  @@index([grupoId, createdAt])
+  @@map("comision_informes")
+}
+
+/**
+ * ComisionRenovacionApoyo — apoyo de un miembro a renovar una comisión atrasada.
+ */
+model ComisionRenovacionApoyo {
+  id        String   @id @default(uuid()) @db.Uuid
+  grupoId   String   @db.Uuid
+  grupo     Group    @relation(fields: [grupoId], references: [id], onDelete: Cascade)
+  profileId String   @db.Uuid
+  profile   Profile  @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now()) @db.Timestamptz
+
+  @@unique([grupoId, profileId])
+  @@map("comision_renovacion_apoyos")
+}
+
+/**
+ * ComisionPapeleta — orden de preferencias (profileIds de voluntarios) de un votante.
+ */
+model ComisionPapeleta {
+  id        String   @id @default(uuid()) @db.Uuid
+  grupoId   String   @db.Uuid
+  grupo     Group    @relation(fields: [grupoId], references: [id], onDelete: Cascade)
+  profileId String   @db.Uuid
+  profile   Profile  @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  orden     String[] @db.Uuid
+
+  @@unique([grupoId, profileId])
+  @@map("comision_papeletas")
 }
