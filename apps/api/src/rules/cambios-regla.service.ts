@@ -22,6 +22,8 @@ const SOLUCION_TITULO_MAX = 140;
 const SOLUCION_DESCRIPCION_MAX = 2000;
 /** Cambios resueltos como mucho por pasada; el resto espera a la siguiente. */
 const LOTE = 100;
+/** Días que un cambio de la colmena espera a la mesa; después queda rechazado_mesa y libera la regla. */
+export const PLAZO_MESA_DIAS = 30;
 
 const NO_AMBITO = 'Las reglas se cambian en una comunidad de origen, de acogida o en el nivel general, no en un grupo de trabajo.';
 const EN_CURSO = 'Ya hay un cambio en curso para esta regla.';
@@ -227,6 +229,59 @@ export class CambiosReglaService {
       await tx.cambioRegla.update({ where: { id }, data: { boardActionId: accion.id } });
       return { accion: 'regla.cambio_enviado_a_mesa', key: c.key };
     });
+  }
+
+  // ─── Vencimiento en la mesa ───────────────────────────────────────────────
+
+  /**
+   * Pasada del programador: la acción de la mesa de un cambio de la colmena que lleva más de
+   * {@link PLAZO_MESA_DIAS} días sin resolverse queda rechazada y su cambio, `rechazado_mesa`
+   * (la regla queda libre para otra propuesta). Cada una en su propia transacción, con la acción
+   * bloqueada como en el voto de la mesa. Devuelve cuántos cambios venció.
+   */
+  async vencerPendientesMesa(ahora: Date = new Date()): Promise<number> {
+    const limite = new Date(ahora.getTime() - PLAZO_MESA_DIAS * DIA_MS);
+    const acciones = await this.prisma.boardAction.findMany({
+      where: { type: 'change_rule', status: 'pending', createdAt: { lt: limite } },
+      select: { id: true },
+      orderBy: { createdAt: 'asc' },
+      take: LOTE,
+    });
+    let n = 0;
+    for (const { id } of acciones) {
+      try {
+        const cambio = await this.prisma.$transaction(async (tx) => {
+          await tx.$queryRaw(Prisma.sql`SELECT id FROM board_actions WHERE id = ${id}::uuid FOR UPDATE`);
+          const tomada = await tx.boardAction.updateMany({
+            where: { id, status: 'pending', createdAt: { lt: limite } },
+            data: { status: 'rejected', resolvedAt: ahora },
+          });
+          if (tomada.count === 0) return null;
+          const c = await tx.cambioRegla.findFirst({
+            where: { boardActionId: id, estado: 'pendiente_mesa' },
+            select: { id: true, key: true },
+          });
+          if (!c) return null;
+          const cerrado = await tx.cambioRegla.updateMany({
+            where: { id: c.id, estado: 'pendiente_mesa' },
+            data: { estado: 'rechazado_mesa', resueltoAt: ahora },
+          });
+          return cerrado.count === 1 ? c : null;
+        });
+        if (!cambio) continue;
+        n++;
+        void this.audit
+          .log({
+            action: 'regla.cambio_rechazado',
+            resource: `cambio_regla:${cambio.id}`,
+            metadata: { cambioId: cambio.id, key: cambio.key },
+          })
+          .catch((err: unknown) => this.logger.error('Audit log failed', err));
+      } catch (err) {
+        this.logger.error(`No se pudo vencer la acción ${id}: ${err instanceof Error ? err.name : 'error'}`);
+      }
+    }
+    return n;
   }
 }
 

@@ -446,3 +446,81 @@ describe('CambiosReglaService.procesarResultados()', () => {
     expect(cambios.get('c-b')!.estado).toBe('aplicado');
   });
 });
+
+describe('CambiosReglaService.vencerPendientesMesa()', () => {
+  const AHORA = new Date('2026-12-15T12:00:00Z');
+  const DIA = 86_400_000;
+
+  function crear(acciones: { id: string; status: string; createdAt: Date }[], cambios: { id: string; key: string; boardActionId: string; estado: string; resueltoAt?: Date }[]) {
+    const db = {
+      $queryRaw: vi.fn().mockResolvedValue([]),
+      boardAction: {
+        findMany: vi.fn(async ({ where }: { where: { createdAt: { lt: Date } } }) =>
+          acciones.filter((a) => a.status === 'pending' && a.createdAt < where.createdAt.lt).map((a) => ({ id: a.id })),
+        ),
+        updateMany: vi.fn(async ({ where, data }: { where: { id: string; status: string; createdAt: { lt: Date } }; data: { status: string } }) => {
+          const a = acciones.find((x) => x.id === where.id);
+          if (!a || a.status !== where.status || !(a.createdAt < where.createdAt.lt)) return { count: 0 };
+          a.status = data.status;
+          return { count: 1 };
+        }),
+      },
+      cambioRegla: {
+        findFirst: vi.fn(async ({ where }: { where: { boardActionId: string; estado: string } }) => {
+          const c = cambios.find((x) => x.boardActionId === where.boardActionId && x.estado === where.estado);
+          return c ? { id: c.id, key: c.key } : null;
+        }),
+        updateMany: vi.fn(async ({ where, data }: { where: { id: string; estado: string }; data: { estado: string; resueltoAt: Date } }) => {
+          const c = cambios.find((x) => x.id === where.id);
+          if (!c || c.estado !== where.estado) return { count: 0 };
+          Object.assign(c, data);
+          return { count: 1 };
+        }),
+      },
+      $transaction: vi.fn(async (fn: (t: unknown) => unknown) => fn(db)),
+    };
+    const audit = { log: vi.fn().mockResolvedValue(undefined) };
+    const service = new CambiosReglaService(db as never, {} as never, {} as never, {} as never, audit as never);
+    return { db, audit, service };
+  }
+
+  it('pasados 30 días sin resolver, la acción de la mesa queda rechazada y el cambio rechazado_mesa (sin actor)', async () => {
+    const acciones = [
+      { id: 'a-vieja', status: 'pending', createdAt: new Date(AHORA.getTime() - 31 * DIA) },
+      { id: 'a-nueva', status: 'pending', createdAt: new Date(AHORA.getTime() - 29 * DIA) },
+    ];
+    const cambios = [
+      { id: 'c-v', key: 'reglas.participacion_minima', boardActionId: 'a-vieja', estado: 'pendiente_mesa' },
+      { id: 'c-n', key: 'reglas.participacion_minima', boardActionId: 'a-nueva', estado: 'pendiente_mesa' },
+    ];
+    const { db, audit, service } = crear(acciones, cambios);
+
+    expect(await service.vencerPendientesMesa(AHORA)).toBe(1);
+
+    expect(db.boardAction.findMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: { type: 'change_rule', status: 'pending', createdAt: { lt: new Date(AHORA.getTime() - 30 * DIA) } },
+    }));
+    const bloqueo = db.$queryRaw.mock.calls[0]![0] as { strings: string[]; values: unknown[] };
+    expect(bloqueo.strings.join('?')).toContain('FROM board_actions WHERE id = ?::uuid FOR UPDATE');
+    expect(bloqueo.values).toEqual(['a-vieja']);
+    expect(acciones.map((a) => a.status)).toEqual(['rejected', 'pending']);
+    expect(cambios[0]).toMatchObject({ estado: 'rechazado_mesa', resueltoAt: AHORA });
+    expect(cambios[1]!.estado).toBe('pendiente_mesa');
+    expect(audit.log).toHaveBeenCalledTimes(1);
+    expect(audit.log).toHaveBeenCalledWith({
+      action: 'regla.cambio_rechazado',
+      resource: 'cambio_regla:c-v',
+      metadata: { cambioId: 'c-v', key: 'reglas.participacion_minima' },
+    });
+  });
+
+  it('si la mesa la resolvió justo antes, no se toca (condicionado a pending)', async () => {
+    const acciones = [{ id: 'a-1', status: 'pending', createdAt: new Date(AHORA.getTime() - 40 * DIA) }];
+    const cambios = [{ id: 'c-1', key: 'reglas.participacion_minima', boardActionId: 'a-1', estado: 'pendiente_mesa' }];
+    const { db, audit, service } = crear(acciones, cambios);
+    db.boardAction.updateMany.mockResolvedValueOnce({ count: 0 });
+    expect(await service.vencerPendientesMesa(AHORA)).toBe(0);
+    expect(cambios[0]!.estado).toBe('pendiente_mesa');
+    expect(audit.log).not.toHaveBeenCalled();
+  });
+});
