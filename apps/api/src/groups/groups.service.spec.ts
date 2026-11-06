@@ -13,6 +13,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { NotFoundException } from '@nestjs/common';
 
 import { GroupsService } from './groups.service';
+import { GroupAccessService } from './group-access.service';
 import { PrismaService } from '../prisma/prisma.service';
 
 // ─── Fixtures ────────────────────────────────────────────────────────────────
@@ -68,7 +69,10 @@ describe('GroupsService', () => {
     vi.resetAllMocks();
     prisma = buildPrismaMock();
     vi.mocked(prisma.groupMembership.deleteMany).mockResolvedValue({ count: 0 } as never);
-    service = new GroupsService(prisma as unknown as PrismaService);
+    service = new GroupsService(
+      prisma as unknown as PrismaService,
+      new GroupAccessService(prisma as unknown as PrismaService),
+    );
   });
 
   // ─── getMyGroups ─────────────────────────────────────────────────────────
@@ -135,6 +139,19 @@ describe('GroupsService', () => {
       const result = await service.getGroupById(GROUP_ID, PROFILE_ID);
 
       expect(result.isMember).toBe(false);
+    });
+
+    it('un grupo de trabajo solo lo ven sus miembros y los miembros de su ámbito', async () => {
+      const sub = { ...mockGroup, type: 'trabajo', parentGroupId: 'g-ambito' };
+      vi.mocked(prisma.group.findUnique).mockResolvedValue(sub as never);
+      vi.mocked(prisma.groupMembership.findUnique).mockResolvedValue(null as never);
+      await expect(service.getGroupById(GROUP_ID, PROFILE_ID)).rejects.toThrow(
+        'Solo los miembros de esta comunidad pueden ver esto.',
+      );
+
+      vi.mocked(prisma.groupMembership.findUnique).mockImplementation((async (a: { where: { groupId_profileId: { groupId: string } } }) =>
+        a.where.groupId_profileId.groupId === 'g-ambito' ? mockMembership : null) as never);
+      await expect(service.getGroupById(GROUP_ID, PROFILE_ID)).resolves.toMatchObject({ isMember: false });
     });
 
     it('throws NotFoundException when group does not exist', async () => {

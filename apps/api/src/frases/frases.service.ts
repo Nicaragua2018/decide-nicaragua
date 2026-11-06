@@ -118,9 +118,11 @@ export class FrasesService {
   async list(profileId: string, proposalId: string): Promise<FrasesResponse> {
     const tema = await this.tema(profileId, proposalId, 'leer');
     if (tema.hidden) return { items: [], pendientes: 0 };
-    // Una frase oculta solo la ve su autor (sin el texto); para los demás no existe.
+    // Una frase oculta solo la ve su autor (sin el texto), si participa; para los demás no existe.
     const frases = await this.prisma.frase.findMany({
-      where: { proposalId, OR: [{ hidden: false }, { hidden: true, authorProfileId: profileId }] },
+      where: tema.participa
+        ? { proposalId, OR: [{ hidden: false }, { hidden: true, authorProfileId: profileId }] }
+        : { proposalId, hidden: false },
       orderBy: { createdAt: 'asc' },
     });
     const ocultas = frases.filter((f) => f.hidden).map((f) => f.id);
@@ -133,10 +135,13 @@ export class FrasesService {
       : [];
     const ultima = new Map<string, (typeof acciones)[number]>();
     for (const a of acciones) if (!ultima.has(a.targetId)) ultima.set(a.targetId, a);
-    const mios = await this.prisma.fraseVoto.findMany({
-      where: { profileId, frase: { proposalId } },
-      select: { fraseId: true, value: true },
-    });
+    // Quien solo lee no tiene votos propios (los de cuando era miembro no cuentan): no ve resultados.
+    const mios = tema.participa
+      ? await this.prisma.fraseVoto.findMany({
+          where: { profileId, frase: { proposalId } },
+          select: { fraseId: true, value: true },
+        })
+      : [];
     const miVoto = new Map(mios.map((v) => [v.fraseId, v.value as FraseVotoValue]));
     // Recuentos solo de las frases que la persona ya votó (independencia).
     const votadas = frases.filter((f) => miVoto.has(f.id)).map((f) => f.id);
@@ -170,7 +175,7 @@ export class FrasesService {
         id: f.id,
         text: f.text,
         hidden: false,
-        isAuthor: f.authorProfileId === profileId,
+        isAuthor: tema.participa && f.authorProfileId === profileId,
         myVote: mine,
         resultado: mine ? this.resultado(conteo.get(f.id) ?? { deAcuerdo: 0, enDesacuerdo: 0, paso: 0 }) : null,
         hiddenReason: null,
@@ -251,7 +256,10 @@ export class FrasesService {
     // Un grupo de menos de 3 personas ni se muestra ni cuenta para puentes o divisivas.
     const visibles = new Set(result.grupos.filter((g) => g.size >= MIN_GRUPO).map((g) => g.id));
     const analizadas = result.frases.map((f) => ({ ...f, porGrupo: f.porGrupo.filter((g) => visibles.has(g.grupo)) }));
-    const votadasPorMi = new Set(votos.filter((v) => v.profileId === profileId).map((v) => v.fraseId));
+    // Quien solo lee no votó: no ve puentes ni divisivas, ni cuántos puentes le faltan.
+    const votadasPorMi = new Set(
+      tema.participa ? votos.filter((v) => v.profileId === profileId).map((v) => v.fraseId) : [],
+    );
     const texto = new Map(frases.map((f) => [f.id, f.text]));
 
     const aAnalisis = (f: (typeof analizadas)[number]): FraseAnalisis => ({
@@ -267,7 +275,8 @@ export class FrasesService {
     // coincide con las sin votar (diría que todas las pendientes son puentes).
     const sinVotar = frases.filter((f) => !votadasPorMi.has(f.id)).length;
     const pendientesPuente = puentesTodos.filter((f) => !votadasPorMi.has(f.fraseId)).length;
-    const puentesSinVer = sinVotar >= MIN_GRUPO && pendientesPuente < sinVotar ? pendientesPuente : 0;
+    const puentesSinVer =
+      tema.participa && sinVotar >= MIN_GRUPO && pendientesPuente < sinVotar ? pendientesPuente : 0;
     const divisivas = analizadas.filter((f) => isDivisiva(f) && votadasPorMi.has(f.fraseId)).map(aAnalisis);
 
     return {

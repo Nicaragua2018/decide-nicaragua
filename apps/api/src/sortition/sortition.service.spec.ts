@@ -82,6 +82,9 @@ function buildPrismaMock() {
     sortitionMember: {
       create: vi.fn(),
     },
+    group: {
+      findUnique: vi.fn(),
+    },
     groupMembership: {
       findUnique: vi.fn(),
       findMany: vi.fn(),
@@ -120,6 +123,16 @@ describe('SortitionService', () => {
 
   describe('createDraw', () => {
     const dto = { title: 'Sorteo de prueba MVP', selectionSize: 3 };
+
+    it('no se crean sorteos dentro de un grupo de trabajo (400)', async () => {
+      prisma.groupMembership.findUnique.mockResolvedValue(mockMembership);
+      prisma.group.findUnique.mockResolvedValue({ type: 'trabajo' });
+
+      await expect(service.createDraw(GROUP_ID, dto, PROFILE_ID, IP)).rejects.toThrow(
+        'Los grupos de trabajo deciden con soluciones y votación; lo demás se lleva a la comunidad.',
+      );
+      expect(prisma.sortitionDraw.create).not.toHaveBeenCalled();
+    });
 
     it('crea un sorteo cuando el usuario es miembro', async () => {
       prisma.groupMembership.findUnique.mockResolvedValue(mockMembership);

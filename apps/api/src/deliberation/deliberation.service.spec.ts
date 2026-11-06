@@ -564,6 +564,22 @@ describe('DeliberationService', () => {
       expect(r.userSignal).toBeNull();
     });
 
+    it('quien lee no recibe datos de apelación de sus comentarios ni de su tema ocultos', async () => {
+      miembroDe(['g-ambito']);
+      prisma.moderationAction.findFirst.mockResolvedValue({ id: 'ma1', causa: null, reason: 'x', status: 'oculto' });
+      prisma.proposal.findUnique.mockResolvedValue({
+        ...detalle,
+        comments: [
+          { id: COMMENT_ID, authorProfileId: PROFILE_ID, author: { displayName: 'Yo' }, body: 'texto', parentId: null, createdAt: new Date(), hidden: true },
+        ],
+      });
+      let r = await service.getProposalById(PROPOSAL_ID, PROFILE_ID);
+      expect(r.comments[0]!.moderationId).toBeNull();
+      prisma.proposal.findUnique.mockResolvedValue({ ...detalle, hidden: true });
+      r = await service.getProposalById(PROPOSAL_ID, PROFILE_ID);
+      expect(r.moderationId).toBeNull();
+    });
+
     it('un miembro del subgrupo no es solo lectura', async () => {
       miembroDe([GROUP_ID]);
       prisma.proposal.findUnique.mockResolvedValue(detalle);

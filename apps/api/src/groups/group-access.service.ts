@@ -1,5 +1,17 @@
-import { ForbiddenException, Injectable } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+
+export const SOLO_EN_LA_COMUNIDAD =
+  'Los grupos de trabajo deciden con soluciones y votación; lo demás se lleva a la comunidad.';
+
+/** Inquietudes, elecciones y sorteos no existen dentro de un grupo de trabajo (400). */
+export async function rechazarGrupoDeTrabajo(
+  prisma: Pick<PrismaService, 'group'>,
+  groupId: string,
+): Promise<void> {
+  const g = await prisma.group.findUnique({ where: { id: groupId }, select: { type: true } });
+  if ((g?.type as string | undefined) === 'trabajo') throw new BadRequestException(SOLO_EN_LA_COMUNIDAD);
+}
 
 const NO_LEE = 'Solo los miembros de esta comunidad pueden ver esto.';
 const NO_PARTICIPA_COMUNIDAD = 'Solo los miembros de esta comunidad pueden participar.';

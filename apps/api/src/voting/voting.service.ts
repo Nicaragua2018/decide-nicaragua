@@ -16,6 +16,7 @@ import type {
 } from '@decide/shared';
 
 import { PrismaService } from '../prisma/prisma.service';
+import { rechazarGrupoDeTrabajo } from '../groups/group-access.service';
 import { AuditService } from '../audit/audit.service';
 import { runSchulze } from './schulze';
 import { CreateElectionDto } from './dto/create-election.dto';
@@ -40,6 +41,7 @@ export class VotingService {
     ip: string,
   ): Promise<{ id: string }> {
     await this.requireMembership(groupId, profileId);
+    await rechazarGrupoDeTrabajo(this.prisma, groupId);
 
     const startsAt = new Date(dto.startsAt);
     const endsAt = new Date(dto.endsAt);

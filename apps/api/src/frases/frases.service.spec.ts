@@ -135,6 +135,38 @@ describe('FrasesService', () => {
       expect(prisma.fraseVoto.upsert).not.toHaveBeenCalled();
     });
 
+    it('el análisis de quien lee no cuenta puentes sin ver ni muestra puentes', async () => {
+      miembroDe(['g-ambito']);
+      prisma.frase.findMany.mockResolvedValue([frase('f1'), frase('f2'), frase('f3'), frase('f4')]);
+      // Votos guardados de cuando era miembro: no deben contar como suyos.
+      prisma.fraseVoto.findMany.mockResolvedValue([{ profileId: YO, fraseId: 'f1', value: 'de_acuerdo' }]);
+      const acuerdo = { votantes: 5, deAcuerdo: 5, total: 5 };
+      const desacuerdo = { votantes: 5, deAcuerdo: 0, total: 5 };
+      ctl.override = () => ({
+        participants: 10,
+        grupos: [{ id: 0, size: 5, members: [] }, { id: 1, size: 5, members: [] }],
+        frases: [
+          { fraseId: 'f1', porGrupo: [{ grupo: 0, ...acuerdo }, { grupo: 1, ...acuerdo }] },
+          { fraseId: 'f2', porGrupo: [{ grupo: 0, ...acuerdo }, { grupo: 1, ...acuerdo }] },
+          { fraseId: 'f3', porGrupo: [{ grupo: 0, ...acuerdo }, { grupo: 1, ...acuerdo }] },
+          { fraseId: 'f4', porGrupo: [{ grupo: 0, ...acuerdo }, { grupo: 1, ...desacuerdo }] },
+        ],
+      });
+      const r = await service.analysis(YO, T);
+      expect(r).toMatchObject({ available: true, puentesSinVer: 0, puentes: [], divisivas: [] });
+    });
+
+    it('quien lee (antes miembro) no ve sus votos, ni resultados, ni datos de apelación', async () => {
+      miembroDe(['g-ambito']);
+      prisma.frase.findMany.mockResolvedValue([frase('f1', undefined, { authorProfileId: YO })]);
+      prisma.fraseVoto.findMany.mockResolvedValue([{ fraseId: 'f1', value: 'de_acuerdo' }]);
+      prisma.fraseVoto.groupBy.mockResolvedValue([{ fraseId: 'f1', value: 'de_acuerdo', _count: { _all: 9 } }]);
+      const r = await service.list(YO, T);
+      expect(r.items[0]).toMatchObject({ id: 'f1', isAuthor: false, myVote: null, resultado: null, moderationId: null });
+      // Solo pide frases visibles: las ocultas propias (con su apelación) son de quien participa.
+      expect(prisma.frase.findMany).toHaveBeenCalledWith(expect.objectContaining({ where: { proposalId: T, hidden: false } }));
+    });
+
     it('quien no es del ámbito no lee nada', async () => {
       miembroDe(['g-otra']);
       await expect(service.list(YO, T)).rejects.toThrow('Solo los miembros de esta comunidad pueden ver esto.');

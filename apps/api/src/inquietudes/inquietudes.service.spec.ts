@@ -11,6 +11,7 @@ import { RespondDto } from './dto/respond.dto';
 function buildPrisma() {
   return {
     groupMembership: { findUnique: vi.fn(), count: vi.fn(), findMany: vi.fn() },
+    group: { findUnique: vi.fn().mockResolvedValue(null) },
     inquietud: { create: vi.fn(), findMany: vi.fn(), findUnique: vi.fn(), updateMany: vi.fn() },
     inquietudApoyo: { upsert: vi.fn(), deleteMany: vi.fn(), count: vi.fn(), findUnique: vi.fn(), findMany: vi.fn() },
     moderationAction: { findFirst: vi.fn() },
@@ -123,6 +124,17 @@ describe('InquietudesService', () => {
         ForbiddenException,
       );
       await expect(service.list(YO, G)).rejects.toBeInstanceOf(ForbiddenException);
+      expect(prisma.inquietud.create).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('grupos de trabajo', () => {
+    it('no se crean inquietudes dentro de un grupo de trabajo (400)', async () => {
+      prisma.groupMembership.findUnique.mockResolvedValue({ id: 'm1' });
+      prisma.group.findUnique.mockResolvedValue({ type: 'trabajo' });
+      await expect(
+        service.create(YO, { groupId: G, title: 'Una inquietud de prueba', body: 'Explicación suficiente' }, 'ip'),
+      ).rejects.toThrow('Los grupos de trabajo deciden con soluciones y votación; lo demás se lleva a la comunidad.');
       expect(prisma.inquietud.create).not.toHaveBeenCalled();
     });
   });

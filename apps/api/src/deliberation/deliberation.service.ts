@@ -162,11 +162,13 @@ export class DeliberationService {
     const { participa } = await this.access.requireReader(proposal.groupId, profileId);
 
     const userSignalRow = participa ? proposal.signals.find((s) => s.profileId === profileId) : undefined;
+    // Quien solo lee no apela: no recibe el id de la moderación de lo suyo.
+    const viewer = participa ? profileId : null;
 
     // Una consulta por comentario oculto (la escala es pequeña). De un tema oculto no se lee nada.
     const comments: CommentItem[] = [];
     for (const c of proposal.hidden ? [] : proposal.comments) {
-      const cm = c.hidden ? await this.hiddenInfo('respuesta', c.id, c.authorProfileId, profileId) : null;
+      const cm = c.hidden ? await this.hiddenInfo('respuesta', c.id, c.authorProfileId, viewer) : null;
       comments.push({
         id: c.id,
         authorDisplayName: c.author.displayName,
@@ -180,7 +182,7 @@ export class DeliberationService {
     }
 
     const topicInfo = proposal.hidden
-      ? await this.hiddenInfo('tema', proposal.id, proposal.authorProfileId, profileId)
+      ? await this.hiddenInfo('tema', proposal.id, proposal.authorProfileId, viewer)
       : null;
 
     const electionStatus =
@@ -419,7 +421,7 @@ export class DeliberationService {
     target: 'tema' | 'respuesta',
     targetId: string,
     authorProfileId: string,
-    viewerProfileId: string,
+    viewerProfileId: string | null,
   ): Promise<{ reason: string | null; moderationId: string | null }> {
     const action = await this.prisma.moderationAction.findFirst({
       where: { target, targetId },
