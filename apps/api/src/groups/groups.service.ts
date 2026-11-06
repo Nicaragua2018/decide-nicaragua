@@ -2,7 +2,7 @@ import { Injectable, NotFoundException, Logger } from '@nestjs/common';
 import { GroupType } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { slugify } from '../common/utils/slugify.util';
-import { MIN_ACTIVE_MEMBERS, GENERAL_GROUP_SLUG } from '@decide/shared';
+import { MIN_ACTIVE_MEMBERS, GENERAL_GROUP_NAME, GENERAL_GROUP_SLUG } from '@decide/shared';
 import type { GroupSummary, GroupDetail, GroupListResponse } from '@decide/shared';
 import { hostCommunity } from '../common/utils/host-community.util';
 
@@ -123,10 +123,10 @@ export class GroupsService {
     // el borrado por tipo de upsertMembership nunca la toca).
     operations.push(
       this.upsertMembership(profile.id, {
-        name: 'Toda la comunidad',
+        name: GENERAL_GROUP_NAME,
         slug: GENERAL_GROUP_SLUG,
         type: GroupType.custom,
-        description: 'Comunidad de todas las personas verificadas de Nicaragua Decide',
+        description: 'Nivel general: todas las personas verificadas del exilio y la diáspora',
       }),
     );
 

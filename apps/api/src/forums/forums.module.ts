@@ -5,11 +5,12 @@ import { RulesModule } from '../rules/rules.module';
 import { ForumsService } from './forums.service';
 import { ForumsController } from './forums.controller';
 import { PublicController } from './public.controller';
+import { ModeracionScheduler } from './moderacion.scheduler';
 
 @Module({
   imports: [AuditModule, BoardModule, RulesModule],
   controllers: [ForumsController, PublicController],
-  providers: [ForumsService],
+  providers: [ForumsService, ModeracionScheduler],
   exports: [ForumsService],
 })
 export class ForumsModule {}

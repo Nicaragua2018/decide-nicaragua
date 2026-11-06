@@ -22,6 +22,7 @@ import { CreateCommentDto } from './dto/create-comment.dto';
 import { SetSignalDto } from './dto/set-signal.dto';
 import { UpdateProposalStatusDto } from './dto/update-proposal-status.dto';
 import { LINKED_TOPIC_REASON } from '../forums/forums.service';
+import { motivoVisible } from '../forums/moderacion-motivo';
 
 /** Estados que aceptan nuevos comentarios y señales */
 const MUTABLE_STATUSES: string[] = [ProposalStatus.open];
@@ -255,10 +256,15 @@ export class DeliberationService {
     }
 
     if ((dto.status as string) === 'archived' && (proposal.kind as string) === 'propuesta') {
-      const election = proposal.electionId
-        ? await this.prisma.election.findUnique({ where: { id: proposal.electionId }, select: { status: true } })
-        : null;
-      const contada = election !== null && ['tallied', 'cancelled'].includes(election.status as string);
+      let contada: boolean;
+      if (proposal.electionId) {
+        const election = await this.prisma.election.findUnique({ where: { id: proposal.electionId }, select: { status: true } });
+        contada = election !== null && ['tallied', 'cancelled'].includes(election.status as string);
+      } else {
+        // Ciclo de soluciones (3A-3): se archiva cuando la decisión ya se contó o se canceló.
+        const decision = await this.prisma.decision.findUnique({ where: { proposalId }, select: { fase: true } });
+        contada = decision != null && ['contada', 'cancelada'].includes(decision.fase as string);
+      }
       if (!contada) {
         throw new BadRequestException('Una propuesta formal no se archiva antes de que se cuente su votación.');
       }
@@ -424,7 +430,7 @@ export class DeliberationService {
     const action = await this.prisma.moderationAction.findFirst({
       where: { target, targetId },
       orderBy: { createdAt: 'desc' },
-      select: { id: true, reason: true, status: true },
+      select: { id: true, causa: true, reason: true, status: true },
     });
     // La ocultación vinculada se apela desde la inquietud de origen, no desde el debate.
     const canAppeal =
@@ -432,7 +438,7 @@ export class DeliberationService {
       action.reason !== LINKED_TOPIC_REASON &&
       authorProfileId === viewerProfileId &&
       (action.status as string) === 'oculto';
-    return { reason: action?.reason ?? null, moderationId: canAppeal ? action.id : null };
+    return { reason: motivoVisible(action), moderationId: canAppeal ? action.id : null };
   }
 
   private requireMutableStatus(status: string): void {

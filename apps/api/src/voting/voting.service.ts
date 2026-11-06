@@ -194,6 +194,7 @@ export class VotingService {
     if ((election.status as string) !== ElectionStatus.open) {
       throw new BadRequestException('Ballots can only be cast in open elections');
     }
+    await this.rejectHiddenProposalVote(electionId);
 
     await this.requireMembership(election.groupId, profileId);
 
@@ -265,6 +266,7 @@ export class VotingService {
     if (election.endsAt > new Date()) {
       throw new BadRequestException('Election has not ended yet');
     }
+    await this.rejectHiddenProposalVote(electionId);
 
     const ballots = await this.prisma.ballot.findMany({
       where: { electionId },
@@ -355,6 +357,12 @@ export class VotingService {
   }
 
   // ─── Helpers privados ─────────────────────────────────────────────────────
+
+  /** La votación de una propuesta oculta por moderación (también provisional) no recibe papeletas ni se cuenta. */
+  private async rejectHiddenProposalVote(electionId: string): Promise<void> {
+    const p = await this.prisma.proposal.findUnique({ where: { electionId }, select: { hidden: true } });
+    if (p?.hidden === true) throw new BadRequestException('Este tema está oculto por moderación.');
+  }
 
   private async isProposalVote(electionId: string): Promise<boolean> {
     return Boolean(await this.prisma.proposal.findUnique({ where: { electionId } }));

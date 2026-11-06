@@ -64,6 +64,33 @@ enum ModerationTarget {
   respuesta
   inquietud
   frase
+  solucion
+}
+
+enum Origen {
+  persona
+  asistente
+}
+
+enum DecisionFase {
+  modo
+  objecion
+  votacion
+  contada
+  cancelada
+}
+
+enum DecisionModo {
+  excluyentes
+  compatibles
+}
+
+enum DecisionResultado {
+  aprobada
+  ninguna
+  empate
+  sin_quorum
+  sin_soluciones
 }
 
 enum FraseVotoValor {
@@ -85,6 +112,17 @@ enum ModerationStatus {
   apelado // el autor apeló
   restaurado // la mesa lo devolvió a la vista
   confirmado // la mesa mantuvo la moderación tras la apelación
+  pendiente // solicitud que espera la segunda firma; el contenido sigue visible
+  provisional // causa urgente: oculto ya, a la espera de la segunda firma
+  rechazado // la mesa no dio la segunda firma o venció el plazo
+}
+
+enum ModeracionCausa {
+  datos_personales
+  insultos_amenazas
+  spam
+  ilegal_violencia
+  suplantacion
 }
 
 enum AccountStatus {
@@ -203,6 +241,9 @@ model Profile {
   inquietudApoyos       InquietudApoyo[]
   frases                Frase[]
   frasesVotos           FraseVoto[]
+  soluciones            Solucion[]
+  papeletas             DecisionPapeleta[]
+  objecionesModo        ObjecionModo[]
 
   @@map("profiles")
 }
@@ -289,6 +330,8 @@ model Proposal {
   signals     ConsensusSignal[]
   inquietudes Inquietud[]
   frases      Frase[]
+  soluciones  Solucion[]
+  decision    Decision?
 
   @@index([forumId])
   @@index([groupId, status])
@@ -658,9 +701,22 @@ model ModerationAction {
   appealedAt         DateTime?        @db.Timestamptz
   resolvedAt         DateTime?        @db.Timestamptz
   createdAt          DateTime         @default(now()) @db.Timestamptz
+  /// Null en las moderaciones anteriores a las causas cerradas.
+  causa                ModeracionCausa?
+  /// Segunda persona de la mesa que confirmó o rechazó (columna simple, sin relación).
+  confirmadorProfileId String?          @db.Uuid
+  /// Plazo de una solicitud pendiente o provisional.
+  venceAt              DateTime?        @db.Timestamptz
+  /// Nació «provisional» (causa urgente). Si se rechaza o vence, una nueva solicitud urgente
+  /// sobre el mismo contenido ya no lo oculta de inmediato: queda «pendiente».
+  fueProvisional       Boolean          @default(false)
 
+  // El índice único parcial `moderation_actions_abierta_key` (una sola solicitud pendiente o
+  // provisional por contenido) vive solo en SQL: Prisma no modela índices parciales
+  // (migración 20261106140100_una_solicitud_abierta_por_contenido).
   @@index([target, targetId])
   @@index([status])
+  @@index([status, venceAt])
   @@map("moderation_actions")
 }
 
@@ -792,4 +848,87 @@ model FraseVoto {
   @@unique([fraseId, profileId])
   @@index([profileId])
   @@map("frase_votos")
+}
+
+/**
+ * Solucion — alternativa de solución a una inquietud/tema, escrita por un miembro
+ * o sugerida por el asistente. Puede fusionarse en otra (mergedIntoId).
+ */
+model Solucion {
+  id              String   @id @default(uuid()) @db.Uuid
+  proposalId      String   @db.Uuid
+  proposal        Proposal @relation(fields: [proposalId], references: [id], onDelete: Cascade)
+  authorProfileId String   @db.Uuid
+  author          Profile  @relation(fields: [authorProfileId], references: [id])
+  title           String   @db.VarChar(140)
+  description     String   @db.VarChar(2000)
+  origen          Origen   @default(persona)
+  hidden          Boolean  @default(false)
+  mergedIntoId    String?  @db.Uuid
+  createdAt       DateTime @default(now()) @db.Timestamptz
+
+  @@index([proposalId])
+  @@map("soluciones")
+}
+
+/**
+ * Decision — proceso de decisión de un tema: modo, objeción, votación por
+ * papeleta ordenada y resultado (Schulze / aprobaciones).
+ */
+model Decision {
+  id                String             @id @default(uuid()) @db.Uuid
+  proposalId        String             @unique @db.Uuid
+  proposal          Proposal           @relation(fields: [proposalId], references: [id], onDelete: Cascade)
+  fase              DecisionFase
+  modo              DecisionModo?
+  modoPropuesto     DecisionModo?
+  objecionEndsAt    DateTime?          @db.Timestamptz
+  votacionStartsAt  DateTime?          @db.Timestamptz
+  votacionEndsAt    DateTime?          @db.Timestamptz
+  /// Orden congelado al abrir la votación.
+  candidatas        String[]           @default([]) @db.Uuid
+  resultado         DecisionResultado?
+  ganadoras         String[]           @default([]) @db.Uuid
+  /// Aprobaciones por índice de `candidatas`.
+  aprobaciones      Int[]              @default([])
+  pairwiseMatrix    Json?
+  schulzeMatrix     Json?
+  papeletasTotal    Int?
+  abstenciones      Int?
+  miembros          Int?
+  contadaAt         DateTime?          @db.Timestamptz
+  createdAt         DateTime           @default(now()) @db.Timestamptz
+  updatedAt         DateTime           @updatedAt @db.Timestamptz
+
+  papeletas  DecisionPapeleta[]
+  objeciones ObjecionModo[]
+
+  @@index([fase])
+  @@map("decisiones")
+}
+
+model DecisionPapeleta {
+  id         String   @id @default(uuid()) @db.Uuid
+  decisionId String   @db.Uuid
+  decision   Decision @relation(fields: [decisionId], references: [id], onDelete: Cascade)
+  profileId  String   @db.Uuid
+  profile    Profile  @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  abstencion Boolean
+  orden      String[] @db.Uuid
+  updatedAt  DateTime @updatedAt @db.Timestamptz
+
+  @@unique([decisionId, profileId])
+  @@map("decision_papeletas")
+}
+
+model ObjecionModo {
+  id         String   @id @default(uuid()) @db.Uuid
+  decisionId String   @db.Uuid
+  decision   Decision @relation(fields: [decisionId], references: [id], onDelete: Cascade)
+  profileId  String   @db.Uuid
+  profile    Profile  @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  createdAt  DateTime @default(now()) @db.Timestamptz
+
+  @@unique([decisionId, profileId])
+  @@map("objeciones_modo")
 }

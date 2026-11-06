@@ -1,7 +1,8 @@
 'use client';
 
-import { useActionState, useState, useTransition } from 'react';
-import { hideContent, voteFrase, type ActionResult } from '@/lib/actions';
+import { useState, useTransition } from 'react';
+import { voteFrase } from '@/lib/actions';
+import { ModerarForm } from '@/components/ModerarForm';
 import type { FraseVotoValue } from '@decide/shared';
 
 const OPCIONES: { value: FraseVotoValue; label: string; className: string }[] = [
@@ -43,34 +44,5 @@ export function VotarFrase({ fraseId, proposalId }: { fraseId: string; proposalI
 }
 
 export function OcultarFrase({ fraseId, proposalId }: { fraseId: string; proposalId: string }) {
-  const [open, setOpen] = useState(false);
-  const [state, action, pending] = useActionState<ActionResult | null, FormData>(hideContent, null);
-  if (!open) {
-    return (
-      <button type="button" className="comment-reply-btn" onClick={() => setOpen(true)}>
-        Ocultar
-      </button>
-    );
-  }
-  return (
-    <form action={action} className="comment-reply-form">
-      <input type="hidden" name="target" value="frase" />
-      <input type="hidden" name="targetId" value={fraseId} />
-      <input type="hidden" name="topicId" value={proposalId} />
-      <textarea
-        name="reason"
-        required
-        minLength={10}
-        maxLength={500}
-        rows={2}
-        className="form-textarea"
-        placeholder="Motivo (obligatorio)"
-      />
-      <div className="comment-reply-actions">
-        <button type="submit" className="btn btn-primary btn-sm" disabled={pending}>Ocultar</button>
-        <button type="button" className="btn btn-ghost btn-sm" onClick={() => setOpen(false)}>Cancelar</button>
-      </div>
-      {state && 'error' in state && <p className="alert alert-error">{state.error}</p>}
-    </form>
-  );
+  return <ModerarForm target="frase" targetId={fraseId} topicId={proposalId} colapsable className="comment-reply-form" />;
 }

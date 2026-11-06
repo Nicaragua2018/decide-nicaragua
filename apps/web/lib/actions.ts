@@ -6,7 +6,7 @@ import { redirect } from 'next/navigation';
 
 const API_URL = process.env.API_URL ?? 'http://localhost:4000';
 
-export type ActionResult = { error: string } | { success: true; devInviteUrl?: string };
+export type ActionResult = { error: string } | { success: true; devInviteUrl?: string; estado?: string };
 
 async function actionFetch(path: string, init?: RequestInit): Promise<Response> {
   const cookieStore = await cookies();
@@ -373,13 +373,6 @@ export async function formalizeTopic(topicId: string): Promise<ActionResult> {
   return { success: true };
 }
 
-export async function openTopicVote(topicId: string): Promise<ActionResult> {
-  const res = await actionFetch(`/api/forums/topics/${topicId}/open-vote`, { method: 'POST' });
-  if (!res.ok) return { error: await parseError(res) };
-  revalidatePath(`/proposals/${topicId}`);
-  return { success: true };
-}
-
 export async function closeTopic(_prev: ActionResult | null, formData: FormData): Promise<ActionResult> {
   const topicId = String(formData.get('topicId'));
   const res = await actionFetch(`/api/forums/topics/${topicId}/close`, {
@@ -407,12 +400,35 @@ function revalidateContent(formData: FormData): void {
 }
 
 export async function hideContent(_prev: ActionResult | null, formData: FormData): Promise<ActionResult> {
+  const targetId = formData.get('targetId');
+  if (!isUuid(targetId)) return INVALID;
+  const detalle = formData.get('reason');
   const res = await actionFetch('/api/forums/moderation/hide', {
     method: 'POST',
-    body: JSON.stringify({ target: formData.get('target'), targetId: formData.get('targetId'), reason: formData.get('reason') }),
+    body: JSON.stringify({
+      target: formData.get('target'),
+      targetId,
+      causa: formData.get('causa'),
+      ...(typeof detalle === 'string' && detalle.trim() !== '' ? { reason: detalle.trim() } : {}),
+    }),
   });
   if (!res.ok) return { error: await parseError(res) };
+  const body = (await res.json().catch(() => ({}))) as { estado?: string };
   revalidateContent(formData);
+  return body.estado ? { success: true, estado: body.estado } : { success: true };
+}
+
+export async function confirmarModeracion(moderationId: string, aprobar: boolean): Promise<ActionResult> {
+  if (!isUuid(moderationId)) return INVALID;
+  const res = await actionFetch(`/api/forums/moderation/${moderationId}/confirmar`, {
+    method: 'POST',
+    body: JSON.stringify({ aprobar }),
+  });
+  if (!res.ok) return { error: await parseError(res) };
+  revalidatePath('/admin/mesa');
+  // Confirmar oculta y rechazar puede volver a mostrar: se refrescan las páginas con contenido
+  // (temas, propuestas, inquietudes, decisiones), que cuelgan del layout raíz.
+  revalidatePath('/', 'layout');
   return { success: true };
 }
 
@@ -530,6 +546,77 @@ export async function voteFrase(
   const res = await actionFetch(`/api/frases/${fraseId}/voto`, {
     method: 'PUT',
     body: JSON.stringify({ value }),
+  });
+  if (!res.ok) return { error: await parseError(res) };
+  revalidatePath(`/proposals/${proposalId}`);
+  return { success: true };
+}
+
+// ─── Soluciones y decisión ────────────────────────────────────────────────────
+
+export async function createSolucion(
+  proposalId: string,
+  _prev: ActionResult | null,
+  formData: FormData,
+): Promise<ActionResult> {
+  if (!isUuid(proposalId)) return INVALID;
+  const res = await actionFetch(`/api/decisiones/temas/${proposalId}/soluciones`, {
+    method: 'POST',
+    body: JSON.stringify({ title: formData.get('title'), description: formData.get('description') }),
+  });
+  if (!res.ok) return { error: await parseError(res) };
+  revalidatePath(`/proposals/${proposalId}`);
+  return { success: true };
+}
+
+export async function mergeSolucion(
+  solucionId: string,
+  intoId: string,
+  proposalId: string,
+): Promise<ActionResult> {
+  if (!isUuid(solucionId) || !isUuid(intoId) || !isUuid(proposalId)) return INVALID;
+  const res = await actionFetch(`/api/decisiones/soluciones/${solucionId}/juntar`, {
+    method: 'POST',
+    body: JSON.stringify({ intoId }),
+  });
+  if (!res.ok) return { error: await parseError(res) };
+  revalidatePath(`/proposals/${proposalId}`);
+  return { success: true };
+}
+
+export async function proposeModo(proposalId: string, modo: string): Promise<ActionResult> {
+  if (!isUuid(proposalId)) return INVALID;
+  if (modo !== 'excluyentes' && modo !== 'compatibles') return INVALID;
+  const res = await actionFetch(`/api/decisiones/temas/${proposalId}/modo`, {
+    method: 'POST',
+    body: JSON.stringify({ modo }),
+  });
+  if (!res.ok) return { error: await parseError(res) };
+  revalidatePath(`/proposals/${proposalId}`);
+  return { success: true };
+}
+
+export async function setObjecion(proposalId: string, objeto: boolean): Promise<ActionResult> {
+  if (!isUuid(proposalId) || typeof objeto !== 'boolean') return INVALID;
+  const res = await actionFetch(`/api/decisiones/temas/${proposalId}/objecion`, {
+    method: 'PUT',
+    body: JSON.stringify({ objeto }),
+  });
+  if (!res.ok) return { error: await parseError(res) };
+  revalidatePath(`/proposals/${proposalId}`);
+  return { success: true };
+}
+
+export async function castPapeleta(
+  proposalId: string,
+  abstencion: boolean,
+  orden: string[],
+): Promise<ActionResult> {
+  if (!isUuid(proposalId) || typeof abstencion !== 'boolean') return INVALID;
+  if (!Array.isArray(orden) || !orden.every(isUuid)) return INVALID;
+  const res = await actionFetch(`/api/decisiones/temas/${proposalId}/papeleta`, {
+    method: 'PUT',
+    body: JSON.stringify({ abstencion, orden }),
   });
   if (!res.ok) return { error: await parseError(res) };
   revalidatePath(`/proposals/${proposalId}`);

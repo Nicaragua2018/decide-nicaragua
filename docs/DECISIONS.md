@@ -446,6 +446,78 @@ El spec 3A (§4) pide que el consenso real se vea en el debate. Inspirados en Po
 
 ---
 
+## ADR-020: Soluciones y papeleta (2026-11-05)
+**Fecha:** 2026-11-05
+**Estado:** Aceptado
+
+### Contexto
+El spec 3A (§5) pide que de cada debate salgan soluciones y que la comunidad las vote. Carlos Robleto fijó la papeleta el 2026-11-04: con una sola solución se aprueba o no; con varias se ordenan **solo las que se aceptan**.
+
+### Decisión
+- **Soluciones:** durante el debate, cualquier miembro propone soluciones (título de 10 a 140 caracteres, descripción de hasta 2000). Quien organiza junta las repetidas. Las soluciones quedan fijas al vencer el plazo del debate (`debate.plazo_dias`).
+- **«Llevar a decisión»** reemplaza a «Convertir en propuesta formal» del plan 2. Si el tema no tiene soluciones, el propio tema entra como la única. Se retira «Abrir votación»; las votaciones del plan 2 que ya existían se cuentan como antes, y esos temas no entran en este ciclo.
+- **Fases automáticas** (un programador horario): debate → modo → objeción → votación → contada, o cancelada si se oculta el tema. Cada cambio de fase ocurre una sola vez, con bloqueos de fila y actualizaciones condicionadas.
+- **Modo:** con varias soluciones, quien organiza propone `excluyentes` o `compatibles`. Si se opone al menos un tercio de quienes participaron en el debate y siguen siendo miembros, se usa el otro modo. Con una sola solución siempre es `compatibles`. Si al final de la objeción no queda ninguna solución visible, el resultado es «No se propusieron soluciones».
+- **Papeleta:**
+  - una solución: «Apruebo», «No apruebo» o «Me abstengo»;
+  - varias: se ordenan las que se aceptan, y las que se dejan fuera cuentan como rechazadas; también «Rechazo todas» o «Me abstengo»;
+  - se puede cambiar hasta el cierre.
+- **Resultado** (`apps/api/src/decisiones/decision-tally.ts`):
+  - **quórum:** han votado al menos `votacion.quorum_porcentaje` de los miembros actuales, contando las abstenciones;
+  - **aprobada:** más de la mitad de las papeletas válidas (sin abstenciones) la incluye;
+  - **compatibles:** ganan todas las aprobadas;
+  - **excluyentes:** gana la preferida por Schulze si está aprobada; si Schulze empata una aprobada con otra que no lo está, gana la aprobada; si empatan dos aprobadas, «Empate» sin decisión.
+- **Privacidad:**
+  - ninguna cifra antes del conteo;
+  - el resultado se calcula una sola vez y queda congelado, con matrices para verificarlo;
+  - solo cuentan papeletas de miembros actuales;
+  - nadie ve la papeleta ni la objeción de otra persona;
+  - papeletas y objeciones no se auditan (mismo criterio que ADR-018 y ADR-019);
+  - el texto de una solución oculta no sale por ningún camino.
+- **Público:** `GET /api/public/consensos` suma `approvedSolutions` con los títulos de las ganadoras.
+
+### Consecuencias
+- Las papeletas guardadas permiten en 3A-4 saber, sin revelarlo, quién puede sumarse a una bifurcación.
+- El resto del antiguo 3A-3 se divide en **3A-4** (comisiones y bifurcaciones) y **3A-5** (cambio de reglas por votación).
+- La página pública que muestre las soluciones aprobadas llega con la portada del plan 4.
+
+---
+
+## ADR-021: Causas cerradas, segunda firma para ocultar y página «Decisiones» (2026-11-05)
+**Fecha:** 2026-11-05
+**Estado:** Aceptado
+
+### Contexto
+Carlos Robleto pidió el 2026-11-05 tres cosas:
+- que la moderación use una **lista cerrada de causas**;
+- que ocultar una **solución** o una **propuesta formal** requiera un **quórum mínimo** de la mesa;
+- que todo sea «automatizado» y «sencillo», con un lugar donde ver los consensos logrados, los rechazados y los resultados por territorio de origen, comunidad de acogida y exilio y diáspora en general.
+
+### Decisión
+- **Causas**, para toda la moderación:
+  - datos que identifican o ponen en riesgo a una persona;
+  - insultos, amenazas o acoso;
+  - correo basura o publicidad ajena al tema;
+  - contenido ilegal o que incita a la violencia;
+  - suplantación.
+
+  El texto libre pasa a ser un detalle opcional. Las moderaciones anteriores conservan su motivo.
+- **Segunda firma:** ocultar una solución o una propuesta formal necesita a 2 personas distintas de la mesa, el mismo umbral que las acciones 2 de 3 del plan 1.
+  - **Causas urgentes** (datos personales, ilegal o violento): se oculta enseguida de forma **provisional**. Si nadie más de la mesa lo confirma en 48 h, vuelve a mostrarse solo.
+  - **Demás causas:** queda una **solicitud**, y el contenido sigue visible hasta que otra persona de la mesa la confirme. Vence a los 7 días.
+  - Nadie confirma ni rechaza su propia solicitud. Hay una sola solicitud abierta por contenido (índice único parcial). Un programador revisa los plazos cada 15 minutos.
+  - Si se oculta una inquietud cuyo debate ya es una propuesta formal, ese debate sigue la misma regla de dos firmas con la misma causa.
+  - Lo provisional **solo pausa**: una propuesta o solución oculta de forma provisional no avanza ni se cuenta, pero su decisión no se cancela ni la solución sale de las candidatas hasta que la segunda firma confirme. Un contenido que ya tuvo una provisional rechazada o vencida no vuelve a ocultarse de inmediato: la nueva solicitud urgente queda como solicitud normal.
+  - El resto del contenido (respuestas, frases, inquietudes y temas no formales) sigue con una sola firma.
+- **Página «Decisiones»:** por cada comunidad de la persona (origen, acogida y general) muestra «Aprobadas», «Rechazadas o sin decisión» y «En curso», con enlaces a cada tema. Excluye los temas ocultos y enmascara las soluciones ocultas.
+
+### Consecuencias
+- La mesa necesita al menos 2 personas con cargo para que el quórum funcione. Si no, lo urgente vuelve a mostrarse a las 48 h y las demás solicitudes vencen.
+- Si una ocultación vinculada provisional vence sin confirmarse, el debate vuelve a verse aunque la inquietud siga oculta.
+- La versión pública de «Decisiones», sin sesión, llega con la portada del plan 4.
+
+---
+
 ## Decisiones pendientes
 
 | ID | Pregunta | Prioridad |

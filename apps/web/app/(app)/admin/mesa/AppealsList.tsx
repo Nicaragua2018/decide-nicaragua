@@ -2,7 +2,23 @@
 
 import { useState, useTransition } from 'react';
 import { resolveAppeal } from '@/lib/actions';
+import { MODERACION_CAUSAS } from '@decide/shared';
 import type { ModerationAppeal } from '@decide/shared';
+
+const TIPO: Record<ModerationAppeal['target'], string> = {
+  tema: 'Tema',
+  respuesta: 'Respuesta',
+  inquietud: 'Inquietud',
+  frase: 'Frase',
+  solucion: 'Solución',
+};
+
+/** Etiqueta de la causa más el detalle (si lo hay); sin causa, el motivo de las moderaciones viejas. */
+function motivo(a: ModerationAppeal): string {
+  if (!a.causa) return a.reason;
+  const etiqueta = MODERACION_CAUSAS.find((c) => c.value === a.causa)?.label ?? a.causa;
+  return a.reason.trim() ? `${etiqueta}: ${a.reason}` : etiqueta;
+}
 
 export function AppealsList({ appeals }: { appeals: ModerationAppeal[] }) {
   const [pending, startTransition] = useTransition();
@@ -22,8 +38,8 @@ export function AppealsList({ appeals }: { appeals: ModerationAppeal[] }) {
     <>
       {appeals.map((a) => (
         <div key={a.id} className="card">
-          <p className="card-title">{a.target === 'tema' ? 'Tema' : 'Respuesta'}</p>
-          <p className="card-meta">Motivo de la moderación: {a.reason}</p>
+          <p className="card-title">{TIPO[a.target]}</p>
+          <p className="card-meta">Motivo de la moderación: {motivo(a)}</p>
           <p className="text-sm font-medium mt-2">Texto original</p>
           <blockquote className="card" style={{ whiteSpace: 'pre-wrap' }}>{a.originalText}</blockquote>
           <p className="text-sm font-medium mt-2">Apelación</p>

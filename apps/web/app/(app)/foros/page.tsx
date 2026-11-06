@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import type { Metadata } from 'next';
 import { serverFetch } from '@/lib/api';
+import { GENERAL_GROUP_NAME } from '@decide/shared';
 import type { ForumSummary } from '@decide/shared';
 import { NewForumForm } from './NewForumForm';
 
@@ -20,7 +21,7 @@ export default async function ForosPage() {
     entry.forums.push(f);
     byGroup.set(f.groupId, entry);
   }
-  const GENERAL = 'Toda la comunidad';
+  const GENERAL = GENERAL_GROUP_NAME;
   const groups = [...byGroup.values()].sort((a, b) => {
     if (a.groupName === GENERAL) return -1;
     if (b.groupName === GENERAL) return 1;
@@ -33,7 +34,7 @@ export default async function ForosPage() {
         <div>
           <h1 className="page-title">Foros</h1>
           <p className="page-sub">
-            Conversa con tu comunidad de origen, con quienes viven donde tú y con toda la comunidad.
+            Conversa con tu comunidad de origen, con quienes viven donde tú y con todo el exilio y la diáspora.
           </p>
         </div>
       </div>

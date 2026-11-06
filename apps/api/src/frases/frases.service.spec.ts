@@ -194,6 +194,16 @@ describe('FrasesService', () => {
       expect(JSON.stringify(r)).not.toContain('Texto que no debe salir');
     });
 
+    it('list: hiddenReason usa la etiqueta de la causa', async () => {
+      prisma.frase.findMany.mockResolvedValue([frase('f9', undefined, { hidden: true, authorProfileId: YO })]);
+      prisma.fraseVoto.findMany.mockResolvedValue([]);
+      prisma.moderationAction.findMany.mockResolvedValue([
+        { id: 'ma1', targetId: 'f9', causa: 'insultos_amenazas', reason: '', status: 'oculto', createdAt: new Date('2026-11-03') },
+      ]);
+      const r = await service.list(YO, T);
+      expect(r.items[0]).toMatchObject({ hiddenReason: 'Insultos, amenazas o acoso' });
+    });
+
     it('list: tras apelar, el autor ve el motivo pero ya no el moderationId', async () => {
       prisma.frase.findMany.mockResolvedValue([frase('f9', undefined, { hidden: true, authorProfileId: YO })]);
       prisma.fraseVoto.findMany.mockResolvedValue([]);

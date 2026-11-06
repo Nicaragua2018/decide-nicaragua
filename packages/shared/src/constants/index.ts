@@ -38,3 +38,4 @@ export const API_PREFIX = 'api';
 
 export * from './communities.js';
 export * from './rules.js';
+export * from './moderacion.js';

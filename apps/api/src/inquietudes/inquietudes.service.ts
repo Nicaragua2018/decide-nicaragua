@@ -12,6 +12,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { RulesService } from '../rules/rules.service';
 import { ForumsService } from '../forums/forums.service';
+import { motivoVisible } from '../forums/moderacion-motivo';
 import { DeliberationService } from '../deliberation/deliberation.service';
 
 const DIA_MS = 86_400_000;
@@ -169,9 +170,9 @@ export class InquietudesService {
       const action = await this.prisma.moderationAction.findFirst({
         where: { target: 'inquietud', targetId: id },
         orderBy: { createdAt: 'desc' },
-        select: { id: true, reason: true, status: true },
+        select: { id: true, causa: true, reason: true, status: true },
       });
-      hiddenReason = action?.reason ?? null;
+      hiddenReason = motivoVisible(action);
       if (action && isAuthor && (action.status as string) === 'oculto') moderationId = action.id;
     }
 

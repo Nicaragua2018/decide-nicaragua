@@ -236,7 +236,7 @@ describe('GroupsService', () => {
       expect(prisma.group.upsert).toHaveBeenCalledWith(
         expect.objectContaining({
           where: { slug: 'general' },
-          create: expect.objectContaining({ name: 'Toda la comunidad', type: 'custom' }),
+          create: expect.objectContaining({ name: 'Exilio y diáspora', type: 'custom' }),
         }),
       );
       // La comunidad general es 'custom': el borrado por tipo nunca la toca.

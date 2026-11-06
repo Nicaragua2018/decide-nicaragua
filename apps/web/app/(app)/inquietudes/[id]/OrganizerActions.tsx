@@ -2,7 +2,8 @@
 
 import { useActionState } from 'react';
 import type { InquietudStatusValue } from '@decide/shared';
-import { hideContent, respondInquietud, type ActionResult } from '@/lib/actions';
+import { respondInquietud, type ActionResult } from '@/lib/actions';
+import { ModerarForm } from '@/components/ModerarForm';
 
 /** Solo una inquietud abierta o en plazo admite respuesta (igual que en la API). */
 const RESPONDIBLES: readonly InquietudStatusValue[] = ['abierta', 'en_plazo'];
@@ -16,7 +17,6 @@ export function OrganizerActions({
 }) {
   const canRespond = RESPONDIBLES.includes(status);
   const [respState, respAction, responding] = useActionState<ActionResult | null, FormData>(respondInquietud, null);
-  const [hideState, hideAction, hiding] = useActionState<ActionResult | null, FormData>(hideContent, null);
 
   return (
     <div className="card mb-4">
@@ -39,23 +39,7 @@ export function OrganizerActions({
         </form>
       )}
 
-      <form action={hideAction} className="form">
-        <p className="card-title">Ocultar inquietud</p>
-        <input type="hidden" name="target" value="inquietud" />
-        <input type="hidden" name="targetId" value={inquietudId} />
-        <input type="hidden" name="inquietudId" value={inquietudId} />
-        <textarea
-          name="reason"
-          className="form-textarea"
-          rows={2}
-          required
-          minLength={10}
-          maxLength={500}
-          placeholder="Motivo (obligatorio)"
-        />
-        <button className="btn btn-ghost btn-sm" disabled={hiding}>Ocultar inquietud</button>
-        {hideState && 'error' in hideState && <p className="alert alert-error">{hideState.error}</p>}
-      </form>
+      <ModerarForm target="inquietud" targetId={inquietudId} inquietudId={inquietudId} titulo="Ocultar inquietud" boton="Ocultar inquietud" />
     </div>
   );
 }
