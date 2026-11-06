@@ -5,6 +5,7 @@ import { Prisma } from '@prisma/client';
 import { validate } from 'class-validator';
 import { plainToInstance } from 'class-transformer';
 import { DecisionesService } from './decisiones.service';
+import { GroupAccessService } from '../groups/group-access.service';
 import { CreateSolucionDto } from './dto/create-solucion.dto';
 import { MergeSolucionDto } from './dto/merge-solucion.dto';
 import { ProposeModoDto } from './dto/propose-modo.dto';
@@ -19,6 +20,7 @@ function buildPrisma() {
   return {
     proposal: { findUnique: vi.fn(), findMany: vi.fn().mockResolvedValue([]) },
     groupMembership: { findUnique: vi.fn(), findMany: vi.fn().mockResolvedValue([]), count: vi.fn().mockResolvedValue(0) },
+    group: { findUnique: vi.fn().mockResolvedValue(null) },
     $transaction: vi.fn(),
     $queryRaw: vi.fn().mockResolvedValue([]),
     solucion: { create: vi.fn(), findMany: vi.fn().mockResolvedValue([]), findUnique: vi.fn(), updateMany: vi.fn() },
@@ -74,7 +76,7 @@ describe('DecisionesService', () => {
     prisma.profile.findUnique.mockResolvedValue({ userId: 'u1' });
     prisma.decision.findUnique.mockResolvedValue(null);
     prisma.$transaction.mockImplementation((fn: (tx: unknown) => unknown) => fn(prisma));
-    service = new DecisionesService(prisma as never, audit as never, forums as never, rules as never);
+    service = new DecisionesService(prisma as never, audit as never, forums as never, rules as never, new GroupAccessService(prisma as never));
   });
 
   describe('DTOs', () => {
@@ -1135,6 +1137,65 @@ describe('DecisionesService', () => {
         papeletasTotal: 0, abstenciones: 0, validas: 0, miembros: 0,
         pairwiseMatrix: [], schulzeMatrix: [], contadaAt: '2026-11-20T00:05:00.000Z',
       });
+    });
+  });
+
+  describe('grupo de trabajo (G es subgrupo de g-ambito)', () => {
+    /** YO es miembro solo de los grupos de `de`. */
+    function miembroDe(de: string[]): void {
+      prisma.groupMembership.findUnique.mockImplementation(({ where }: { where: { groupId_profileId: { groupId: string } } }) =>
+        Promise.resolve(de.includes(where.groupId_profileId.groupId) ? { id: 'm' } : null),
+      );
+      prisma.group.findUnique.mockImplementation(({ where }: { where: { id: string } }) =>
+        Promise.resolve(where.id === G ? { type: 'trabajo', parentGroupId: 'g-ambito' } : { type: 'territorial_residence', parentGroupId: null }),
+      );
+    }
+    const NO_PARTICIPA = 'Solo los miembros de este grupo pueden participar.';
+
+    it('un miembro del ámbito lee el tema con las banderas de participación en false', async () => {
+      miembroDe(['g-ambito']);
+      forums.canOrganize.mockResolvedValue(true);
+      prisma.solucion.findMany.mockResolvedValue([sol('s1', { authorProfileId: YO })]);
+      prisma.decision.findUnique.mockResolvedValue({
+        id: 'd1', proposalId: T, fase: 'votacion', modo: 'excluyentes', modoPropuesto: 'excluyentes',
+        objecionEndsAt: null, votacionEndsAt: new Date('2099-01-01T00:00:00Z'), candidatas: ['s1'],
+        resultado: null, ganadoras: [], aprobaciones: [], papeletasTotal: null, abstenciones: null, miembros: null,
+      });
+      prisma.decisionPapeleta.findUnique.mockResolvedValue({ abstencion: false, orden: ['s1'] });
+      const r = await service.getTema(YO, T);
+      expect(r.soloLectura).toBe(true);
+      expect(r.puedeProponer).toBe(false);
+      expect(r.canOrganize).toBe(false);
+      expect(r.soluciones[0]!.isAuthor).toBe(false);
+      expect(r.decision).toMatchObject({ miPapeleta: null, puedoObjetar: false, yoObjete: false });
+    });
+
+    it('un miembro del subgrupo recibe soloLectura en false', async () => {
+      miembroDe([G, 'g-ambito']);
+      const r = await service.getTema(YO, T);
+      expect(r.soloLectura).toBe(false);
+      expect(r.puedeProponer).toBe(true);
+    });
+
+    it('un miembro del ámbito no propone, no junta, no propone el modo, no objeta ni vota (403)', async () => {
+      miembroDe(['g-ambito']);
+      await expect(
+        service.createSolucion(YO, T, { title: 'Huerto comunitario', description: 'Una descripción suficiente' }, 'ip'),
+      ).rejects.toThrow(NO_PARTICIPA);
+      await expect(service.setObjecion(YO, T, true)).rejects.toThrow(NO_PARTICIPA);
+      await expect(service.castPapeleta(YO, T, { abstencion: true, orden: [] })).rejects.toThrow(NO_PARTICIPA);
+      forums.canOrganize.mockResolvedValue(true);
+      await expect(service.proposeModo(YO, T, 'excluyentes', 'ip')).rejects.toThrow(NO_PARTICIPA);
+      prisma.solucion.findUnique.mockResolvedValue(sol('s1'));
+      await expect(service.mergeSolucion(YO, 's1', 's2', 'ip')).rejects.toThrow(NO_PARTICIPA);
+      expect(prisma.solucion.create).not.toHaveBeenCalled();
+      expect(prisma.objecionModo.upsert).not.toHaveBeenCalled();
+      expect(prisma.decisionPapeleta.upsert).not.toHaveBeenCalled();
+    });
+
+    it('quien no es del ámbito no lee el tema', async () => {
+      miembroDe(['g-otra']);
+      await expect(service.getTema(YO, T)).rejects.toThrow('Solo los miembros de esta comunidad pueden ver esto.');
     });
   });
 

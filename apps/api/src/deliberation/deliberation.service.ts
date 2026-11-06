@@ -17,6 +17,7 @@ import type {
 
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
+import { GroupAccessService } from '../groups/group-access.service';
 import { CreateProposalDto } from './dto/create-proposal.dto';
 import { CreateCommentDto } from './dto/create-comment.dto';
 import { SetSignalDto } from './dto/set-signal.dto';
@@ -36,6 +37,7 @@ export class DeliberationService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
+    private readonly access: GroupAccessService,
   ) {}
 
   // ─── Proposals ────────────────────────────────────────────────────────────
@@ -46,7 +48,7 @@ export class DeliberationService {
     profileId: string,
     ip: string,
   ): Promise<{ id: string }> {
-    await this.requireMembership(groupId, profileId);
+    await this.access.requireParticipant(groupId, profileId);
 
     let forumId: string;
     if (dto.forumId) {
@@ -108,7 +110,7 @@ export class DeliberationService {
   }
 
   async listGroupProposals(groupId: string, profileId: string): Promise<ProposalListResponse> {
-    await this.requireMembership(groupId, profileId);
+    await this.access.requireReader(groupId, profileId);
 
     const proposals = await this.prisma.proposal.findMany({
       where: { groupId },
@@ -156,9 +158,10 @@ export class DeliberationService {
       throw new NotFoundException('Proposal not found');
     }
 
-    await this.requireMembership(proposal.groupId, profileId);
+    // Lo leen los miembros y, si es de un grupo de trabajo, los miembros de su ámbito (solo lectura).
+    const { participa } = await this.access.requireReader(proposal.groupId, profileId);
 
-    const userSignalRow = proposal.signals.find((s) => s.profileId === profileId);
+    const userSignalRow = participa ? proposal.signals.find((s) => s.profileId === profileId) : undefined;
 
     // Una consulta por comentario oculto (la escala es pequeña). De un tema oculto no se lee nada.
     const comments: CommentItem[] = [];
@@ -196,7 +199,7 @@ export class DeliberationService {
       status: proposal.status as unknown as ProposalStatus,
       authorDisplayName: proposal.author.displayName,
       authorProfileId: proposal.authorProfileId,
-      isAuthor: proposal.authorProfileId === profileId,
+      isAuthor: participa && proposal.authorProfileId === profileId,
       signalCounts: computeSignalCounts(proposal.signals.map((s) => s.signal as string)),
       commentCount: proposal._count.comments,
       createdAt: proposal.createdAt.toISOString(),
@@ -216,6 +219,7 @@ export class DeliberationService {
       canModerate: false,
       abiertoPorComunidad: proposal.abiertoPorComunidad,
       inquietudes: (proposal.inquietudes ?? []).map((i) => ({ id: i.id, title: i.title })),
+      soloLectura: !participa,
     };
 
     return proposal.hidden ? redactHiddenTopic(detail) : detail;
@@ -238,7 +242,7 @@ export class DeliberationService {
     }
 
     // Una persona suspendida pierde sus membresías: ya no gestiona sus temas.
-    await this.requireMembership(proposal.groupId, profileId);
+    await this.access.requireParticipant(proposal.groupId, profileId);
 
     this.requireNotHidden(proposal.hidden);
 
@@ -298,7 +302,7 @@ export class DeliberationService {
       throw new NotFoundException('Proposal not found');
     }
 
-    await this.requireMembership(proposal.groupId, profileId);
+    await this.access.requireParticipant(proposal.groupId, profileId);
     this.requireNotHidden(proposal.hidden);
     this.requireMutableStatus(proposal.status as string);
 
@@ -353,7 +357,7 @@ export class DeliberationService {
       throw new NotFoundException('Proposal not found');
     }
 
-    await this.requireMembership(proposal.groupId, profileId);
+    await this.access.requireParticipant(proposal.groupId, profileId);
     this.requireNotHidden(proposal.hidden);
     this.requireMutableStatus(proposal.status as string);
 
@@ -377,16 +381,6 @@ export class DeliberationService {
   }
 
   // ─── Helpers privados ─────────────────────────────────────────────────────
-
-  private async requireMembership(groupId: string, profileId: string): Promise<void> {
-    const membership = await this.prisma.groupMembership.findUnique({
-      where: { groupId_profileId: { groupId, profileId } },
-    });
-
-    if (!membership) {
-      throw new ForbiddenException('You must be a member of this group to participate');
-    }
-  }
 
   private requireNotHidden(hidden: boolean): void {
     if (hidden) {

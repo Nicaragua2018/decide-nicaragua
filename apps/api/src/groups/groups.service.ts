@@ -15,11 +15,12 @@ export class GroupsService {
   // ─── Consultas ────────────────────────────────────────────────────────────
 
   /**
-   * Devuelve todos los grupos a los que pertenece un perfil.
+   * Devuelve las comunidades a las que pertenece un perfil (sin los grupos de trabajo).
    */
   async getMyGroups(profileId: string): Promise<GroupListResponse> {
+    // Los grupos de trabajo no son comunidades: se muestran dentro de su ámbito.
     const memberships = await this.prisma.groupMembership.findMany({
-      where: { profileId },
+      where: { profileId, group: { type: { not: GroupType.trabajo } } },
       include: { group: true },
       orderBy: { group: { name: 'asc' } },
     });

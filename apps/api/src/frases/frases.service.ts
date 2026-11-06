@@ -1,4 +1,4 @@
-import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import type {
   FraseAnalisis,
   FraseItem,
@@ -11,6 +11,7 @@ import type {
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { RulesService } from '../rules/rules.service';
+import { GroupAccessService } from '../groups/group-access.service';
 import { motivoVisible } from '../forums/moderacion-motivo';
 import { analyzeOpinions, isDivisiva, isPuente, seedFromId, type VoteRow } from './opinion-groups';
 
@@ -38,6 +39,8 @@ interface TemaRow {
   groupId: string;
   status: string;
   hidden: boolean;
+  /** Es miembro del grupo; si es false, solo lee desde el ámbito de un grupo de trabajo. */
+  participa: boolean;
 }
 
 @Injectable()
@@ -46,29 +49,30 @@ export class FrasesService {
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
     private readonly rules: RulesService,
+    private readonly access: GroupAccessService,
   ) {}
-
-  private async requireMembership(groupId: string, profileId: string): Promise<void> {
-    const m = await this.prisma.groupMembership.findUnique({
-      where: { groupId_profileId: { groupId, profileId } },
-    });
-    if (!m) throw new ForbiddenException('Solo los miembros de esta comunidad pueden participar.');
-  }
 
   private async actorId(profileId: string): Promise<{ actorId: string } | Record<never, never>> {
     const p = await this.prisma.profile.findUnique({ where: { id: profileId }, select: { userId: true } });
     return p?.userId ? { actorId: p.userId } : {};
   }
 
-  /** El tema debe existir y la persona ser miembro de su grupo. */
-  private async tema(profileId: string, proposalId: string): Promise<TemaRow> {
+  /**
+   * El tema debe existir. Para `participar`, la persona debe ser miembro de su grupo; para
+   * `leer` basta con poder leerlo (miembro, o miembro del ámbito si es un grupo de trabajo).
+   */
+  private async tema(profileId: string, proposalId: string, modo: 'leer' | 'participar'): Promise<TemaRow> {
     const tema = await this.prisma.proposal.findUnique({
       where: { id: proposalId },
       select: { id: true, groupId: true, status: true, hidden: true },
     });
     if (!tema) throw new NotFoundException('Tema no encontrado.');
-    await this.requireMembership(tema.groupId, profileId);
-    return tema as TemaRow;
+    if (modo === 'participar') {
+      await this.access.requireParticipant(tema.groupId, profileId);
+      return { ...(tema as Omit<TemaRow, 'participa'>), participa: true };
+    }
+    const { participa } = await this.access.requireReader(tema.groupId, profileId);
+    return { ...(tema as Omit<TemaRow, 'participa'>), participa };
   }
 
   private assertWritable(tema: { status: string; hidden: boolean }): void {
@@ -96,7 +100,7 @@ export class FrasesService {
   }
 
   async create(profileId: string, proposalId: string, text: string, ip: string): Promise<{ id: string }> {
-    const tema = await this.tema(profileId, proposalId);
+    const tema = await this.tema(profileId, proposalId, 'participar');
     this.assertWritable(tema);
     const created = await this.prisma.frase.create({
       data: { proposalId, authorProfileId: profileId, text: text.trim() },
@@ -112,7 +116,7 @@ export class FrasesService {
   }
 
   async list(profileId: string, proposalId: string): Promise<FrasesResponse> {
-    const tema = await this.tema(profileId, proposalId);
+    const tema = await this.tema(profileId, proposalId, 'leer');
     if (tema.hidden) return { items: [], pendientes: 0 };
     // Una frase oculta solo la ve su autor (sin el texto); para los demás no existe.
     const frases = await this.prisma.frase.findMany({
@@ -173,12 +177,14 @@ export class FrasesService {
         moderationId: null,
       };
     });
-    return { items, pendientes: items.filter((i) => !i.hidden && i.myVote === null).length };
+    // Quien solo lee no vota: no tiene frases pendientes (ni ve resultados, porque no votó ninguna).
+    const pendientes = tema.participa ? items.filter((i) => !i.hidden && i.myVote === null).length : 0;
+    return { items, pendientes };
   }
 
   async next(profileId: string, proposalId: string): Promise<FraseParaVotar | null> {
-    const tema = await this.tema(profileId, proposalId);
-    if (tema.hidden) return null;
+    const tema = await this.tema(profileId, proposalId, 'leer');
+    if (tema.hidden || !tema.participa) return null;
     const frases = await this.prisma.frase.findMany({ where: { proposalId, hidden: false }, orderBy: { createdAt: 'asc' } });
     const mios = await this.prisma.fraseVoto.findMany({ where: { profileId, frase: { proposalId } }, select: { fraseId: true } });
     const votadas = new Set(mios.map((v) => v.fraseId));
@@ -202,7 +208,7 @@ export class FrasesService {
       include: { proposal: { select: { groupId: true, status: true, hidden: true } } },
     });
     if (!frase) throw new NotFoundException('Frase no encontrada.');
-    await this.requireMembership(frase.proposal.groupId, profileId);
+    await this.access.requireParticipant(frase.proposal.groupId, profileId);
     this.assertWritable(frase.proposal);
     if (frase.hidden) throw new BadRequestException('Esta frase está oculta por moderación.');
     await this.prisma.fraseVoto.upsert({
@@ -221,7 +227,7 @@ export class FrasesService {
   }
 
   async analysis(profileId: string, proposalId: string): Promise<OpinionAnalysisResponse> {
-    const tema = await this.tema(profileId, proposalId);
+    const tema = await this.tema(profileId, proposalId, 'leer');
     const needed = await this.rules.getInt('debate.minimo_para_grupos', tema.groupId);
     if (tema.hidden) return { available: false, participants: 0, needed };
 

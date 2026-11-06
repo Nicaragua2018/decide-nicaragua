@@ -55,6 +55,8 @@ export interface DecisionTemaResponse {
   canOrganize: boolean;
   soluciones: SolucionItem[];
   decision: DecisionView | null;
+  /** Quien lee desde el ámbito de un grupo de trabajo sin ser miembro: no participa. */
+  soloLectura: boolean;
 }
 
 /** Tipo de comunidad en la página «Decisiones». */
