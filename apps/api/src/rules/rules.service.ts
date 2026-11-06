@@ -44,6 +44,9 @@ export class RulesService {
         ...(def.max !== undefined && { max: def.max }),
         ...(def.options !== undefined && { options: def.options }),
         isDefault: row === undefined,
+        enCurso: null,
+        historial: [],
+        puedoProponer: false,
       };
     });
   }

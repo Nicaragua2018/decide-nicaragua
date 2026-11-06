@@ -70,6 +70,27 @@ export function ruleDefinition(key: string): RuleDefinition {
   return def;
 }
 
+export type CambioReglaEstadoValue =
+  | 'en_votacion'
+  | 'pendiente_mesa'
+  | 'aplicado'
+  | 'rechazado'
+  | 'rechazado_mesa'
+  | 'sin_participacion'
+  | 'anulado';
+
+export interface CambioReglaView {
+  id: string;
+  key: string;
+  nivel: 'colmena' | 'local';
+  valorAnterior: string;
+  valorPropuesto: string;
+  estado: CambioReglaEstadoValue;
+  proposalId: string | null;
+  createdAt: string;
+  resueltoAt: string | null;
+}
+
 export interface RuleView {
   key: string;
   level: RuleLevel;
@@ -82,4 +103,7 @@ export interface RuleView {
   max?: number;
   options?: string[];
   isDefault: boolean;
+  enCurso: CambioReglaView | null;
+  historial: CambioReglaView[];
+  puedoProponer: boolean;
 }

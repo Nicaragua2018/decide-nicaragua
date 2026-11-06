@@ -195,7 +195,11 @@ export class BoardService {
       },
     });
     const targets = await Promise.all(
-      actions.map((a) => this.prisma.profile.findUnique({ where: { userId: a.targetUserId }, select: { displayName: true } })),
+      actions.map((a) =>
+        a.targetUserId === null
+          ? Promise.resolve(null)
+          : this.prisma.profile.findUnique({ where: { userId: a.targetUserId }, select: { displayName: true } }),
+      ),
     );
     return actions.map((a, i) => ({
       id: a.id,
@@ -204,13 +208,15 @@ export class BoardService {
       params: a.params as Record<string, unknown>,
       reason: a.reason,
       status: a.status as BoardActionSummary['status'],
-      proposedBy: a.proposedBy.displayName,
+      proposedBy: a.proposedBy?.displayName ?? null,
       approvals: a.approvals.map((x) => ({ role: x.role as unknown as BoardRole, approve: x.approve })),
       createdAt: a.createdAt.toISOString(),
     }));
   }
 
-  private async execute(type: BoardActionType, targetUserId: string, params: Record<string, unknown>): Promise<void> {
+  private async execute(type: BoardActionType, targetUserId: string | null, params: Record<string, unknown>): Promise<void> {
+    // El comportamiento de change_rule llega en la tarea 3; las demás acciones exigen persona objetivo.
+    if (targetUserId === null) throw new BadRequestException('La acción no tiene persona objetivo');
     if (type === BoardActionType.suspend_user) {
       // Los guards de participación miran la membresía: suspender también la quita.
       await this.prisma.$transaction(async (tx) => {
