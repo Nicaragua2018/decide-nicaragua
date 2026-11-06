@@ -426,6 +426,9 @@ export async function confirmarModeracion(moderationId: string, aprobar: boolean
   });
   if (!res.ok) return { error: await parseError(res) };
   revalidatePath('/admin/mesa');
+  // Confirmar oculta y rechazar puede volver a mostrar: se refrescan las páginas con contenido
+  // (temas, propuestas, inquietudes, decisiones), que cuelgan del layout raíz.
+  revalidatePath('/', 'layout');
   return { success: true };
 }
 

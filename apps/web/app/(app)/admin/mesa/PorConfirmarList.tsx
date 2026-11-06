@@ -32,6 +32,7 @@ export function PorConfirmarList({ items }: { items: ModeracionPorConfirmar[] })
       {items.map((m) => (
         <div key={m.id} className="card">
           <p className="card-title">{TIPO[m.target]}</p>
+          {m.contexto && <p className="text-sm text-muted">{m.contexto}</p>}
           <p className="card-meta">
             Causa: {MODERACION_CAUSAS.find((c) => c.value === m.causa)?.label ?? m.causa}
           </p>
