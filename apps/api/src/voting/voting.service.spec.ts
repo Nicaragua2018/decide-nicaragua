@@ -308,6 +308,17 @@ describe('VotingService', () => {
       });
     });
 
+    it('la votación de una propuesta oculta por moderación no acepta papeletas', async () => {
+      prisma.election.findUnique.mockResolvedValue(mockElectionOpen);
+      prisma.groupMembership.findUnique.mockResolvedValue(mockMembership);
+      prisma.proposal.findUnique.mockResolvedValue({ id: 'p1', hidden: true });
+      await expect(service.castBallot(ELECTION_ID, dto, PROFILE_ID, IP)).rejects.toThrow(
+        new BadRequestException('Este tema está oculto por moderación.'),
+      );
+      expect(prisma.proposal.findUnique).toHaveBeenCalledWith({ where: { electionId: ELECTION_ID }, select: { hidden: true } });
+      expect(prisma.$transaction).not.toHaveBeenCalled();
+    });
+
     it('emite la papeleta correctamente en una elección abierta', async () => {
       prisma.election.findUnique.mockResolvedValue(mockElectionOpen);
       prisma.groupMembership.findUnique.mockResolvedValue(mockMembership);
@@ -372,6 +383,16 @@ describe('VotingService', () => {
 
     beforeEach(() => {
       prisma.$transaction.mockResolvedValue([{}, {}]);
+    });
+
+    it('la votación de una propuesta oculta por moderación no se cuenta', async () => {
+      prisma.election.findUnique.mockResolvedValue(electionReadyToTally);
+      prisma.proposal.findUnique.mockResolvedValue({ id: 'p1', hidden: true });
+      await expect(service.tallyElection(ELECTION_ID, PROFILE_ID, IP)).rejects.toThrow(
+        new BadRequestException('Este tema está oculto por moderación.'),
+      );
+      expect(prisma.ballot.findMany).not.toHaveBeenCalled();
+      expect(prisma.$transaction).not.toHaveBeenCalled();
     });
 
     it('ejecuta el conteo y guarda el resultado', async () => {

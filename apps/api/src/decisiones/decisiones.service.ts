@@ -502,7 +502,13 @@ export class DecisionesService {
     }
     const valor: PapeletaValue = { abstencion: p.abstencion, orden: [...p.orden] };
     await this.prisma.$transaction(async (tx) => {
-      // Relee con bloqueo: si el plazo venció, el programador ya contó o el tema se ocultó (cancelada), no se escribe.
+      // Primero el tema (mismo orden que contar: proposals antes que decisiones). FOR SHARE choca
+      // con la ocultación (provisional o en firme): si se ocultó entre la lectura y aquí, no se escribe.
+      const visible = await tx.$queryRaw<{ id: string }[]>(
+        Prisma.sql`SELECT id FROM proposals WHERE id = ${proposalId}::uuid AND hidden = false FOR SHARE`,
+      );
+      if (visible.length === 0) throw new BadRequestException('Este tema está oculto por moderación.');
+      // Relee la decisión con bloqueo: si el plazo venció, el programador ya contó o se canceló, no se escribe.
       const abierta = await tx.$queryRaw<{ id: string }[]>(
         Prisma.sql`SELECT id FROM decisiones WHERE id = ${decision.id}::uuid AND fase = 'votacion' AND "votacionEndsAt" > ${new Date()} FOR UPDATE`,
       );

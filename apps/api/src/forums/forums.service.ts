@@ -68,6 +68,9 @@ const SOLICITUD_ABIERTA = 'Ya hay una solicitud de moderación abierta para este
 const YA_RESUELTA = 'Esta solicitud ya fue resuelta.';
 const YA_VENCIO = 'Esta solicitud ya venció.';
 
+/** Solicitud vinculada que se cerró al restaurarse su inquietud (para auditarla después). */
+type VinculadaCerrada = { id: string; topicId: string; causa: ModeracionCausaValue | null };
+
 /** Debate abierto por la comunidad que se modera junto con su inquietud, y cómo queda. */
 type Vinculo = { topicId: string; estado: EstadoSolicitud };
 
@@ -444,13 +447,15 @@ export class ForumsService {
         if (await this.cancelarVotacionesTx(tx, action.targetId, t?.electionId ?? null, true)) canceladas.push(action.targetId);
       } else if (!aprobar && previo === 'provisional') {
         await this.aplicarRestauracion(tx, target, action.targetId);
+        if (target === 'tema') await this.extenderPlazosTx(tx, action.targetId, action.createdAt, now);
       }
     });
     const actor = await this.actorId(profileId);
+    // Ya resuelta, la auditoría dice qué contenido fue (nunca el texto).
     void this.audit.log({
       ...actor,
       action: aprobar ? 'moderation.confirmed_by_board' : 'moderation.rejected_by_board',
-      resource: `moderation:${moderationId}`,
+      resource: `${target}:${action.targetId}`,
       ip,
       metadata: { moderationId, causa: action.causa },
     });
@@ -497,7 +502,7 @@ export class ForumsService {
   async processModerationDeadlines(now: Date): Promise<number> {
     const vencidas = await this.prisma.moderationAction.findMany({
       where: { status: { in: [...ABIERTAS] }, venceAt: { lte: now } },
-      select: { id: true, target: true, targetId: true, causa: true, status: true },
+      select: { id: true, target: true, targetId: true, causa: true, status: true, createdAt: true },
       orderBy: { venceAt: 'asc' },
     });
     let cerradas = 0;
@@ -511,14 +516,17 @@ export class ForumsService {
           data: { status: 'rechazado', resolvedAt: now },
         });
         if (r.count === 0) return false;
-        if (previo === 'provisional') await this.aplicarRestauracion(tx, target, a.targetId);
+        if (previo === 'provisional') {
+          await this.aplicarRestauracion(tx, target, a.targetId);
+          if (target === 'tema') await this.extenderPlazosTx(tx, a.targetId, a.createdAt, now);
+        }
         return true;
       });
       if (!hecho) continue;
       cerradas += 1;
       void this.audit.log({
         action: 'moderation.expired',
-        resource: `moderation:${a.id}`,
+        resource: `${target}:${a.targetId}`,
         metadata: { moderationId: a.id, causa: a.causa },
       });
     }
@@ -572,19 +580,30 @@ export class ForumsService {
     if ((action.status as string) !== 'apelado') throw new BadRequestException('Esta moderación no tiene una apelación pendiente.');
     rejectLinkedTopicAction(action);
     const target = checkTarget(action.target);
-    await this.prisma.$transaction(async (tx) => {
-      if (restore) await this.aplicarRestauracion(tx, target, action.targetId);
+    const cerrada = await this.prisma.$transaction(async (tx) => {
+      const c = restore ? await this.aplicarRestauracion(tx, target, action.targetId) : null;
       await tx.moderationAction.update({
         where: { id: moderationId },
         data: { status: restore ? 'restaurado' : 'confirmado', resolvedAt: new Date() },
       });
+      return c;
     });
+    const actor = await this.actorId(profileId);
     void this.audit.log({
-      ...(await this.actorId(profileId)),
+      ...actor,
       action: restore ? 'moderation.restored' : 'moderation.confirmed',
       resource: `moderation:${moderationId}`,
       ip,
     });
+    if (cerrada) {
+      void this.audit.log({
+        ...actor,
+        action: 'moderation.closed_with_origin',
+        resource: `tema:${cerrada.topicId}`,
+        ip,
+        metadata: { moderationId: cerrada.id, causa: cerrada.causa },
+      });
+    }
   }
 
   /**
@@ -690,14 +709,14 @@ export class ForumsService {
   }
 
   /** Vuelve a mostrar el contenido. Una decisión o votación cancelada no se reabre. */
-  private async aplicarRestauracion(tx: Tx, target: ModTarget, targetId: string): Promise<void> {
+  private async aplicarRestauracion(tx: Tx, target: ModTarget, targetId: string): Promise<VinculadaCerrada | null> {
     if (target === 'tema') {
       await this.restoreTopicTx(tx, targetId);
     } else if (target === 'inquietud') {
       // El estado y el umbral los reevalúa InquietudesService al leerla (sin ciclo entre módulos).
       const q = await tx.inquietud.update({ where: { id: targetId }, data: { hidden: false } });
       const proposalId = (q as { proposalId?: string | null } | undefined)?.proposalId ?? null;
-      if (proposalId) await this.restoreLinkedTopicTx(tx, proposalId);
+      if (proposalId) return this.restoreLinkedTopicTx(tx, proposalId);
     } else if (target === 'frase') {
       await tx.frase.update({ where: { id: targetId }, data: { hidden: false } });
     } else if (target === 'solucion') {
@@ -705,6 +724,7 @@ export class ForumsService {
     } else {
       await tx.proposalComment.update({ where: { id: targetId }, data: { hidden: false } });
     }
+    return null;
   }
 
   /** Moderación del debate moderado junto con su inquietud; copia la causa de la de origen. */
@@ -813,38 +833,44 @@ export class ForumsService {
    * por su propio motivo, sigue oculto. Una vinculada que aún espera la segunda firma se cierra
    * como «rechazado»; si era provisional, el debate vuelve salvo otra ocultación en firme.
    */
-  private async restoreLinkedTopicTx(tx: Tx, topicId: string): Promise<void> {
+  private async restoreLinkedTopicTx(tx: Tx, topicId: string): Promise<VinculadaCerrada | null> {
     const p = await tx.proposal.findUnique({
       where: { id: topicId },
       select: { abiertoPorComunidad: true, hidden: true },
     });
-    if (p?.abiertoPorComunidad !== true) return;
+    if (p?.abiertoPorComunidad !== true) return null;
     // Si la vinculada aún espera la segunda firma, se cierra («rechazado») con la inquietud restaurada.
     const abierta = await tx.moderationAction.findFirst({
       where: { target: 'tema', targetId: topicId, reason: LINKED_TOPIC_REASON, status: { in: [...ABIERTAS] } },
-      select: { id: true, status: true },
+      select: { id: true, status: true, causa: true, createdAt: true },
     });
     const previo = abierta?.status as string | undefined;
     if (abierta && (previo === 'pendiente' || previo === 'provisional')) {
+      const now = new Date();
       const r = await tx.moderationAction.updateMany({
         where: { id: abierta.id, status: previo },
-        data: { status: 'rechazado', resolvedAt: new Date() },
+        data: { status: 'rechazado', resolvedAt: now },
       });
-      if (r.count === 0 || previo !== 'provisional' || p.hidden !== true) return;
+      if (r.count === 0) return null;
+      const cerrada: VinculadaCerrada = { id: abierta.id, topicId, causa: abierta.causa ?? null };
+      if (previo !== 'provisional' || p.hidden !== true) return cerrada;
       // La provisional lo había ocultado: vuelve, salvo que otra ocultación firme lo mantenga oculto.
       const firmes = await tx.moderationAction.count({
         where: { target: 'tema', targetId: topicId, id: { not: abierta.id }, status: { in: ['oculto', 'apelado', 'confirmado'] } },
       });
-      if (firmes === 0) await this.restoreTopicTx(tx, topicId);
-      return;
+      if (firmes === 0) {
+        await this.restoreTopicTx(tx, topicId);
+        await this.extenderPlazosTx(tx, topicId, abierta.createdAt, now);
+      }
+      return cerrada;
     }
-    if (p.hidden !== true) return;
+    if (p.hidden !== true) return null;
     const latest = await tx.moderationAction.findFirst({
       where: { target: 'tema', targetId: topicId },
       orderBy: { createdAt: 'desc' },
       select: { id: true, reason: true, status: true },
     });
-    if (!latest || latest.reason !== LINKED_TOPIC_REASON || (latest.status as string) !== 'oculto') return;
+    if (!latest || latest.reason !== LINKED_TOPIC_REASON || (latest.status as string) !== 'oculto') return null;
     // Otra moderación del tema que sigue en pie (oculta, apelada, confirmada o abierta) lo mantiene oculto.
     const otras = await tx.moderationAction.count({
       where: {
@@ -854,12 +880,39 @@ export class ForumsService {
         status: { in: ['oculto', 'apelado', 'confirmado', 'provisional', 'pendiente'] },
       },
     });
-    if (otras > 0) return;
+    if (otras > 0) return null;
     await tx.moderationAction.update({
       where: { id: latest.id },
       data: { status: 'restaurado', resolvedAt: new Date() },
     });
     await this.restoreTopicTx(tx, topicId);
+    return null;
+  }
+
+  /**
+   * La pausa de una ocultación provisional no acorta los plazos: al levantarse, el cierre de la
+   * objeción o de la votación activa se corre lo que duró la pausa (desde que se pidió). El plazo
+   * del debate no se toca.
+   */
+  private async extenderPlazosTx(tx: Tx, topicId: string, desde: Date, ahora: Date): Promise<void> {
+    const pausa = ahora.getTime() - desde.getTime();
+    if (pausa <= 0) return;
+    const d = await tx.decision.findUnique({
+      where: { proposalId: topicId },
+      select: { id: true, fase: true, objecionEndsAt: true, votacionEndsAt: true },
+    });
+    if (!d) return;
+    if ((d.fase as string) === 'objecion' && d.objecionEndsAt) {
+      await tx.decision.updateMany({
+        where: { id: d.id, fase: 'objecion' },
+        data: { objecionEndsAt: new Date(d.objecionEndsAt.getTime() + pausa) },
+      });
+    } else if ((d.fase as string) === 'votacion' && d.votacionEndsAt) {
+      await tx.decision.updateMany({
+        where: { id: d.id, fase: 'votacion' },
+        data: { votacionEndsAt: new Date(d.votacionEndsAt.getTime() + pausa) },
+      });
+    }
   }
 
   private async authorOf(

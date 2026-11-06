@@ -900,7 +900,7 @@ describe('ForumsService', () => {
       });
       expect(prisma.solucion.update).toHaveBeenCalledWith({ where: { id: 's1' }, data: { hidden: true } });
       expect(audit.log).toHaveBeenCalledWith(expect.objectContaining({
-        action: 'moderation.confirmed_by_board', resource: 'moderation:ma1', metadata: { moderationId: 'ma1', causa: 'spam' },
+        action: 'moderation.confirmed_by_board', resource: 'solucion:s1', metadata: { moderationId: 'ma1', causa: 'spam' },
       }));
     });
 
@@ -933,7 +933,7 @@ describe('ForumsService', () => {
       });
       expect(prisma.solucion.update).toHaveBeenCalledWith({ where: { id: 's1' }, data: { hidden: false } });
       expect(audit.log).toHaveBeenCalledWith(expect.objectContaining({
-        action: 'moderation.rejected_by_board', metadata: { moderationId: 'ma1', causa: 'datos_personales' },
+        action: 'moderation.rejected_by_board', resource: 'solucion:s1', metadata: { moderationId: 'ma1', causa: 'datos_personales' },
       }));
     });
 
@@ -1008,9 +1008,11 @@ describe('ForumsService', () => {
       expect(prisma.solucion.update).toHaveBeenCalledTimes(1);
       expect(prisma.solucion.update).toHaveBeenCalledWith({ where: { id: 's1' }, data: { hidden: false } });
       expect(audit.log).toHaveBeenCalledWith(expect.objectContaining({
-        action: 'moderation.expired', resource: 'moderation:ma1', metadata: { moderationId: 'ma1', causa: 'datos_personales' },
+        action: 'moderation.expired', resource: 'solucion:s1', metadata: { moderationId: 'ma1', causa: 'datos_personales' },
       }));
-      expect(audit.log).toHaveBeenCalledWith(expect.objectContaining({ action: 'moderation.expired', resource: 'moderation:ma2' }));
+      expect(audit.log).toHaveBeenCalledWith(expect.objectContaining({
+        action: 'moderation.expired', resource: 'solucion:s2', metadata: { moderationId: 'ma2', causa: 'spam' },
+      }));
     });
 
     it('si otra corrida o una confirmación ganó (count = 0), el vencimiento no restaura ni audita', async () => {
@@ -1288,7 +1290,7 @@ describe('ForumsService', () => {
         prisma.moderationAction.findUnique.mockResolvedValue({ id: 'ma1', target: 'inquietud', targetId: 'q1', status: 'apelado', reason: 'x' });
         prisma.inquietud.update.mockResolvedValue({ id: 'q1', proposalId: 't1' });
         prisma.proposal.findUnique.mockResolvedValue({ id: 't1', abiertoPorComunidad: true, hidden: true });
-        prisma.moderationAction.findFirst.mockResolvedValue({ id: 'ma2', reason: LINKED_TOPIC_REASON, status: 'provisional' });
+        prisma.moderationAction.findFirst.mockResolvedValue({ id: 'ma2', reason: LINKED_TOPIC_REASON, status: 'provisional', createdAt: AHORA });
         prisma.moderationAction.count.mockResolvedValue(0);
         prisma.proposal.update.mockResolvedValue({ id: 't1', title: 'Fondo', electionId: null });
         await service.resolveAppeal(YO, 'ma1', true, 'ip');
@@ -1324,6 +1326,80 @@ describe('ForumsService', () => {
         await service.resolveAppeal(YO, 'ma1', true, 'ip');
         expect(prisma.moderationAction.updateMany).toHaveBeenCalledTimes(1);
         expect(prisma.proposal.update).not.toHaveBeenCalled();
+      });
+
+      it('I3: cerrar la vinculada al restaurar la inquietud queda en la auditoría con el contenido', async () => {
+        prisma.moderationAction.findUnique.mockResolvedValue({ id: 'ma1', target: 'inquietud', targetId: 'q1', status: 'apelado', reason: 'x' });
+        prisma.inquietud.update.mockResolvedValue({ id: 'q1', proposalId: 't1' });
+        prisma.proposal.findUnique.mockResolvedValue({ id: 't1', abiertoPorComunidad: true, hidden: false });
+        prisma.moderationAction.findFirst.mockResolvedValue({
+          id: 'ma2', reason: LINKED_TOPIC_REASON, status: 'pendiente', causa: 'spam', createdAt: AHORA,
+        });
+        await service.resolveAppeal(YO, 'ma1', true, 'ip');
+        expect(audit.log).toHaveBeenCalledWith(expect.objectContaining({
+          action: 'moderation.closed_with_origin', resource: 'tema:t1', metadata: { moderationId: 'ma2', causa: 'spam' },
+        }));
+      });
+
+      describe('la pausa no acorta los plazos de la decisión', () => {
+        const CREADA = new Date(AHORA.getTime() - 10 * HORA);
+        const PAUSA = 10 * HORA;
+        const FIN = new Date(AHORA.getTime() + 2 * HORA);
+
+        it('al rechazar la provisional de una propuesta en votación, el cierre de la votación se corre lo que duró la pausa', async () => {
+          prisma.moderationAction.findUnique.mockResolvedValue(
+            accion({ target: 'tema', targetId: 't1', status: 'provisional', causa: 'datos_personales', createdAt: CREADA }),
+          );
+          prisma.proposal.update.mockResolvedValue({ id: 't1', title: 'Fondo', electionId: null });
+          prisma.decision.findUnique.mockResolvedValue({ id: 'd1', fase: 'votacion', objecionEndsAt: null, votacionEndsAt: FIN });
+          await service.confirmar(YO, 'ma1', false, 'ip');
+          expect(prisma.decision.findUnique).toHaveBeenCalledWith(expect.objectContaining({ where: { proposalId: 't1' } }));
+          expect(prisma.decision.updateMany).toHaveBeenCalledWith({
+            where: { id: 'd1', fase: 'votacion' },
+            data: { votacionEndsAt: new Date(FIN.getTime() + PAUSA) },
+          });
+        });
+
+        it('al vencer la provisional de una propuesta en objeción, el cierre de la objeción se corre; el debate no', async () => {
+          prisma.moderationAction.findMany.mockResolvedValue([
+            accion({ target: 'tema', targetId: 't1', status: 'provisional', causa: 'datos_personales', createdAt: CREADA }),
+          ]);
+          prisma.proposal.update.mockResolvedValue({ id: 't1', title: 'Fondo', electionId: null });
+          prisma.decision.findUnique.mockResolvedValue({ id: 'd1', fase: 'objecion', objecionEndsAt: FIN, votacionEndsAt: null });
+          expect(await service.processModerationDeadlines(AHORA)).toBe(1);
+          expect(prisma.decision.updateMany).toHaveBeenCalledWith({
+            where: { id: 'd1', fase: 'objecion' },
+            data: { objecionEndsAt: new Date(FIN.getTime() + PAUSA) },
+          });
+          expect(JSON.stringify(prisma.proposal.update.mock.calls)).not.toContain('deliberationEndsAt');
+        });
+
+        it('al cerrar con la inquietud una vinculada provisional, también se corre el plazo', async () => {
+          prisma.moderationAction.findUnique.mockResolvedValue({ id: 'ma1', target: 'inquietud', targetId: 'q1', status: 'apelado', reason: 'x' });
+          prisma.inquietud.update.mockResolvedValue({ id: 'q1', proposalId: 't1' });
+          prisma.proposal.findUnique.mockResolvedValue({ id: 't1', abiertoPorComunidad: true, hidden: true });
+          prisma.moderationAction.findFirst.mockResolvedValue({
+            id: 'ma2', reason: LINKED_TOPIC_REASON, status: 'provisional', causa: 'datos_personales', createdAt: CREADA,
+          });
+          prisma.moderationAction.count.mockResolvedValue(0);
+          prisma.proposal.update.mockResolvedValue({ id: 't1', title: 'Fondo', electionId: null });
+          prisma.decision.findUnique.mockResolvedValue({ id: 'd1', fase: 'votacion', objecionEndsAt: null, votacionEndsAt: FIN });
+          await service.resolveAppeal(YO, 'ma1', true, 'ip');
+          expect(prisma.decision.updateMany).toHaveBeenCalledWith({
+            where: { id: 'd1', fase: 'votacion' },
+            data: { votacionEndsAt: new Date(FIN.getTime() + PAUSA) },
+          });
+        });
+
+        it('una decisión en modo o ya contada no se toca', async () => {
+          prisma.moderationAction.findUnique.mockResolvedValue(
+            accion({ target: 'tema', targetId: 't1', status: 'provisional', causa: 'datos_personales', createdAt: CREADA }),
+          );
+          prisma.proposal.update.mockResolvedValue({ id: 't1', title: 'Fondo', electionId: null });
+          prisma.decision.findUnique.mockResolvedValue({ id: 'd1', fase: 'modo', objecionEndsAt: null, votacionEndsAt: null });
+          await service.confirmar(YO, 'ma1', false, 'ip');
+          expect(prisma.decision.updateMany).not.toHaveBeenCalled();
+        });
       });
 
       it('I4 y M1: el debate vinculado se lee con FOR UPDATE antes de buscar su solicitud abierta', async () => {

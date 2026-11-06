@@ -988,6 +988,18 @@ describe('DecisionesService', () => {
       expect(prisma.decisionPapeleta.upsert).not.toHaveBeenCalled();
     });
 
+    it('si el tema se ocultó entre la lectura y la escritura, no guarda: el tema se bloquea antes que la decisión', async () => {
+      prisma.$queryRaw.mockImplementation(async (q: Prisma.Sql) => (q.sql.includes('FROM proposals') ? [] : [{ id: 'd1' }]));
+      await expect(service.castPapeleta(YO, T, { abstencion: true, orden: [] })).rejects.toThrow('Este tema está oculto por moderación.');
+      expect(prisma.decisionPapeleta.upsert).not.toHaveBeenCalled();
+      prisma.$queryRaw.mockReset();
+      prisma.$queryRaw.mockResolvedValue([{ id: 'x' }]);
+      await service.castPapeleta(YO, T, { abstencion: true, orden: [] });
+      const sqls = prisma.$queryRaw.mock.calls.map(([q]) => (q as Prisma.Sql).sql);
+      expect(sqls[0]).toMatch(/FROM proposals WHERE id = .* AND hidden = false FOR SHARE/);
+      expect(sqls[1]).toContain('FROM decisiones');
+    });
+
     it('fuera de la fase de votación o con el plazo vencido: 400', async () => {
       prisma.decision.findUnique.mockResolvedValue({ ...enVotacion(['s1']), fase: 'objecion' });
       await expect(service.castPapeleta(YO, T, { abstencion: true, orden: [] })).rejects.toThrow('La votación no está abierta.');
@@ -999,9 +1011,10 @@ describe('DecisionesService', () => {
     });
 
     it('dentro de la transacción vuelve a comprobar la fase y el plazo; si cambiaron: 400 sin guardar', async () => {
-      prisma.$queryRaw.mockResolvedValue([]);
+      // El tema sigue visible (primer bloqueo); la decisión ya no está en votación (segundo).
+      prisma.$queryRaw.mockImplementation(async (q: Prisma.Sql) => (q.sql.includes('FROM proposals') ? [{ id: T }] : []));
       await expect(service.castPapeleta(YO, T, { abstencion: true, orden: [] })).rejects.toThrow('La votación no está abierta.');
-      const sql = (prisma.$queryRaw.mock.calls[0]![0] as Prisma.Sql).sql;
+      const sql = (prisma.$queryRaw.mock.calls[1]![0] as Prisma.Sql).sql;
       expect(sql).toContain("fase = 'votacion'");
       expect(sql).toContain('"votacionEndsAt" >');
       expect(sql).toContain('FOR UPDATE');
