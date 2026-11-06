@@ -4,6 +4,7 @@
   "sourceRoot": "src",
   "compilerOptions": {
     "deleteOutDir": true,
+    "assets": ["asistente/*.md"],
     "tsConfigPath": "tsconfig.build.json"
   }
 }
