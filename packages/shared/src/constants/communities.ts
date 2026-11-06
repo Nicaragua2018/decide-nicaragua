@@ -46,3 +46,6 @@ export const BOOTSTRAP_VERIFIED_LIMIT = 4;
 
 /** Comunidad de toda la plataforma (grupo custom). */
 export const GENERAL_GROUP_SLUG = 'general';
+
+/** Nivel general (no es una comunidad): todo el exilio y la diáspora. */
+export const GENERAL_GROUP_NAME = 'Exilio y diáspora';

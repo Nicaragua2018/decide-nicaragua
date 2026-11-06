@@ -8,7 +8,7 @@ export const metadata: Metadata = { title: 'Decisiones — Decide Nicaragua' };
 const ENCABEZADO: Record<ComunidadTipo, string> = {
   origen: 'Tu territorio de origen',
   acogida: 'Tu comunidad de acogida',
-  general: 'Exilio y diáspora',
+  general: 'Nivel general',
 };
 
 const ESTADO_BADGE: Record<DecisionResumenItem['estado'], string> = {
