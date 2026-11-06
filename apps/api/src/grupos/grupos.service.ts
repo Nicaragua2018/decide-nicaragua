@@ -15,6 +15,7 @@ import { AuditService } from '../audit/audit.service';
 import { RulesService } from '../rules/rules.service';
 import { GroupAccessService } from '../groups/group-access.service';
 import { type GrupoFila, grupoTrabajoItem } from './grupo-item';
+import { type ComisionFila, ComisionesService } from './comisiones.service';
 
 const DIA_MS = 86_400_000;
 /** Un subgrupo activo con menos de estas personas empieza a contar los días para archivarse. */
@@ -34,6 +35,7 @@ const NO_ACTIVO = 'Solo un grupo de trabajo activo puede llevar propuestas a la 
 const TEMA_OCULTO = 'Este tema está oculto por moderación.';
 const NO_MIEMBRO_PARA_LLEVAR = 'Solo los miembros de la comunidad pueden llevar propuestas a ella.';
 const CONVOCATORIA_VENCIDA = 'La convocatoria de este grupo ya venció.';
+const COMISION_SIN_ENTRAR = 'A una comisión no se entra directamente: ofrécete como voluntario.';
 const CUERPO_MAX = 2000;
 
 type AmbitoTipo = 'origen' | 'acogida' | 'general';
@@ -59,6 +61,7 @@ export class GruposService {
     private readonly access: GroupAccessService,
     private readonly rules: RulesService,
     private readonly audit: AuditService,
+    private readonly comisiones: ComisionesService,
   ) {}
 
   private async actorId(profileId: string): Promise<{ actorId: string } | Record<never, never>> {
@@ -173,14 +176,17 @@ export class GruposService {
       forumId = foro?.id ?? null;
     }
     const estado = g.trabajoEstado;
+    const esComision = g.trabajoTipo === 'comision';
+    const comision = esComision ? await this.comisiones.vista(g as unknown as ComisionFila, profileId, completo) : null;
     return {
       ...this.item(g, miembros, minimo, soyMiembro),
       ambito: { id: g.parent.id, name: g.parent.name, tipo: ambito?.tipo ?? 'general' },
       miembrosNombres,
       forumId,
-      puedoEntrar: enAmbito && !soyMiembro && (estado === 'convocando' || estado === 'activo'),
+      // A una comisión no se entra: sus miembros son los voluntarios que resultaron seleccionados.
+      puedoEntrar: !esComision && enAmbito && !soyMiembro && (estado === 'convocando' || estado === 'activo'),
       puedoSalir: soyMiembro,
-      comision: null,
+      comision,
       bifurcacion: null,
     };
   }
@@ -230,6 +236,7 @@ export class GruposService {
 
   async entrar(profileId: string, id: string, ip: string, now: Date = new Date()): Promise<GrupoTrabajoDetail> {
     const g = await this.grupoDeTrabajoLegible(id, profileId);
+    if (g.trabajoTipo === 'comision') throw new BadRequestException(COMISION_SIN_ENTRAR);
     if (!(await this.access.isParticipant(g.parentGroupId, profileId))) throw new ForbiddenException(NO_MIEMBRO_AMBITO);
     const minimo = await this.rules.getInt('subgrupo.minimo_personas', g.parentGroupId);
 
@@ -277,6 +284,8 @@ export class GruposService {
     const { salio, archivado } = await this.prisma.$transaction(async (tx) => {
       const actual = await this.bloquear(tx, id);
       const res = await tx.groupMembership.deleteMany({ where: { groupId: id, profileId } });
+      // Una comisión sigue su propio ciclo (ComisionesService): salir no la archiva ni la marca con pocos miembros.
+      if (actual.trabajoTipo === 'comision') return { salio: res.count > 0, archivado: false };
       const miembros = await tx.groupMembership.count({ where: { groupId: id } });
       let archivado = false;
       if (actual.trabajoEstado === 'activo' && miembros < MINIMO_ACTIVO && !actual.pocosMiembrosDesde) {
@@ -384,15 +393,18 @@ export class GruposService {
     return true;
   }
 
-  /** Archiva las convocatorias vencidas y los activos con pocos miembros durante 30 días. */
+  /**
+   * Archiva las convocatorias vencidas y los activos con pocos miembros durante 30 días.
+   * Las comisiones quedan fuera: sus plazos los revisa `ComisionesService.processDeadlines`.
+   */
   async processDeadlines(now: Date): Promise<number> {
     const limite = new Date(now.getTime() - DIAS_CON_POCOS * DIA_MS);
     const vencidos = await this.prisma.group.findMany({
-      where: { type: 'trabajo', trabajoEstado: 'convocando', convocatoriaEndsAt: { lte: now } },
+      where: { type: 'trabajo', trabajoTipo: { not: 'comision' }, trabajoEstado: 'convocando', convocatoriaEndsAt: { lte: now } },
       select: { id: true },
     });
     const conPocos = await this.prisma.group.findMany({
-      where: { type: 'trabajo', trabajoEstado: 'activo', pocosMiembrosDesde: { lte: limite } },
+      where: { type: 'trabajo', trabajoTipo: { not: 'comision' }, trabajoEstado: 'activo', pocosMiembrosDesde: { lte: limite } },
       select: { id: true },
     });
     const casos: { id: string; where: Prisma.GroupWhereInput }[] = [
@@ -402,7 +414,7 @@ export class GruposService {
     // Los activos que quedaron con menos de 3 sin pasar por `salir` (p. ej., por una suspensión)
     // empiezan aquí a contar sus 30 días.
     const sinMarca = await this.prisma.group.findMany({
-      where: { type: 'trabajo', trabajoEstado: 'activo', pocosMiembrosDesde: null },
+      where: { type: 'trabajo', trabajoTipo: { not: 'comision' }, trabajoEstado: 'activo', pocosMiembrosDesde: null },
       select: { id: true, _count: { select: { memberships: true } } },
     });
     for (const g of sinMarca) {

@@ -27,7 +27,8 @@ export function grupoTrabajoItem(g: GrupoFila, miembros: number, minimo: number,
     tipo: (g.trabajoTipo ?? 'subgrupo') as TrabajoTipoValue,
     estado: (g.trabajoEstado ?? 'convocando') as TrabajoEstadoValue,
     miembros,
-    faltan: faltanParaActivar(g.trabajoEstado, miembros, minimo),
+    // Una comisión no se activa por número de miembros, sino al cerrar su convocatoria.
+    faltan: g.trabajoTipo === 'comision' ? null : faltanParaActivar(g.trabajoEstado, miembros, minimo),
     convocatoriaEndsAt: g.convocatoriaEndsAt ? g.convocatoriaEndsAt.toISOString() : null,
     soyMiembro,
   };

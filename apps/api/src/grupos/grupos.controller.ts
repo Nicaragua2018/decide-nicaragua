@@ -1,13 +1,16 @@
 import {
   Body,
   Controller,
+  Delete,
   ForbiddenException,
   Get,
   HttpCode,
   HttpStatus,
   Param,
   ParseUUIDPipe,
+  Patch,
   Post,
+  Put,
   Req,
   UseGuards,
 } from '@nestjs/common';
@@ -19,11 +22,18 @@ import { extractIp } from '../common/utils/ip.util';
 import { GruposService } from './grupos.service';
 import { ProponerGrupoDto } from './dto/proponer-grupo.dto';
 import { LlevarPropuestaDto } from './dto/llevar-propuesta.dto';
+import { ComisionesService } from './comisiones.service';
+import { VoluntarioDto } from './dto/voluntario.dto';
+import { AjustarComisionDto } from './dto/ajustar-comision.dto';
+import { PapeletaComisionDto } from './dto/papeleta-comision.dto';
 
 @Controller('grupos')
 @UseGuards(JwtAuthGuard)
 export class GruposController {
-  constructor(private readonly grupos: GruposService) {}
+  constructor(
+    private readonly grupos: GruposService,
+    private readonly comisiones: ComisionesService,
+  ) {}
 
   private perfil(user: JwtPayload): string {
     if (!user.profileId) throw new ForbiddenException('Perfil requerido');
@@ -65,5 +75,57 @@ export class GruposController {
   @HttpCode(HttpStatus.OK)
   async salir(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() user: JwtPayload, @Req() req: Request): Promise<GrupoTrabajoDetail> {
     return this.grupos.salir(this.perfil(user), id, extractIp(req));
+  }
+
+  // ─── Comisiones ───────────────────────────────────────────────────────────
+
+  @Post(':id/voluntario')
+  @HttpCode(HttpStatus.OK)
+  async ofrecerse(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: VoluntarioDto,
+    @CurrentUser() user: JwtPayload,
+    @Req() req: Request,
+  ): Promise<GrupoTrabajoDetail> {
+    const profileId = this.perfil(user);
+    await this.comisiones.ofrecerse(profileId, id, dto.experiencia, extractIp(req));
+    return this.grupos.detail(profileId, id);
+  }
+
+  @Delete(':id/voluntario')
+  async retirarse(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() user: JwtPayload, @Req() req: Request): Promise<GrupoTrabajoDetail> {
+    const profileId = this.perfil(user);
+    await this.comisiones.retirarse(profileId, id, extractIp(req));
+    return this.grupos.detail(profileId, id);
+  }
+
+  @Patch(':id/comision')
+  async ajustar(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: AjustarComisionDto,
+    @CurrentUser() user: JwtPayload,
+  ): Promise<GrupoTrabajoDetail> {
+    const profileId = this.perfil(user);
+    await this.comisiones.ajustar(profileId, id, {
+      ...(dto.tarea !== undefined && { tarea: dto.tarea }),
+      ...(dto.puestos !== undefined && { puestos: dto.puestos }),
+    });
+    return this.grupos.detail(profileId, id);
+  }
+
+  @Put(':id/comision/papeleta')
+  async votar(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: PapeletaComisionDto,
+    @CurrentUser() user: JwtPayload,
+  ): Promise<GrupoTrabajoDetail> {
+    const profileId = this.perfil(user);
+    await this.comisiones.votar(profileId, id, dto.orden);
+    return this.grupos.detail(profileId, id);
+  }
+
+  @Get(':id/comision/verificar')
+  async verificar(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() user: JwtPayload): Promise<{ ok: boolean; elegidos: string[] }> {
+    return this.comisiones.verificar(this.perfil(user), id);
   }
 }

@@ -77,6 +77,7 @@ describe('GruposService', () => {
   };
   let rules: { getInt: ReturnType<typeof vi.fn> };
   let audit: { log: ReturnType<typeof vi.fn> };
+  let comisiones: { vista: ReturnType<typeof vi.fn> };
   let service: GruposService;
   /** Miembros por grupo, para las comprobaciones de membresía. */
   let miembroDe: Set<string>;
@@ -98,7 +99,8 @@ describe('GruposService', () => {
     };
     rules = { getInt: vi.fn(async (key: string) => (key === 'subgrupo.minimo_personas' ? 5 : 14)) };
     audit = { log: vi.fn().mockResolvedValue(undefined) };
-    service = new GruposService(prisma as never, access as never, rules as never, audit as never);
+    comisiones = { vista: vi.fn().mockResolvedValue({ tarea: 'vista de la comisión' }) };
+    service = new GruposService(prisma as never, access as never, rules as never, audit as never, comisiones as never);
     prisma.group.findUnique.mockImplementation(async ({ where }: { where: { id: string } }) =>
       where.id === AMBITO ? ambito() : trabajo(),
     );
@@ -343,6 +345,31 @@ describe('GruposService', () => {
     });
   });
 
+  describe('comisiones en entrar, salir y plazos', () => {
+    it('a una comisión no se entra (400)', async () => {
+      prisma.group.findUnique.mockResolvedValue(trabajo({ trabajoTipo: 'comision' }));
+      await expect(service.entrar(YO, GT, '1.1.1.1', NOW)).rejects.toBeInstanceOf(BadRequestException);
+      expect(prisma.$transaction).not.toHaveBeenCalled();
+    });
+
+    it('salir de una comisión convocando no la archiva', async () => {
+      tx.group.findUnique.mockResolvedValue(trabajo({ trabajoTipo: 'comision' }));
+      tx.groupMembership.deleteMany.mockResolvedValue({ count: 0 });
+      tx.groupMembership.count.mockResolvedValue(0);
+      await service.salir(YO, GT, '1.1.1.1', NOW);
+      expect(tx.group.updateMany).not.toHaveBeenCalled();
+      expect(acciones()).toEqual([]);
+    });
+
+    it('los plazos de subgrupos dejan fuera a las comisiones', async () => {
+      await service.processDeadlines(NOW);
+      for (const call of prisma.group.findMany.mock.calls) {
+        expect(call[0].where).toMatchObject({ trabajoTipo: { not: 'comision' } });
+      }
+      expect(prisma.group.findMany).toHaveBeenCalledTimes(3);
+    });
+  });
+
   describe('processDeadlines', () => {
     it('archiva al vencer la convocatoria sin el mínimo', async () => {
       prisma.group.findMany.mockResolvedValueOnce([{ id: GT }]).mockResolvedValueOnce([]);
@@ -397,6 +424,7 @@ describe('GruposService', () => {
       expect(n).toBe(0);
       expect(prisma.group.findMany.mock.calls[2]![0].where).toEqual({
         type: 'trabajo',
+        trabajoTipo: { not: 'comision' },
         trabajoEstado: 'activo',
         pocosMiembrosDesde: null,
       });
@@ -613,6 +641,23 @@ describe('GruposService', () => {
         faltan: 3,
         soyMiembro: false,
       });
+    });
+
+    it('el detalle de una comisión trae su vista y no ofrece entrar', async () => {
+      const g = { ...trabajo({ trabajoTipo: 'comision' }), parent: ambito() };
+      prisma.group.findUnique.mockResolvedValue(g);
+      const d = await service.detail(YO, GT);
+      expect(comisiones.vista).toHaveBeenCalledWith(g, YO, true);
+      expect(d.comision).toEqual({ tarea: 'vista de la comisión' });
+      expect(d.puedoEntrar).toBe(false);
+      expect(d.faltan).toBeNull();
+    });
+
+    it('el detalle de un subgrupo no trae vista de comisión', async () => {
+      prisma.group.findUnique.mockResolvedValue({ ...trabajo(), parent: ambito() });
+      const d = await service.detail(YO, GT);
+      expect(d.comision).toBeNull();
+      expect(comisiones.vista).not.toHaveBeenCalled();
     });
 
     it('el detalle de un grupo que no es de trabajo es 404', async () => {
