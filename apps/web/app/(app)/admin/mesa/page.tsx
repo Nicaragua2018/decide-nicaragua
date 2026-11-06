@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import { ruleDefinition } from '@decide/shared';
 import type { BoardActionSummary, BoardSeatSummary, ModeracionPorConfirmar, ModerationAppeal, PausaApeladaItem, UserListResponse } from '@decide/shared';
 import { serverFetch } from '@/lib/api';
 import { AppealsList } from './AppealsList';
@@ -7,6 +8,17 @@ import { PorConfirmarList } from './PorConfirmarList';
 import { AssignSeatForm, ProposeActionForm, ROLE_LABEL, VoteButtons } from './MesaForms';
 
 export const metadata: Metadata = { title: 'Mesa directiva' };
+
+function descripcionCambioRegla(a: BoardActionSummary): string {
+  const key = String(a.params['key']);
+  let label = key;
+  try {
+    label = ruleDefinition(key).label;
+  } catch {
+    // regla desconocida: se muestra la clave
+  }
+  return `Cambiar la regla de la colmena «${label}» a ${String(a.params['valor'])}`;
+}
 
 export default async function MesaPage() {
   const [seatsRes, meRes, actionsRes, usersRes, appealsRes, porConfirmarRes, pausasRes] = await Promise.all([
@@ -64,10 +76,12 @@ export default async function MesaPage() {
         {actions.map((a) => (
           <div key={a.id} className="card">
             <p className="card-title">
-              {a.type === 'suspend_user' ? 'Suspender' : `Cambiar origen a ${String(a.params['birthDepartment'])}`}: {a.targetDisplayName ?? '—'}
+              {a.type === 'change_rule'
+                ? descripcionCambioRegla(a)
+                : `${a.type === 'suspend_user' ? 'Suspender' : `Cambiar origen a ${String(a.params['birthDepartment'])}`}: ${a.targetDisplayName ?? '—'}`}
             </p>
             <p className="card-meta">
-              Propuso {a.proposedBy} · {a.approvals.filter((x) => x.approve).length} a favor ·{' '}
+              Propuso {a.proposedBy ?? 'la comunidad'} · {a.approvals.filter((x) => x.approve).length} a favor ·{' '}
               {a.approvals.filter((x) => !x.approve).length} en contra · {a.status}
             </p>
             <p className="text-sm">{a.reason}</p>

@@ -808,3 +808,21 @@ export async function pedirComision(grupoId: string): Promise<ActionResult> {
   revalidarGrupo(grupoId);
   redirect(`/grupos/${data.id}`);
 }
+
+/** Propone cambiar una regla. Abre un debate y, al terminar, la comunidad vota. */
+export async function proponerCambioRegla(
+  groupId: string,
+  key: string,
+  valor: string,
+  motivo?: string,
+): Promise<{ error: string } | { success: true; proposalId: string }> {
+  if (!isUuid(groupId)) return { error: 'Solicitud no válida.' };
+  const res = await actionFetch('/api/rules/cambios', {
+    method: 'POST',
+    body: JSON.stringify({ groupId, key, valor, ...(motivo ? { motivo } : {}) }),
+  });
+  if (!res.ok) return { error: await parseError(res) };
+  const data = (await res.json()) as { id: string; proposalId: string };
+  revalidatePath('/reglas');
+  return { success: true, proposalId: data.proposalId };
+}
