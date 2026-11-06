@@ -434,8 +434,16 @@ describe('BifurcacionesService', () => {
         puedoPausar: false,
         puedoPedirComision: false,
         yaLlevada: false,
+        comisionId: null,
       });
       expect(JSON.stringify(v)).not.toContain('p-');
+    });
+
+    it('comisionId: la comisión viva propia, solo para sus miembros', async () => {
+      prisma.solucion.findUnique.mockResolvedValue({ title: 'Huerto comunitario', proposalId: 't-1', hidden: false });
+      prisma.group.findFirst.mockResolvedValue({ id: 'g-com' });
+      expect((await service.vista(bif({ trabajoEstado: 'pausado' }), YO, true, true)).comisionId).toBe('g-com');
+      expect((await service.vista(bif(), YO, false, true)).comisionId).toBeNull();
     });
 
     it('activa: pide comisión si no hay una viva; ya llevada si existe la inquietud', async () => {
@@ -446,7 +454,7 @@ describe('BifurcacionesService', () => {
       prisma.group.findFirst.mockResolvedValue({ id: 'g-com' });
       prisma.inquietud.findUnique.mockResolvedValue({ id: 'inq' });
       v = await service.vista(bif(), YO, true, true);
-      expect(v).toMatchObject({ puedoPedirComision: false, yaLlevada: true });
+      expect(v).toMatchObject({ puedoPedirComision: false, yaLlevada: true, comisionId: 'g-com' });
       expect(prisma.group.findFirst).toHaveBeenLastCalledWith({
         where: { trabajoTipo: 'comision', origenSolucionId: S, trabajoEstado: { notIn: ['cerrado', 'archivado'] } },
         select: { id: true },

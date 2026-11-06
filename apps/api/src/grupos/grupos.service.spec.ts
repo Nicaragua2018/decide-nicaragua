@@ -60,7 +60,7 @@ function buildPrisma(tx: ReturnType<typeof buildTx>) {
     groupMembership: { findUnique: vi.fn(), findMany: vi.fn().mockResolvedValue([]), count: vi.fn().mockResolvedValue(1) },
     forum: { findFirst: vi.fn().mockResolvedValue(null) },
     profile: { findUnique: vi.fn().mockResolvedValue({ userId: 'u-yo' }) },
-    solucion: { findUnique: vi.fn().mockResolvedValue(null) },
+    solucion: { findUnique: vi.fn().mockResolvedValue(null), findMany: vi.fn().mockResolvedValue([]) },
     $transaction: vi.fn(async (fn: (t: unknown) => unknown) => fn(tx)),
   };
 }
@@ -74,6 +74,7 @@ describe('GruposService', () => {
     requireParticipant: ReturnType<typeof vi.fn>;
     requireMember: ReturnType<typeof vi.fn>;
     canRead: ReturnType<typeof vi.fn>;
+    esReservado: ReturnType<typeof vi.fn>;
   };
   let rules: { getInt: ReturnType<typeof vi.fn> };
   let audit: { log: ReturnType<typeof vi.fn> };
@@ -97,6 +98,7 @@ describe('GruposService', () => {
         if (!miembroDe.has(groupId)) throw new ForbiddenException('No participa.');
       }),
       canRead: vi.fn().mockResolvedValue(true),
+      esReservado: vi.fn().mockResolvedValue(false),
     };
     rules = { getInt: vi.fn(async (key: string) => (key === 'subgrupo.minimo_personas' ? 5 : 14)) };
     audit = { log: vi.fn().mockResolvedValue(undefined) };
@@ -371,6 +373,15 @@ describe('GruposService', () => {
       await service.salir(YO, GT, '1.1.1.1', NOW);
       expect(tx.group.updateMany).not.toHaveBeenCalled();
       expect(acciones()).toEqual([]);
+    });
+
+    it('salir de la comisión de una bifurcación (reservada) se audita sin actor ni ip', async () => {
+      access.esReservado.mockResolvedValue(true);
+      tx.group.findUnique.mockResolvedValue(trabajo({ trabajoTipo: 'comision', trabajoEstado: 'activo' }));
+      await service.salir(YO, GT, '1.1.1.1', NOW);
+      expect(acciones()).toEqual(['grupo.left']);
+      expect(audit.log.mock.calls[0]![0]).not.toHaveProperty('actorId');
+      expect(audit.log.mock.calls[0]![0]).not.toHaveProperty('ip');
     });
 
     it('los plazos de subgrupos dejan fuera a las comisiones', async () => {
@@ -786,6 +797,17 @@ describe('GruposService', () => {
         expect.objectContaining({ id: GT, miembros: 2, faltan: 3 }),
       ]);
       expect(JSON.stringify(res)).not.toContain(OTRA);
+    });
+
+    it('M1: si la solución de origen se ocultó, la lista no repite su título', async () => {
+      prisma.groupMembership.findMany.mockImplementation(async ({ where }: { where: Record<string, unknown> }) =>
+        where['profileId'] && !where['groupId'] ? [{ groupId: AMBITO, group: ambito() }] : [],
+      );
+      prisma.group.findMany.mockResolvedValue([{ ...bif(), _count: { memberships: 3 } }]);
+      (prisma.solucion as Record<string, unknown>)['findMany'] = vi.fn().mockResolvedValue([{ id: S }]);
+      const res = await service.list(YO);
+      expect(res.ambitos[0]!.grupos[0]!.proposito).toBe('Solución oculta por moderación');
+      expect(JSON.stringify(res)).not.toContain('Huerto');
     });
 
     describe('volver a la colmena', () => {

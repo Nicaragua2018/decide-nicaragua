@@ -112,6 +112,7 @@ describe('ComisionesService', () => {
     isParticipant: ReturnType<typeof vi.fn>;
     requireReader: ReturnType<typeof vi.fn>;
     requireParticipant: ReturnType<typeof vi.fn>;
+    esReservado: ReturnType<typeof vi.fn>;
   };
   let rules: { getInt: ReturnType<typeof vi.fn>; getChoice: ReturnType<typeof vi.fn> };
   let audit: { log: ReturnType<typeof vi.fn> };
@@ -131,6 +132,8 @@ describe('ComisionesService', () => {
         if (!miembroDe.has(groupId) && !(parent && miembroDe.has(parent))) throw new ForbiddenException('No lee.');
         return { participa: miembroDe.has(groupId) };
       }),
+      // Reservada: la comisión de una bifurcación (cuelga de BIF).
+      esReservado: vi.fn(async (groupId: string) => groupId === BIF || (groupId === COM && grupoActual['parentGroupId'] === BIF)),
       requireParticipant: vi.fn(async (groupId: string) => {
         if (!miembroDe.has(groupId)) throw new ForbiddenException('No participa.');
         if (groupId === COM && grupoActual['trabajoEstado'] !== 'activo') throw new ConflictException('No activo.');
@@ -319,6 +322,18 @@ describe('ComisionesService', () => {
       miembroDe.add(BIF);
       await service.ofrecerse(YO, COM, undefined, '1.1.1.1', NOW);
       expect(prisma.comisionVoluntario.upsert).toHaveBeenCalledTimes(1);
+    });
+
+    it('I1: en la comisión de una bifurcación ofrecerse y retirarse se auditan sin actor ni ip', async () => {
+      grupoActual = comision({ parentGroupId: BIF, origenGrupoId: BIF });
+      miembroDe.add(BIF);
+      await service.ofrecerse(YO, COM, 'Sé de huertos.', '1.1.1.1', NOW);
+      await service.retirarse(YO, COM, '1.1.1.1', NOW);
+      expect(acciones()).toEqual(['comision.volunteered', 'comision.withdrew']);
+      for (const [e] of audit.log.mock.calls as [Record<string, unknown>][]) {
+        expect(e).not.toHaveProperty('actorId');
+        expect(e).not.toHaveProperty('ip');
+      }
     });
 
     it('un grupo que no es comisión da 400', async () => {

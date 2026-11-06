@@ -267,7 +267,8 @@ export class BifurcacionesService {
       S ? this.prisma.solucion.findUnique({ where: { id: S }, select: { title: true, proposalId: true, hidden: true } }) : null,
       activa && enAmbito && g.parentGroupId ? this.forums.canOrganize(profileId, g.parentGroupId) : false,
       S ? this.prisma.inquietud.findUnique({ where: { origenSolucionId: S }, select: { id: true } }) : null,
-      S && soyMiembro && activa
+      // La comisión propia solo se muestra a los miembros (su existencia no sale de la bifurcación).
+      S && soyMiembro
         ? this.prisma.group.findFirst({
             where: { trabajoTipo: 'comision', origenSolucionId: S, trabajoEstado: { notIn: ['cerrado', 'archivado'] } },
             select: { id: true },
@@ -285,6 +286,7 @@ export class BifurcacionesService {
       puedoPausar: activa && enAmbito && organiza,
       puedoPedirComision: soyMiembro && activa && Boolean(S) && comisionViva === null,
       yaLlevada: llevada !== null,
+      comisionId: comisionViva?.id ?? null,
     };
   }
 }

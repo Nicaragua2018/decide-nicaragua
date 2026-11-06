@@ -52,10 +52,6 @@ export class FrasesService {
     private readonly access: GroupAccessService,
   ) {}
 
-  private async actorId(profileId: string): Promise<{ actorId: string } | Record<never, never>> {
-    const p = await this.prisma.profile.findUnique({ where: { id: profileId }, select: { userId: true } });
-    return p?.userId ? { actorId: p.userId } : {};
-  }
 
   /**
    * El tema debe existir. Para `participar`, la persona debe ser miembro de su grupo; para
@@ -105,11 +101,12 @@ export class FrasesService {
     const created = await this.prisma.frase.create({
       data: { proposalId, authorProfileId: profileId, text: text.trim() },
     });
+    // Dentro de una bifurcación, sin actor ni ip: delataría quiénes la forman.
+    const { quien } = await this.access.rastro(tema.groupId, profileId, ip);
     void this.audit.log({
-      ...(await this.actorId(profileId)),
+      ...quien,
       action: 'frase.created',
       resource: `frase:${created.id}`,
-      ip,
       metadata: { proposalId },
     });
     return { id: created.id };

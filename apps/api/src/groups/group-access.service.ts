@@ -48,6 +48,38 @@ export class GroupAccessService {
     return null;
   }
 
+  /**
+   * Grupo reservado: una bifurcación o un grupo que cuelga de una (su comisión). Lo que se hace
+   * dentro no se audita con actor, ip ni el id del grupo: delataría quiénes la forman.
+   */
+  async esReservado(groupId: string): Promise<boolean> {
+    const g = await this.grupo(groupId);
+    if (!g || g.type !== 'trabajo') return false;
+    if (g.trabajoTipo === 'bifurcacion') return true;
+    if (!g.parentGroupId) return false;
+    return (await this.grupo(g.parentGroupId))?.trabajoTipo === 'bifurcacion';
+  }
+
+  /**
+   * Rastro de quien actúa para la auditoría: `{ actorId, ip }` fuera de lo reservado; nada dentro de
+   * un grupo reservado o cuando quien llama ya sabe que el contenido es reservado (`forzar`).
+   */
+  async rastro(
+    groupId: string,
+    profileId: string,
+    ip?: string,
+    forzar = false,
+  ): Promise<{ reservado: boolean; quien: { actorId?: string; ip?: string } }> {
+    try {
+      if (forzar || (await this.esReservado(groupId))) return { reservado: true, quien: {} };
+      const p = await this.prisma.profile.findUnique({ where: { id: profileId }, select: { userId: true } });
+      return { reservado: false, quien: { ...(p?.userId ? { actorId: p.userId } : {}), ...(ip ? { ip } : {}) } };
+    } catch {
+      // La auditoría no debe romper la acción; ante la duda, sin rastro.
+      return { reservado: true, quien: {} };
+    }
+  }
+
   async canRead(groupId: string, profileId: string): Promise<boolean> {
     return (await this.nivel(groupId, profileId)) !== null;
   }

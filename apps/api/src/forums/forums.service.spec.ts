@@ -322,6 +322,66 @@ describe('ForumsService', () => {
     });
   });
 
+  describe('auditoría sin rastro en lo reservado', () => {
+    const sinRastro = () => {
+      expect(audit.log).toHaveBeenCalled();
+      for (const [e] of audit.log.mock.calls as [Record<string, unknown>][]) {
+        expect(e).not.toHaveProperty('actorId');
+        expect(e).not.toHaveProperty('ip');
+      }
+    };
+    const tema = { id: 't1', groupId: 'g-bif', authorProfileId: YO, status: 'open', kind: 'tema', hidden: false, title: 'Tema', body: 'Cuerpo', electionId: null, abiertoPorComunidad: false };
+    const enBifurcacion = () => {
+      prisma.groupMembership.findUnique.mockResolvedValue({ id: 'm' });
+      prisma.group.findUnique.mockResolvedValue({ type: 'trabajo', parentGroupId: 'g-ambito', trabajoEstado: 'activo', trabajoTipo: 'bifurcacion' });
+    };
+
+    it('formalizar y cerrar con consenso dentro de una bifurcación', async () => {
+      enBifurcacion();
+      prisma.proposal.findUnique.mockResolvedValue(tema);
+      await service.formalize(YO, 't1', 'ip');
+      prisma.proposal.update.mockResolvedValue({});
+      await service.closeWithConsensus(YO, 't1', { conclusion: 'Acordamos sembrar el huerto.' } as never, 'ip');
+      sinRastro();
+    });
+
+    it('apelar un comentario oculto dentro de una bifurcación', async () => {
+      enBifurcacion();
+      prisma.moderationAction.findUnique.mockResolvedValue({ id: 'ma1', target: 'respuesta', targetId: 'c1', reason: 'x', status: 'oculto' });
+      prisma.proposalComment.findUnique.mockResolvedValue({ authorProfileId: YO, proposal: { groupId: 'g-bif' } });
+      prisma.moderationAction.update.mockResolvedValue({});
+      await service.appeal(YO, 'ma1', 'No fue mi intención ofender', 'ip');
+      sinRastro();
+    });
+
+    it('I2: el tema que la comunidad abrió desde una inquietud llevada por una bifurcación no delata a su autor', async () => {
+      prisma.groupMembership.findUnique.mockResolvedValue({ id: 'm' });
+      prisma.group.findUnique.mockResolvedValue({ type: 'territorial_origin', parentGroupId: null, trabajoEstado: null, trabajoTipo: null });
+      const p = prisma as unknown as Record<string, unknown>;
+      p['inquietud'] = {
+        ...prisma.inquietud,
+        findMany: vi.fn().mockResolvedValue([{ proposalId: 't1', origenSolucionId: 's-bif' }]),
+        findUnique: vi.fn().mockResolvedValue({ id: 'i1', authorProfileId: YO, groupId: 'g-ambito', origenSolucionId: 's-bif' }),
+      };
+      p['group'] = { ...prisma.group, findMany: vi.fn().mockResolvedValue([{ origenSolucionId: 's-bif' }]) };
+      prisma.proposal.findUnique.mockResolvedValue({ ...tema, groupId: 'g-ambito', abiertoPorComunidad: true });
+      await service.formalize(YO, 't1', 'ip');
+      // Y la apelación de la inquietud llevada.
+      prisma.moderationAction.findUnique.mockResolvedValue({ id: 'ma2', target: 'inquietud', targetId: 'i1', reason: 'x', status: 'oculto' });
+      prisma.moderationAction.update.mockResolvedValue({});
+      await service.appeal(YO, 'ma2', 'No fue mi intención ofender', 'ip');
+      sinRastro();
+    });
+
+    it('fuera de lo reservado sigue con actor e ip', async () => {
+      prisma.groupMembership.findUnique.mockResolvedValue({ id: 'm' });
+      prisma.group.findUnique.mockResolvedValue({ type: 'territorial_origin', parentGroupId: null, trabajoEstado: null, trabajoTipo: null });
+      prisma.proposal.findUnique.mockResolvedValue({ ...tema, groupId: 'g-ambito' });
+      await service.formalize(YO, 't1', 'ip');
+      expect(audit.log.mock.calls[0]![0]).toMatchObject({ actorId: 'u-yo', ip: 'ip' });
+    });
+  });
+
   describe('formalize()', () => {
     it('solo el autor o quien modera convierte en propuesta', async () => {
       prisma.proposal.findUnique.mockResolvedValue({ id: 't1', groupId: 'g1', authorProfileId: 'p-otro', status: 'open', kind: 'tema', hidden: false });

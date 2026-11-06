@@ -90,6 +90,8 @@ export interface BifurcacionView {
   puedoPausar: boolean;
   puedoPedirComision: boolean;
   yaLlevada: boolean;
+  /** Comisión viva propia de la bifurcación (solo para sus miembros); null si no hay. */
+  comisionId: string | null;
 }
 
 export interface GruposAmbitoResponse {

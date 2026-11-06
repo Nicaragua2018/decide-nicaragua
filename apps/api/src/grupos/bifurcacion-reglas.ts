@@ -5,7 +5,31 @@ export const NO_ELEGIBLE = 'Solo quienes apoyaron esta solución pueden sumarse.
 /** Nombre con el que una bifurcación (y lo que lleva a la colmena) se ve desde fuera. */
 export const NOMBRE_INICIATIVA = 'Iniciativa de un grupo';
 
+/** Texto con el que sale una solución ocultada por moderación. */
+export const SOLUCION_OCULTA = 'Solución oculta por moderación';
+
 const DIA_MS = 86_400_000;
+
+/**
+ * En las listas, el propósito de una bifurcación es el título de su solución de origen: si esa
+ * solución se ocultó por moderación, sale enmascarado. Una consulta para todas las filas.
+ */
+export async function enmascararOrigenOculto<
+  T extends { trabajoTipo: string | null; proposito: string | null; origenSolucionId?: string | null },
+>(prisma: Pick<PrismaService, 'solucion'>, filas: T[]): Promise<T[]> {
+  const ids = filas
+    .filter((f) => f.trabajoTipo === 'bifurcacion' && f.origenSolucionId)
+    .map((f) => f.origenSolucionId as string);
+  if (ids.length === 0) return filas;
+  const ocultas = new Set(
+    (await prisma.solucion.findMany({ where: { id: { in: ids }, hidden: true }, select: { id: true } })).map((s) => s.id),
+  );
+  return filas.map((f) =>
+    f.trabajoTipo === 'bifurcacion' && f.origenSolucionId && ocultas.has(f.origenSolucionId)
+      ? { ...f, proposito: SOLUCION_OCULTA }
+      : f,
+  );
+}
 
 export interface DecisionBifurcable {
   fase: string;

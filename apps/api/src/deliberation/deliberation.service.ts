@@ -74,9 +74,10 @@ export class DeliberationService {
       },
     });
 
-    void this.auditBase(profileId).then((base) =>
+    // En un grupo reservado (bifurcación) no se registra actor, ip ni el grupo.
+    void this.access.rastro(groupId, profileId, ip).then(({ reservado, quien }) =>
       this.audit
-        .log({ ...base, action: 'proposal.created', resource: `proposal:${proposal.id}`, ip, metadata: { groupId } })
+        .log({ ...quien, action: 'proposal.created', resource: `proposal:${proposal.id}`, metadata: reservado ? {} : { groupId } })
         .catch((err: unknown) => this.logger.error('Audit log failed', err)),
     );
 
@@ -289,9 +290,9 @@ export class DeliberationService {
       data: { status: newStatus },
     });
 
-    void this.auditBase(profileId).then((base) =>
+    void this.access.rastro(proposal.groupId, profileId, ip).then(({ quien }) =>
       this.audit
-        .log({ ...base, action: 'proposal.status_changed', resource: `proposal:${proposalId}`, ip, metadata: { newStatus: dto.status } })
+        .log({ ...quien, action: 'proposal.status_changed', resource: `proposal:${proposalId}`, metadata: { newStatus: dto.status } })
         .catch((err: unknown) => this.logger.error('Audit log failed', err)),
     );
   }
@@ -342,9 +343,9 @@ export class DeliberationService {
       },
     });
 
-    void this.auditBase(profileId).then((base) =>
+    void this.access.rastro(proposal.groupId, profileId, ip).then(({ quien }) =>
       this.audit
-        .log({ ...base, action: 'proposal.comment_added', resource: `proposal:${proposalId}`, ip })
+        .log({ ...quien, action: 'proposal.comment_added', resource: `proposal:${proposalId}` })
         .catch((err: unknown) => this.logger.error('Audit log failed', err)),
     );
 
@@ -381,9 +382,9 @@ export class DeliberationService {
       },
     });
 
-    void this.auditBase(profileId).then((base) =>
+    void this.access.rastro(proposal.groupId, profileId, ip).then(({ quien }) =>
       this.audit
-        .log({ ...base, action: 'proposal.signal_set', resource: `proposal:${proposalId}`, ip, metadata: { signal: dto.signal } })
+        .log({ ...quien, action: 'proposal.signal_set', resource: `proposal:${proposalId}`, metadata: { signal: dto.signal } })
         .catch((err: unknown) => this.logger.error('Audit log failed', err)),
     );
   }
@@ -449,23 +450,6 @@ export class DeliberationService {
         `Proposal is ${status} and does not accept new interactions`,
       );
     }
-  }
-
-  /**
-   * Construye el objeto base para audit.log incluyendo actorId solo si está disponible.
-   * Usa spread condicional para respetar `exactOptionalPropertyTypes`.
-   */
-  private async auditBase(profileId: string): Promise<{ actorId: string } | Record<never, never>> {
-    try {
-      const profile = await this.prisma.profile.findUnique({
-        where: { id: profileId },
-        select: { userId: true },
-      });
-      if (profile?.userId) return { actorId: profile.userId };
-    } catch {
-      // silenciar — el audit log es fire-and-forget
-    }
-    return {};
   }
 }
 

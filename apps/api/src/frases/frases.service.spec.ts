@@ -183,6 +183,16 @@ describe('FrasesService', () => {
         expect.objectContaining({ action: 'frase.created', actorId: 'u1', ip: '1.1.1.1', metadata: { proposalId: T } }),
       );
     });
+    it('dentro de una bifurcación la frase se audita sin actor, ip ni el grupo', async () => {
+      prisma.group.findUnique.mockResolvedValue({ type: 'trabajo', parentGroupId: 'g-ambito', trabajoEstado: 'activo', trabajoTipo: 'bifurcacion' });
+      prisma.frase.create.mockResolvedValue({ id: 'f1' });
+      await service.create(YO, T, 'Una frase de prueba', '1.1.1.1');
+      const e = audit.log.mock.calls[0]![0] as Record<string, unknown>;
+      expect(e).toMatchObject({ action: 'frase.created' });
+      expect(e).not.toHaveProperty('actorId');
+      expect(e).not.toHaveProperty('ip');
+      expect(JSON.stringify(e)).not.toContain(G);
+    });
     it('en un tema cerrado no se escribe ni se vota', async () => {
       prisma.proposal.findUnique.mockResolvedValue({ id: T, groupId: G, status: 'closed', hidden: false });
       await expect(service.create(YO, T, 'Una frase de prueba', 'ip')).rejects.toThrow('Este tema ya no acepta frases.');

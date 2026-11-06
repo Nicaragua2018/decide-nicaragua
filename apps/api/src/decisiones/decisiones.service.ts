@@ -16,7 +16,7 @@ import type {
   SolucionItem,
 } from '@decide/shared';
 import { type GrupoFila, claveMinimo, grupoTrabajoItem } from '../grupos/grupo-item';
-import { type DecisionBifurcable, esBifurcable, finDelPlazo } from '../grupos/bifurcacion-reglas';
+import { type DecisionBifurcable, enmascararOrigenOculto, esBifurcable, finDelPlazo } from '../grupos/bifurcacion-reglas';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { ForumsService } from '../forums/forums.service';
@@ -138,11 +138,6 @@ export class DecisionesService {
     private readonly access: GroupAccessService,
   ) {}
 
-  private async actorId(profileId: string): Promise<{ actorId: string } | Record<never, never>> {
-    const p = await this.prisma.profile.findUnique({ where: { id: profileId }, select: { userId: true } });
-    return p?.userId ? { actorId: p.userId } : {};
-  }
-
   /**
    * El tema debe existir. Para `participar`, la persona debe ser miembro de su grupo; para
    * `leer` basta con poder leerlo (miembro, o miembro del ámbito si es un grupo de trabajo).
@@ -190,11 +185,11 @@ export class DecisionesService {
         },
       });
     });
+    // Dentro de una bifurcación (reservada), sin actor ni ip.
     void this.audit.log({
-      ...(await this.actorId(profileId)),
+      ...(await this.access.rastro(tema.groupId, profileId, ip)).quien,
       action: 'solucion.created',
       resource: `solucion:${created.id}`,
-      ip,
       metadata: { proposalId },
     });
     return { id: created.id };
@@ -247,10 +242,9 @@ export class DecisionesService {
       if (r.count === 0) throw new BadRequestException('Alguna de las soluciones ya fue juntada u ocultada.');
     });
     void this.audit.log({
-      ...(await this.actorId(profileId)),
+      ...(await this.access.rastro(tema.groupId, profileId, ip)).quien,
       action: 'solucion.merged',
       resource: `solucion:${solucionId}`,
-      ip,
       metadata: { proposalId: origen.proposalId },
     });
   }
@@ -451,7 +445,7 @@ export class DecisionesService {
       return this.salirDelModo(tx, decision.id, proposalId, new Date(), modo, plazos);
     });
     if (!salida) throw new BadRequestException(fueraDeFase);
-    this.auditarSalidaDelModo(salida, decision.id, proposalId, { ...(await this.actorId(profileId)), ip });
+    this.auditarSalidaDelModo(salida, decision.id, proposalId, (await this.access.rastro(tema.groupId, profileId, ip)).quien);
   }
 
   private async plazosDelModo(groupId: string): Promise<{ objecionDias: number; votacionDias: number }> {
@@ -1025,14 +1019,18 @@ export class DecisionesService {
    */
   private async gruposDeTrabajo(ambitoIds: string[], soy: Set<string>): Promise<Map<string, GrupoTrabajoItem[]>> {
     const porAmbito = new Map<string, GrupoTrabajoItem[]>();
-    const filas = (await this.prisma.group.findMany({
-      where: { type: 'trabajo', parentGroupId: { in: ambitoIds }, trabajoEstado: { not: 'archivado' } },
-      select: {
-        id: true, name: true, type: true, parentGroupId: true, trabajoTipo: true, trabajoEstado: true,
-        proposito: true, convocatoriaEndsAt: true, pocosMiembrosDesde: true,
-      },
-      orderBy: { createdAt: 'asc' },
-    })) as GrupoFila[];
+    // El propósito de una bifurcación es el título de su solución de origen: enmascarado si se ocultó.
+    const filas = await enmascararOrigenOculto(
+      this.prisma,
+      (await this.prisma.group.findMany({
+        where: { type: 'trabajo', parentGroupId: { in: ambitoIds }, trabajoEstado: { not: 'archivado' } },
+        select: {
+          id: true, name: true, type: true, parentGroupId: true, trabajoTipo: true, trabajoEstado: true,
+          proposito: true, convocatoriaEndsAt: true, pocosMiembrosDesde: true, origenSolucionId: true,
+        },
+        orderBy: { createdAt: 'asc' },
+      })) as GrupoFila[],
+    );
     if (filas.length === 0) return porAmbito;
 
     const conteos = await this.prisma.groupMembership.groupBy({

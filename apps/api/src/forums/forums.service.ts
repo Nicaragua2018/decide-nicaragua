@@ -21,7 +21,7 @@ import { AuditService } from '../audit/audit.service';
 import { BoardService } from '../board/board.service';
 import { RulesService } from '../rules/rules.service';
 import { GroupAccessService } from '../groups/group-access.service';
-import { NOMBRE_INICIATIVA, temasDeIniciativa } from '../grupos/bifurcacion-reglas';
+import { NOMBRE_INICIATIVA, solucionesDeIniciativa, temasDeIniciativa } from '../grupos/bifurcacion-reglas';
 import type { CreateForumDto } from './dto/create-forum.dto';
 import type { CloseTopicDto } from './dto/close-topic.dto';
 import type { ModerateDto } from './dto/moderate.dto';
@@ -288,7 +288,7 @@ export class ForumsService {
         });
       }
     });
-    void this.audit.log({ ...(await this.actorId(profileId)), action: 'proposal.formalized', resource: `proposal:${topicId}`, ip });
+    void this.audit.log({ ...(await this.rastroDelTema(topic, profileId, ip)), action: 'proposal.formalized', resource: `proposal:${topicId}` });
   }
 
   async closeWithConsensus(profileId: string, topicId: string, dto: CloseTopicDto, ip: string): Promise<void> {
@@ -315,7 +315,11 @@ export class ForumsService {
         objections: dto.objections ?? null,
       },
     });
-    void this.audit.log({ ...(await this.actorId(profileId)), action: 'proposal.closed_with_consensus', resource: `proposal:${topicId}`, ip });
+    void this.audit.log({
+      ...(await this.rastroDelTema(topic, profileId, ip)),
+      action: 'proposal.closed_with_consensus',
+      resource: `proposal:${topicId}`,
+    });
   }
 
   // ─── Moderación ───────────────────────────────────────────────────────────
@@ -566,7 +570,10 @@ export class ForumsService {
       where: { id: moderationId },
       data: { status: 'apelado', appealText: text, appealedAt: new Date() },
     });
-    void this.audit.log({ ...(await this.actorId(profileId)), action: 'moderation.appealed', resource: `moderation:${moderationId}`, ip });
+    // Dentro de una bifurcación, o si el contenido llegó desde una, sin actor ni ip.
+    const forzar = await this.esDeIniciativa(checkTarget(action.target), action.targetId);
+    const { quien } = await this.access.rastro(contenido.groupId, profileId, ip, forzar);
+    void this.audit.log({ ...quien, action: 'moderation.appealed', resource: `moderation:${moderationId}` });
   }
 
   async listAppeals(profileId: string): Promise<ModerationAppeal[]> {
@@ -937,6 +944,32 @@ export class ForumsService {
         data: { votacionEndsAt: new Date(d.votacionEndsAt.getTime() + pausa) },
       });
     }
+  }
+
+  /**
+   * Rastro de quien actúa sobre un tema: nada si el tema es de un grupo reservado o lo abrió la
+   * comunidad desde una inquietud llevada por una bifurcación (su autor es miembro de ella).
+   */
+  private async rastroDelTema(
+    topic: { id: string; groupId: string; abiertoPorComunidad: boolean },
+    profileId: string,
+    ip: string,
+  ): Promise<{ actorId?: string; ip?: string }> {
+    const forzar = (await temasDeIniciativa(this.prisma, [topic])).size > 0;
+    return (await this.access.rastro(topic.groupId, profileId, ip, forzar)).quien;
+  }
+
+  /** Inquietud o tema llevados a la colmena desde una bifurcación. */
+  private async esDeIniciativa(target: ModTarget, id: string): Promise<boolean> {
+    if (target === 'tema') {
+      const t = await this.prisma.proposal.findUnique({ where: { id }, select: { id: true, abiertoPorComunidad: true } });
+      return t ? (await temasDeIniciativa(this.prisma, [t])).size > 0 : false;
+    }
+    if (target === 'inquietud') {
+      const q = await this.prisma.inquietud.findUnique({ where: { id }, select: { origenSolucionId: true } });
+      return q?.origenSolucionId ? (await solucionesDeIniciativa(this.prisma, [q.origenSolucionId])).size > 0 : false;
+    }
+    return false;
   }
 
   private async authorOf(

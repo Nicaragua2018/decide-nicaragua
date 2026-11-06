@@ -111,8 +111,10 @@ export class ComisionesService {
     ip?: string,
     extra: Record<string, string> = {},
   ): Promise<void> {
+    // La comisión de una bifurcación es reservada: ni actor ni ip (delatarían quiénes la forman).
+    const reservado = await this.access.esReservado(grupoId);
     let actor: { actorId: string } | Record<never, never> = {};
-    if (profileId) {
+    if (profileId && !reservado) {
       const p = await this.prisma.profile.findUnique({ where: { id: profileId }, select: { userId: true } });
       if (p?.userId) actor = { actorId: p.userId };
     }
@@ -120,7 +122,7 @@ export class ComisionesService {
       ...actor,
       action,
       resource: `group:${grupoId}`,
-      ...(ip ? { ip } : {}),
+      ...(ip && !reservado ? { ip } : {}),
       metadata: { grupoId, ...extra },
     });
   }

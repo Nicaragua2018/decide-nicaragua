@@ -17,7 +17,7 @@ import { GroupAccessService } from '../groups/group-access.service';
 import { type GrupoFila, claveMinimo, grupoTrabajoItem } from './grupo-item';
 import { type ComisionFila, ComisionesService } from './comisiones.service';
 import { type BifurcacionFila, BifurcacionesService } from './bifurcaciones.service';
-import { NO_ELEGIBLE } from './bifurcacion-reglas';
+import { NO_ELEGIBLE, enmascararOrigenOculto } from './bifurcacion-reglas';
 
 const DIA_MS = 86_400_000;
 /** Un subgrupo activo con menos de estas personas empieza a contar los días para archivarse. */
@@ -80,11 +80,13 @@ export class GruposService {
     ip?: string,
     extra: Record<string, string> = {},
   ): Promise<void> {
+    // En un grupo reservado (la comisión de una bifurcación) ni actor ni ip.
+    const reservado = profileId !== null || ip ? await this.access.esReservado(grupoId) : false;
     void this.audit.log({
-      ...(profileId ? await this.actorId(profileId) : {}),
+      ...(profileId && !reservado ? await this.actorId(profileId) : {}),
       action,
       resource: `group:${grupoId}`,
-      ...(ip ? { ip } : {}),
+      ...(ip && !reservado ? { ip } : {}),
       metadata: { grupoId, ...extra },
     });
   }
@@ -125,11 +127,14 @@ export class GruposService {
       .sort((a, b) => a.rango - b.rango || a.name.localeCompare(b.name, 'es'));
     if (ambitos.length === 0) return { ambitos: [] };
 
-    const grupos = (await this.prisma.group.findMany({
-      where: { type: 'trabajo', parentGroupId: { in: ambitos.map((a) => a.id) }, trabajoEstado: { not: 'archivado' } },
-      include: { _count: { select: { memberships: true } } },
-      orderBy: { createdAt: 'asc' },
-    })) as (GrupoFila & { _count: { memberships: number } })[];
+    const grupos = await enmascararOrigenOculto(
+      this.prisma,
+      (await this.prisma.group.findMany({
+        where: { type: 'trabajo', parentGroupId: { in: ambitos.map((a) => a.id) }, trabajoEstado: { not: 'archivado' } },
+        include: { _count: { select: { memberships: true } } },
+        orderBy: { createdAt: 'asc' },
+      })) as (GrupoFila & { _count: { memberships: number } })[],
+    );
     const mias = grupos.length
       ? await this.prisma.groupMembership.findMany({
           where: { profileId, groupId: { in: grupos.map((g) => g.id) } },
@@ -201,7 +206,7 @@ export class GruposService {
     let puedoEntrar = !esComision && enAmbito && !soyMiembro && (estado === 'convocando' || estado === 'activo');
     if (puedoEntrar && esBifurcacion) puedoEntrar = await this.bifurcaciones.elegible(g, profileId);
     return {
-      ...this.item(g, miembros, minimo, soyMiembro),
+      ...this.item(esBifurcacion ? ((await enmascararOrigenOculto(this.prisma, [g]))[0] ?? g) : g, miembros, minimo, soyMiembro),
       ambito: { id: g.parent.id, name: g.parent.name, tipo: ambito?.tipo ?? 'general' },
       // Nunca los nombres de quienes forman una bifurcación.
       miembrosNombres: esBifurcacion ? [] : miembrosNombres,

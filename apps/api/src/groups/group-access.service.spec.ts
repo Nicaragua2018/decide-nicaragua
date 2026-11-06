@@ -129,4 +129,39 @@ describe('GroupAccessService', () => {
       await expect(service.requireParticipant(SUB, YO)).rejects.toThrow(ConflictException);
     });
   });
+
+  describe('grupos reservados y rastro para la auditoría', () => {
+    /** g-bif es una bifurcación de AMBITO; g-com es su comisión; SUB un subgrupo. */
+    function prismaReservado() {
+      const grupos: Record<string, { type: string; parentGroupId: string | null; trabajoEstado: string | null; trabajoTipo: string | null }> = {
+        [AMBITO]: { type: 'territorial_residence', parentGroupId: null, trabajoEstado: null, trabajoTipo: null },
+        [SUB]: { type: 'trabajo', parentGroupId: AMBITO, trabajoEstado: 'activo', trabajoTipo: 'subgrupo' },
+        'g-bif': { type: 'trabajo', parentGroupId: AMBITO, trabajoEstado: 'activo', trabajoTipo: 'bifurcacion' },
+        'g-com': { type: 'trabajo', parentGroupId: 'g-bif', trabajoEstado: 'activo', trabajoTipo: 'comision' },
+      };
+      return {
+        groupMembership: { findUnique: vi.fn().mockResolvedValue(null) },
+        group: { findUnique: vi.fn(({ where }: { where: { id: string } }) => Promise.resolve(grupos[where.id] ?? null)) },
+        profile: { findUnique: vi.fn().mockResolvedValue({ userId: 'u-yo' }) },
+      };
+    }
+
+    it('esReservado: la bifurcación y su comisión sí; el ámbito, un subgrupo o un grupo inexistente no', async () => {
+      service = new GroupAccessService(prismaReservado() as never);
+      expect(await service.esReservado('g-bif')).toBe(true);
+      expect(await service.esReservado('g-com')).toBe(true);
+      expect(await service.esReservado(AMBITO)).toBe(false);
+      expect(await service.esReservado(SUB)).toBe(false);
+      expect(await service.esReservado('g-nada')).toBe(false);
+    });
+
+    it('rastro: fuera de lo reservado lleva actor e ip; dentro, nada', async () => {
+      service = new GroupAccessService(prismaReservado() as never);
+      expect(await service.rastro(AMBITO, YO, '1.1.1.1')).toEqual({ reservado: false, quien: { actorId: 'u-yo', ip: '1.1.1.1' } });
+      expect(await service.rastro('g-bif', YO, '1.1.1.1')).toEqual({ reservado: true, quien: {} });
+      expect(await service.rastro('g-com', YO)).toEqual({ reservado: true, quien: {} });
+      // Reservado por otra causa (p. ej., un tema llevado desde una bifurcación).
+      expect(await service.rastro(AMBITO, YO, '1.1.1.1', true)).toEqual({ reservado: true, quien: {} });
+    });
+  });
 });
