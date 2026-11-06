@@ -7,7 +7,8 @@ const HORA_MS = 3_600_000;
 /**
  * Cada hora:
  * - crea las comisiones de las soluciones aprobadas y cierra sus convocatorias y elecciones vencidas;
- * - archiva los subgrupos cuya convocatoria venció o que llevan 30 días con pocos miembros.
+ * - archiva los subgrupos y las bifurcaciones cuya convocatoria venció (para una bifurcación,
+ *   `contadaAt + bifurcacion.plazo_dias`) o que llevan 30 días con pocos miembros.
  */
 @Injectable()
 export class GruposScheduler implements OnApplicationBootstrap, OnModuleDestroy {

@@ -14,8 +14,10 @@ import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { RulesService } from '../rules/rules.service';
 import { GroupAccessService } from '../groups/group-access.service';
-import { type GrupoFila, grupoTrabajoItem } from './grupo-item';
+import { type GrupoFila, claveMinimo, grupoTrabajoItem } from './grupo-item';
 import { type ComisionFila, ComisionesService } from './comisiones.service';
+import { type BifurcacionFila, BifurcacionesService } from './bifurcaciones.service';
+import { NO_ELEGIBLE } from './bifurcacion-reglas';
 
 const DIA_MS = 86_400_000;
 /** Un subgrupo activo con menos de estas personas empieza a contar los días para archivarse. */
@@ -37,6 +39,7 @@ const NO_MIEMBRO_PARA_LLEVAR = 'Solo los miembros de la comunidad pueden llevar 
 const CONVOCATORIA_VENCIDA = 'La convocatoria de este grupo ya venció.';
 const COMISION_SIN_ENTRAR = 'A una comisión no se entra directamente: ofrécete como voluntario.';
 const CUERPO_MAX = 2000;
+const NO_ORIGEN = 'La solución de origen de esta iniciativa ya no se puede llevar a la comunidad.';
 
 type AmbitoTipo = 'origen' | 'acogida' | 'general';
 type Tx = Prisma.TransactionClient;
@@ -62,6 +65,7 @@ export class GruposService {
     private readonly rules: RulesService,
     private readonly audit: AuditService,
     private readonly comisiones: ComisionesService,
+    private readonly bifurcaciones: BifurcacionesService,
   ) {}
 
   private async actorId(profileId: string): Promise<{ actorId: string } | Record<never, never>> {
@@ -100,6 +104,11 @@ export class GruposService {
     return grupoTrabajoItem(g, miembros, minimo, soyMiembro);
   }
 
+  /** Personas para activarse: las de una bifurcación o las de un subgrupo (reglas del ámbito). */
+  private minimoDe(trabajoTipo: string | null, ambitoId: string): Promise<number> {
+    return this.rules.getInt(claveMinimo(trabajoTipo), ambitoId);
+  }
+
   // ─── Lecturas ─────────────────────────────────────────────────────────────
 
   async list(profileId: string): Promise<GruposAmbitoResponse> {
@@ -131,14 +140,19 @@ export class GruposService {
 
     const result: GruposAmbitoResponse['ambitos'] = [];
     for (const a of ambitos) {
-      const minimo = await this.rules.getInt('subgrupo.minimo_personas', a.id);
+      const propios = grupos.filter((g) => g.parentGroupId === a.id);
+      const minimos = new Map<string, number>();
+      for (const clave of new Set(propios.map((g) => claveMinimo(g.trabajoTipo)))) {
+        minimos.set(clave, await this.rules.getInt(clave, a.id));
+      }
       result.push({
         id: a.id,
         name: a.name,
         tipo: a.tipo,
-        grupos: grupos
-          .filter((g) => g.parentGroupId === a.id)
-          .map((g) => this.item(g, g._count.memberships, minimo, soy.has(g.id))),
+        // Una bifurcación se ve como «Iniciativa de un grupo» con cuántos son, nunca quiénes.
+        grupos: propios.map((g) =>
+          this.item(g, g._count.memberships, minimos.get(claveMinimo(g.trabajoTipo)) ?? 0, soy.has(g.id)),
+        ),
       });
     }
     return { ambitos: result };
@@ -158,7 +172,7 @@ export class GruposService {
     const ambito = tipoDeAmbito({ type: g.parent.type as string, slug: g.parent.slug });
     const [miembros, minimo, soyMiembro, enAmbito] = await Promise.all([
       this.prisma.groupMembership.count({ where: { groupId: id } }),
-      this.rules.getInt('subgrupo.minimo_personas', g.parent.id),
+      this.minimoDe(g.trabajoTipo, g.parent.id),
       this.access.isParticipant(id, profileId),
       this.access.isParticipant(g.parent.id, profileId),
     ]);
@@ -178,16 +192,24 @@ export class GruposService {
     const estado = g.trabajoEstado;
     const esComision = g.trabajoTipo === 'comision';
     const comision = esComision ? await this.comisiones.vista(g as unknown as ComisionFila, profileId, completo) : null;
+    const esBifurcacion = g.trabajoTipo === 'bifurcacion';
+    const bifurcacion = esBifurcacion
+      ? await this.bifurcaciones.vista(g as unknown as BifurcacionFila, profileId, soyMiembro, enAmbito)
+      : null;
+    // A una comisión no se entra: sus miembros son los voluntarios que resultaron seleccionados.
+    // A una bifurcación solo entra quien apoyó su solución.
+    let puedoEntrar = !esComision && enAmbito && !soyMiembro && (estado === 'convocando' || estado === 'activo');
+    if (puedoEntrar && esBifurcacion) puedoEntrar = await this.bifurcaciones.elegible(g, profileId);
     return {
       ...this.item(g, miembros, minimo, soyMiembro),
       ambito: { id: g.parent.id, name: g.parent.name, tipo: ambito?.tipo ?? 'general' },
-      miembrosNombres,
+      // Nunca los nombres de quienes forman una bifurcación.
+      miembrosNombres: esBifurcacion ? [] : miembrosNombres,
       forumId,
-      // A una comisión no se entra: sus miembros son los voluntarios que resultaron seleccionados.
-      puedoEntrar: !esComision && enAmbito && !soyMiembro && (estado === 'convocando' || estado === 'activo'),
+      puedoEntrar,
       puedoSalir: soyMiembro,
       comision,
-      bifurcacion: null,
+      bifurcacion,
     };
   }
 
@@ -234,11 +256,32 @@ export class GruposService {
     return g;
   }
 
+  /**
+   * Grupo al que se quiere entrar. Una bifurcación no la lee el ámbito (R4): para ella, en lugar de
+   * poder leerla, se exige ser elegible, con el mismo 403 para quien votó otra cosa o no votó.
+   */
+  private async grupoParaEntrar(id: string, profileId: string): Promise<GrupoFila & { parentGroupId: string }> {
+    let g: GrupoFila & { parentGroupId: string };
+    try {
+      g = await this.grupoDeTrabajoLegible(id, profileId);
+    } catch (err) {
+      if (!(err instanceof ForbiddenException)) throw err;
+      const b = (await this.prisma.group.findUnique({ where: { id } })) as GrupoFila | null;
+      if (!b || b.type !== 'trabajo' || b.trabajoTipo !== 'bifurcacion' || !b.parentGroupId) throw err;
+      g = b as GrupoFila & { parentGroupId: string };
+    }
+    if (g.trabajoTipo === 'bifurcacion' && !(await this.bifurcaciones.elegible(g, profileId))) {
+      throw new ForbiddenException(NO_ELEGIBLE);
+    }
+    return g;
+  }
+
   async entrar(profileId: string, id: string, ip: string, now: Date = new Date()): Promise<GrupoTrabajoDetail> {
-    const g = await this.grupoDeTrabajoLegible(id, profileId);
+    const g = await this.grupoParaEntrar(id, profileId);
     if (g.trabajoTipo === 'comision') throw new BadRequestException(COMISION_SIN_ENTRAR);
     if (!(await this.access.isParticipant(g.parentGroupId, profileId))) throw new ForbiddenException(NO_MIEMBRO_AMBITO);
-    const minimo = await this.rules.getInt('subgrupo.minimo_personas', g.parentGroupId);
+    const esBifurcacion = g.trabajoTipo === 'bifurcacion';
+    const minimo = await this.minimoDe(g.trabajoTipo, g.parentGroupId);
 
     const { entro, activado } = await this.prisma.$transaction(async (tx) => {
       // Con la fila bloqueada, dos que entran a la vez se cuentan uno tras otro.
@@ -273,14 +316,15 @@ export class GruposService {
       return { entro: !ya, activado };
     });
 
-    if (entro) await this.auditar('grupo.joined', id, profileId, ip);
-    if (activado) await this.auditar('grupo.activated', id, null);
+    // Sumarse a una bifurcación no se audita: delataría el voto.
+    if (entro && !esBifurcacion) await this.auditar('grupo.joined', id, profileId, ip);
+    if (activado) await this.auditar(esBifurcacion ? 'bifurcacion.activated' : 'grupo.activated', id, null);
     return this.detail(profileId, id);
   }
 
   async salir(profileId: string, id: string, ip: string, now: Date = new Date()): Promise<GrupoTrabajoDetail> {
     // Quien no es del subgrupo ni de su ámbito no sabe ni si existe: 403 antes de tocar nada.
-    await this.grupoDeTrabajoLegible(id, profileId);
+    const g = await this.grupoDeTrabajoLegible(id, profileId);
     const { salio, archivado } = await this.prisma.$transaction(async (tx) => {
       const actual = await this.bloquear(tx, id);
       const res = await tx.groupMembership.deleteMany({ where: { groupId: id, profileId } });
@@ -299,7 +343,8 @@ export class GruposService {
       return { salio: res.count > 0, archivado };
     });
 
-    if (salio) await this.auditar('grupo.left', id, profileId, ip);
+    // Salir de una bifurcación tampoco se audita.
+    if (salio && g.trabajoTipo !== 'bifurcacion') await this.auditar('grupo.left', id, profileId, ip);
     if (archivado) await this.auditar('grupo.archived', id, null);
     // Quien ya no lee el grupo (se mudó de comunidad) recibe el detalle sin nombres ni foro.
     const lee = await this.access.canRead(id, profileId);
@@ -339,16 +384,27 @@ export class GruposService {
         proposal: { select: { groupId: true, hidden: true, decision: { select: { fase: true, resultado: true, ganadoras: true } } } },
       },
     });
-    if (!s || s.proposal.groupId !== id) throw new BadRequestException(NO_GANADORA);
-    if (s.hidden) throw new BadRequestException(OCULTA);
-    if (s.proposal.hidden) throw new BadRequestException(TEMA_OCULTO);
-    const d = s.proposal.decision;
-    if (!d || d.fase !== 'contada' || d.resultado !== 'aprobada' || !d.ganadoras.includes(s.id)) {
-      throw new BadRequestException(NO_GANADORA);
+    const esBifurcacion = g.trabajoTipo === 'bifurcacion';
+    // Una bifurcación vuelve a la colmena con su solución de origen (una vez, por el índice único).
+    const deOrigen = esBifurcacion && Boolean(g.origenSolucionId) && solucionId === g.origenSolucionId;
+    if (deOrigen) {
+      if (!s || s.proposal.groupId !== g.parentGroupId) throw new BadRequestException(NO_ORIGEN);
+      if (s.hidden) throw new BadRequestException(OCULTA);
+      if (s.proposal.hidden) throw new BadRequestException(TEMA_OCULTO);
+    } else {
+      if (!s || s.proposal.groupId !== id) throw new BadRequestException(NO_GANADORA);
+      if (s.hidden) throw new BadRequestException(OCULTA);
+      if (s.proposal.hidden) throw new BadRequestException(TEMA_OCULTO);
+      const d = s.proposal.decision;
+      if (!d || d.fase !== 'contada' || d.resultado !== 'aprobada' || !d.ganadoras.includes(s.id)) {
+        throw new BadRequestException(NO_GANADORA);
+      }
     }
 
     const dias = await this.rules.getInt('inquietud.plazo_respuesta_dias', g.parentGroupId);
-    const body = `Propuesta del grupo de trabajo ${g.name}.\n\n${s.description}`.slice(0, CUERPO_MAX);
+    // El nombre de una bifurcación ya es «Iniciativa de un grupo»: nada identifica a sus miembros.
+    const encabezado = esBifurcacion ? 'Propuesta de una iniciativa de un grupo.' : `Propuesta del grupo de trabajo ${g.name}.`;
+    const body = `${encabezado}\n\n${s.description}`.slice(0, CUERPO_MAX);
     let inquietudId: string;
     try {
       const creada = await this.prisma.$transaction((tx) =>
@@ -372,7 +428,12 @@ export class GruposService {
       if (esDuplicado(err)) throw new ConflictException(YA_LLEVADA);
       throw err;
     }
-    await this.auditar('grupo.propuesta_llevada', id, profileId, ip, { inquietudId });
+    if (esBifurcacion) {
+      // Sin actor, ip ni inquietud: quien la lleva es miembro y su nombre delataría su voto.
+      await this.auditar('bifurcacion.carried_back', id, null);
+    } else {
+      await this.auditar('grupo.propuesta_llevada', id, profileId, ip, { inquietudId });
+    }
     return { inquietudId };
   }
 

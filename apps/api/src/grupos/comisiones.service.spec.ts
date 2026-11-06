@@ -261,6 +261,42 @@ describe('ComisionesService', () => {
     });
   });
 
+  describe('crearDeBifurcacion (comisión propia)', () => {
+    const bif = { id: BIF, parentGroupId: AMBITO, origenSolucionId: SOL };
+
+    it('nace convocando dentro de la bifurcación, con la solución de origen y las reglas de la comunidad; sin actor', async () => {
+      prisma.solucion.findUnique.mockResolvedValue({ title: 'Huerto comunitario', description: 'Sembrar un huerto en el barrio.' });
+      const id = await service.crearDeBifurcacion(bif, NOW);
+      const data = prisma.group.create.mock.calls[0]![0].data as Record<string, unknown>;
+      expect(data).toMatchObject({
+        id,
+        name: 'Comisión: Huerto comunitario',
+        parentGroupId: BIF,
+        trabajoTipo: 'comision',
+        trabajoEstado: 'convocando',
+        tarea: 'Sembrar un huerto en el barrio.',
+        origenSolucionId: SOL,
+        origenGrupoId: BIF,
+        puestos: 3,
+        forma: 'sorteo',
+        convocatoriaEndsAt: new Date(NOW.getTime() + 7 * DIA_MS),
+      });
+      expect(rules.getInt).toHaveBeenCalledWith('comision.puestos_min', AMBITO);
+      expect(acciones()).toEqual(['comision.created']);
+      expect(audit.log.mock.calls[0]![0]).not.toHaveProperty('actorId');
+      expect(metadatas()).toEqual([{ grupoId: id }]);
+    });
+
+    it('si ya hay una viva para esa solución (P2002) da 409 y no audita', async () => {
+      prisma.solucion.findUnique.mockResolvedValue({ title: 'Huerto', description: 'Sembrar.' });
+      prisma.group.create.mockRejectedValueOnce(
+        new Prisma.PrismaClientKnownRequestError('dup', { code: 'P2002', clientVersion: 'x', meta: {} }),
+      );
+      await expect(service.crearDeBifurcacion(bif, NOW)).rejects.toBeInstanceOf(ConflictException);
+      expect(audit.log).not.toHaveBeenCalled();
+    });
+  });
+
   // ─── Voluntarios ──────────────────────────────────────────────────────────
 
   describe('ofrecerse', () => {

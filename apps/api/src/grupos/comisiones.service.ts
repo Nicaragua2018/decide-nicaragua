@@ -523,6 +523,42 @@ export class ComisionesService {
     return creadas;
   }
 
+  /**
+   * Comisión propia de una bifurcación: nace como en R1, con la solución de origen como tarea,
+   * `origenGrupoId` = la bifurcación y la bifurcación como ámbito (solo sus miembros se ofrecen).
+   * Las reglas son las de la comunidad. El índice parcial único deja una sola viva por solución (409).
+   */
+  async crearDeBifurcacion(
+    bif: { id: string; parentGroupId: string; origenSolucionId: string },
+    now: Date = new Date(),
+  ): Promise<string> {
+    const s = await this.prisma.solucion.findUnique({
+      where: { id: bif.origenSolucionId },
+      select: { title: true, description: true },
+    });
+    if (!s) throw new BadRequestException('La solución de origen ya no existe.');
+    const datos = await this.datosNuevaComision(bif.parentGroupId, now);
+    let id: string;
+    try {
+      id = await this.prisma.$transaction((tx) =>
+        this.crearComisionTx(tx, {
+          ...datos,
+          nombre: `Comisión: ${s.title}`,
+          tarea: s.description.slice(0, TAREA_INICIAL_MAX),
+          ambitoId: bif.id,
+          origenSolucionId: bif.origenSolucionId,
+          origenGrupoId: bif.id,
+        }),
+      );
+    } catch (err) {
+      if (esDuplicado(err)) throw new ConflictException('Ya hay una comisión para esta solución.');
+      throw err;
+    }
+    // Sin actor: pedirla delataría la membresía.
+    await this.auditar('comision.created', id, null);
+    return id;
+  }
+
   /** Puestos, forma y fin de la convocatoria de una comisión que nace ahora (reglas de la comunidad). */
   private async datosNuevaComision(
     reglasDe: string,

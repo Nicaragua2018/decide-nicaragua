@@ -24,6 +24,7 @@ import { SetSignalDto } from './dto/set-signal.dto';
 import { UpdateProposalStatusDto } from './dto/update-proposal-status.dto';
 import { LINKED_TOPIC_REASON } from '../forums/forums.service';
 import { motivoVisible } from '../forums/moderacion-motivo';
+import { NOMBRE_INICIATIVA, temasDeIniciativa } from '../grupos/bifurcacion-reglas';
 
 /** Estados que aceptan nuevos comentarios y señales */
 const MUTABLE_STATUSES: string[] = [ProposalStatus.open];
@@ -121,6 +122,8 @@ export class DeliberationService {
       },
       orderBy: { createdAt: 'desc' },
     });
+    // Temas que llegaron desde una bifurcación: su autor no se muestra (delataría su voto).
+    const anonimos = await temasDeIniciativa(this.prisma, proposals);
 
     return {
       proposals: proposals.map((p) => ({
@@ -128,7 +131,7 @@ export class DeliberationService {
         groupId: p.groupId,
         title: p.hidden ? HIDDEN_TOPIC_TITLE : p.title,
         status: p.status as unknown as ProposalStatus,
-        authorDisplayName: p.author.displayName,
+        authorDisplayName: anonimos.has(p.id) ? NOMBRE_INICIATIVA : p.author.displayName,
         signalCounts: computeSignalCounts(p.signals.map((s) => s.signal as string)),
         commentCount: p._count.comments,
         createdAt: p.createdAt.toISOString(),
@@ -193,15 +196,18 @@ export class DeliberationService {
           }))?.status ?? null) as ProposalDetail['electionStatus'])
         : null;
 
+    const isAuthor = participa && proposal.authorProfileId === profileId;
+    // Tema llegado desde una bifurcación: ni el nombre ni el id de quien lo llevó (salvo a sí mismo).
+    const anonimo = (await temasDeIniciativa(this.prisma, [proposal])).has(proposal.id);
     const detail: ProposalDetail = {
       id: proposal.id,
       groupId: proposal.groupId,
       title: proposal.title,
       body: proposal.body,
       status: proposal.status as unknown as ProposalStatus,
-      authorDisplayName: proposal.author.displayName,
-      authorProfileId: proposal.authorProfileId,
-      isAuthor: participa && proposal.authorProfileId === profileId,
+      authorDisplayName: anonimo ? NOMBRE_INICIATIVA : proposal.author.displayName,
+      authorProfileId: anonimo && !isAuthor ? '' : proposal.authorProfileId,
+      isAuthor,
       signalCounts: computeSignalCounts(proposal.signals.map((s) => s.signal as string)),
       commentCount: proposal._count.comments,
       createdAt: proposal.createdAt.toISOString(),

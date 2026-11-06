@@ -11,6 +11,13 @@ export interface GrupoFila {
   proposito: string | null;
   convocatoriaEndsAt: Date | null;
   pocosMiembrosDesde: Date | null;
+  /** Solución de origen (comisiones y bifurcaciones); las listas no la seleccionan. */
+  origenSolucionId?: string | null;
+}
+
+/** Regla con las personas mínimas para activarse: la de las bifurcaciones o la de los subgrupos. */
+export function claveMinimo(trabajoTipo: string | null): 'bifurcacion.minimo_personas' | 'subgrupo.minimo_personas' {
+  return trabajoTipo === 'bifurcacion' ? 'bifurcacion.minimo_personas' : 'subgrupo.minimo_personas';
 }
 
 /** Cuántas personas faltan para activarse; solo tiene sentido mientras convoca. */

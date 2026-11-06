@@ -334,7 +334,10 @@ describe('DecisionesService', () => {
       expect(rules.getInt).toHaveBeenCalledWith('debate.fraccion_objecion_modo', G);
       expect(r.decision).toEqual({
         fase: 'modo', modo: null, modoPropuesto: null, objecionEndsAt: null, votacionEndsAt: null,
-        candidatas: [{ id: 's1', title: 'Solución s1 de prueba', description: 'Descripción de s1', hidden: false }],
+        candidatas: [{
+          id: 's1', title: 'Solución s1 de prueba', description: 'Descripción de s1', hidden: false,
+          bifurcable: false, puedoIniciarBifurcacion: false, bifurcacionId: null,
+        }],
         miPapeleta: null, yoObjete: false, puedoObjetar: false, resultado: null, fraccionObjecionPct: 33,
       });
     });
@@ -361,6 +364,72 @@ describe('DecisionesService', () => {
       });
       const r = await service.getTema(YO, T);
       expect(r.puedeProponer).toBe(false);
+    });
+
+    describe('bifurcaciones en una decisión contada', () => {
+      const CONTADA = new Date(Date.now() - 2 * 86_400_000);
+      const contada = (over: Record<string, unknown> = {}) => ({
+        id: 'd1', proposalId: T, fase: 'contada', modo: 'excluyentes', modoPropuesto: 'excluyentes',
+        objecionEndsAt: null, votacionEndsAt: null, candidatas: ['s1', 's4'], ganadoras: ['s1'],
+        resultado: 'aprobada', aprobaciones: [3, 2], papeletasTotal: 5, abstenciones: 0, miembros: 9,
+        pairwiseMatrix: [], schulzeMatrix: [], contadaAt: CONTADA, updatedAt: CONTADA,
+        ...over,
+      });
+      beforeEach(() => {
+        prisma.solucion.findMany.mockResolvedValue([sol('s1'), sol('s4')]);
+        prisma.decision.findUnique.mockResolvedValue(contada());
+        rules.getInt.mockImplementation(async (key: string) => (key === 'bifurcacion.plazo_dias' ? 14 : 7));
+      });
+      const cand = (r: Awaited<ReturnType<DecisionesService['getTema']>>, id: string) =>
+        r.decision!.candidatas.find((c) => c.id === id)!;
+
+      it('la perdedora es bifurcable; solo quien la tenía en su orden puede iniciarla', async () => {
+        prisma.decisionPapeleta.findUnique.mockResolvedValue({ abstencion: false, orden: ['s4', 's1'] });
+        const r = await service.getTema(YO, T);
+        expect(cand(r, 's1')).toMatchObject({ bifurcable: false, puedoIniciarBifurcacion: false, bifurcacionId: null });
+        expect(cand(r, 's4')).toMatchObject({ bifurcable: true, puedoIniciarBifurcacion: true, bifurcacionId: null });
+        expect(rules.getInt).toHaveBeenCalledWith('bifurcacion.plazo_dias', G);
+      });
+
+      it('para quien votó otra cosa, no votó o se abstuvo, la respuesta es idéntica', async () => {
+        const respuestas: string[] = [];
+        for (const p of [{ abstencion: false, orden: ['s1'] }, null, { abstencion: true, orden: [] }]) {
+          prisma.decisionPapeleta.findUnique.mockResolvedValue(p);
+          const r = await service.getTema(YO, T);
+          respuestas.push(JSON.stringify(r.decision!.candidatas));
+        }
+        expect(new Set(respuestas).size).toBe(1);
+        expect(respuestas[0]).toContain('"puedoIniciarBifurcacion":false');
+      });
+
+      it('si ya existe, da su id y deja sumarse a quien la apoyó; no lista a nadie', async () => {
+        prisma.decisionPapeleta.findUnique.mockResolvedValue({ abstencion: false, orden: ['s4'] });
+        prisma.group.findMany.mockResolvedValue([
+          { id: 'g-bif', origenSolucionId: 's4', trabajoEstado: 'convocando', convocatoriaEndsAt: new Date(Date.now() + 86_400_000) },
+        ]);
+        let r = await service.getTema(YO, T);
+        expect(cand(r, 's4')).toMatchObject({ bifurcable: true, puedoIniciarBifurcacion: true, bifurcacionId: 'g-bif' });
+        expect(prisma.groupMembership.findMany).toHaveBeenCalledWith({
+          where: { profileId: YO, groupId: { in: ['g-bif'] } },
+          select: { groupId: true },
+        });
+        // Quien ya es miembro no se suma otra vez.
+        prisma.groupMembership.findMany.mockResolvedValue([{ groupId: 'g-bif' }]);
+        r = await service.getTema(YO, T);
+        expect(cand(r, 's4').puedoIniciarBifurcacion).toBe(false);
+        expect(JSON.stringify(r)).not.toContain('p-autor');
+      });
+
+      it('fuera de plazo no se inicia; en un grupo de trabajo nada es bifurcable', async () => {
+        prisma.decisionPapeleta.findUnique.mockResolvedValue({ abstencion: false, orden: ['s4'] });
+        prisma.decision.findUnique.mockResolvedValue(contada({ contadaAt: new Date(Date.now() - 15 * 86_400_000) }));
+        let r = await service.getTema(YO, T);
+        expect(cand(r, 's4')).toMatchObject({ bifurcable: true, puedoIniciarBifurcacion: false });
+        prisma.decision.findUnique.mockResolvedValue(contada());
+        prisma.group.findUnique.mockResolvedValue({ type: 'trabajo', parentGroupId: 'g-amb', trabajoEstado: 'activo', trabajoTipo: 'subgrupo' });
+        r = await service.getTema(YO, T);
+        expect(cand(r, 's4')).toMatchObject({ bifurcable: false, puedoIniciarBifurcacion: false });
+      });
     });
   });
 
@@ -1132,7 +1201,9 @@ describe('DecisionesService', () => {
         pairwiseMatrix: [[0, 1], [3, 0]], schulzeMatrix: [[0, 0], [3, 0]],
         contadaAt: '2026-11-20T00:05:00.000Z',
       });
-      expect(r.decision!.candidatas[1]).toEqual({ id: 's2', title: 'Solución oculta por moderación', description: '', hidden: true });
+      expect(r.decision!.candidatas[1]).toMatchObject({ id: 's2', title: 'Solución oculta por moderación', description: '', hidden: true });
+      // Una oculta nunca es bifurcable.
+      expect(r.decision!.candidatas[1]!.bifurcable).toBe(false);
       const json = JSON.stringify(r);
       expect(json).not.toContain('secreto');
       expect(json).not.toContain(OTRO);
@@ -1275,6 +1346,24 @@ describe('DecisionesService', () => {
       expect(r.comunidades[1]!.grupos).toEqual([
         expect.objectContaining({ id: 'g-sub2', estado: 'activo', miembros: 6, faltan: null, soyMiembro: false }),
       ]);
+    });
+
+    it('una bifurcación sale como «Iniciativa de un grupo», con su mínimo y cuántos son, sin miembros', async () => {
+      const BIF = {
+        id: 'g-bif', name: 'Iniciativa de un grupo', type: 'trabajo', slug: 'trabajo-g-bif', parentGroupId: ORIGEN.id,
+        trabajoTipo: 'bifurcacion', trabajoEstado: 'convocando', proposito: 'Huerto comunitario',
+        convocatoriaEndsAt: new Date('2026-11-20T00:00:00Z'), pocosMiembrosDesde: null,
+      };
+      miembroDe(ORIGEN);
+      prisma.group.findMany.mockResolvedValue([BIF]);
+      prisma.groupMembership.groupBy.mockResolvedValue([{ groupId: 'g-bif', _count: { _all: 3 } }]);
+      rules.getInt.mockImplementation(async (key: string) => (key === 'bifurcacion.minimo_personas' ? 7 : 5));
+      const r = await service.getResumen(YO);
+      expect(rules.getInt).toHaveBeenCalledWith('bifurcacion.minimo_personas', ORIGEN.id);
+      expect(r.comunidades[0]!.grupos).toEqual([
+        expect.objectContaining({ id: 'g-bif', name: 'Iniciativa de un grupo', proposito: 'Huerto comunitario', miembros: 3, faltan: 4 }),
+      ]);
+      expect(JSON.stringify(r)).not.toContain('p-');
     });
 
     it('solo consulta las comunidades de quien pregunta y excluye los temas ocultos', async () => {

@@ -278,6 +278,42 @@ describe('ForumsService', () => {
       miembroDe(['g-otra']);
       await expect(service.getForum(YO, 'f-sub')).rejects.toThrow('Solo los miembros de esta comunidad pueden ver esto.');
     });
+
+    it('R4: el ámbito no lee el foro de una bifurcación (403); sus miembros sí', async () => {
+      const esBifurcacion = () =>
+        prisma.group.findUnique.mockImplementation(({ where }: { where: { id: string } }) =>
+          Promise.resolve(
+            where.id === 'g-sub'
+              ? { type: 'trabajo', parentGroupId: 'g-ambito', trabajoEstado: 'activo', trabajoTipo: 'bifurcacion' }
+              : { type: 'territorial_residence', parentGroupId: null },
+          ),
+        );
+      miembroDe(['g-ambito']);
+      esBifurcacion();
+      await expect(service.getForum(YO, 'f-sub')).rejects.toThrow('Solo los miembros de esta comunidad pueden ver esto.');
+      miembroDe(['g-sub', 'g-ambito']);
+      esBifurcacion();
+      await expect(service.getForum(YO, 'f-sub')).resolves.toMatchObject({ soloLectura: false });
+    });
+
+    it('un tema llegado desde una bifurcación no muestra a quien lo llevó', async () => {
+      miembroDe(['g-sub', 'g-ambito']);
+      const p = prisma as unknown as Record<string, unknown>;
+      p['inquietud'] = { findMany: vi.fn().mockResolvedValue([{ proposalId: 'tema-bif', origenSolucionId: 's-bif' }]) };
+      p['group'] = { ...prisma.group, findMany: vi.fn().mockResolvedValue([{ origenSolucionId: 's-bif' }]) };
+      p['solucion'] = { ...(p['solucion'] as object), findMany: vi.fn().mockResolvedValue([]) };
+      const tema = {
+        groupId: 'g-sub', forumId: 'f-sub', title: 'Huerto', status: 'open', kind: 'discussion', hidden: false,
+        signals: [], _count: { comments: 0 }, createdAt: new Date('2026-11-01T00:00:00Z'),
+      };
+      prisma.proposal.findMany.mockResolvedValue([
+        { ...tema, id: 'tema-bif', abiertoPorComunidad: true, author: { displayName: 'Zoe Secreta' } },
+        { ...tema, id: 'tema-otro', abiertoPorComunidad: false, author: { displayName: 'Ana' } },
+      ]);
+      const f = await service.getForum(YO, 'f-sub');
+      expect(f.topics.map((t) => t.authorDisplayName)).toEqual(['Iniciativa de un grupo', 'Ana']);
+      expect(JSON.stringify(f)).not.toContain('Zoe');
+    });
   });
 
   describe('createForum()', () => {

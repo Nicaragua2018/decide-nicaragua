@@ -15,7 +15,7 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import type { Request } from 'express';
-import type { GrupoTrabajoDetail, GruposAmbitoResponse, JwtPayload } from '@decide/shared';
+import type { GrupoTrabajoDetail, GruposAmbitoResponse, JwtPayload, PausaApeladaItem } from '@decide/shared';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { extractIp } from '../common/utils/ip.util';
@@ -27,6 +27,8 @@ import { VoluntarioDto } from './dto/voluntario.dto';
 import { AjustarComisionDto } from './dto/ajustar-comision.dto';
 import { PapeletaComisionDto } from './dto/papeleta-comision.dto';
 import { InformeComisionDto } from './dto/informe-comision.dto';
+import { BifurcacionesService } from './bifurcaciones.service';
+import { ApelarPausaDto, IniciarBifurcacionDto, PausarBifurcacionDto, ResolverPausaDto } from './dto/bifurcacion.dto';
 
 @Controller('grupos')
 @UseGuards(JwtAuthGuard)
@@ -34,6 +36,7 @@ export class GruposController {
   constructor(
     private readonly grupos: GruposService,
     private readonly comisiones: ComisionesService,
+    private readonly bifurcaciones: BifurcacionesService,
   ) {}
 
   private perfil(user: JwtPayload): string {
@@ -49,6 +52,62 @@ export class GruposController {
   @Post()
   async proponer(@Body() dto: ProponerGrupoDto, @CurrentUser() user: JwtPayload, @Req() req: Request): Promise<{ id: string }> {
     return this.grupos.proponer(this.perfil(user), dto, extractIp(req));
+  }
+
+  // ─── Bifurcaciones ────────────────────────────────────────────────────────
+
+  /** Inicia la bifurcación de una solución perdedora (solo quien la apoyó). Sin ip: delataría el voto. */
+  @Post('bifurcaciones')
+  async iniciarBifurcacion(@Body() dto: IniciarBifurcacionDto, @CurrentUser() user: JwtPayload): Promise<{ id: string }> {
+    return this.bifurcaciones.iniciar(this.perfil(user), dto.solucionId);
+  }
+
+  /** Cola de la mesa: pausas de bifurcaciones apeladas y pendientes. */
+  @Get('pausas/apeladas')
+  async pausasApeladas(@CurrentUser() user: JwtPayload): Promise<PausaApeladaItem[]> {
+    return this.bifurcaciones.apeladas(this.perfil(user));
+  }
+
+  @Post(':id/pausa')
+  @HttpCode(HttpStatus.OK)
+  async pausar(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: PausarBifurcacionDto,
+    @CurrentUser() user: JwtPayload,
+    @Req() req: Request,
+  ): Promise<{ ok: true }> {
+    await this.bifurcaciones.pausar(this.perfil(user), id, dto.causa, dto.detalle, extractIp(req));
+    return { ok: true };
+  }
+
+  @Post(':id/pausa/apelacion')
+  @HttpCode(HttpStatus.OK)
+  async apelarPausa(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: ApelarPausaDto,
+    @CurrentUser() user: JwtPayload,
+  ): Promise<GrupoTrabajoDetail> {
+    const profileId = this.perfil(user);
+    await this.bifurcaciones.apelar(profileId, id, dto.texto);
+    return this.grupos.detail(profileId, id);
+  }
+
+  @Post(':id/pausa/resolver')
+  @HttpCode(HttpStatus.OK)
+  async resolverPausa(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: ResolverPausaDto,
+    @CurrentUser() user: JwtPayload,
+    @Req() req: Request,
+  ): Promise<{ ok: true }> {
+    await this.bifurcaciones.resolver(this.perfil(user), id, dto.reanudar, extractIp(req));
+    return { ok: true };
+  }
+
+  /** Un miembro pide la comisión propia de su bifurcación. */
+  @Post(':id/comision')
+  async pedirComision(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() user: JwtPayload): Promise<{ id: string }> {
+    return this.bifurcaciones.pedirComision(this.perfil(user), id);
   }
 
   @Get(':id')

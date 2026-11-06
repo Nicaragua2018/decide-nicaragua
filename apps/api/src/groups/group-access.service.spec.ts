@@ -9,7 +9,7 @@ const SUB = 'g-sub';
 const COMUNIDAD = 'g-comunidad';
 
 /** Membresías por grupo: la persona es miembro de los grupos de `de`. */
-function prismaCon(de: string[], trabajoEstado = 'activo') {
+function prismaCon(de: string[], trabajoEstado = 'activo', trabajoTipo = 'subgrupo') {
   return {
     groupMembership: {
       findUnique: vi.fn(({ where }: { where: { groupId_profileId: { groupId: string; profileId: string } } }) =>
@@ -22,7 +22,7 @@ function prismaCon(de: string[], trabajoEstado = 'activo') {
       findUnique: vi.fn(({ where }: { where: { id: string } }) =>
         Promise.resolve(
           where.id === SUB
-            ? { type: 'trabajo', parentGroupId: AMBITO, trabajoEstado }
+            ? { type: 'trabajo', parentGroupId: AMBITO, trabajoEstado, trabajoTipo }
             : where.id === COMUNIDAD || where.id === AMBITO
               ? { type: 'territorial_residence', parentGroupId: null, trabajoEstado: null }
               : null,
@@ -108,6 +108,25 @@ describe('GroupAccessService', () => {
       await expect(service.requireMember(SUB, YO)).resolves.toBeUndefined();
       service = new GroupAccessService(prismaCon([AMBITO], 'activo') as never);
       await expect(service.requireMember(SUB, YO)).rejects.toThrow('Solo los miembros de este grupo pueden participar.');
+    });
+  });
+
+  describe('bifurcación (R4: el ámbito no la lee)', () => {
+    it('un miembro del ámbito que no es de la bifurcación no la lee ni su foro: 403', async () => {
+      service = new GroupAccessService(prismaCon([AMBITO], 'activo', 'bifurcacion') as never);
+      expect(await service.nivel(SUB, YO)).toBeNull();
+      expect(await service.canRead(SUB, YO)).toBe(false);
+      await expect(service.requireReader(SUB, YO)).rejects.toThrow(ForbiddenException);
+    });
+    it('sus miembros la leen y participan', async () => {
+      service = new GroupAccessService(prismaCon([SUB, AMBITO], 'activo', 'bifurcacion') as never);
+      await expect(service.requireReader(SUB, YO)).resolves.toEqual({ participa: true });
+      await expect(service.requireParticipant(SUB, YO)).resolves.toBeUndefined();
+    });
+    it('pausada, sus miembros la leen pero no participan (409)', async () => {
+      service = new GroupAccessService(prismaCon([SUB, AMBITO], 'pausado', 'bifurcacion') as never);
+      await expect(service.requireReader(SUB, YO)).resolves.toEqual({ participa: true });
+      await expect(service.requireParticipant(SUB, YO)).rejects.toThrow(ConflictException);
     });
   });
 });

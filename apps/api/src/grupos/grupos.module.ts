@@ -5,13 +5,14 @@ import { GroupsModule } from '../groups/groups.module';
 import { RulesModule } from '../rules/rules.module';
 import { GruposService } from './grupos.service';
 import { ComisionesService } from './comisiones.service';
+import { BifurcacionesService } from './bifurcaciones.service';
 import { GruposController } from './grupos.controller';
 import { GruposScheduler } from './grupos.scheduler';
 
 @Module({
   imports: [RulesModule, AuditModule, GroupsModule, ForumsModule],
   controllers: [GruposController],
-  providers: [GruposService, ComisionesService, GruposScheduler],
+  providers: [GruposService, ComisionesService, BifurcacionesService, GruposScheduler],
   exports: [GruposService],
 })
 export class GruposModule {}

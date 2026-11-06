@@ -100,3 +100,14 @@ export interface GruposAmbitoResponse {
     grupos: GrupoTrabajoItem[];
   }[];
 }
+
+/** Pausa de una bifurcación apelada y pendiente de la mesa: sin nombres ni ids de sus miembros. */
+export interface PausaApeladaItem {
+  grupoId: string;
+  solucionTitulo: string;
+  proposalId: string;
+  causa: string;
+  detalle: string;
+  apelacion: string;
+  apeladaAt: string;
+}

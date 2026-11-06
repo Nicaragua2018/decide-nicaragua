@@ -41,7 +41,8 @@ export class GroupAccessService {
   async nivel(groupId: string, profileId: string): Promise<NivelDeAcceso> {
     if (await this.isParticipant(groupId, profileId)) return 'participa';
     const grupo = await this.grupo(groupId);
-    if (grupo?.type === 'trabajo' && grupo.parentGroupId) {
+    // Una bifurcación solo la leen sus miembros (R4): nombres y foro delatarían el voto.
+    if (grupo?.type === 'trabajo' && grupo.parentGroupId && grupo.trabajoTipo !== 'bifurcacion') {
       if (await this.isParticipant(grupo.parentGroupId, profileId)) return 'lee';
     }
     return null;
@@ -77,16 +78,17 @@ export class GroupAccessService {
 
   private async grupo(
     groupId: string,
-  ): Promise<{ type: string; parentGroupId: string | null; trabajoEstado: string | null } | null> {
+  ): Promise<{ type: string; parentGroupId: string | null; trabajoEstado: string | null; trabajoTipo: string | null } | null> {
     const g = await this.prisma.group.findUnique({
       where: { id: groupId },
-      select: { type: true, parentGroupId: true, trabajoEstado: true },
+      select: { type: true, parentGroupId: true, trabajoEstado: true, trabajoTipo: true },
     });
     return g
       ? {
           type: g.type as string,
           parentGroupId: g.parentGroupId ?? null,
           trabajoEstado: (g.trabajoEstado as string | null | undefined) ?? null,
+          trabajoTipo: (g.trabajoTipo as string | null | undefined) ?? null,
         }
       : null;
   }

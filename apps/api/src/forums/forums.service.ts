@@ -21,6 +21,7 @@ import { AuditService } from '../audit/audit.service';
 import { BoardService } from '../board/board.service';
 import { RulesService } from '../rules/rules.service';
 import { GroupAccessService } from '../groups/group-access.service';
+import { NOMBRE_INICIATIVA, temasDeIniciativa } from '../grupos/bifurcacion-reglas';
 import type { CreateForumDto } from './dto/create-forum.dto';
 import type { CloseTopicDto } from './dto/close-topic.dto';
 import type { ModerateDto } from './dto/moderate.dto';
@@ -115,7 +116,8 @@ export class ForumsService {
     return this.canModerate(profileId, groupId);
   }
 
-  private async esMesa(profileId: string): Promise<boolean> {
+  /** La mesa directiva (titular verificado); también resuelve las apelaciones de pausas de bifurcaciones. */
+  async esMesa(profileId: string): Promise<boolean> {
     return (await this.board.roleOf(profileId)) !== null;
   }
 
@@ -186,6 +188,8 @@ export class ForumsService {
       },
       orderBy: { createdAt: 'desc' },
     });
+    // Temas que llegaron desde una bifurcación: su autor no se muestra (delataría su voto).
+    const anonimos = await temasDeIniciativa(this.prisma, topics);
 
     return {
       id: forum.id,
@@ -208,7 +212,7 @@ export class ForumsService {
           status: t.status as unknown as ProposalSummary['status'],
           kind: t.kind as unknown as ProposalSummary['kind'],
           hidden: t.hidden,
-          authorDisplayName: t.author.displayName,
+          authorDisplayName: anonimos.has(t.id) ? NOMBRE_INICIATIVA : t.author.displayName,
           signalCounts: counts,
           commentCount: t._count.comments,
           createdAt: t.createdAt.toISOString(),

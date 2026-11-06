@@ -15,6 +15,7 @@ import { RulesService } from '../rules/rules.service';
 import { ForumsService } from '../forums/forums.service';
 import { motivoVisible } from '../forums/moderacion-motivo';
 import { DeliberationService } from '../deliberation/deliberation.service';
+import { NOMBRE_INICIATIVA, solucionesDeIniciativa } from '../grupos/bifurcacion-reglas';
 
 const DIA_MS = 86_400_000;
 const ESTADOS_ABIERTOS = ['abierta', 'en_plazo'] as const;
@@ -34,6 +35,7 @@ interface InquietudRow {
   proposalId: string | null;
   createdAt: Date;
   author: { displayName: string };
+  origenSolucionId?: string | null;
 }
 
 @Injectable()
@@ -87,6 +89,10 @@ export class InquietudesService {
   }
 
   private async summary(row: InquietudRow, viewerProfileId: string, threshold: number): Promise<InquietudSummary> {
+    // Llevada desde una bifurcación: quien la llevó es miembro y su nombre delataría su voto.
+    const anonima = row.origenSolucionId
+      ? (await solucionesDeIniciativa(this.prisma, [row.origenSolucionId])).size > 0
+      : false;
     return {
       id: row.id,
       groupId: row.groupId,
@@ -99,7 +105,7 @@ export class InquietudesService {
       deadlineAt: row.deadlineAt ? row.deadlineAt.toISOString() : null,
       // Oculta, ni siquiera el enlace al debate: ese tema puede repetir su texto.
       proposalId: row.hidden ? null : row.proposalId,
-      authorDisplayName: row.author.displayName,
+      authorDisplayName: anonima ? NOMBRE_INICIATIVA : row.author.displayName,
       createdAt: row.createdAt.toISOString(),
     };
   }

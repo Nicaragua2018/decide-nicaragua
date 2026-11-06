@@ -220,6 +220,32 @@ describe('DeliberationService', () => {
         ForbiddenException,
       );
     });
+
+    it('un tema llegado desde una bifurcación no muestra a quien lo llevó; el detalle tampoco da su id', async () => {
+      const p = prisma as unknown as Record<string, unknown>;
+      p['inquietud'] = {
+        findMany: vi.fn().mockResolvedValue([{ proposalId: 'tema-bif', origenSolucionId: 's-bif' }]),
+      };
+      p['group'] = { ...prisma.group, findMany: vi.fn().mockResolvedValue([{ origenSolucionId: 's-bif' }]) };
+      p['solucion'] = { findMany: vi.fn().mockResolvedValue([]) };
+      prisma.groupMembership.findUnique.mockResolvedValue(mockMembership);
+      const base = { ...mockProposal, signals: [], _count: { comments: 0 } };
+      prisma.proposal.findMany.mockResolvedValue([
+        { ...base, id: 'tema-bif', abiertoPorComunidad: true, authorProfileId: 'p-secreta', author: { displayName: 'Zoe Secreta' } },
+        { ...base, id: 'tema-otro', abiertoPorComunidad: false, author: { displayName: 'Ana' } },
+      ]);
+      const lista = await service.listGroupProposals(GROUP_ID, PROFILE_ID);
+      expect(lista.proposals.map((x) => x.authorDisplayName)).toEqual(['Iniciativa de un grupo', 'Ana']);
+
+      prisma.proposal.findUnique.mockResolvedValue({
+        ...base, id: 'tema-bif', abiertoPorComunidad: true, authorProfileId: 'p-secreta',
+        author: { displayName: 'Zoe Secreta' }, comments: [], inquietudes: [],
+      });
+      const d = await service.getProposalById('tema-bif', PROFILE_ID);
+      expect(d.authorDisplayName).toBe('Iniciativa de un grupo');
+      expect(JSON.stringify(d)).not.toContain('p-secreta');
+      expect(JSON.stringify(d)).not.toContain('Zoe');
+    });
   });
 
   // ─── getProposalById ──────────────────────────────────────────────────────

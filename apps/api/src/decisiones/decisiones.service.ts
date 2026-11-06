@@ -7,6 +7,7 @@ import type {
   DecisionesResumenResponse,
   DecisionModoValue,
   DecisionResumenItem,
+  CandidataView,
   DecisionResultadoView,
   DecisionTemaResponse,
   DecisionView,
@@ -14,7 +15,8 @@ import type {
   PapeletaValue,
   SolucionItem,
 } from '@decide/shared';
-import { type GrupoFila, grupoTrabajoItem } from '../grupos/grupo-item';
+import { type GrupoFila, claveMinimo, grupoTrabajoItem } from '../grupos/grupo-item';
+import { type DecisionBifurcable, esBifurcable, finDelPlazo } from '../grupos/bifurcacion-reglas';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { ForumsService } from '../forums/forums.service';
@@ -28,6 +30,9 @@ const FIJAS = 'Las soluciones ya quedaron fijas.';
 const DIA_MS = 86_400_000;
 const OBJECION_CERRADA = 'El plazo para objetar el modo no está abierto.';
 const VOTACION_CERRADA = 'La votación no está abierta.';
+
+/** Valores de bifurcación antes de calcularlos (o fuera de una decisión contada). */
+const SIN_BIFURCACION = { bifurcable: false, puedoIniciarBifurcacion: false, bifurcacionId: null } as const;
 
 const matriz = (v: Prisma.JsonValue | null | undefined): number[][] => (Array.isArray(v) ? (v as number[][]) : []);
 
@@ -300,13 +305,13 @@ export class DecisionesService {
         const enPausa = await provisionales(this.prisma, filas.filter((s) => s.hidden).map((s) => s.id));
         for (const s of filas) {
           if (s.mergedIntoId === null && (!s.hidden || enPausa.has(s.id))) {
-            candidatas.push({ id: s.id, ...textoDe(s), hidden: s.hidden });
+            candidatas.push({ id: s.id, ...textoDe(s), hidden: s.hidden, ...SIN_BIFURCACION });
           }
         }
       } else {
         for (const id of decision.candidatas) {
           const s = porId.get(id);
-          if (s) candidatas.push({ id: s.id, ...textoDe(s), hidden: s.hidden });
+          if (s) candidatas.push({ id: s.id, ...textoDe(s), hidden: s.hidden, ...SIN_BIFURCACION });
         }
       }
 
@@ -326,6 +331,10 @@ export class DecisionesService {
         decision.objecionEndsAt !== null &&
         Date.now() < decision.objecionEndsAt.getTime() &&
         (await this.participantes(proposalId, tema.groupId)).has(profileId);
+
+      if (fase === 'contada' && candidatas.length > 0) {
+        await this.marcarBifurcaciones(candidatas, decision, tema.groupId, participa ? profileId : null, papeleta);
+      }
 
       // Antes del conteo no sale ninguna cifra; después, el resultado congelado.
       let resultado: DecisionResultadoView | null = null;
@@ -371,6 +380,53 @@ export class DecisionesService {
       soloLectura: !participa,
       llevadas,
     };
+  }
+
+  /**
+   * Bifurcación de cada candidata de una decisión contada. `puedoIniciarBifurcacion` sale solo de la
+   * papeleta propia (miembro actual del grupo del tema): para cualquier otra persona es false, sin más.
+   */
+  private async marcarBifurcaciones(
+    candidatas: CandidataView[],
+    decision: DecisionBifurcable & { contadaAt: Date | null; updatedAt: Date },
+    groupId: string,
+    yo: string | null,
+    papeleta: { abstencion: boolean; orden: string[] } | null,
+  ): Promise<void> {
+    const now = new Date();
+    const [grupo, bifs, dias] = await Promise.all([
+      this.prisma.group.findUnique({ where: { id: groupId }, select: { type: true } }),
+      this.prisma.group.findMany({
+        where: { trabajoTipo: 'bifurcacion', origenSolucionId: { in: candidatas.map((c) => c.id) } },
+        select: { id: true, origenSolucionId: true, trabajoEstado: true, convocatoriaEndsAt: true },
+      }),
+      this.rules.getInt('bifurcacion.plazo_dias', groupId),
+    ]);
+    const tipo = (grupo?.type as string | undefined) ?? '';
+    const enPlazo = now.getTime() < finDelPlazo(decision.contadaAt ?? decision.updatedAt, dias).getTime();
+    const mias =
+      yo && bifs.length > 0
+        ? new Set(
+            (
+              await this.prisma.groupMembership.findMany({
+                where: { profileId: yo, groupId: { in: bifs.map((b) => b.id) } },
+                select: { groupId: true },
+              })
+            ).map((m) => m.groupId),
+          )
+        : new Set<string>();
+    for (const c of candidatas) {
+      c.bifurcable = !c.hidden && esBifurcable(decision, c.id, tipo);
+      const b = bifs.find((x) => x.origenSolucionId === c.id);
+      c.bifurcacionId = b?.id ?? null;
+      const apoyo = yo !== null && papeleta !== null && !papeleta.abstencion && papeleta.orden.includes(c.id);
+      const abierta = b
+        ? !mias.has(b.id) &&
+          (b.trabajoEstado === 'activo' ||
+            (b.trabajoEstado === 'convocando' && b.convocatoriaEndsAt !== null && now.getTime() < b.convocatoriaEndsAt.getTime()))
+        : enPlazo;
+      c.puedoIniciarBifurcacion = c.bifurcable && apoyo && abierta;
+    }
   }
 
   // ─── Modo y objeción ──────────────────────────────────────────────────────
@@ -986,13 +1042,17 @@ export class DecisionesService {
     });
     const miembros = new Map(conteos.map((c) => [c.groupId, c._count._all]));
     const minimos = new Map<string, number>();
-    for (const ambitoId of new Set(filas.map((f) => f.parentGroupId ?? ''))) {
-      minimos.set(ambitoId, await this.rules.getInt('subgrupo.minimo_personas', ambitoId));
+    // Mínimo por ámbito y tipo: las bifurcaciones tienen su propia regla.
+    const claveDe = (f: GrupoFila) => `${f.parentGroupId ?? ''}|${claveMinimo(f.trabajoTipo)}`;
+    for (const f of filas) {
+      const k = claveDe(f);
+      if (!minimos.has(k)) minimos.set(k, await this.rules.getInt(claveMinimo(f.trabajoTipo), f.parentGroupId ?? ''));
     }
     for (const f of filas) {
       const ambitoId = f.parentGroupId ?? '';
       const lista = porAmbito.get(ambitoId) ?? [];
-      lista.push(grupoTrabajoItem(f, miembros.get(f.id) ?? 0, minimos.get(ambitoId) ?? 0, soy.has(f.id)));
+      // Una bifurcación sale como «Iniciativa de un grupo» con cuántos son, nunca quiénes.
+      lista.push(grupoTrabajoItem(f, miembros.get(f.id) ?? 0, minimos.get(claveDe(f)) ?? 0, soy.has(f.id)));
       porAmbito.set(ambitoId, lista);
     }
     return porAmbito;
