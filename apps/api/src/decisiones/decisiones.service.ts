@@ -638,9 +638,11 @@ export class DecisionesService {
     const temas = await this.prisma.proposal.findMany({
       // Una propuesta del plan 2 con votación propia (electionId) no pasa por este ciclo.
       // Un grupo de trabajo detenido (pausado, cerrado) o que cuelga de una bifurcación pausada no avanza.
+      // Un cambio de regla anulado (tema ocultado y luego restaurado) no se vota: no aplicaría nada.
       where: {
         kind: 'propuesta', status: 'open', hidden: false, deliberationEndsAt: { lte: now }, decision: null, electionId: null,
         group: GRUPO_EN_MARCHA,
+        OR: [{ cambioRegla: { is: null } }, { cambioRegla: { is: { estado: 'en_votacion' } } }],
       },
       select: { id: true, groupId: true },
     });

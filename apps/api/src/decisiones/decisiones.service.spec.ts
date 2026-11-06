@@ -504,8 +504,17 @@ describe('DecisionesService', () => {
         where: {
           kind: 'propuesta', status: 'open', hidden: false, deliberationEndsAt: { lte: NOW }, decision: null, electionId: null,
           group: GRUPO_EN_MARCHA,
+          OR: [{ cambioRegla: { is: null } }, { cambioRegla: { is: { estado: 'en_votacion' } } }],
         },
       }));
+    });
+
+    it('un cambio de regla anulado (tema ocultado y luego restaurado) no abre una votación que no aplicaría nada', async () => {
+      prisma.proposal.findMany.mockResolvedValue([]);
+      await service.processDeadlines(NOW);
+      const where = prisma.proposal.findMany.mock.calls[0]![0].where;
+      expect(where.OR).toContainEqual({ cambioRegla: { is: { estado: 'en_votacion' } } });
+      expect(where.OR).not.toContainEqual({ cambioRegla: { is: { estado: 'anulado' } } });
     });
 
     it('I3: las cuatro consultas de plazos filtran los grupos detenidos', async () => {
