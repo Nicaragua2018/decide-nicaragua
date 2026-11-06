@@ -507,6 +507,7 @@ Carlos Robleto pidió el 2026-11-05 tres cosas:
   - **Demás causas:** queda una **solicitud**, y el contenido sigue visible hasta que otra persona de la mesa la confirme. Vence a los 7 días.
   - Nadie confirma ni rechaza su propia solicitud. Hay una sola solicitud abierta por contenido (índice único parcial). Un programador revisa los plazos cada 15 minutos.
   - Si se oculta una inquietud cuyo debate ya es una propuesta formal, ese debate sigue la misma regla de dos firmas con la misma causa.
+  - Lo provisional **solo pausa**: una propuesta o solución oculta de forma provisional no avanza ni se cuenta, pero su decisión no se cancela ni la solución sale de las candidatas hasta que la segunda firma confirme. Un contenido que ya tuvo una provisional rechazada o vencida no vuelve a ocultarse de inmediato: la nueva solicitud urgente queda como solicitud normal.
   - El resto del contenido (respuestas, frases, inquietudes y temas no formales) sigue con una sola firma.
 - **Página «Decisiones»:** por cada comunidad de la persona (origen, acogida y general) muestra «Aprobadas», «Rechazadas o sin decisión» y «En curso», con enlaces a cada tema. Excluye los temas ocultos y enmascara las soluciones ocultas.
 

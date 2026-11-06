@@ -36,11 +36,12 @@
     - Rechazar: `pendiente` → `rechazado`; `provisional` → se restaura y pasa a `rechazado`.
   - Solo puede haber una solicitud `pendiente` o `provisional` por contenido; si ya hay una, responde 409.
   - La apelación de la persona autora solo existe sobre `oculto`, igual que hoy.
-  - Ocultar una propuesta formal, al confirmarse o al ocultarse provisionalmente, cancela su decisión activa (`hideTopicTx`). Si luego se restaura, la decisión no se reabre (regla de 3A-3).
+  - Una ocultación provisional **solo pausa**: el tema oculto no avanza en ningún paso de su decisión (`bloquearTema` exige `hidden = false`) y nadie vota ni objeta; su votación del plan 2 pierde el título, pero no se cancela. La decisión activa (y la votación del plan 2) se cancela solo cuando la ocultación queda en firme (`oculto`): ocultación directa o segunda firma. Si la provisional se rechaza o vence, el tema vuelve y el ciclo sigue en la próxima pasada del programador (los plazos vencidos se procesan entonces). Si luego se restaura una ocultación en firme, la decisión no se reabre (regla de 3A-3).
+  - Si un contenido ya tuvo una provisional rechazada o vencida (`fueProvisional`), una nueva solicitud urgente sobre él queda `pendiente` y el contenido sigue visible.
 - **Privacidad:**
   - Mientras está `pendiente`, nadie fuera de la mesa sabe que hay una solicitud.
   - La cola de confirmación muestra el texto original solo a la mesa, como la cola de apelaciones.
-  - La auditoría lleva `{ moderationId, causa }`, sin texto.
+  - La auditoría lleva `{ moderationId, causa }`, sin texto. La de una solicitud `pendiente` (`moderation.requested`) va como `moderation:<id>` sin metadatos: no dice qué contenido ni qué causa.
 - Mensajes en español. Tildes solo con Edit/Write y verificadas en UTF-8 estricto. Commits con `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`. Nunca se hace commit de `apps/web/next-env.d.ts` ni de `.superpowers/`.
 
 ## Review Focus
@@ -48,7 +49,7 @@
 1. **Una sola persona de la mesa no puede ocultar sola una solución o propuesta con causa no urgente.** Tampoco con una urgente más allá de 48 h, ni confirmando su propia solicitud.
 2. Una solicitud `pendiente` **no oculta nada** y no se ve fuera de la mesa.
 3. **Vencimiento:** que el vencimiento corra dos veces a la vez no restaura dos veces ni pisa una confirmación hecha justo antes. Todo pasa por un `updateMany` condicionado al estado.
-4. Una solución ocultada provisionalmente durante la votación **no gana** si sigue oculta al conteo. Si se restaura antes, sí cuenta.
+4. Una solución ocultada provisionalmente **sigue siendo candidata** al fijarse las candidatas, y el conteo **espera** (se salta la pasada, sin escribir ni auditar) mientras alguna candidata tenga una provisional abierta. Si la ocultación se confirma, no gana; si se rechaza o vence, cuenta como cualquier otra.
 5. Las moderaciones anteriores, sin causa, siguen mostrándose y apelándose.
 
 ---
