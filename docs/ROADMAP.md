@@ -41,6 +41,8 @@ Votación de las soluciones de cada debate (ADR-020):
 - [x] Papeleta: Apruebo / No apruebo / Me abstengo, u ordenar solo las aceptadas, «Rechazo todas» y «Me abstengo»
 - [x] Resultado con quórum, aprobación por más de la mitad y Schulze entre las aprobadas, publicado con sus matrices
 - [x] Web: sección «Soluciones y decisión», papeleta y resultado en cada tema
+- [x] Moderación con lista cerrada de causas y segunda firma de la mesa para ocultar soluciones y propuestas (ADR-021)
+- [x] Página «Decisiones»: aprobadas, rechazadas y en curso por territorio de origen, comunidad de acogida y exilio y diáspora
 
 ---
 
