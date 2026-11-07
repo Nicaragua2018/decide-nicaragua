@@ -79,7 +79,7 @@ Qué entregar:
 - nivel: 0, 1 o 2.
 - causa: en el nivel 2, una de las cuatro anteriores. En el nivel 1 es opcional. En el nivel 0, nada.
 - explicacion: en los niveles 1 y 2, una o dos frases cortas en español sencillo, dirigidas a quien escribe («tu texto…»), que digan qué parte es el problema y por qué, sin juzgar a la persona.
-- sugerencia: en los niveles 1 y 2, el texto completo dicho con respeto, que conserve la idea, los argumentos y la postura de quien escribe, incluida su crítica. No cambies lo que piensa ni lo suavices hasta vaciarlo. Si hay datos personales, quítalos.
+- sugerencia: en los niveles 1 y 2, el texto completo dicho con respeto, que conserve la idea, los argumentos y la postura de quien escribe, incluida su crítica. No cambies lo que piensa ni lo suavices hasta vaciarlo. Si hay datos personales, quítalos. Si el texto tiene un título y un cuerpo separados por una línea en blanco, la sugerencia conserva esa misma estructura: el título, una línea en blanco y el cuerpo.
 - En el nivel 0 no pongas causa, explicacion ni sugerencia.`;
 
 /** Instrucción completa para un tipo de texto. La revisión posterior (Task 5) usa la misma. */

@@ -166,6 +166,7 @@ export function useFormConRevision({
   campos,
   campoSugerencia,
   alUsarSugerencia,
+  alUsarTitulo,
   reiniciar = true,
   alOk,
 }: {
@@ -174,6 +175,8 @@ export function useFormConRevision({
   campos: string[];
   campoSugerencia: string;
   alUsarSugerencia?: ((texto: string) => void) | undefined;
+  /** Formularios con título y cuerpo: la sugerencia se parte en la primera línea en blanco. */
+  alUsarTitulo?: ((texto: string) => void) | undefined;
   /** Vacía el formulario al publicar (solo para campos sin estado de React). */
   reiniciar?: boolean;
   alOk?: (() => void) | undefined;
@@ -183,6 +186,7 @@ export function useFormConRevision({
   const [, startTransition] = useTransition();
   const rev = useRevisionPrevia(tipo);
   const { recibir } = rev;
+  const enCurso = useRef(false);
 
   useEffect(() => {
     if (!state) return;
@@ -206,17 +210,35 @@ export function useFormConRevision({
 
   async function onSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    const fd = new FormData(e.currentTarget);
-    const texto = textoParaRevisar(...campos.map((c) => String(fd.get(c) ?? '')));
-    if (await rev.revisar(texto)) lanzar('normal');
+    if (enCurso.current || pendiente) return;
+    enCurso.current = true;
+    try {
+      const fd = new FormData(e.currentTarget);
+      const texto = textoParaRevisar(...campos.map((c) => String(fd.get(c) ?? '')));
+      if (await rev.revisar(texto)) lanzar('normal');
+    } finally {
+      enCurso.current = false;
+    }
+  }
+
+  function ponerCampo(nombre: string, valor: string) {
+    const el = formRef.current?.elements.namedItem(nombre);
+    if (el instanceof HTMLTextAreaElement || el instanceof HTMLInputElement) el.value = valor;
   }
 
   function usarSugerencia(texto: string) {
-    if (alUsarSugerencia) alUsarSugerencia(texto);
-    else {
-      const el = formRef.current?.elements.namedItem(campoSugerencia);
-      if (el instanceof HTMLTextAreaElement || el instanceof HTMLInputElement) el.value = texto;
+    // Con título y cuerpo, el asistente devuelve «título, línea en blanco, cuerpo».
+    const corte = campos.length === 2 ? /?
+?
+/.exec(texto) : null;
+    const titulo = corte ? texto.slice(0, corte.index).trim() : null;
+    const cuerpo = corte ? texto.slice(corte.index + corte[0].length).trim() : texto;
+    if (titulo !== null && campos[0]) {
+      if (alUsarTitulo) alUsarTitulo(titulo);
+      else ponerCampo(campos[0], titulo);
     }
+    if (alUsarSugerencia) alUsarSugerencia(cuerpo);
+    else ponerCampo(campoSugerencia, cuerpo);
     rev.limpiar();
   }
 

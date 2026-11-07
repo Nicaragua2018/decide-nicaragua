@@ -20,6 +20,7 @@ export function ProponerGrupoForm({ ambitos }: { ambitos: AmbitoOpcion[] }) {
     campos: ['name', 'proposito'],
     campoSugerencia: 'proposito',
     alUsarSugerencia: setProposito,
+    alUsarTitulo: setName,
     reiniciar: false,
     alOk: () => {
       setName('');

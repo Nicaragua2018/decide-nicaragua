@@ -13,6 +13,7 @@ export function NuevaSolucionForm({ proposalId }: { proposalId: string }) {
     campos: ['title', 'description'],
     campoSugerencia: 'description',
     alUsarSugerencia: setDescription,
+    alUsarTitulo: setTitle,
     reiniciar: false,
     alOk: () => {
       setTitle('');

@@ -115,6 +115,10 @@ describe('ModeracionPreviaService', () => {
     expect(esRevision(null)).toBe(false);
   });
 
+  it('la tarea pide conservar la estructura de título y cuerpo en la sugerencia', () => {
+    expect(TAREA_REVISION).toContain('título, una línea en blanco y el cuerpo');
+  });
+
   it('la tarea explica los tres niveles y las causas del nivel 2', () => {
     for (const s of ['odio', 'insultos_amenazas', 'datos_personales', 'ilegal_violencia', 'crítica política', 'insulto suelto']) {
       expect(TAREA_REVISION).toContain(s);

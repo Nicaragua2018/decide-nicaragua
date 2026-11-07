@@ -286,10 +286,6 @@ export async function updateProposalStatusDirect(formData: FormData): Promise<vo
   await updateProposalStatus(null, formData);
 }
 
-export async function createCommentDirect(formData: FormData): Promise<void> {
-  await createComment(null, formData);
-}
-
 export async function updateElectionStatusDirect(formData: FormData): Promise<void> {
   await updateElectionStatus(null, formData);
 }
