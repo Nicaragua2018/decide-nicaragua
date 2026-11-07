@@ -18,6 +18,7 @@ import { ModeracionPreviaService } from './moderacion-previa.service';
 import { GuardiaService } from './guardia.service';
 import { PanelService } from './panel.service';
 import { AlDiaService } from './al-dia.service';
+import { CrecerService } from './crecer.service';
 import { Publicadores } from './publicadores';
 import { RevisionPosteriorService } from './revision-posterior.service';
 
@@ -49,6 +50,7 @@ import { RevisionPosteriorService } from './revision-posterior.service';
     ContextoPersonaService,
     PanelService,
     AlDiaService,
+    CrecerService,
     AsistenteScheduler,
   ],
   exports: [AsistenteService, ModeracionPreviaService, GuardiaService, Publicadores, ContextoPersonaService],

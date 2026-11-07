@@ -1,12 +1,13 @@
-import { BadRequestException, Body, Controller, ForbiddenException, Get, HttpCode, Post, UseGuards } from '@nestjs/common';
+import { BadRequestException, Body, Controller, ForbiddenException, Get, HttpCode, Param, ParseUUIDPipe, Post, UseGuards } from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
-import type { AlDiaView, JwtPayload, RespuestaPanel, RevisionTexto } from '@decide/shared';
+import type { AlDiaView, CrecerView, JwtPayload, RespuestaPanel, RevisionTexto } from '@decide/shared';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { AsistenteService, type EstadoAsistente } from './asistente.service';
 import { ModeracionPreviaService } from './moderacion-previa.service';
 import { PanelService } from './panel.service';
 import { AlDiaService, VISTA_VACIA } from './al-dia.service';
+import { CrecerService } from './crecer.service';
 import { RevisarTextoDto } from './dto/revisar-texto.dto';
 import { PreguntarDto } from './dto/preguntar.dto';
 
@@ -18,6 +19,7 @@ export class AsistenteController {
     private readonly moderacion: ModeracionPreviaService,
     private readonly panel: PanelService,
     private readonly alDiaServicio: AlDiaService,
+    private readonly crecerServicio: CrecerService,
   ) {}
 
   /** Si el asistente funciona y si se alcanzó el tope del mes. Cualquier cuenta con perfil. */
@@ -66,5 +68,22 @@ export class AsistenteController {
     if (!user.profileId) throw new ForbiddenException('Perfil requerido');
     if (user.status !== 'verified_citizen') return;
     await this.alDiaServicio.cerrar(user.profileId);
+  }
+
+  /** Tarjeta para hacer crecer la comunidad. Solo cuentas verificadas. */
+  @Get('crecer/:groupId')
+  async crecer(@Param('groupId', new ParseUUIDPipe()) groupId: string, @CurrentUser() user: JwtPayload): Promise<CrecerView> {
+    if (!user.profileId) throw new ForbiddenException('Perfil requerido');
+    if (user.status !== 'verified_citizen') return { mostrar: false };
+    return this.crecerServicio.ver(groupId, user.profileId);
+  }
+
+  /** Oculta la tarjeta durante 7 días. Sin efecto en cuentas sin verificar. */
+  @Post('crecer/:groupId/cerrar')
+  @HttpCode(204)
+  async cerrarCrecer(@Param('groupId', new ParseUUIDPipe()) groupId: string, @CurrentUser() user: JwtPayload): Promise<void> {
+    if (!user.profileId) throw new ForbiddenException('Perfil requerido');
+    if (user.status !== 'verified_citizen') return;
+    await this.crecerServicio.cerrar(groupId, user.profileId);
   }
 }

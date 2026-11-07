@@ -201,7 +201,7 @@ describe('PreguntarDto y endpoint', () => {
 
   it('exige perfil y que el último mensaje sea de la persona', async () => {
     const panel = { preguntar: vi.fn().mockResolvedValue({ tipo: 'apagado' }) };
-    const ctrl = new AsistenteController({} as never, {} as never, panel as never, {} as never);
+    const ctrl = new AsistenteController({} as never, {} as never, panel as never, {} as never, {} as never);
     const dto = (rol: 'persona' | 'asistente') => ({ mensajes: [{ rol, texto: 'Hola' }] }) as never;
     await expect(ctrl.preguntar(dto('persona'), { sub: 'u1', status: 'verified_citizen' } as never)).rejects.toThrow('Perfil requerido');
     await expect(ctrl.preguntar(dto('asistente'), { sub: 'u1', profileId: 'p1', status: 'x' } as never)).rejects.toThrow(
