@@ -1,6 +1,8 @@
 import Link from 'next/link';
 import type { Metadata } from 'next';
 import { serverFetch } from '@/lib/api';
+import { Suspense } from 'react';
+import AlDiaSeccion from '@/components/AlDiaSeccion';
 import type {
   GroupListResponse,
   GroupType,
@@ -91,6 +93,10 @@ export default async function DashboardPage() {
           Ver auditoría pública →
         </Link>
       </div>
+
+      <Suspense fallback={null}>
+        <AlDiaSeccion />
+      </Suspense>
 
       {/* ── Pipeline ───────────────────────────────────────────── */}
       <div className="pipeline">

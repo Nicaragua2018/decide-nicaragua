@@ -4,6 +4,7 @@ import { CAUSAS_NIVEL_2, MODERACION_CAUSAS } from '@decide/shared';
 import type { ModeracionCausaValue, NivelRevision, RevisionTexto, TipoTexto } from '@decide/shared';
 import { RedisService } from '../redis/redis.service';
 import { AsistenteService } from './asistente.service';
+import { conLimite } from './con-limite';
 
 /** Salida de la herramienta, tal como la entrega el modelo (antes de normalizar). */
 export interface SalidaRevision {
@@ -126,19 +127,6 @@ export const LIMITE_DIARIO_POR_PERFIL = 100;
 const CONTADOR_SEGUNDOS = 26 * 3600;
 /** Tiempo máximo de cada operación de Redis: un Redis caído no puede demorar una publicación. */
 const REDIS_MAXIMO_MS = 300;
-
-/** Resuelve con el valor, o con null si tarda más de `ms` o falla. */
-async function conLimite<T>(p: Promise<T>, ms: number): Promise<T | null> {
-  let temporizador: ReturnType<typeof setTimeout> | undefined;
-  const vencido = new Promise<null>((resolve) => {
-    temporizador = setTimeout(() => resolve(null), ms);
-  });
-  try {
-    return await Promise.race([p.catch(() => null), vencido]);
-  } finally {
-    clearTimeout(temporizador);
-  }
-}
 
 /**
  * Moderación previa: clasifica un texto antes de publicarlo. Nunca lanza.

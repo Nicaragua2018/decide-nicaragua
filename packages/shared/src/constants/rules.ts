@@ -9,7 +9,7 @@ export interface RuleDefinition {
   min?: number;
   max?: number;
   options?: string[];
-  unit?: 'personas' | 'porcentaje' | 'dias' | 'meses';
+  unit?: 'personas' | 'porcentaje' | 'dias' | 'meses' | 'preguntas';
   /**
    * false si ningún código lee todavía la regla (se conecta con las elecciones, plan 3C):
    * no se puede proponer cambiarla, porque la votación no tendría efecto.
@@ -67,6 +67,7 @@ export const RULE_DEFINITIONS: readonly RuleDefinition[] = [
   int('comunidad.minimo_activacion', 'colmena', 'Personas mínimas para activar una comunidad (personas)', 7, 3, 50, 'personas', SIN_CONECTAR),
   int('eleccion.minimo_primera', 'colmena', 'Personas mínimas para la primera elección (personas)', 12, 5, 100, 'personas', SIN_CONECTAR),
   int('invitaciones.pendientes_max', 'colmena', 'Invitaciones pendientes por persona (máximo)', 5, 1, 20, 'personas'),
+  int('asistente.preguntas_por_dia', 'colmena', 'Preguntas al asistente por persona y día', 30, 10, 100, 'preguntas'),
   int('revocacion.fraccion', 'colmena', 'Apoyos necesarios para revocar un cargo (%)', 33, 10, 50, 'porcentaje', SIN_CONECTAR),
   int('cargos.periodo_mesa_meses', 'colmena', 'Duración del cargo en la mesa (meses)', 12, 6, 24, 'meses', SIN_CONECTAR),
   int('cargos.periodo_coordinadores_meses', 'colmena', 'Duración del cargo de coordinación (meses)', 6, 3, 12, 'meses', SIN_CONECTAR),
@@ -92,6 +93,8 @@ export function conUnidad(def: RuleDefinition, valor: string): string {
       return uno ? '1 persona' : `${valor} personas`;
     case 'meses':
       return uno ? '1 mes' : `${valor} meses`;
+    case 'preguntas':
+      return uno ? '1 pregunta' : `${valor} preguntas`;
     default:
       return valor;
   }
@@ -123,7 +126,7 @@ export interface RuleView {
   level: RuleLevel;
   label: string;
   type: 'int' | 'choice';
-  unit?: 'personas' | 'porcentaje' | 'dias' | 'meses';
+  unit?: 'personas' | 'porcentaje' | 'dias' | 'meses' | 'preguntas';
   value: string;
   default: string;
   min?: number;

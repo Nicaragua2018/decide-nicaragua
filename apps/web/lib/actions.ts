@@ -908,3 +908,15 @@ export async function proponerCambioRegla(
   revalidatePath('/reglas');
   return { success: true, proposalId: data.proposalId };
 }
+
+// Asistente: tarjetas «al día» y «crecer»
+
+export async function cerrarAlDia(): Promise<void> {
+  await actionFetch('/api/asistente/al-dia/cerrar', { method: 'POST' });
+  revalidatePath('/dashboard');
+}
+
+export async function cerrarCrecer(groupId: string): Promise<void> {
+  await actionFetch(`/api/asistente/crecer/${groupId}/cerrar`, { method: 'POST' });
+  revalidatePath(`/groups/${groupId}`);
+}

@@ -72,3 +72,64 @@ export function textoParaRevisar(...partes: string[]): string {
     .filter((p) => p.length > 0)
     .join('\n\n');
 }
+
+/** Un mensaje del panel del asistente. */
+export interface MensajePanel {
+  rol: 'persona' | 'asistente';
+  texto: string;
+}
+
+/** Lo que devuelve el panel del asistente a una pregunta. */
+export type RespuestaPanel =
+  | { tipo: 'respuesta'; texto: string; enlaces: { texto: string; ruta: string }[] }
+  | { tipo: 'apagado' }
+  | { tipo: 'descansa' }
+  | { tipo: 'limite'; maximo: number };
+
+/** Una novedad de la tarjeta «Al día». */
+export interface ItemAlDia {
+  clase: 'debate' | 'votacion_abierta' | 'votacion_cierra' | 'decision' | 'informe' | 'umbral';
+  titulo: string;
+  comunidad: string;
+  ruta: string;
+  fecha: string;
+}
+
+/** La tarjeta «Al día»: lo que pasó desde la última visita. */
+export interface AlDiaView {
+  mostrar: boolean;
+  desde: string | null;
+  items: ItemAlDia[];
+  resumen: string | null;
+}
+
+/** La tarjeta para hacer crecer la comunidad. */
+export type CrecerView =
+  | { mostrar: false }
+  | {
+      mostrar: true;
+      comunidad: string;
+      miembros: number;
+      activa: boolean;
+      faltan: number;
+      meta: number;
+      texto: string;
+      mensajeInvitacion: string;
+      deAsistente: boolean;
+    };
+
+/** Lo que la comunidad garantiza (texto fijo de la tarjeta «crecer» y del mensaje de invitación). */
+export const GARANTIAS: readonly string[] = [
+  'identidad protegida',
+  'voto secreto',
+  'reglas votadas por todos',
+  'sin caudillos',
+  'cada miembro avalado por dos personas',
+];
+
+export const FACILIDADES: readonly string[] = [
+  'debates y votaciones propios',
+  'grupos de trabajo',
+  'comisiones',
+  'apoyo mutuo en papeles, trabajo y seguridad',
+];
