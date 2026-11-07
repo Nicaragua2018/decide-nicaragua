@@ -22,22 +22,25 @@ export default function CrecerCard({
 }) {
   const [mensaje, setMensaje] = useState(mensajeInvitacion);
   const [copiado, setCopiado] = useState(false);
+  const [falloCopiar, setFalloCopiar] = useState(false);
   const [ocupado, empezar] = useTransition();
 
   async function copiar() {
     try {
       await navigator.clipboard.writeText(mensaje);
+      setFalloCopiar(false);
       setCopiado(true);
       setTimeout(() => setCopiado(false), 2000);
     } catch {
       setCopiado(false);
+      setFalloCopiar(true);
     }
   }
 
   return (
     <section className="card crecer" aria-labelledby="crecer-titulo">
       <h2 id="crecer-titulo" className="card-title">
-        Faltan {faltan} personas para {activa ? 'llegar a 20' : 'activar la comunidad'}
+        {faltan === 1 ? 'Falta 1 persona' : `Faltan ${faltan} personas`} para {activa ? 'llegar a 20' : 'activar la comunidad'}
       </h2>
       {deAsistente && <p className="marca-asistente">sugerencia del asistente</p>}
       <p>{texto}</p>
@@ -70,6 +73,7 @@ export default function CrecerCard({
           Cerrar por 7 días
         </button>
       </div>
+      {falloCopiar && <p className="form-error" role="status">No se pudo copiar; selecciona el texto y cópialo a mano.</p>}
     </section>
   );
 }

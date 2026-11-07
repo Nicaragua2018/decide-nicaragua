@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useTransition } from 'react';
 import type { ItemAlDia } from '@decide/shared';
 import { cerrarAlDia } from '@/lib/actions';
+import { esRutaInterna } from '@/lib/rutas';
 
 const ETIQUETA: Record<ItemAlDia['clase'], string> = {
   debate: 'Debate nuevo',
@@ -45,7 +46,7 @@ export default function AlDiaCard({ resumen, items }: { resumen: string | null; 
             {lista.map((it, i) => (
               <li key={`${it.ruta}-${i}`}>
                 <span className="al-dia-etiqueta">{ETIQUETA[it.clase]}</span>{' '}
-                <Link href={it.ruta}>{it.titulo}</Link>
+                {esRutaInterna(it.ruta) ? <Link href={it.ruta}>{it.titulo}</Link> : it.titulo}
               </li>
             ))}
           </ul>

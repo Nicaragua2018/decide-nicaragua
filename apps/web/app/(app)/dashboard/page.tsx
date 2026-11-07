@@ -1,12 +1,12 @@
 import Link from 'next/link';
 import type { Metadata } from 'next';
 import { serverFetch } from '@/lib/api';
-import AlDiaCard from '@/components/AlDiaCard';
+import { Suspense } from 'react';
+import AlDiaSeccion from '@/components/AlDiaSeccion';
 import type {
   GroupListResponse,
   GroupType,
   AuthResponse,
-  AlDiaView,
   VerificationStatus,
 } from '@decide/shared';
 
@@ -66,13 +66,10 @@ export default async function DashboardPage() {
     );
   }
 
-  const [groupsRes, meRes, alDiaRes] = await Promise.all([
+  const [groupsRes, meRes] = await Promise.all([
     serverFetch('/api/groups'),
     serverFetch('/api/auth/me'),
-    serverFetch('/api/asistente/al-dia').catch(() => null),
   ]);
-
-  const alDia = alDiaRes?.ok ? ((await alDiaRes.json()) as AlDiaView) : null;
 
   const groups = groupsRes.ok
     ? ((await groupsRes.json()) as GroupListResponse).groups ?? []
@@ -97,7 +94,9 @@ export default async function DashboardPage() {
         </Link>
       </div>
 
-      {alDia?.mostrar && <AlDiaCard resumen={alDia.resumen} items={alDia.items} />}
+      <Suspense fallback={null}>
+        <AlDiaSeccion />
+      </Suspense>
 
       {/* ── Pipeline ───────────────────────────────────────────── */}
       <div className="pipeline">

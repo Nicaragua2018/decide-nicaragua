@@ -1,10 +1,10 @@
 import Link from 'next/link';
 import type { Metadata } from 'next';
 import { serverFetch } from '@/lib/api';
-import CrecerCard from '@/components/CrecerCard';
+import { Suspense } from 'react';
+import CrecerSeccion from '@/components/CrecerSeccion';
 import type {
   GroupDetail,
-  CrecerView,
   ProposalListResponse,
   ElectionListResponse,
   SortitionListResponse,
@@ -70,9 +70,8 @@ export default async function GroupPage({
   const { id }               = await params;
   const { tab = 'proposals' } = await searchParams;
 
-  const [groupRes, crecerRes, contentRes] = await Promise.all([
+  const [groupRes, contentRes] = await Promise.all([
     serverFetch(`/api/groups/${id}`),
-    serverFetch(`/api/asistente/crecer/${id}`).catch(() => null),
     tab === 'proposals'
       ? serverFetch(`/api/deliberation/groups/${id}/proposals`)
       : tab === 'elections'
@@ -82,7 +81,6 @@ export default async function GroupPage({
 
   const group       = (await groupRes.json()) as GroupDetail;
   const contentData = contentRes.ok ? await contentRes.json() : null;
-  const crecer      = crecerRes?.ok ? ((await crecerRes.json()) as CrecerView) : null;
   const meta        = TAB_META[tab];
 
   return (
@@ -108,16 +106,9 @@ export default async function GroupPage({
         </Link>
       </div>
 
-      {crecer?.mostrar && (
-        <CrecerCard
-          groupId={id}
-          activa={crecer.activa}
-          faltan={crecer.faltan}
-          texto={crecer.texto}
-          mensajeInvitacion={crecer.mensajeInvitacion}
-          deAsistente={crecer.deAsistente}
-        />
-      )}
+      <Suspense fallback={null}>
+        <CrecerSeccion groupId={id} />
+      </Suspense>
 
       {/* ── Tabs ────────────────────────────────────────────────── */}
       <nav className="tab-nav" aria-label="Secciones del grupo">

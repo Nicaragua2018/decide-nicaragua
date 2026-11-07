@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { useEffect, useRef, useState, type KeyboardEvent } from 'react';
+import { esRutaInterna } from '@/lib/rutas';
 import type { MensajePanel, RespuestaPanel } from '@decide/shared';
 
 const MAX_MENSAJES = 12;
@@ -18,8 +19,12 @@ export default function AsistentePanel({ topeAlcanzado }: { topeAlcanzado: boole
   const [pensando, setPensando] = useState(false);
   const areaRef = useRef<HTMLTextAreaElement>(null);
   const finRef = useRef<HTMLDivElement>(null);
+  const botonRef = useRef<HTMLButtonElement>(null);
+  const generacion = useRef(0);
+  const estuvoAbierto = useRef(false);
 
   function cerrar() {
+    generacion.current += 1; // descarta cualquier respuesta que aún viaje
     setAbierto(false);
     setLineas([]);
     setTexto('');
@@ -27,7 +32,12 @@ export default function AsistentePanel({ topeAlcanzado }: { topeAlcanzado: boole
   }
 
   useEffect(() => {
-    if (abierto) areaRef.current?.focus();
+    if (abierto) {
+      estuvoAbierto.current = true;
+      areaRef.current?.focus();
+    } else if (estuvoAbierto.current) {
+      botonRef.current?.focus();
+    }
   }, [abierto]);
 
   useEffect(() => {
@@ -50,6 +60,7 @@ export default function AsistentePanel({ topeAlcanzado }: { topeAlcanzado: boole
     setLineas(nuevas);
     setTexto('');
     setPensando(true);
+    const miGeneracion = generacion.current;
     const mensajes: MensajePanel[] = nuevas
       .filter((l) => !l.aviso)
       .slice(-MAX_MENSAJES)
@@ -71,6 +82,7 @@ export default function AsistentePanel({ topeAlcanzado }: { topeAlcanzado: boole
     } catch {
       nueva = { rol: 'asistente', aviso: true, texto: TEXTO_ERROR };
     }
+    if (miGeneracion !== generacion.current) return;
     setLineas((prev) => [...prev, nueva]);
     setPensando(false);
   }
@@ -85,12 +97,12 @@ export default function AsistentePanel({ topeAlcanzado }: { topeAlcanzado: boole
   return (
     <>
       {!abierto && (
-        <button type="button" className="asistente-boton btn btn-primary" aria-label="Pregúntale al asistente" onClick={() => setAbierto(true)}>
+        <button ref={botonRef} type="button" className="asistente-boton btn btn-primary" aria-label="Pregúntale al asistente" onClick={() => setAbierto(true)}>
           Pregúntale al asistente
         </button>
       )}
       {abierto && (
-        <aside className="asistente-panel" role="dialog" aria-label="Asistente">
+        <aside className="asistente-panel" role="dialog" aria-modal="true" aria-label="Asistente">
           <div className="asistente-cabecera">
             <strong>Asistente</strong>
             <button type="button" className="btn btn-ghost btn-sm" aria-label="Cerrar el asistente" onClick={cerrar}>
@@ -114,8 +126,10 @@ export default function AsistentePanel({ topeAlcanzado }: { topeAlcanzado: boole
                   <p style={{ whiteSpace: 'pre-wrap' }}>{l.texto}</p>
                   {l.enlaces && l.enlaces.length > 0 && (
                     <ul className="asistente-enlaces">
-                      {l.enlaces.map((e) => (
-                        <li key={e.ruta}><Link href={e.ruta} onClick={cerrar}>{e.texto}</Link></li>
+                      {l.enlaces.map((e, j) => (
+                        <li key={`${e.ruta}-${j}`}>
+                          {esRutaInterna(e.ruta) ? <Link href={e.ruta} onClick={cerrar}>{e.texto}</Link> : e.texto}
+                        </li>
                       ))}
                     </ul>
                   )}
