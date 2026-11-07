@@ -401,7 +401,7 @@ describe('InquietudesService', () => {
       { id: ID2, groupId: G, status: 'abierta', hidden: false },
     ];
 
-    it('guardia: responder revisa como respuesta_inquietud y encola la inquietud', async () => {
+    it('guardia: responder revisa como respuesta_inquietud y no encola la inquietud', async () => {
       forums.canOrganize.mockResolvedValue(true);
       prisma.inquietud.findUnique.mockResolvedValue({ id: 'i1', groupId: G, status: 'en_plazo', hidden: false });
       const texto = 'x'.repeat(50);
@@ -413,7 +413,16 @@ describe('InquietudesService', () => {
         args: { id: 'i1', text: texto },
       });
       expect(guardia.antesDePublicar.mock.invocationCallOrder[0]).toBeLessThan(prisma.inquietud.updateMany.mock.invocationCallOrder[0] ?? 0);
-      expect(guardia.despuesDePublicar).toHaveBeenCalledWith('inquietud', 'i1', true);
+      expect(guardia.despuesDePublicar).not.toHaveBeenCalled();
+    });
+
+    it('guardia: una respuesta sin revisar no encola la inquietud del miembro (Ruling 16)', async () => {
+      forums.canOrganize.mockResolvedValue(true);
+      guardia.antesDePublicar.mockResolvedValue({ revisado: false });
+      prisma.inquietud.findUnique.mockResolvedValue({ id: 'i1', groupId: G, status: 'en_plazo', hidden: false });
+      await service.respond(YO, 'i1', 'x'.repeat(50), 'ip');
+      expect(prisma.inquietud.updateMany).toHaveBeenCalled();
+      expect(guardia.despuesDePublicar).not.toHaveBeenCalled();
     });
 
     it('guardia: abrir debate revisa el tema antes de la transacción y encola el tema', async () => {

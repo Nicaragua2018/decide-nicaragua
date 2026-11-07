@@ -399,7 +399,10 @@ export class InquietudesService implements OnModuleInit {
     if (row.hidden || !(ESTADOS_ABIERTOS as readonly string[]).includes(row.status as string)) {
       throw new BadRequestException('Esta inquietud ya no admite respuesta.');
     }
-    const { revisado } = await this.guardia.antesDePublicar({
+    // La revisión previa sigue (puede bloquear el nivel 2). Una respuesta sin revisar no se encola:
+    // ocultar la inquietud del miembro por las palabras de quien organiza no corresponde (Ruling 16);
+    // la mesa puede moderarla a mano.
+    await this.guardia.antesDePublicar({
       tipo: 'respuesta_inquietud',
       texto: text,
       autorProfileId: profileId,
@@ -412,8 +415,6 @@ export class InquietudesService implements OnModuleInit {
       data: { status: 'respondida', response: text, respondedAt: new Date(), respondedByProfileId: profileId },
     });
     if (res.count === 0) throw new ConflictException('Esta inquietud ya cambió de estado.');
-    // La respuesta se modera junto con su inquietud.
-    await this.guardia.despuesDePublicar('inquietud', id, revisado);
     void this.audit.log({
       ...actor,
       action: 'inquietud.responded',
