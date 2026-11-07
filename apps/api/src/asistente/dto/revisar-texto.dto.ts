@@ -8,6 +8,6 @@ export class RevisarTextoDto {
 
   @IsString({ message: 'El texto debe ser texto.' })
   @MinLength(1, { message: 'El texto está vacío.' })
-  @MaxLength(10_000, { message: 'El texto admite hasta 10000 caracteres.' })
+  @MaxLength(5000, { message: 'El texto admite hasta 5000 caracteres.' })
   texto!: string;
 }

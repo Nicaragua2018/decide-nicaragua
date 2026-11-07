@@ -41,6 +41,13 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
     return this.client.del(key);
   }
 
+  /** Suma 1 al contador y devuelve el valor nuevo. El plazo se fija al crearlo. */
+  async contar(key: string, ttlSeconds: number): Promise<number> {
+    const n = await this.client.incr(key);
+    if (n === 1) await this.client.expire(key, ttlSeconds);
+    return n;
+  }
+
   /** Verifica la conectividad con Redis. Usado por el health check. */
   async ping(): Promise<void> {
     const response = await this.client.ping();

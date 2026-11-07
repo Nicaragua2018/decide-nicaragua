@@ -60,6 +60,8 @@ function pedirRevision(formData: FormData): { pedirRevision?: true } {
 
 /** Revisión previa del asistente. Si falla o no responde, no bloquea: devuelve `revisado: false`. */
 export async function revisarTexto(tipo: TipoTexto, texto: string): Promise<RevisionTexto> {
+  // El servidor revisa hasta 5000 caracteres aquí; un texto más largo lo revisa la guardia al enviarlo.
+  if (texto.length > 5000) return { nivel: 0, revisado: false };
   try {
     const res = await actionFetch('/api/asistente/revisar', {
       method: 'POST',

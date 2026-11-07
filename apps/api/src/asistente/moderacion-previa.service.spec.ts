@@ -18,16 +18,22 @@ function buildRedis() {
       mem.set(k, v);
       return 'OK' as const;
     }),
+    contar: vi.fn(async (k: string, _ttl: number) => {
+      const n = Number(mem.get(k) ?? '0') + 1;
+      mem.set(k, String(n));
+      return n;
+    }),
   };
 }
 
 describe('ModeracionPreviaService', () => {
-  let asistente: { pedir: ReturnType<typeof vi.fn> };
+  let asistente: { pedir: ReturnType<typeof vi.fn>; activo: ReturnType<typeof vi.fn> };
   let redis: ReturnType<typeof buildRedis>;
   let service: ModeracionPreviaService;
 
   beforeEach(() => {
     asistente = {
+      activo: vi.fn().mockReturnValue(true),
       pedir: vi.fn().mockResolvedValue({ nivel: 2, causa: 'odio', explicacion: 'Ataca a un grupo.', sugerencia: 'Otra forma.' }),
     };
     redis = buildRedis();
@@ -105,6 +111,78 @@ describe('ModeracionPreviaService', () => {
     expect(asistente.pedir).toHaveBeenCalledTimes(1);
   });
 
+  it('apagado: no toca Redis, no llama al modelo y lo marca como apagado (igual que 3A)', async () => {
+    asistente.activo.mockReturnValue(false);
+    const r = await service.revisar(TEXTO, 'frase', { profileId: 'p1', paraWeb: true });
+    expect(r).toEqual({ nivel: 0, revisado: true, apagado: true });
+    expect(redis.get).not.toHaveBeenCalled();
+    expect(redis.set).not.toHaveBeenCalled();
+    expect(redis.contar).not.toHaveBeenCalled();
+    expect(asistente.pedir).not.toHaveBeenCalled();
+  });
+
+  it('caché: Redis que no responde no demora la revisión más de ~300 ms', async () => {
+    redis.get.mockImplementation(() => new Promise<string | null>(() => undefined));
+    redis.contar.mockImplementation(() => new Promise<number>(() => undefined));
+    const inicio = Date.now();
+    const r = await service.revisar(TEXTO, 'frase', { profileId: 'p1' });
+    expect(Date.now() - inicio).toBeLessThan(1500);
+    expect(r).toMatchObject({ nivel: 2, revisado: true });
+    expect(asistente.pedir).toHaveBeenCalledTimes(1);
+  });
+
+  it('caché: solo guarda nivel, causa y revisado (nunca explicación ni sugerencia)', async () => {
+    await service.revisar(TEXTO, 'frase');
+    const valor = JSON.parse(redis.set.mock.calls[0]![1] as string);
+    expect(valor).toEqual({ nivel: 2, causa: 'odio', revisado: true });
+  });
+
+  it('caché: en la web, un acierto de nivel > 0 se vuelve a pedir para tener explicación y sugerencia', async () => {
+    await service.revisar(TEXTO, 'frase');
+    const web = await service.revisar(TEXTO, 'frase', { profileId: 'p1', paraWeb: true });
+    expect(asistente.pedir).toHaveBeenCalledTimes(2);
+    expect(web).toMatchObject({ explicacion: 'Ataca a un grupo.', sugerencia: 'Otra forma.' });
+  });
+
+  it('caché: en la web, un acierto de nivel 0 se usa', async () => {
+    asistente.pedir.mockResolvedValue({ nivel: 0 });
+    await service.revisar('Un texto normal', 'frase');
+    expect(await service.revisar('Un texto normal', 'frase', { profileId: 'p1', paraWeb: true })).toEqual({ nivel: 0, revisado: true });
+    expect(asistente.pedir).toHaveBeenCalledTimes(1);
+  });
+
+  it('caché: una entrada vieja con texto se lee sin explicación ni sugerencia', async () => {
+    const hash = createHash('sha256').update(`frase\n${TEXTO}`).digest('hex');
+    redis.mem.set(`asistente:rev:${hash}`, JSON.stringify({ nivel: 1, explicacion: 'vieja', sugerencia: 'vieja', revisado: true }));
+    expect(await service.revisar(TEXTO, 'frase')).toEqual({ nivel: 1, revisado: true });
+  });
+
+  it('límite diario: 100 revisiones por perfil y día; la 101 no llama al modelo', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-11-06T12:00:00Z'));
+    try {
+      for (let i = 0; i < 100; i++) {
+        expect((await service.revisar(`texto ${i}`, 'frase', { profileId: 'p1', paraWeb: true })).revisado).toBe(true);
+      }
+      expect(await service.revisar('texto 100', 'frase', { profileId: 'p1', paraWeb: true })).toEqual({ nivel: 0, revisado: false });
+      expect(await service.revisar('texto 101', 'frase', { profileId: 'p1' })).toEqual({ nivel: 0, revisado: false });
+      expect(asistente.pedir).toHaveBeenCalledTimes(100);
+      // Otro perfil tiene su propio contador.
+      expect((await service.revisar('texto 102', 'frase', { profileId: 'p2' })).revisado).toBe(true);
+      const [clave, ttl] = redis.contar.mock.calls[0]!;
+      expect(clave).toContain('2026-11-06');
+      expect(clave).not.toContain('p1');
+      expect(ttl).toBe(26 * 3600);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('límite diario: si Redis falla al contar, se permite', async () => {
+    redis.contar.mockRejectedValue(new Error('redis'));
+    expect(await service.revisar(TEXTO, 'frase', { profileId: 'p1' })).toMatchObject({ nivel: 2, revisado: true });
+  });
+
   it('esRevision: valida la forma de la salida', () => {
     expect(esRevision({ nivel: 0 })).toBe(true);
     expect(esRevision({ nivel: 1, causa: 'insultos_amenazas', explicacion: 'a', sugerencia: 'b' })).toBe(true);
@@ -135,7 +213,16 @@ describe('POST /asistente/revisar', () => {
       nivel: 1,
       revisado: true,
     });
-    expect(moderacion.revisar).toHaveBeenCalledWith('hola mundo', 'frase');
+    expect(moderacion.revisar).toHaveBeenCalledWith('hola mundo', 'frase', { profileId: 'p1', paraWeb: true });
+  });
+
+  it('con el asistente apagado responde nivel 0 sin revisar (el contrato de la web no cambia)', async () => {
+    const moderacion = { revisar: vi.fn().mockResolvedValue({ nivel: 0, revisado: true, apagado: true }) };
+    const ctrl = new AsistenteController({} as never, moderacion as never);
+    expect(await ctrl.revisar({ tipo: 'frase', texto: 'hola' }, { sub: 'u1', profileId: 'p1' } as never)).toEqual({
+      nivel: 0,
+      revisado: false,
+    });
   });
 
   it('tiene el límite de 20 por minuto', () => {
@@ -148,5 +235,8 @@ describe('POST /asistente/revisar', () => {
     expect(await validate(plainToInstance(RevisarTextoDto, { tipo: 'otro', texto: 'Un texto' }))).toHaveLength(1);
     expect(await validate(plainToInstance(RevisarTextoDto, { tipo: 'frase', texto: '' }))).toHaveLength(1);
     expect(await validate(plainToInstance(RevisarTextoDto, { tipo: 'frase', texto: 'x'.repeat(10_001) }))).toHaveLength(1);
+    // Hasta 5000 caracteres.
+    expect(await validate(plainToInstance(RevisarTextoDto, { tipo: 'frase', texto: 'x'.repeat(5000) }))).toHaveLength(0);
+    expect(await validate(plainToInstance(RevisarTextoDto, { tipo: 'frase', texto: 'x'.repeat(5001) }))).toHaveLength(1);
   });
 });

@@ -4,6 +4,7 @@ import type { TipoTexto } from '@decide/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { ModeracionPreviaService } from './moderacion-previa.service';
+import { nombreDeError } from './errores';
 
 const DIA_MS = 86_400_000;
 /** Un texto en revisión vence a los 7 días y nunca se publica solo. */
@@ -43,7 +44,9 @@ export class GuardiaService {
 
   async antesDePublicar(op: AntesDePublicar): Promise<{ revisado: boolean }> {
     if (op.sinModeracion) return { revisado: true };
-    const revision = await this.moderacion.revisar(op.texto, op.tipo);
+    const revision = await this.moderacion.revisar(op.texto, op.tipo, { profileId: op.autorProfileId });
+    // Apagado: se publica como en 3A, sin cola del nivel 3.
+    if (revision.apagado) return { revisado: true };
     if (!revision.revisado) return { revisado: false };
     if (revision.nivel !== 2 || !revision.causa) return { revisado: true };
 
@@ -92,7 +95,7 @@ export class GuardiaService {
         update: {},
       });
     } catch (err) {
-      this.logger.error('No se pudo encolar la revisión posterior', err instanceof Error ? err.stack : undefined);
+      this.logger.error(`No se pudo encolar la revisión posterior: ${nombreDeError(err)}`);
     }
   }
 }

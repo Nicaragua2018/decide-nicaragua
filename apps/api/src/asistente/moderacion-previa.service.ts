@@ -99,14 +99,51 @@ export function normalizarRevision(s: SalidaRevision): RevisionTexto {
   return r;
 }
 
-/** Lo guardado en caché: una revisión ya normalizada (nunca el texto). */
-function esRevisionGuardada(x: unknown): x is RevisionTexto {
-  return esRevision(x) && (x as { revisado?: unknown }).revisado === true;
+/**
+ * Lo guardado en caché: solo nivel, causa y revisado. Nunca el texto, ni la explicación
+ * ni la sugerencia (que repiten partes del texto). Una entrada vieja con más campos se recorta.
+ */
+type RevisionGuardada = Pick<RevisionTexto, 'nivel' | 'causa' | 'revisado'>;
+
+function soloLoGuardable(r: RevisionTexto): RevisionGuardada {
+  const g: RevisionGuardada = { nivel: r.nivel, revisado: r.revisado };
+  if (r.causa !== undefined) g.causa = r.causa;
+  return g;
+}
+
+/** Resultado interno: `apagado` dice que el asistente está apagado (se publica como en 3A, sin cola). */
+export type RevisionPrevia = RevisionTexto & { apagado?: true };
+
+export interface OpcionesRevisar {
+  /** Perfil que pide la revisión: cuenta para el límite diario. Sin perfil (examen) no se cuenta. */
+  profileId?: string | undefined;
+  /** La pide la web: necesita explicación y sugerencia, así que un acierto de caché de nivel > 0 no sirve. */
+  paraWeb?: boolean | undefined;
+}
+
+/** Revisiones del asistente por perfil y día UTC (web y guardia juntas). */
+export const LIMITE_DIARIO_POR_PERFIL = 100;
+const CONTADOR_SEGUNDOS = 26 * 3600;
+/** Tiempo máximo de cada operación de Redis: un Redis caído no puede demorar una publicación. */
+const REDIS_MAXIMO_MS = 300;
+
+/** Resuelve con el valor, o con null si tarda más de `ms` o falla. */
+async function conLimite<T>(p: Promise<T>, ms: number): Promise<T | null> {
+  let temporizador: ReturnType<typeof setTimeout> | undefined;
+  const vencido = new Promise<null>((resolve) => {
+    temporizador = setTimeout(() => resolve(null), ms);
+  });
+  try {
+    return await Promise.race([p.catch(() => null), vencido]);
+  } finally {
+    clearTimeout(temporizador);
+  }
 }
 
 /**
- * Moderación previa: clasifica un texto antes de publicarlo. Nunca lanza; si el asistente
- * no responde (apagado, sin margen, lento o con salida inválida) devuelve nivel 0 sin revisar.
+ * Moderación previa: clasifica un texto antes de publicarlo. Nunca lanza.
+ * - Asistente apagado: `apagado`, sin tocar Redis ni encolar (igual que 3A).
+ * - Encendido pero sin respuesta (sin margen, lento, salida inválida o límite diario): nivel 0 sin revisar.
  */
 @Injectable()
 export class ModeracionPreviaService {
@@ -117,11 +154,18 @@ export class ModeracionPreviaService {
     private readonly redis: RedisService,
   ) {}
 
-  async revisar(texto: string, tipo: TipoTexto): Promise<RevisionTexto> {
+  async revisar(texto: string, tipo: TipoTexto, opciones: OpcionesRevisar = {}): Promise<RevisionPrevia> {
+    if (!this.asistente.activo()) return { nivel: 0, revisado: true, apagado: true };
+
     // La clave es un hash: en Redis nunca queda el texto.
     const clave = `asistente:rev:${createHash('sha256').update(`${tipo}\n${texto}`).digest('hex')}`;
     const guardada = await this.leerCache(clave);
-    if (guardada) return guardada;
+    // La guardia usa cualquier acierto; la web solo el de nivel 0 (para los demás necesita la explicación).
+    if (guardada && (!opciones.paraWeb || guardada.nivel === 0)) return guardada;
+
+    if (opciones.profileId && !(await this.dentroDelLimite(opciones.profileId))) {
+      return { nivel: 0, revisado: false };
+    }
 
     const salida = await this.asistente.pedir({
       modelo: 'rapido',
@@ -135,20 +179,33 @@ export class ModeracionPreviaService {
     if (!salida) return { nivel: 0, revisado: false };
 
     const revision = normalizarRevision(salida);
-    try {
-      await this.redis.set(clave, JSON.stringify(revision), CACHE_SEGUNDOS);
-    } catch (err) {
-      this.logger.warn(`No se pudo guardar la revisión en caché: ${err instanceof Error ? err.name : 'error'}`);
-    }
+    const guardado = await conLimite(
+      Promise.resolve().then(() => this.redis.set(clave, JSON.stringify(soloLoGuardable(revision)), CACHE_SEGUNDOS)),
+      REDIS_MAXIMO_MS,
+    );
+    if (guardado === null) this.logger.warn('No se pudo guardar la revisión en caché');
     return revision;
   }
 
-  private async leerCache(clave: string): Promise<RevisionTexto | null> {
+  /** Suma una revisión al contador del perfil en el día UTC. Si Redis falla o tarda, se permite. */
+  private async dentroDelLimite(profileId: string): Promise<boolean> {
+    const dia = new Date().toISOString().slice(0, 10);
+    // El identificador del perfil va como hash: en Redis no queda quién usó el asistente.
+    const perfil = createHash('sha256').update(profileId).digest('hex');
+    const n = await conLimite(
+      Promise.resolve().then(() => this.redis.contar(`asistente:dia:${perfil}:${dia}`, CONTADOR_SEGUNDOS)),
+      REDIS_MAXIMO_MS,
+    );
+    return n === null || n <= LIMITE_DIARIO_POR_PERFIL;
+  }
+
+  private async leerCache(clave: string): Promise<RevisionGuardada | null> {
+    const crudo = await conLimite(Promise.resolve().then(() => this.redis.get(clave)), REDIS_MAXIMO_MS);
+    if (!crudo) return null;
     try {
-      const crudo = await this.redis.get(clave);
-      if (!crudo) return null;
       const valor: unknown = JSON.parse(crudo);
-      return esRevisionGuardada(valor) ? valor : null;
+      if (!esRevision(valor) || (valor as { revisado?: unknown }).revisado !== true) return null;
+      return soloLoGuardable(valor as RevisionTexto);
     } catch {
       return null;
     }

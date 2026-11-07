@@ -28,6 +28,9 @@ export class AsistenteController {
   @Throttle({ default: { limit: 20, ttl: 60_000 } })
   async revisar(@Body() dto: RevisarTextoDto, @CurrentUser() user: JwtPayload): Promise<RevisionTexto> {
     if (!user.profileId) throw new ForbiddenException('Perfil requerido');
-    return this.moderacion.revisar(dto.texto, dto.tipo);
+    const r = await this.moderacion.revisar(dto.texto, dto.tipo, { profileId: user.profileId, paraWeb: true });
+    // Para la web, apagado es lo mismo que «no revisado»: se publica sin aviso.
+    if (r.apagado) return { nivel: 0, revisado: false };
+    return r;
   }
 }

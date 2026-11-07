@@ -57,7 +57,7 @@ describe('GuardiaService (con frases.create)', () => {
     const resp = (err as UnprocessableEntityException).getResponse() as { codigo: string; revision: { nivel: number; causa: string } };
     expect(resp.codigo).toBe('nivel_2');
     expect(resp.revision).toMatchObject({ nivel: 2, causa: 'odio' });
-    expect(moderacion.revisar).toHaveBeenCalledWith(ODIO, 'frase');
+    expect(moderacion.revisar).toHaveBeenCalledWith(ODIO, 'frase', { profileId: YO });
     expect(prisma.frase.create).not.toHaveBeenCalled();
     expect(prisma.textoEnRevision.create).not.toHaveBeenCalled();
   });
@@ -132,6 +132,13 @@ describe('GuardiaService (con frases.create)', () => {
       create: { target: 'frase', targetId: 'f1' },
       update: {},
     });
+  });
+
+  it('guardia: con el asistente apagado publica y no encola (igual que 3A)', async () => {
+    moderacion.revisar.mockResolvedValue({ nivel: 0, revisado: true, apagado: true });
+    expect(await frases.create(YO, T, ODIO, 'ip')).toEqual({ id: 'f1' });
+    expect(prisma.frase.create).toHaveBeenCalled();
+    expect(prisma.colaRevisionPosterior.upsert).not.toHaveBeenCalled();
   });
 
   it('guardia: nivel 0 revisado publica y no encola', async () => {
