@@ -82,12 +82,13 @@ Qué entregar:
 - sugerencia: en los niveles 1 y 2, el texto completo dicho con respeto, que conserve la idea, los argumentos y la postura de quien escribe, incluida su crítica. No cambies lo que piensa ni lo suavices hasta vaciarlo. Si hay datos personales, quítalos.
 - En el nivel 0 no pongas causa, explicacion ni sugerencia.`;
 
-function tarea(tipo: TipoTexto): string {
+/** Instrucción completa para un tipo de texto. La revisión posterior (Task 5) usa la misma. */
+export function tareaRevision(tipo: TipoTexto): string {
   return `${TAREA_REVISION}\n\nEl texto es ${QUE_ES[tipo]}.`;
 }
 
 /** Normaliza la salida: un nivel 2 sin causa válida baja a 1; el 0 no lleva nada más. */
-function normalizar(s: SalidaRevision): RevisionTexto {
+export function normalizarRevision(s: SalidaRevision): RevisionTexto {
   let nivel = s.nivel;
   if (nivel === 2 && (s.causa === undefined || !CAUSAS_NIVEL_2.includes(s.causa))) nivel = 1;
   if (nivel === 0) return { nivel: 0, revisado: true };
@@ -126,14 +127,14 @@ export class ModeracionPreviaService {
       modelo: 'rapido',
       prioridad: 'interactiva',
       timeoutMs: TIEMPO_MAXIMO_MS,
-      tarea: tarea(tipo),
+      tarea: tareaRevision(tipo),
       material: texto,
       herramienta: { nombre: 'clasificar_texto', esquema: ESQUEMA_REVISION },
       validar: esRevision,
     });
     if (!salida) return { nivel: 0, revisado: false };
 
-    const revision = normalizar(salida);
+    const revision = normalizarRevision(salida);
     try {
       await this.redis.set(clave, JSON.stringify(revision), CACHE_SEGUNDOS);
     } catch (err) {

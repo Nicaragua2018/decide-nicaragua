@@ -4,6 +4,7 @@ import Anthropic from '@anthropic-ai/sdk';
 import { AuditModule } from '../audit/audit.module';
 import { BoardModule } from '../board/board.module';
 import { EmailModule } from '../email/email.module';
+import { ForumsModule } from '../forums/forums.module';
 import { AsistenteController } from './asistente.controller';
 import { RevisionesController } from './revisiones.controller';
 import { RevisionesService } from './revisiones.service';
@@ -12,9 +13,10 @@ import { ANTHROPIC_CLIENT, AsistenteService } from './asistente.service';
 import { ModeracionPreviaService } from './moderacion-previa.service';
 import { GuardiaService } from './guardia.service';
 import { Publicadores } from './publicadores';
+import { RevisionPosteriorService } from './revision-posterior.service';
 
 @Module({
-  imports: [AuditModule, EmailModule, BoardModule],
+  imports: [AuditModule, EmailModule, BoardModule, ForumsModule],
   controllers: [AsistenteController, RevisionesController],
   providers: [
     {
@@ -37,6 +39,7 @@ import { Publicadores } from './publicadores';
     GuardiaService,
     Publicadores,
     RevisionesService,
+    RevisionPosteriorService,
     AsistenteScheduler,
   ],
   exports: [AsistenteService, ModeracionPreviaService, GuardiaService, Publicadores],

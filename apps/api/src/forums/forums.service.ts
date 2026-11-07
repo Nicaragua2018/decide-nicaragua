@@ -78,6 +78,7 @@ const PLAZO_PENDIENTE_MS = 7 * DIA_MS;
 const SOLICITUD_ABIERTA = 'Ya hay una solicitud de moderación abierta para este contenido.';
 const YA_RESUELTA = 'Esta solicitud ya fue resuelta.';
 const YA_VENCIO = 'Esta solicitud ya venció.';
+const OTRA_FIRMA = 'Otra persona de la mesa acaba de firmar esta solicitud. Vuelve a cargar la página.';
 
 /** Solicitud vinculada que se cerró al restaurarse su inquietud (para auditarla después). */
 type VinculadaCerrada = { id: string; topicId: string; causa: ModeracionCausaValue | null };
@@ -430,6 +431,75 @@ export class ForumsService {
   }
 
   /**
+   * Solicitud de moderación abierta por el asistente (revisión posterior, nivel 2). Nunca oculta
+   * en firme: con causa urgente queda «provisional» (oculta ya, 48 h), salvo que el contenido ya
+   * haya tenido una provisional; si no, «pendiente» (7 días, sigue visible). La resuelve la mesa
+   * en `confirmar`. Devuelve null si el contenido no existe, ya está oculto o ya tiene una
+   * solicitud abierta.
+   */
+  async solicitarPorAsistente(
+    target: ModTarget,
+    targetId: string,
+    causa: ModeracionCausaValue,
+  ): Promise<{ id: string; estado: EstadoSolicitud } | null> {
+    if ((await this.estaOculto(target, targetId)) !== false) return null;
+    const abierta = await this.prisma.moderationAction.findFirst({
+      where: { target, targetId, status: { in: [...ABIERTAS] } },
+      select: { id: true },
+    });
+    if (abierta) return null;
+
+    const canceladas: string[] = [];
+    let resultado: { id: string; estado: 'provisional' | 'pendiente'; vinculada: (Vinculo & { id: string }) | null } | null;
+    try {
+      resultado = await this.prisma.$transaction(async (tx) => {
+        // Un tema se bloquea, como en hide(): una formalización u otra moderación simultánea espera.
+        if (target === 'tema' && (await this.bloquearTemaTx(tx, targetId))?.hidden === true) return null;
+        const previas = esUrgente(causa)
+          ? await tx.moderationAction.count({ where: { target, targetId, fueProvisional: true } })
+          : 0;
+        const estado: 'provisional' | 'pendiente' = esUrgente(causa) && previas === 0 ? 'provisional' : 'pendiente';
+        let vinculo: Vinculo | null = null;
+        if (estado === 'provisional') {
+          const o = await this.aplicarOcultacion(tx, target, targetId, causa, false);
+          canceladas.push(...o.canceladas);
+          vinculo = o.vinculo;
+        }
+        const plazo = plazoDe(estado);
+        const created = await tx.moderationAction.create({
+          data: {
+            target,
+            targetId,
+            causa,
+            reason: '',
+            moderatorProfileId: null,
+            origen: 'asistente',
+            status: estado,
+            venceAt: plazo === null ? null : new Date(Date.now() + plazo),
+            ...(estado === 'provisional' ? { fueProvisional: true } : {}),
+          },
+        });
+        const vinculada = vinculo
+          ? { ...vinculo, id: await this.crearVinculadaTx(tx, vinculo, causa, null, 'asistente') }
+          : null;
+        return { id: created.id, estado, vinculada };
+      });
+    } catch (err) {
+      // Otra solicitud abierta se registró a la vez (índice único parcial).
+      if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') return null;
+      throw err;
+    }
+    if (!resultado) return null;
+    this.auditarSolicitudDelAsistente(`${target}:${targetId}`, resultado.id, causa, resultado.estado);
+    const v = resultado.vinculada;
+    if (v && v.estado !== 'oculto') this.auditarSolicitudDelAsistente(`tema:${v.topicId}`, v.id, causa, v.estado);
+    for (const proposalId of canceladas) {
+      void this.audit.log({ action: 'decision.cancelled', resource: `proposal:${proposalId}`, metadata: { proposalId, origen: 'asistente' } });
+    }
+    return { id: resultado.id, estado: resultado.estado };
+  }
+
+  /**
    * Segunda firma de la mesa sobre una solicitud pendiente o provisional. La da otra persona
    * de la mesa, nunca quien la pidió. Todo cambio pasa por un updateMany condicionado al estado:
    * si el vencimiento u otra persona la resolvió antes, responde 409 sin tocar el contenido.
@@ -442,14 +512,30 @@ export class ForumsService {
     if (!action) throw new NotFoundException('Moderación no encontrada');
     const previo = action.status as string;
     if (previo !== 'pendiente' && previo !== 'provisional') throw new ConflictException(YA_RESUELTA);
-    if (action.moderatorProfileId === profileId) throw new ForbiddenException('No puedes confirmar tu propia solicitud.');
+    // La pidió el asistente: no hay «quien la pidió»; la primera firma humana ocupa ese lugar.
+    const delAsistente = (action.origen as string | undefined) === 'asistente';
+    if (action.moderatorProfileId === profileId) {
+      throw new ForbiddenException(
+        delAsistente ? 'Ya firmaste esta solicitud: falta otra persona de la mesa.' : 'No puedes confirmar tu propia solicitud.',
+      );
+    }
     const now = new Date();
     // Pasado el plazo nadie firma ni rechaza: el vencimiento la cierra (aunque aún no haya corrido).
     const vencida = (al: Date): boolean => action.venceAt === null || action.venceAt.getTime() <= al.getTime();
     if (vencida(now)) throw new ConflictException(YA_VENCIO);
     const target = checkTarget(action.target);
     const canceladas: string[] = [];
-    await this.prisma.$transaction(async (tx) => {
+    const resultado = await this.prisma.$transaction(async (tx): Promise<'primera_firma' | 'resuelta'> => {
+      if (aprobar && delAsistente && action.moderatorProfileId === null && (await this.requiereQuorumTx(tx, target, action.targetId))) {
+        // Donde una persona de la mesa necesitaría la segunda firma, el asistente no cuenta como una:
+        // la primera aprobación queda como firma y la solicitud sigue abierta.
+        const r = await tx.moderationAction.updateMany({
+          where: { id: moderationId, status: previo, venceAt: { gt: now }, moderatorProfileId: null },
+          data: { moderatorProfileId: profileId },
+        });
+        if (r.count === 0) throw new ConflictException(vencida(new Date()) ? YA_VENCIO : OTRA_FIRMA);
+        return 'primera_firma';
+      }
       const r = await tx.moderationAction.updateMany({
         where: { id: moderationId, status: previo, venceAt: { gt: now } },
         data: aprobar
@@ -458,10 +544,13 @@ export class ForumsService {
       });
       if (r.count === 0) throw new ConflictException(vencida(new Date()) ? YA_VENCIO : YA_RESUELTA);
       if (aprobar && previo === 'pendiente') {
-        // Solo llegan aquí soluciones y temas: no arrastran una moderación vinculada.
+        // Las de personas son soluciones y temas (sin vinculada); las del asistente pueden ser de
+        // cualquier tipo: una inquietud arrastra a su debate como en hide(), con el mismo origen.
         const o = await this.aplicarOcultacion(tx, target, action.targetId, action.causa, true);
         canceladas.push(...o.canceladas);
-        if (o.vinculo) await this.crearVinculadaTx(tx, o.vinculo, action.causa, action.moderatorProfileId);
+        if (o.vinculo) {
+          await this.crearVinculadaTx(tx, o.vinculo, action.causa, action.moderatorProfileId, delAsistente ? 'asistente' : undefined);
+        }
       } else if (aprobar && previo === 'provisional' && target === 'tema') {
         // La provisional solo pausaba la decisión: con la segunda firma se cancela (y la votación del plan 2).
         const t = await tx.proposal.findUnique({ where: { id: action.targetId }, select: { electionId: true } });
@@ -470,8 +559,14 @@ export class ForumsService {
         await this.aplicarRestauracion(tx, target, action.targetId);
         if (target === 'tema') await this.extenderPlazosTx(tx, action.targetId, action.createdAt, now);
       }
+      return 'resuelta';
     });
     const actor = await this.actorId(profileId);
+    if (resultado === 'primera_firma') {
+      // Sigue abierta: como una solicitud pendiente, no dice qué contenido ni por qué causa.
+      void this.audit.log({ ...actor, action: 'moderation.first_signature', resource: `moderation:${moderationId}`, ip, metadata: {} });
+      return;
+    }
     // Ya resuelta, la auditoría dice qué contenido fue (nunca el texto).
     void this.audit.log({
       ...actor,
@@ -510,6 +605,7 @@ export class ForumsService {
         createdAt: a.createdAt.toISOString(),
         esMia: a.moderatorProfileId === profileId,
         contexto: await this.contextoDe(target, a.targetId, a.reason),
+        solicitadaPorAsistente: (a.origen as string | undefined) === 'asistente',
       });
     }
     return result;
@@ -764,6 +860,7 @@ export class ForumsService {
     vinculo: Vinculo,
     causa: ModeracionCausaValue | null,
     moderatorProfileId: string | null,
+    origen?: 'asistente',
   ): Promise<string> {
     const plazo = plazoDe(vinculo.estado);
     const created = await tx.moderationAction.create({
@@ -773,6 +870,7 @@ export class ForumsService {
         causa,
         reason: LINKED_TOPIC_REASON,
         moderatorProfileId,
+        ...(origen ? { origen } : {}),
         status: vinculo.estado,
         venceAt: plazo === null ? null : new Date(Date.now() + plazo),
         ...(vinculo.estado === 'provisional' ? { fueProvisional: true } : {}),
@@ -799,6 +897,36 @@ export class ForumsService {
       return;
     }
     void this.audit.log({ ...actor, action: 'moderation.hidden', resource, ip, metadata: { moderationId, causa, estado } });
+  }
+
+  /**
+   * Audita una solicitud del asistente: sin actor ni ip y con `origen`. Como en las de personas,
+   * una pendiente no dice qué contenido ni por qué causa; una provisional ya ocultó el contenido.
+   */
+  private auditarSolicitudDelAsistente(
+    resource: string,
+    moderationId: string,
+    causa: ModeracionCausaValue,
+    estado: 'provisional' | 'pendiente' | 'oculto',
+  ): void {
+    if (estado === 'pendiente') {
+      void this.audit.log({ action: 'moderacion.solicitada', resource: `moderation:${moderationId}`, metadata: { origen: 'asistente' } });
+      return;
+    }
+    void this.audit.log({ action: 'moderacion.solicitada', resource, metadata: { origen: 'asistente', moderationId, causa, estado } });
+  }
+
+  /** true si el contenido está oculto, false si está visible, null si no existe. */
+  private async estaOculto(target: ModTarget, id: string): Promise<boolean | null> {
+    const where = { where: { id }, select: { hidden: true } };
+    let fila: { hidden: boolean } | null;
+    if (target === 'tema') fila = await this.prisma.proposal.findUnique(where);
+    else if (target === 'inquietud') fila = await this.prisma.inquietud.findUnique(where);
+    else if (target === 'frase') fila = await this.prisma.frase.findUnique(where);
+    else if (target === 'solucion') fila = await this.prisma.solucion.findUnique(where);
+    else if (target === 'informe') fila = await this.prisma.comisionInforme.findUnique(where);
+    else fila = await this.prisma.proposalComment.findUnique(where);
+    return fila ? fila.hidden : null;
   }
 
   private auditarCanceladas(

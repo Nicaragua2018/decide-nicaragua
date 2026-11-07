@@ -1,16 +1,23 @@
 import { Injectable, Logger, OnApplicationBootstrap, OnModuleDestroy } from '@nestjs/common';
 import { RevisionesService } from './revisiones.service';
+import { RevisionPosteriorService } from './revision-posterior.service';
 
 const HORA_MS = 3_600_000;
 
-/** Cada hora vence los textos en revisión cuyo plazo pasó. Nunca los publica. */
+/**
+ * Cada hora: vence los textos en revisión cuyo plazo pasó (nunca los publica) y revisa después
+ * lo publicado sin revisión previa (nivel 3). Una tarea que falla no detiene a la otra.
+ */
 @Injectable()
 export class AsistenteScheduler implements OnApplicationBootstrap, OnModuleDestroy {
   private readonly logger = new Logger(AsistenteScheduler.name);
   private timer: NodeJS.Timeout | null = null;
   private running = false;
 
-  constructor(private readonly revisiones: RevisionesService) {}
+  constructor(
+    private readonly revisiones: RevisionesService,
+    private readonly posterior: RevisionPosteriorService,
+  ) {}
 
   onApplicationBootstrap(): void {
     if (process.env['NODE_ENV'] === 'test' || process.env['VITEST']) return;
@@ -28,10 +35,18 @@ export class AsistenteScheduler implements OnApplicationBootstrap, OnModuleDestr
     if (this.running) return;
     this.running = true;
     try {
-      const n = await this.revisiones.vencer(new Date());
-      if (n > 0) this.logger.log(`Textos en revisión vencidos: ${n}`);
-    } catch (err) {
-      this.logger.error(`Falló el vencimiento de revisiones: ${err instanceof Error ? err.name : 'error'}`);
+      try {
+        const n = await this.revisiones.vencer(new Date());
+        if (n > 0) this.logger.log(`Textos en revisión vencidos: ${n}`);
+      } catch (err) {
+        this.logger.error(`Falló el vencimiento de revisiones: ${err instanceof Error ? err.name : 'error'}`);
+      }
+      try {
+        const n = await this.posterior.procesar(new Date());
+        if (n > 0) this.logger.log(`Revisión posterior: ${n} contenidos revisados`);
+      } catch (err) {
+        this.logger.error(`Falló la revisión posterior: ${err instanceof Error ? err.name : 'error'}`);
+      }
     } finally {
       this.running = false;
     }
