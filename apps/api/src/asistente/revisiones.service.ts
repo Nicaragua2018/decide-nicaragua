@@ -5,10 +5,16 @@ import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { BoardService } from '../board/board.service';
 import { Publicadores } from './publicadores';
+import { nombreDeError } from './errores';
 
 /** Firmas de personas distintas de la mesa para aprobar (o para rechazar). */
 const FIRMAS_PARA_RESOLVER = 2;
 const MOTIVO_GENERICO = 'No se pudo publicar';
+/** Vencidos y no publicables guardan el texto 30 días para que la persona lo reformule; después se borra. */
+const DIAS_RETENCION = 30;
+const DIA_MS = 86_400_000;
+/** Lo que se borra de una revisión resuelta: el texto y los argumentos (que también lo contienen). */
+const SIN_TEXTO = { texto: '', args: {} } as const;
 
 type RevisionConFirmas = Prisma.TextoEnRevisionGetPayload<{ include: { firmas: true } }>;
 
@@ -85,7 +91,7 @@ export class RevisionesService {
         if (enContra >= FIRMAS_PARA_RESOLVER) {
           const r = await tx.textoEnRevision.updateMany({
             where: { id, estado: 'pendiente' },
-            data: { estado: 'rechazado', resueltoAt: ahora },
+            data: { estado: 'rechazado', resueltoAt: ahora, ...SIN_TEXTO },
           });
           return r.count === 0 ? { accion: 'ninguna' } : { accion: 'rechazada' };
         }
@@ -99,7 +105,9 @@ export class RevisionesService {
       throw err;
     }
 
-    void this.audit.log({ action: 'asistente.revision_firmada', resource: `texto_en_revision:${id}`, metadata: { aprobar } });
+    // Quién firmó (como moderation.confirmed), nunca el texto ni el autor.
+    const actor = await this.actorId(profileId);
+    void this.audit.log({ ...actor, action: 'asistente.revision_firmada', resource: `texto_en_revision:${id}`, metadata: { aprobar } });
 
     if (transicion.accion === 'rechazada') {
       void this.audit.log({ action: 'asistente.revision_resuelta', resource: `texto_en_revision:${id}`, metadata: { estado: 'rechazado' } });
@@ -121,6 +129,19 @@ export class RevisionesService {
     return r.count;
   }
 
+  /** Borra el texto y los argumentos de los vencidos y no publicables resueltos hace más de 30 días. */
+  async purgar(now: Date): Promise<number> {
+    const r = await this.prisma.textoEnRevision.updateMany({
+      where: {
+        estado: { in: ['vencido', 'no_publicable'] },
+        resueltoAt: { lte: new Date(now.getTime() - DIAS_RETENCION * DIA_MS) },
+        texto: { not: '' },
+      },
+      data: { ...SIN_TEXTO },
+    });
+    return r.count;
+  }
+
   /** Publica ya fuera de la transacción. Si falla (tema cerrado, persona fuera…), queda no_publicable con el motivo. */
   private async publicar(id: string, t: Extract<Transicion, { accion: 'publicar' }>): Promise<void> {
     let estado: EstadoTextoEnRevision = 'publicado';
@@ -131,14 +152,24 @@ export class RevisionesService {
       estado = 'no_publicable';
       motivo = err instanceof HttpException ? mensajeDe(err) : MOTIVO_GENERICO;
       if (!(err instanceof HttpException)) {
-        this.logger.error('No se pudo publicar un texto aprobado', err instanceof Error ? err.stack : undefined);
+        this.logger.error(`No se pudo publicar un texto aprobado: ${nombreDeError(err)}`);
       }
     }
     await this.prisma.textoEnRevision.updateMany({
       where: { id, estado: 'publicando' },
-      data: { estado, motivo, resueltoAt: new Date() },
+      // Publicado: el texto ya vive en su lugar y aquí se borra. No publicable: se conserva (ver purgar).
+      data: { estado, motivo, resueltoAt: new Date(), ...(estado === 'publicado' ? SIN_TEXTO : {}) },
     });
     void this.audit.log({ action: 'asistente.revision_resuelta', resource: `texto_en_revision:${id}`, metadata: { estado } });
+  }
+
+  private async actorId(profileId: string): Promise<{ actorId: string } | Record<never, never>> {
+    try {
+      const p = await this.prisma.profile.findUnique({ where: { id: profileId }, select: { userId: true } });
+      return p?.userId ? { actorId: p.userId } : {};
+    } catch {
+      return {};
+    }
   }
 
   private async exigirMesa(profileId: string): Promise<void> {

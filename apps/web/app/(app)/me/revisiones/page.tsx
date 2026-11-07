@@ -33,7 +33,11 @@ export default async function MisRevisionesPage() {
       {items.map((r) => (
         <div key={r.id} className="card">
           <p className="card-title">{estadoEnPalabras(r)}</p>
-          <blockquote style={{ whiteSpace: 'pre-wrap' }}>{r.texto}</blockquote>
+          {r.texto ? (
+            <blockquote style={{ whiteSpace: 'pre-wrap' }}>{r.texto}</blockquote>
+          ) : (
+            <p className="card-meta">Texto eliminado: ya no se guarda una vez resuelta la revisión.</p>
+          )}
           <p className="card-meta">
             Causa: {MODERACION_CAUSAS.find((c) => c.value === r.causa)?.label ?? r.causa}
           </p>

@@ -5,7 +5,8 @@ import { RevisionPosteriorService } from './revision-posterior.service';
 const HORA_MS = 3_600_000;
 
 /**
- * Cada hora: vence los textos en revisión cuyo plazo pasó (nunca los publica) y revisa después
+ * Cada hora: vence los textos en revisión cuyo plazo pasó (nunca los publica), borra el texto de
+ * los vencidos y no publicables resueltos hace más de 30 días, y revisa después
  * lo publicado sin revisión previa (nivel 3). Una tarea que falla no detiene a la otra.
  */
 @Injectable()
@@ -40,6 +41,12 @@ export class AsistenteScheduler implements OnApplicationBootstrap, OnModuleDestr
         if (n > 0) this.logger.log(`Textos en revisión vencidos: ${n}`);
       } catch (err) {
         this.logger.error(`Falló el vencimiento de revisiones: ${err instanceof Error ? err.name : 'error'}`);
+      }
+      try {
+        const n = await this.revisiones.purgar(new Date());
+        if (n > 0) this.logger.log(`Textos en revisión purgados: ${n}`);
+      } catch (err) {
+        this.logger.error(`Falló la purga de textos en revisión: ${err instanceof Error ? err.name : 'error'}`);
       }
       try {
         const n = await this.posterior.procesar(new Date());

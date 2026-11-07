@@ -25,7 +25,11 @@ export function RevisionesList({ items, mesaSuficiente }: { items: TextoEnRevisi
       {items.length === 0 && <p className="empty-state">No hay textos en revisión.</p>}
       {items.map((r) => (
         <div key={r.id} className="card">
-          <blockquote className="card" style={{ whiteSpace: 'pre-wrap' }}>{r.texto}</blockquote>
+          {r.texto ? (
+            <blockquote className="card" style={{ whiteSpace: 'pre-wrap' }}>{r.texto}</blockquote>
+          ) : (
+            <p className="card-meta">Texto eliminado.</p>
+          )}
           <p className="card-meta">
             Causa: {MODERACION_CAUSAS.find((c) => c.value === r.causa)?.label ?? r.causa}
           </p>

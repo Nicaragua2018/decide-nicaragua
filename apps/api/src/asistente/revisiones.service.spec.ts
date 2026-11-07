@@ -1,6 +1,6 @@
 import 'reflect-metadata';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { ConflictException, ForbiddenException } from '@nestjs/common';
+import { ConflictException, ForbiddenException, Logger } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { RevisionesService } from './revisiones.service';
 
@@ -20,7 +20,7 @@ function build(opts: { cargos?: number } = {}) {
     autorProfileId: AUTOR,
     tipo: 'frase',
     args: { a: 1 },
-    texto: 'x',
+    texto: 'Texto de nivel 2 con datos de alguien',
     causa: 'odio',
     estado: 'pendiente',
     motivo: null as string | null,
@@ -58,6 +58,7 @@ function build(opts: { cargos?: number } = {}) {
       findMany: vi.fn(async () => firmas.map((f) => ({ ...f }))),
     },
     boardSeat: { count: vi.fn().mockResolvedValue(opts.cargos ?? 3) },
+    profile: { findUnique: vi.fn(async ({ where }: { where: { id: string } }) => ({ userId: `usr-${where.id.slice(2)}` })) },
   };
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   prisma['$transaction'] = vi.fn(async (cb: any) => cb(prisma));
@@ -183,5 +184,70 @@ describe('RevisionesService', () => {
     const todo = JSON.stringify(t.audit.log.mock.calls);
     expect(todo).not.toContain(AUTOR);
     expect(todo).not.toContain(M1);
+  });
+  it('retención: al publicarse se borran el texto y los argumentos (quedan causa, estado y fechas)', async () => {
+    await t.svc.firmar(M1, ID, true);
+    const r = await t.svc.firmar(M2, ID, true);
+    expect(t.publicadores.publicar).toHaveBeenCalledWith('frase', AUTOR, { a: 1 });
+    expect(t.rev.estado).toBe('publicado');
+    expect(t.rev.texto).toBe('');
+    expect(t.rev.args).toEqual({});
+    expect(t.rev.causa).toBe('odio');
+    expect(t.rev.resueltoAt).toBeInstanceOf(Date);
+    expect(r.texto).toBe('');
+  });
+
+  it('retención: al rechazarse se borran el texto y los argumentos', async () => {
+    await t.svc.firmar(M1, ID, false);
+    await t.svc.firmar(M2, ID, false);
+    expect(t.rev.estado).toBe('rechazado');
+    expect(t.rev.texto).toBe('');
+    expect(t.rev.args).toEqual({});
+  });
+
+  it('retención: no_publicable conserva el texto para que la persona lo reformule', async () => {
+    t.publicadores.publicar.mockRejectedValue(new ForbiddenException('No eres miembro de este grupo.'));
+    await t.svc.firmar(M1, ID, true);
+    await t.svc.firmar(M2, ID, true);
+    expect(t.rev.estado).toBe('no_publicable');
+    expect(t.rev.texto).toBe('Texto de nivel 2 con datos de alguien');
+  });
+
+  it('retención: purgar borra texto y argumentos de vencidos y no publicables 30 días después de resolverse', async () => {
+    t.prisma['textoEnRevision'].updateMany.mockResolvedValueOnce({ count: 3 });
+    const now = new Date('2026-12-31T00:00:00Z');
+    expect(await t.svc.purgar(now)).toBe(3);
+    expect(t.prisma['textoEnRevision'].updateMany).toHaveBeenCalledWith({
+      where: {
+        estado: { in: ['vencido', 'no_publicable'] },
+        resueltoAt: { lte: new Date(now.getTime() - 30 * 86_400_000) },
+        texto: { not: '' },
+      },
+      data: { texto: '', args: {} },
+    });
+  });
+
+  it('auditoría: la firma lleva el actorId de quien firma (nunca el texto ni el autor)', async () => {
+    await t.svc.firmar(M1, ID, true);
+    const evento = t.audit.log.mock.calls.map((c) => c[0]).find((e: { action: string }) => e.action === 'asistente.revision_firmada');
+    expect(evento.actorId).toBe(`usr-${M1.slice(2)}`);
+    const todo = JSON.stringify(t.audit.log.mock.calls);
+    expect(todo).not.toContain('Texto de nivel 2');
+    expect(todo).not.toContain(`usr-${AUTOR.slice(2)}`);
+  });
+
+  it('registro: un error al publicar se registra solo por su nombre (sin pila ni mensaje)', async () => {
+    const espia = vi.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined);
+    try {
+      t.publicadores.publicar.mockRejectedValue(new Error('boom con datos internos'));
+      await t.svc.firmar(M1, ID, true);
+      await t.svc.firmar(M2, ID, true);
+      const registrado = JSON.stringify(espia.mock.calls);
+      expect(registrado).toContain('Error');
+      expect(registrado).not.toContain('boom');
+      expect(registrado).not.toContain('at ');
+    } finally {
+      espia.mockRestore();
+    }
   });
 });
