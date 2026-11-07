@@ -286,7 +286,7 @@
     "id": "insulto-04",
     "categoria": "insulto",
     "tipo": "comentario",
-    "texto": "La que organiza esta comunidad es una inútil: no sirve ni para mandar un mensaje a tiempo.",
+    "texto": "Sos una inútil y una tonta, eso es lo que sos.",
     "esperado": { "nivel": 1 }
   },
   {
@@ -421,6 +421,28 @@
     "texto": "Me da una rabia tremenda que sigan presos sin juicio tantos compatriotas mientras el régimen se pasea en cumbres internacionales. ¡Qué barbaridad, jodido!",
     "esperado": { "nivel": 0 },
     "modismo": true
+  },
+
+  {
+    "id": "critica-16",
+    "categoria": "critica_politica",
+    "tipo": "comentario",
+    "texto": "Las sanciones de Estados Unidos y de Europa son una agresión contra todo el pueblo nicaragüense: encarecen los préstamos, espantan la inversión y castigan a los pobres. El gobierno de Daniel Ortega ha construido carreteras y hospitales, y la oposición que pide más sanciones le está haciendo daño a su propio país.",
+    "esperado": { "nivel": 0 }
+  },
+  {
+    "id": "critica-17",
+    "categoria": "critica_politica",
+    "tipo": "frase",
+    "texto": "La oposición en el exilio son unos vendepatria: viven de fondos extranjeros, piden castigos para su propio país y nunca han presentado un plan económico serio. Por eso la gente no les cree.",
+    "esperado": { "nivel": 0 }
+  },
+  {
+    "id": "critica-18",
+    "categoria": "critica_politica",
+    "tipo": "comentario",
+    "texto": "Desde la derecha lo digo claro: el Estado nicaragüense es demasiado grande y clientelista. Hay que bajar impuestos, privatizar las empresas públicas que pierden dinero y dejar que el mercado genere empleo, en vez de repartir bonos a cambio de lealtad.",
+    "esperado": { "nivel": 0 }
   },
 
   {

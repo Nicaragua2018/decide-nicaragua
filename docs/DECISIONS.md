@@ -638,8 +638,13 @@ El spec 3B (§6 y §7) pide un asistente de IA (Claude) que cuide la conversaci�
   - La sugerencia conserva el título y el cuerpo cuando el texto los tiene; la web la reparte en los dos campos.
 - **La causa `odio`:** «Incita al odio o ataca a un grupo por lo que es (origen, etnia, color, religión, sexo, orientación, discapacidad)», no urgente.
 - **La revisión de la mesa** de un texto de nivel 2: 2 aprobaciones de miembros distintos de la mesa publican y 2 rechazos rechazan; vence a los 7 días y nunca se publica sola. Quien escribió el texto no puede firmar su propia revisión. Pedir dos veces la misma revisión (misma persona, tipo, texto y destino, sin vencer) no crea otra. Si al publicar el destino ya no existe, la revisión queda «no publicable» con el motivo.
-- **Cuando el asistente pide una moderación** en la revisión posterior, no cuenta como firma de la mesa.
-  - **Firmas según el quórum de 3A-3b:** hacen falta 2 firmas humanas donde 3A-3b exige quórum (temas formales y soluciones) y 1 donde un moderador puede ocultar solo. El asistente no pesa ni más ni menos que una persona.
+- **Solicitud de moderación del asistente** (revisión posterior, nivel 2). El asistente nunca oculta en firme: su solicitud nunca queda «oculto» por sí sola y nunca cuenta como firma de la mesa.
+  - Con causa urgente queda **provisional**: el contenido se oculta ya durante 48 h y vuelve a mostrarse si la mesa la rechaza o si vence. Si ese contenido ya tuvo antes una solicitud provisional, queda **pendiente**.
+  - Con causa no urgente queda **pendiente**: el contenido sigue visible mientras la mesa decide.
+- **Firmas según el quórum de 3A-3b** para resolver la solicitud del asistente:
+  - donde 3A-3b exige quórum (temas formales y soluciones) hacen falta 2 firmas de personas distintas de la mesa: la primera aprobación queda como primera firma y la solicitud sigue abierta hasta la segunda;
+  - en el resto, una sola aprobación de la mesa la resuelve, como cuando un moderador oculta hoy;
+  - un rechazo de la mesa la cierra.
 - **Fecha al publicar desde la revisión:** el texto aprobado se publica con la fecha actual, no con la original. Pasar la fecha a cada publicador cuesta más de lo que aporta; si importa, se agrega en 3B-2.
 - **El tope de gasto:** `ASISTENTE_TOPE_MENSUAL_USD`, por defecto **20 USD** al mes. Las tareas nocturnas paran al **80 %** y las interactivas al **100 %**; después la moderación funciona como «servicio caído». Al llegar al 100 % se audita y se avisa una sola vez al mes por correo a `ASISTENTE_AVISO_EMAIL` (si falta, solo queda el registro).
 - **El interruptor:** `ASISTENTE_ACTIVO`, apagado por defecto. Solo funciona si vale exactamente `"true"` y hay clave. Apagado, la plataforma funciona igual que en 3A.
