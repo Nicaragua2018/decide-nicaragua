@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { MIN_ACTIVE_MEMBERS, type CrecerView } from '@decide/shared';
+import { FACILIDADES, GARANTIAS, MIN_ACTIVE_MEMBERS, type CrecerView } from '@decide/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { RedisService } from '../redis/redis.service';
 import { AsistenteService } from './asistente.service';
@@ -14,21 +14,6 @@ const CACHE_SEGUNDOS = 26 * 3600;
 const TIEMPO_MAXIMO_MS = 8000;
 /** Tiempo máximo de cada operación de Redis: un Redis caído no puede demorar la tarjeta. */
 const REDIS_MAXIMO_MS = 300;
-
-export const GARANTIAS: readonly string[] = [
-  'identidad protegida',
-  'voto secreto',
-  'reglas votadas por todos',
-  'sin caudillos',
-  'cada miembro avalado por dos personas',
-];
-
-export const FACILIDADES: readonly string[] = [
-  'debates y votaciones propios',
-  'grupos de trabajo',
-  'comisiones',
-  'apoyo mutuo en papeles, trabajo y seguridad',
-];
 
 type Texto = { texto: string; mensajeInvitacion: string };
 type Datos = { comunidad: string; miembros: number; activa: boolean; faltan: number };

@@ -1,7 +1,8 @@
 import 'reflect-metadata';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { AsistenteController } from './asistente.controller';
-import { CrecerService, FACILIDADES, GARANTIAS, META_ACTIVA, textoSinAsistente } from './crecer.service';
+import { FACILIDADES, GARANTIAS } from '@decide/shared';
+import { CrecerService, META_ACTIVA, textoSinAsistente } from './crecer.service';
 
 const AHORA = new Date('2026-11-07T12:00:00Z');
 const DIA = 24 * 3_600_000;

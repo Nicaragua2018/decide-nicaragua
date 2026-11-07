@@ -117,3 +117,19 @@ export type CrecerView =
       mensajeInvitacion: string;
       deAsistente: boolean;
     };
+
+/** Lo que la comunidad garantiza (texto fijo de la tarjeta «crecer» y del mensaje de invitación). */
+export const GARANTIAS: readonly string[] = [
+  'identidad protegida',
+  'voto secreto',
+  'reglas votadas por todos',
+  'sin caudillos',
+  'cada miembro avalado por dos personas',
+];
+
+export const FACILIDADES: readonly string[] = [
+  'debates y votaciones propios',
+  'grupos de trabajo',
+  'comisiones',
+  'apoyo mutuo en papeles, trabajo y seguridad',
+];
