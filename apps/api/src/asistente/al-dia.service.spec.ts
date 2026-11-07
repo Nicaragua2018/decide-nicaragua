@@ -115,25 +115,60 @@ describe('AlDiaService', () => {
     expect(op.herramienta.nombre).toBe('resumir_al_dia');
   });
 
-  it('el material del resumen no lleva uuid ni rutas', async () => {
-    prisma.decision.findMany.mockResolvedValue([
-      {
-        id: D1,
-        proposalId: P1,
-        fase: 'contada',
-        resultado: 'aprobada',
-        contadaAt: new Date('2026-11-06T11:00:00Z'),
-        votacionStartsAt: null,
-        votacionEndsAt: null,
-        proposal: { title: 'Arreglar el parque', groupId: G1 },
-      },
-    ]);
+  const decisionDe = (extra: Record<string, unknown>) => ({
+    id: D1,
+    proposalId: P1,
+    fase: 'contada',
+    resultado: 'aprobada',
+    contadaAt: null,
+    votacionStartsAt: null,
+    votacionEndsAt: null,
+    proposal: { title: 'Arreglar el parque', groupId: G1 },
+    ...extra,
+  });
+
+  it('el material del resumen no lleva uuid ni rutas, con varias clases a la vez', async () => {
+    prisma.decision.findMany.mockImplementation(async (args: any) => {
+      if (args.where.fase === 'votacion') return [decisionDe({ fase: 'votacion', resultado: null, votacionEndsAt: new Date('2026-11-08T00:00:00Z') })];
+      if (args.where.contadaAt) return [decisionDe({ contadaAt: new Date('2026-11-06T11:00:00Z') })];
+      return [decisionDe({ votacionStartsAt: new Date('2026-11-06T09:00:00Z'), proposalId: G1 })];
+    });
+    prisma.comisionInforme.findMany.mockResolvedValue([{ grupoId: G1, createdAt: new Date('2026-11-06T12:00:00Z') }]);
+    prisma.inquietud.findMany.mockResolvedValue([{ id: D1, title: 'Basura', groupId: G1, thresholdReachedAt: new Date('2026-11-06T13:00:00Z') }]);
     await service.ver('p1', AHORA);
     const { material, tarea } = asistente.pedir.mock.calls[0]![0];
+    expect(material.match(/^- /gm)!.length).toBeGreaterThanOrEqual(5);
     expect(material).not.toMatch(UUID);
     expect(material).not.toContain('/proposals');
     expect(material).not.toContain('/grupos');
+    expect(material).not.toContain('/inquietudes');
     expect(tarea).not.toMatch(UUID);
+  });
+
+  it('una votación que abrió en la ventana y cierra pronto sale una sola vez', async () => {
+    prisma.proposal.findMany.mockResolvedValue([]);
+    const d = decisionDe({ fase: 'votacion', resultado: null, votacionStartsAt: new Date('2026-11-06T09:00:00Z'), votacionEndsAt: new Date('2026-11-08T00:00:00Z') });
+    prisma.decision.findMany.mockImplementation(async (args: any) => (args.where.contadaAt ? [] : [d]));
+    const r = await service.ver('p1', AHORA);
+    expect(r.items).toHaveLength(1);
+    expect(r.items[0]!.clase).toBe('votacion_cierra');
+  });
+
+  it('un item nuevo cambia la clave y vuelve a pedir el resumen', async () => {
+    await service.ver('p1', AHORA);
+    prisma.proposal.findMany.mockResolvedValue([
+      { id: P1, title: 'Arreglar el parque', groupId: G1, createdAt: new Date('2026-11-06T10:00:00Z') },
+      { id: D1, title: 'Otro tema', groupId: G1, createdAt: new Date('2026-11-07T10:00:00Z') },
+    ]);
+    await service.ver('p1', AHORA);
+    expect(asistente.pedir).toHaveBeenCalledTimes(2);
+  });
+
+  it('los borradores se excluyen también en las decisiones', async () => {
+    await service.ver('p1', AHORA);
+    for (const llamada of prisma.decision.findMany.mock.calls) {
+      expect(llamada[0].where.proposal).toMatchObject({ status: { not: 'draft' } });
+    }
   });
 
   it('una segunda llamada con la misma ventana usa la caché', async () => {

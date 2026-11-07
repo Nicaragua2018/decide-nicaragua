@@ -124,12 +124,12 @@ export class AlDiaService {
     const comunidad = (id: string) => nombre.get(id) ?? '';
 
     const enVentana = { gte: desde, lte: ahora };
-    const proposalVisible = { groupId: { in: ids }, hidden: false };
+    const proposalVisible = { groupId: { in: ids }, hidden: false, status: { not: 'draft' as const } };
     const conPropuesta = { proposal: { select: { title: true, groupId: true } } };
 
     const [debates, aperturas, cierres, contadas, informes, umbrales] = await Promise.all([
       this.prisma.proposal.findMany({
-        where: { ...proposalVisible, status: { not: 'draft' }, createdAt: enVentana },
+        where: { ...proposalVisible, createdAt: enVentana },
         select: { id: true, title: true, groupId: true, createdAt: true },
         orderBy: { createdAt: 'desc' },
         take: MAX_ITEMS,
@@ -170,8 +170,10 @@ export class AlDiaService {
     for (const d of debates) {
       items.push({ clase: 'debate', titulo: d.title, comunidad: comunidad(d.groupId), ruta: `/proposals/${d.id}`, fecha: d.createdAt.toISOString() });
     }
+    // Una votación que abrió en la ventana y cierra pronto sale una sola vez, como «cierra».
+    const cierran = new Set(cierres.map((d) => d.proposalId));
     for (const d of aperturas) {
-      if (!d.votacionStartsAt) continue;
+      if (!d.votacionStartsAt || cierran.has(d.proposalId)) continue;
       items.push({
         clase: 'votacion_abierta',
         titulo: d.proposal.title,
@@ -229,7 +231,9 @@ export class AlDiaService {
   /** Resumen en caché por perfil y ventana; null si el asistente no responde. Redis lento o caído no lo impide. */
   private async resumir(profileId: string, desde: Date, items: ItemAlDia[]): Promise<string | null> {
     // La clave es un hash: en Redis no queda quién consultó.
-    const clave = `asistente:aldia:${createHash('sha256').update(profileId + desde.toISOString()).digest('hex')}`;
+    // Lleva también un hash de la lista (clase y ruta): el resumen se reutiliza solo mientras la lista no cambie.
+    const lista = createHash('sha256').update(items.map((i) => `${i.clase}${i.ruta}`).join(';')).digest('hex').slice(0, 16);
+    const clave = `asistente:aldia:${createHash('sha256').update(`${profileId}${desde.toISOString()}${lista}`).digest('hex')}`;
     const guardado = await conLimite(Promise.resolve().then(() => this.redis.get(clave)), REDIS_MAXIMO_MS);
     if (guardado) return guardado;
 
