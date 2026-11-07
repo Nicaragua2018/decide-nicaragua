@@ -1,31 +1,41 @@
 'use client';
 
 import { useActionState } from 'react';
-import { appealModeration, type ActionResult } from '@/lib/actions';
+import { appealModeration } from '@/lib/actions';
+import type { ActionResult } from '@/lib/actions';
 
-export function AppealForm({ moderationId, topicId, inquietudId }: { moderationId: string; topicId?: string; inquietudId?: string }) {
-  const [state, action, pending] = useActionState<ActionResult | null, FormData>(appealModeration, null);
+interface AppealFormProps {
+  moderationId: string;
+  topicId: string;
+}
 
-  if (state && 'success' in state) {
-    return <p className="alert alert-success">Tu apelación llegó a la mesa directiva.</p>;
+export function AppealForm({ moderationId, topicId }: AppealFormProps) {
+  const [state, formAction, isPending] = useActionState<ActionResult | null, FormData>(
+    appealModeration,
+    null,
+  );
+
+  if (state && !('error' in state)) {
+    return <p className="text-sm text-muted mt-1">Apelación enviada. Será revisada por los moderadores.</p>;
   }
 
   return (
-    <form action={action} className="form">
+    <form action={formAction} className="mt-1">
       <input type="hidden" name="moderationId" value={moderationId} />
-      {topicId && <input type="hidden" name="topicId" value={topicId} />}
-      {inquietudId && <input type="hidden" name="inquietudId" value={inquietudId} />}
-      <textarea
-        name="text"
-        className="form-textarea"
-        rows={3}
-        required
-        minLength={10}
-        maxLength={1000}
-        placeholder="Explica por qué crees que no debió ocultarse"
-      />
-      <button className="btn btn-primary btn-sm" disabled={pending}>Apelar</button>
-      {state && 'error' in state && <p className="alert alert-error">{state.error}</p>}
+      <input type="hidden" name="topicId"       value={topicId} />
+      <div className="form-field">
+        <textarea
+          name="reason"
+          required
+          className="form-textarea"
+          rows={2}
+          placeholder="Explica por qué crees que esta ocultación fue incorrecta…"
+        />
+      </div>
+      {state && 'error' in state && <p className="form-error">{state.error as string}</p>}
+      <button type="submit" className="btn btn-ghost btn-sm mt-1" disabled={isPending}>
+        {isPending ? 'Enviando…' : 'Apelar ocultación'}
+      </button>
     </form>
   );
 }

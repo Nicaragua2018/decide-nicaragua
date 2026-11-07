@@ -5,6 +5,7 @@ import VoteForm from '@/components/VoteForm';
 import { ConfirmForm } from '@/components/ConfirmForm';
 import { updateElectionStatusDirect, tallyElection } from '@/lib/actions';
 import type { ElectionDetail, ElectionResultResponse, ElectionStatus } from '@decide/shared';
+import { LiveBallotCount } from './LiveBallotCount';
 
 const STATUS_LABEL: Record<ElectionStatus, string> = {
   draft: 'Borrador', open: 'Abierta', tallied: 'Contada', cancelled: 'Cancelada',
@@ -64,7 +65,7 @@ export default async function ElectionPage({
             ? `${endsAt.toLocaleDateString('es-NI')}${isOpen && !hasEnded ? ` (${daysRemaining(endsAt)} restantes)` : ''}`
             : '—'
           }
-          {' · '}{election.ballotCount} voto{election.ballotCount !== 1 ? 's' : ''} emitidos
+          {' · '}<LiveBallotCount electionId={id} initialCount={election.ballotCount} />
         </p>
         {election.description && <p className="mt-2">{election.description}</p>}
       </div>
@@ -119,29 +120,16 @@ export default async function ElectionPage({
               </form>
             )}
             {isOpen && (
-              <>
-                {!election.proposalId && (
-                  <ConfirmForm
-                    action={updateElectionStatusDirect}
-                    message="¿Cancelar esta elección? Esta acción no se puede deshacer y todos los votos se descartarán."
-                  >
-                    <input type="hidden" name="electionId" value={id} />
-                    <input type="hidden" name="status"     value="cancelled" />
-                    <button className="btn btn-danger btn-sm">Cancelar elección</button>
-                  </ConfirmForm>
-                )}
-
-                <ConfirmForm
-                  action={tallyElection.bind(null, id)}
-                  message={
-                    hasEnded
-                      ? `¿Contar los votos ahora? Se procesarán ${election.ballotCount} votos con el método Condorcet-Schulze. Esta acción cerrará la votación.`
-                      : `La fecha de cierre aún no ha llegado (${endsAt.toLocaleDateString('es-NI')}). ¿Contar los votos igualmente?`
-                  }
-                >
-                  <button className="btn btn-primary btn-sm">Contar votos</button>
-                </ConfirmForm>
-              </>
+              <ConfirmForm
+                action={tallyElection.bind(null, id)}
+                message={
+                  hasEnded
+                    ? `¿Concluir la elección y contar los votos ahora? Se procesarán ${election.ballotCount} votos con el método Condorcet-Schulze. Esta acción cerrará la votación.`
+                    : `La fecha de cierre aún no ha llegado (${endsAt.toLocaleDateString('es-NI')}). ¿Concluir la elección y contar los votos igualmente?`
+                }
+              >
+                <button className="btn btn-primary btn-sm">Concluir elección y contar votos</button>
+              </ConfirmForm>
             )}
           </div>
           {isOpen && !hasEnded && (
