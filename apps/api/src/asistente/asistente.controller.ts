@@ -1,11 +1,12 @@
 import { BadRequestException, Body, Controller, ForbiddenException, Get, HttpCode, Post, UseGuards } from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
-import type { JwtPayload, RespuestaPanel, RevisionTexto } from '@decide/shared';
+import type { AlDiaView, JwtPayload, RespuestaPanel, RevisionTexto } from '@decide/shared';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { AsistenteService, type EstadoAsistente } from './asistente.service';
 import { ModeracionPreviaService } from './moderacion-previa.service';
 import { PanelService } from './panel.service';
+import { AlDiaService, VISTA_VACIA } from './al-dia.service';
 import { RevisarTextoDto } from './dto/revisar-texto.dto';
 import { PreguntarDto } from './dto/preguntar.dto';
 
@@ -16,6 +17,7 @@ export class AsistenteController {
     private readonly asistente: AsistenteService,
     private readonly moderacion: ModeracionPreviaService,
     private readonly panel: PanelService,
+    private readonly alDiaServicio: AlDiaService,
   ) {}
 
   /** Si el asistente funciona y si se alcanzó el tope del mes. Cualquier cuenta con perfil. */
@@ -47,5 +49,22 @@ export class AsistenteController {
       throw new BadRequestException('La última línea debe ser tu pregunta.');
     }
     return this.panel.preguntar({ userId: user.sub, profileId: user.profileId, status: user.status }, dto.mensajes);
+  }
+
+  /** «Desde tu última visita». Solo cuentas verificadas; las demás reciben la tarjeta apagada sin tocar su perfil. */
+  @Get('al-dia')
+  async alDia(@CurrentUser() user: JwtPayload): Promise<AlDiaView> {
+    if (!user.profileId) throw new ForbiddenException('Perfil requerido');
+    if (user.status !== 'verified_citizen') return { ...VISTA_VACIA };
+    return this.alDiaServicio.ver(user.profileId);
+  }
+
+  /** Cierra la tarjeta «Desde tu última visita». Sin efecto en cuentas sin verificar. */
+  @Post('al-dia/cerrar')
+  @HttpCode(204)
+  async cerrarAlDia(@CurrentUser() user: JwtPayload): Promise<void> {
+    if (!user.profileId) throw new ForbiddenException('Perfil requerido');
+    if (user.status !== 'verified_citizen') return;
+    await this.alDiaServicio.cerrar(user.profileId);
   }
 }

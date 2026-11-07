@@ -207,7 +207,7 @@ describe('ModeracionPreviaService', () => {
 describe('POST /asistente/revisar', () => {
   it('exige perfil y devuelve la revisión', async () => {
     const moderacion = { revisar: vi.fn().mockResolvedValue({ nivel: 1, revisado: true }) };
-    const ctrl = new AsistenteController({} as never, moderacion as never, {} as never);
+    const ctrl = new AsistenteController({} as never, moderacion as never, {} as never, {} as never);
     await expect(ctrl.revisar({ tipo: 'frase', texto: 'hola mundo' }, { sub: 'u1' } as never)).rejects.toThrow('Perfil requerido');
     expect(await ctrl.revisar({ tipo: 'frase', texto: 'hola mundo' }, { sub: 'u1', profileId: 'p1' } as never)).toEqual({
       nivel: 1,
@@ -218,7 +218,7 @@ describe('POST /asistente/revisar', () => {
 
   it('con el asistente apagado responde nivel 0 sin revisar (el contrato de la web no cambia)', async () => {
     const moderacion = { revisar: vi.fn().mockResolvedValue({ nivel: 0, revisado: true, apagado: true }) };
-    const ctrl = new AsistenteController({} as never, moderacion as never, {} as never);
+    const ctrl = new AsistenteController({} as never, moderacion as never, {} as never, {} as never);
     expect(await ctrl.revisar({ tipo: 'frase', texto: 'hola' }, { sub: 'u1', profileId: 'p1' } as never)).toEqual({
       nivel: 0,
       revisado: false,
