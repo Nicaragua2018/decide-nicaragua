@@ -200,8 +200,8 @@ export class AsistenteService {
       });
       if (count !== 1) return;
 
-      await this.audit.log({ action: 'asistente.tope_alcanzado', resource: `uso_asistente:${mes}`, metadata: { mes } });
-      await this.avisarPorCorreo();
+      // Sin esperar: un correo o una auditoría lentos no deben llevar a pedir() más allá de su tiempo.
+      void this.avisarTope(mes);
     } catch (err) {
       this.logger.error('No se pudo registrar el gasto del asistente', err instanceof Error ? err.stack : undefined);
     }
@@ -221,6 +221,16 @@ export class AsistenteService {
         return this.prisma.usoAsistente.upsert(args);
       }
       throw err;
+    }
+  }
+
+  /** Auditoría y correo del tope alcanzado. Nunca lanza (se llama sin esperar). */
+  private async avisarTope(mes: string): Promise<void> {
+    try {
+      await this.audit.log({ action: 'asistente.tope_alcanzado', resource: `uso_asistente:${mes}`, metadata: { mes } });
+      await this.avisarPorCorreo();
+    } catch (err) {
+      this.logger.error('No se pudo avisar del tope del asistente', err instanceof Error ? err.stack : undefined);
     }
   }
 

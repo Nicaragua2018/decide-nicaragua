@@ -273,6 +273,24 @@ describe('AsistenteService', () => {
       expect(email.sendAvisoTopeAsistente).not.toHaveBeenCalled();
     });
 
+    it('el aviso del tope no se espera: un correo o una auditoría lentos no demoran pedir', async () => {
+      prisma.usoAsistente.upsert.mockResolvedValue({ mes: 'x', costoMicrodolares: 21n * USD, avisoTopeAt: null });
+      prisma.usoAsistente.updateMany.mockResolvedValue({ count: 1 });
+      // Ninguna de las dos promesas se resuelve nunca.
+      audit.log.mockReturnValue(new Promise(() => undefined));
+      email.sendAvisoTopeAsistente.mockReturnValue(new Promise(() => undefined));
+      expect(await crear().pedir(op())).toEqual({ nivel: 0 });
+      expect(audit.log).toHaveBeenCalledTimes(1);
+    });
+
+    it('si la auditoría del tope falla, no hay rechazo sin capturar y pedir devuelve el resultado', async () => {
+      prisma.usoAsistente.upsert.mockResolvedValue({ mes: 'x', costoMicrodolares: 21n * USD, avisoTopeAt: null });
+      prisma.usoAsistente.updateMany.mockResolvedValue({ count: 1 });
+      audit.log.mockRejectedValue(new Error('db'));
+      expect(await crear().pedir(op())).toEqual({ nivel: 0 });
+      await new Promise((r) => setImmediate(r));
+    });
+
     it('si el correo falla, pedir igual devuelve el resultado', async () => {
       prisma.usoAsistente.upsert.mockResolvedValue({ mes: 'x', costoMicrodolares: 21n * USD, avisoTopeAt: null });
       prisma.usoAsistente.updateMany.mockResolvedValue({ count: 1 });
