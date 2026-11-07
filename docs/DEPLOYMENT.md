@@ -110,6 +110,40 @@ Y luego, tras el despliegue:
 docker compose --env-file env.production logs -f traefik api web
 ```
 
+## 6. Asistente de IA: clave y examen
+
+El asistente está apagado por defecto (ADR-025). Para encenderlo:
+
+1. Añadir la clave a `env.production` sin que se vea en pantalla ni quede en el historial:
+
+   ```bash
+   read -rs -p "Pega la clave de Anthropic y pulsa Enter: " CLAVE; echo
+   printf 'ANTHROPIC_API_KEY=%s\nASISTENTE_ACTIVO=false\n' "$CLAVE" >> env.production
+   unset CLAVE
+   chmod 600 env.production
+   ```
+
+   Si `env.production` ya tenía esas líneas, hay que borrar las viejas con `nano env.production`.
+
+2. Correr el examen. Usa una imagen de prueba con el código fuente y no toca la API en marcha:
+
+   ```bash
+   docker build -f apps/api/Dockerfile --target builder -t decide-api-examen .
+   docker run --rm --network decide_network --env-file env.production \
+     -e ASISTENTE_ACTIVO=true decide-api-examen \
+     pnpm --filter @decide/api asistente:examen
+   ```
+
+   Tiene que terminar sin fallos. El gasto de la corrida cuenta para el tope del mes.
+
+3. Solo si el examen aprueba completo: cambiar `ASISTENTE_ACTIVO=false` por `ASISTENTE_ACTIVO=true` en `env.production` y reiniciar:
+
+   ```bash
+   bash deploy.sh --env-file env.production --no-build
+   ```
+
+   Para apagarlo, volver a `false` y reiniciar igual.
+
 ## Notas finales
 
 - El archivo `env.production` contiene secretos y no debe compartirse públicamente.
