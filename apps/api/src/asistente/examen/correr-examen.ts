@@ -112,7 +112,7 @@ async function main(): Promise<number> {
       const refs = new Map(
         Object.entries(caso.refs ?? {}).map(([ref, ruta]) => [ref, { texto: 'Ver en la plataforma', ruta }]),
       );
-      const { salida } = await panel.responderConMaterial(caso.contexto, refs, [{ rol: 'persona', texto: caso.pregunta }]);
+      const { salida } = await panel.responderConMaterial(caso.contexto, refs, [...(caso.turnos ?? []), { rol: 'persona', texto: caso.pregunta }]);
       const fallo = evaluarCasoPanel(caso, salida);
       totalesPanel.set(caso.categoria, (totalesPanel.get(caso.categoria) ?? 0) + 1);
       if (fallo === null) {
