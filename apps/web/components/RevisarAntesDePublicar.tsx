@@ -228,9 +228,7 @@ export function useFormConRevision({
 
   function usarSugerencia(texto: string) {
     // Con título y cuerpo, el asistente devuelve «título, línea en blanco, cuerpo».
-    const corte = campos.length === 2 ? /?
-?
-/.exec(texto) : null;
+    const corte = campos.length === 2 ? /\r?\n\r?\n/.exec(texto) : null;
     const titulo = corte ? texto.slice(0, corte.index).trim() : null;
     const cuerpo = corte ? texto.slice(corte.index + corte[0].length).trim() : texto;
     if (titulo !== null && campos[0]) {
