@@ -12,6 +12,7 @@ import {
   verificarSorteo,
 } from '@/lib/actions';
 import { useAccion } from './useAccion';
+import { useRevisionPrevia, type ModoEnvio } from '@/components/RevisarAntesDePublicar';
 
 function Aviso({ msg }: { msg: string | null }) {
   return msg ? <p role="alert" className="alert alert-error mt-2">{msg}</p> : null;
@@ -157,18 +158,30 @@ export function InformeForm({ grupoId }: { grupoId: string }) {
   const { pending, error, run } = useAccion();
   const [texto, setTexto] = useState('');
   const [final, setFinal] = useState(false);
+  const rev = useRevisionPrevia('informe');
+
+  function enviar(modo: ModoEnvio) {
+    run(
+      async () => {
+        const r = await publicarInforme(grupoId, texto, final, modo === 'pedir');
+        rev.recibir(r);
+        return r;
+      },
+      () => {
+        setTexto('');
+        setFinal(false);
+      },
+    );
+  }
+
   return (
     <form
       className="form mt-3"
       onSubmit={(e) => {
         e.preventDefault();
-        run(
-          () => publicarInforme(grupoId, texto, final),
-          () => {
-            setTexto('');
-            setFinal(false);
-          },
-        );
+        void rev.revisar(texto).then((puede) => {
+          if (puede) enviar('normal');
+        });
       }}
     >
       <label className="form-label" htmlFor={`informe-${grupoId}`}>Publicar informe</label>
@@ -177,7 +190,16 @@ export function InformeForm({ grupoId }: { grupoId: string }) {
         <input type="checkbox" checked={final} onChange={(e) => setFinal(e.target.checked)} /> Es el informe final
       </label>
       <br />
-      <button type="submit" className="btn btn-primary btn-sm mt-2" disabled={pending}>Publicar informe</button>
+      {rev.aviso({
+        ocupado: pending || rev.revisando,
+        onUsarSugerencia: (s) => {
+          setTexto(s);
+          rev.limpiar();
+        },
+        onPublicarComoEsta: () => enviar('omitir'),
+        onPedirRevision: () => enviar('pedir'),
+      })}
+      <button type="submit" className="btn btn-primary btn-sm mt-2" disabled={pending || rev.revisando}>Publicar informe</button>
       <Aviso msg={error} />
     </form>
   );

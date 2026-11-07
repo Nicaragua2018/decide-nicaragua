@@ -1,12 +1,17 @@
 'use client';
 
-import { useActionState } from 'react';
-import { createInquietud, type ActionResult } from '@/lib/actions';
+import { createInquietud } from '@/lib/actions';
+import { useFormConRevision } from '@/components/RevisarAntesDePublicar';
 
 export function NewInquietudForm({ groupId }: { groupId: string }) {
-  const [state, action, pending] = useActionState<ActionResult | null, FormData>(createInquietud, null);
+  const { formRef, onSubmit, state, ocupado, aviso } = useFormConRevision({
+    tipo: 'inquietud',
+    accion: createInquietud,
+    campos: ['title', 'body'],
+    campoSugerencia: 'body',
+  });
   return (
-    <form action={action} className="form">
+    <form ref={formRef} onSubmit={onSubmit} className="form">
       <input type="hidden" name="groupId" value={groupId} />
       <input
         name="title"
@@ -23,7 +28,8 @@ export function NewInquietudForm({ groupId }: { groupId: string }) {
         maxLength={2000}
         placeholder="Explícala con más detalle (opcional)"
       />
-      <button className="btn btn-primary" disabled={pending}>Plantear inquietud</button>
+      {aviso}
+      <button className="btn btn-primary" disabled={ocupado}>Plantear inquietud</button>
       {state && 'error' in state && <p className="alert alert-error">{state.error}</p>}
       {state && 'success' in state && <p className="alert alert-success">Tu inquietud fue planteada.</p>}
     </form>

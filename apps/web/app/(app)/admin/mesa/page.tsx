@@ -1,10 +1,12 @@
 import type { Metadata } from 'next';
 import { conUnidad, ruleDefinition } from '@decide/shared';
+import type { TextoEnRevisionView } from '@decide/shared';
 import type { BoardActionSummary, BoardSeatSummary, ModeracionPorConfirmar, ModerationAppeal, PausaApeladaItem, UserListResponse } from '@decide/shared';
 import { serverFetch } from '@/lib/api';
 import { AppealsList } from './AppealsList';
 import { PausasApeladas } from './PausasApeladas';
 import { PorConfirmarList } from './PorConfirmarList';
+import { RevisionesList } from './RevisionesList';
 import { AssignSeatForm, ProposeActionForm, ROLE_LABEL, VoteButtons } from './MesaForms';
 
 export const metadata: Metadata = { title: 'Mesa directiva' };
@@ -25,7 +27,7 @@ function descripcionCambioRegla(a: BoardActionSummary): string {
 }
 
 export default async function MesaPage() {
-  const [seatsRes, meRes, actionsRes, usersRes, appealsRes, porConfirmarRes, pausasRes] = await Promise.all([
+  const [seatsRes, meRes, actionsRes, usersRes, appealsRes, porConfirmarRes, pausasRes, estadoRes, revisionesRes] = await Promise.all([
     serverFetch('/api/board/seats'),
     serverFetch('/api/board/me'),
     serverFetch('/api/board/actions'),
@@ -33,6 +35,8 @@ export default async function MesaPage() {
     serverFetch('/api/forums/moderation/appeals'),
     serverFetch('/api/forums/moderation/por-confirmar'),
     serverFetch('/api/grupos/pausas/apeladas'),
+    serverFetch('/api/asistente/estado'),
+    serverFetch('/api/asistente/revisiones'),
   ]);
   const seats = seatsRes.ok ? ((await seatsRes.json()) as BoardSeatSummary[]) : [];
   const me = meRes.ok ? ((await meRes.json()) as { role: string | null }) : { role: null };
@@ -43,6 +47,10 @@ export default async function MesaPage() {
   const appeals = appealsRes.ok ? ((await appealsRes.json()) as ModerationAppeal[]) : [];
   const porConfirmar = porConfirmarRes.ok ? ((await porConfirmarRes.json()) as ModeracionPorConfirmar[]) : [];
   const pausas = pausasRes.ok ? ((await pausasRes.json()) as PausaApeladaItem[]) : [];
+  const estadoAsistente = estadoRes.ok ? ((await estadoRes.json()) as { activo: boolean; topeAlcanzado: boolean }) : null;
+  const revisiones = revisionesRes.ok
+    ? ((await revisionesRes.json()) as { mesaSuficiente: boolean; revisiones: TextoEnRevisionView[] })
+    : { mesaSuficiente: true, revisiones: [] };
   const noElected = seats.every((s) => s.source !== 'eleccion');
 
   return (
@@ -51,6 +59,12 @@ export default async function MesaPage() {
         <h1 className="page-title">Mesa directiva</h1>
         <p className="page-sub">Tres cargos. Las acciones delicadas necesitan la aprobación de 2 de los 3.</p>
       </div>
+
+      {estadoAsistente?.topeAlcanzado && (
+        <p className="alert alert-warning">
+          El asistente alcanzó su tope de gasto del mes y descansa hasta el próximo. La plataforma sigue funcionando.
+        </p>
+      )}
 
       {seats.map((s) => (
         <div key={s.role} className="card">
@@ -97,6 +111,11 @@ export default async function MesaPage() {
       <section className="mt-2">
         <h2 className="section-title">Ocultaciones por confirmar</h2>
         <PorConfirmarList items={porConfirmar} />
+      </section>
+
+      <section className="mt-2">
+        <h2 className="section-title">Textos en revisión</h2>
+        <RevisionesList items={revisiones.revisiones} mesaSuficiente={revisiones.mesaSuficiente} />
       </section>
 
       <section className="mt-2">

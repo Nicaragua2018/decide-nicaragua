@@ -3,10 +3,19 @@
 import { cookies } from 'next/headers';
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
+import type { RevisionTexto, TipoTexto } from '@decide/shared';
 
 const API_URL = process.env.API_URL ?? 'http://localhost:4000';
 
-export type ActionResult = { error: string } | { success: true; devInviteUrl?: string; estado?: string };
+/**
+ * `revision`: el asistente dice que el texto no se puede publicar así (nivel 2).
+ * `enRevision`: el texto quedó en revisión de la mesa (no se publicó todavía).
+ */
+export type ActionResult =
+  | { error: string }
+  | { success: true; devInviteUrl?: string; estado?: string }
+  | { revision: RevisionTexto }
+  | { enRevision: true };
 
 async function actionFetch(path: string, init?: RequestInit): Promise<Response> {
   const cookieStore = await cookies();
@@ -30,6 +39,50 @@ async function parseError(res: Response): Promise<string> {
   }
 }
 
+/** Un 422 «nivel_2» o un 202 «en_revision» de la API no son errores: la web los muestra aparte. */
+async function respuestaDeRevision(res: Response): Promise<{ revision: RevisionTexto } | { enRevision: true } | null> {
+  if (res.status === 202) return { enRevision: true };
+  if (res.status === 422) {
+    try {
+      const body = (await res.clone().json()) as { codigo?: string; revision?: RevisionTexto };
+      if (body.codigo === 'nivel_2' && body.revision) return { revision: body.revision };
+    } catch {
+      // sin cuerpo legible: se trata como error normal
+    }
+  }
+  return null;
+}
+
+/** El formulario pide la revisión de la mesa (botón «Pedir revisión a la mesa»). */
+function pedirRevision(formData: FormData): { pedirRevision?: true } {
+  return formData.get('pedirRevision') === '1' ? { pedirRevision: true } : {};
+}
+
+/** Revisión previa del asistente. Si falla o no responde, no bloquea: devuelve `revisado: false`. */
+export async function revisarTexto(tipo: TipoTexto, texto: string): Promise<RevisionTexto> {
+  try {
+    const res = await actionFetch('/api/asistente/revisar', {
+      method: 'POST',
+      body: JSON.stringify({ tipo, texto }),
+    });
+    if (!res.ok) return { nivel: 0, revisado: false };
+    return (await res.json()) as RevisionTexto;
+  } catch {
+    return { nivel: 0, revisado: false };
+  }
+}
+
+export async function firmarRevision(id: string, aprobar: boolean): Promise<ActionResult> {
+  if (!/^[0-9a-f-]{36}$/i.test(id)) return { error: 'Solicitud no válida.' };
+  const res = await actionFetch(`/api/asistente/revisiones/${id}/firmar`, {
+    method: 'POST',
+    body: JSON.stringify({ aprobar }),
+  });
+  if (!res.ok) return { error: await parseError(res) };
+  revalidatePath('/admin/mesa');
+  return { success: true };
+}
+
 // ─── Proposals ────────────────────────────────────────────────────────────────
 
 export async function createProposal(
@@ -43,9 +96,12 @@ export async function createProposal(
       title:       formData.get('title'),
       body:        formData.get('body'),
       status:      formData.get('status') ?? 'draft',
+      ...pedirRevision(formData),
     }),
   });
 
+  const rev = await respuestaDeRevision(res);
+  if (rev) return rev;
   if (!res.ok) return { error: await parseError(res) };
   const data = await res.json() as { id: string };
   redirect(`/proposals/${data.id}`);
@@ -78,9 +134,12 @@ export async function createComment(
     body: JSON.stringify({
       body:     formData.get('body'),
       parentId: formData.get('parentId') || undefined,
+      ...pedirRevision(formData),
     }),
   });
 
+  const rev = await respuestaDeRevision(res);
+  if (rev) return rev;
   if (!res.ok) return { error: await parseError(res) };
   revalidatePath(`/proposals/${proposalId}`);
   return { success: true };
@@ -359,8 +418,10 @@ export async function createTopic(_prev: ActionResult | null, formData: FormData
   const forumId = String(formData.get('forumId'));
   const res = await actionFetch(`/api/deliberation/groups/${groupId}/proposals`, {
     method: 'POST',
-    body: JSON.stringify({ title: formData.get('title'), body: formData.get('body'), forumId }),
+    body: JSON.stringify({ title: formData.get('title'), body: formData.get('body'), forumId, ...pedirRevision(formData) }),
   });
+  const rev = await respuestaDeRevision(res);
+  if (rev) return rev;
   if (!res.ok) return { error: await parseError(res) };
   revalidatePath(`/foros/${forumId}`);
   return { success: true };
@@ -462,8 +523,10 @@ export async function createInquietud(_prev: ActionResult | null, formData: Form
   if (!isUuid(groupId)) return INVALID;
   const res = await actionFetch('/api/inquietudes', {
     method: 'POST',
-    body: JSON.stringify({ groupId, title: formData.get('title'), body: formData.get('body') }),
+    body: JSON.stringify({ groupId, title: formData.get('title'), body: formData.get('body'), ...pedirRevision(formData) }),
   });
+  const rev = await respuestaDeRevision(res);
+  if (rev) return rev;
   if (!res.ok) return { error: await parseError(res) };
   revalidatePath('/inquietudes');
   return { success: true };
@@ -498,8 +561,11 @@ export async function openDebate(_prev: ActionResult | null, formData: FormData)
       inquietudIds,
       title: formData.get('title'),
       body: formData.get('body'),
+      ...pedirRevision(formData),
     }),
   });
+  const rev = await respuestaDeRevision(res);
+  if (rev) return rev;
   if (!res.ok) return { error: await parseError(res) };
   const data = (await res.json()) as { proposalId: string };
   revalidatePath('/inquietudes');
@@ -512,8 +578,10 @@ export async function respondInquietud(_prev: ActionResult | null, formData: For
   if (!isUuid(id)) return INVALID;
   const res = await actionFetch(`/api/inquietudes/${id}/respuesta`, {
     method: 'POST',
-    body: JSON.stringify({ text: formData.get('text') }),
+    body: JSON.stringify({ text: formData.get('text'), ...pedirRevision(formData) }),
   });
+  const rev = await respuestaDeRevision(res);
+  if (rev) return rev;
   if (!res.ok) return { error: await parseError(res) };
   revalidatePath(`/inquietudes/${id}`);
   revalidatePath('/inquietudes');
@@ -531,8 +599,10 @@ export async function createFrase(
   if (!isUuid(proposalId)) return INVALID;
   const res = await actionFetch(`/api/frases/temas/${proposalId}`, {
     method: 'POST',
-    body: JSON.stringify({ text: formData.get('text') }),
+    body: JSON.stringify({ text: formData.get('text'), ...pedirRevision(formData) }),
   });
+  const rev = await respuestaDeRevision(res);
+  if (rev) return rev;
   if (!res.ok) return { error: await parseError(res) };
   revalidatePath(`/proposals/${proposalId}`);
   return { success: true };
@@ -564,8 +634,10 @@ export async function createSolucion(
   if (!isUuid(proposalId)) return INVALID;
   const res = await actionFetch(`/api/decisiones/temas/${proposalId}/soluciones`, {
     method: 'POST',
-    body: JSON.stringify({ title: formData.get('title'), description: formData.get('description') }),
+    body: JSON.stringify({ title: formData.get('title'), description: formData.get('description'), ...pedirRevision(formData) }),
   });
+  const rev = await respuestaDeRevision(res);
+  if (rev) return rev;
   if (!res.ok) return { error: await parseError(res) };
   revalidatePath(`/proposals/${proposalId}`);
   return { success: true };
@@ -632,8 +704,10 @@ export async function proponerGrupo(_prev: ActionResult | null, formData: FormDa
   if (!isUuid(ambitoId)) return { error: 'Elige una comunidad.' };
   const res = await actionFetch('/api/grupos', {
     method: 'POST',
-    body: JSON.stringify({ ambitoId, name: formData.get('name'), proposito: formData.get('proposito') }),
+    body: JSON.stringify({ ambitoId, name: formData.get('name'), proposito: formData.get('proposito'), ...pedirRevision(formData) }),
   });
+  const rev = await respuestaDeRevision(res);
+  if (rev) return rev;
   if (!res.ok) return { error: await parseError(res) };
   revalidatePath('/grupos');
   revalidatePath('/decisiones');
@@ -712,12 +786,19 @@ export async function guardarPapeletaComision(grupoId: string, orden: string[]):
   return { success: true };
 }
 
-export async function publicarInforme(grupoId: string, texto: string, final: boolean): Promise<ActionResult> {
+export async function publicarInforme(
+  grupoId: string,
+  texto: string,
+  final: boolean,
+  pedir = false,
+): Promise<ActionResult> {
   if (!isUuid(grupoId)) return INVALID;
   const res = await actionFetch(`/api/grupos/${grupoId}/informes`, {
     method: 'POST',
-    body: JSON.stringify({ texto, final }),
+    body: JSON.stringify({ texto, final, ...(pedir ? { pedirRevision: true } : {}) }),
   });
+  const rev = await respuestaDeRevision(res);
+  if (rev) return rev;
   if (!res.ok) return { error: await parseError(res) };
   revalidarGrupo(grupoId);
   return { success: true };
@@ -815,12 +896,15 @@ export async function proponerCambioRegla(
   key: string,
   valor: string,
   motivo?: string,
-): Promise<{ error: string } | { success: true; proposalId: string }> {
+  pedir = false,
+): Promise<{ error: string } | { success: true; proposalId: string } | { revision: RevisionTexto } | { enRevision: true }> {
   if (!isUuid(groupId)) return { error: 'Solicitud no válida.' };
   const res = await actionFetch('/api/rules/cambios', {
     method: 'POST',
-    body: JSON.stringify({ groupId, key, valor, ...(motivo ? { motivo } : {}) }),
+    body: JSON.stringify({ groupId, key, valor, ...(motivo ? { motivo } : {}), ...(pedir ? { pedirRevision: true } : {}) }),
   });
+  const rev = await respuestaDeRevision(res);
+  if (rev) return rev;
   if (!res.ok) return { error: await parseError(res) };
   const data = (await res.json()) as { id: string; proposalId: string };
   revalidatePath('/reglas');

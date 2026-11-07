@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import Link from 'next/link';
 import { serverFetch } from '@/lib/api';
 import type { AuthResponse } from '@decide/shared';
 import EditProfileForm from './EditProfileForm';
@@ -70,6 +71,10 @@ export default async function MePage() {
           </div>
         )}
       </div>
+
+      <p className="mt-4">
+        <Link href="/me/revisiones">Mis textos en revisión</Link>
+      </p>
 
       <EditProfileForm current={user} />
     </>

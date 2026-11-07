@@ -1,7 +1,8 @@
 'use client';
 
-import { useActionState, useEffect, useState } from 'react';
-import { proponerGrupo, type ActionResult } from '@/lib/actions';
+import { useState } from 'react';
+import { proponerGrupo } from '@/lib/actions';
+import { useFormConRevision } from '@/components/RevisarAntesDePublicar';
 
 export interface AmbitoOpcion {
   id: string;
@@ -10,22 +11,26 @@ export interface AmbitoOpcion {
 }
 
 export function ProponerGrupoForm({ ambitos }: { ambitos: AmbitoOpcion[] }) {
-  const [state, action, pending] = useActionState<ActionResult | null, FormData>(proponerGrupo, null);
   const [ambitoId, setAmbitoId] = useState(ambitos[0]?.id ?? '');
   const [name, setName] = useState('');
   const [proposito, setProposito] = useState('');
-
-  useEffect(() => {
-    if (state && 'success' in state) {
+  const { formRef, onSubmit, state, ocupado, aviso } = useFormConRevision({
+    tipo: 'subgrupo',
+    accion: proponerGrupo,
+    campos: ['name', 'proposito'],
+    campoSugerencia: 'proposito',
+    alUsarSugerencia: setProposito,
+    reiniciar: false,
+    alOk: () => {
       setName('');
       setProposito('');
-    }
-  }, [state]);
+    },
+  });
 
   const minimo = ambitos.find((a) => a.id === ambitoId)?.minimo ?? 5;
 
   return (
-    <form action={action} className="form card mt-4">
+    <form ref={formRef} onSubmit={onSubmit} className="form card mt-4">
       <p className="card-title">Proponer un grupo de trabajo</p>
       <div className="form-field">
         <label className="form-label" htmlFor="grupo-ambito">Comunidad</label>
@@ -69,7 +74,8 @@ export function ProponerGrupoForm({ ambitos }: { ambitos: AmbitoOpcion[] }) {
         />
       </div>
       <p className="text-xs text-muted">Nace solo cuando se suman {minimo} personas</p>
-      <button type="submit" className="btn btn-primary btn-sm" disabled={pending}>Proponer grupo</button>
+      {aviso}
+      <button type="submit" className="btn btn-primary btn-sm" disabled={ocupado}>Proponer grupo</button>
       {state && 'error' in state && <p role="alert" className="alert alert-error">{state.error}</p>}
       {state && 'success' in state && <p className="alert alert-success">Tu grupo quedó propuesto.</p>}
     </form>

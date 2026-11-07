@@ -17,7 +17,9 @@ export function useAccion() {
     startTransition(async () => {
       const r = await fn();
       if (r && 'error' in r) setError(r.error);
-      else {
+      else if (r && 'revision' in r) {
+        // el asistente bloqueó el texto: el formulario muestra el aviso, no hay nada que refrescar
+      } else {
         setHecho(true);
         alOk?.();
         router.refresh();

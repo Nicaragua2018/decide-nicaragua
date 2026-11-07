@@ -1,8 +1,9 @@
 'use client';
 
 import Link from 'next/link';
-import { use, useActionState } from 'react';
+import { use } from 'react';
 import { createProposal } from '@/lib/actions';
+import { useFormConRevision } from '@/components/RevisarAntesDePublicar';
 
 export default function NewProposalPage({
   params,
@@ -10,7 +11,13 @@ export default function NewProposalPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = use(params);
-  const [state, action, isPending] = useActionState(createProposal, null);
+  const { formRef, onSubmit, state, ocupado: isPending, aviso } = useFormConRevision({
+    tipo: 'tema',
+    accion: createProposal,
+    campos: ['title', 'body'],
+    campoSugerencia: 'body',
+    reiniciar: false,
+  });
 
   return (
     <>
@@ -22,7 +29,7 @@ export default function NewProposalPage({
       </div>
 
       <div className="card" style={{ maxWidth: 640 }}>
-        <form action={action} className="form">
+        <form ref={formRef} onSubmit={onSubmit} className="form">
           <input type="hidden" name="groupId" value={id} />
 
           <div className="form-field">
@@ -45,9 +52,11 @@ export default function NewProposalPage({
             </select>
           </div>
 
-          {'error' in (state ?? {}) && (
-            <p className="form-error">{(state as { error: string }).error}</p>
+          {state && 'error' in state && (
+            <p className="form-error">{state.error}</p>
           )}
+
+          {aviso}
 
           <div className="flex gap-2">
             <button type="submit" className="btn btn-primary" disabled={isPending}>

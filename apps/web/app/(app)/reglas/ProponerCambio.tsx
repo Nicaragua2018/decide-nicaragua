@@ -3,6 +3,7 @@
 import { useRouter } from 'next/navigation';
 import { useState, useTransition } from 'react';
 import { proponerCambioRegla } from '@/lib/actions';
+import { useRevisionPrevia, type ModoEnvio } from '@/components/RevisarAntesDePublicar';
 
 interface Props {
   groupId: string;
@@ -21,6 +22,7 @@ export function ProponerCambio({ groupId, ruleKey, type, value, min, max, option
   const [valor, setValor] = useState(value);
   const [motivo, setMotivo] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const rev = useRevisionPrevia('motivo_regla');
 
   if (!abierto) {
     return (
@@ -30,17 +32,27 @@ export function ProponerCambio({ groupId, ruleKey, type, value, min, max, option
     );
   }
 
-  function enviar(e: React.FormEvent) {
-    e.preventDefault();
+  function enviarCambio(modo: ModoEnvio) {
     setError(null);
     startTransition(async () => {
-      const r = await proponerCambioRegla(groupId, ruleKey, valor, motivo.trim() || undefined);
+      const r = await proponerCambioRegla(groupId, ruleKey, valor, motivo.trim() || undefined, modo === 'pedir');
+      if (rev.recibir(r)) return;
       if ('error' in r) {
         setError(r.error);
         return;
       }
+      if (!('proposalId' in r)) return;
       // Se va al debate recién abierto: ahí queda a la vista aunque se recargue la página.
       router.push(`/proposals/${r.proposalId}`);
+    });
+  }
+
+  function enviar(e: React.FormEvent) {
+    e.preventDefault();
+    setError(null);
+    // El motivo es opcional: sin motivo no hay texto que revisar.
+    void rev.revisar(motivo).then((puede) => {
+      if (puede) enviarCambio('normal');
     });
   }
 
@@ -82,8 +94,17 @@ export function ProponerCambio({ groupId, ruleKey, type, value, min, max, option
         onChange={(e) => setMotivo(e.target.value)}
       />
       {error && <p className="alert alert-error" role="alert">{error}</p>}
+      {rev.aviso({
+        ocupado: pending || rev.revisando,
+        onUsarSugerencia: (s) => {
+          setMotivo(s);
+          rev.limpiar();
+        },
+        onPublicarComoEsta: () => enviarCambio('omitir'),
+        onPedirRevision: () => enviarCambio('pedir'),
+      })}
       <div className="flex gap-2 mt-2">
-        <button type="submit" className="btn btn-primary btn-sm" disabled={pending}>
+        <button type="submit" className="btn btn-primary btn-sm" disabled={pending || rev.revisando}>
           {pending ? 'Enviando…' : 'Proponer un cambio'}
         </button>
         <button type="button" className="btn btn-ghost btn-sm" disabled={pending} onClick={() => setAbierto(false)}>
