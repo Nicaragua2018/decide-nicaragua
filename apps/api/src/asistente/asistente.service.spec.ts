@@ -337,7 +337,7 @@ describe('AsistenteService', () => {
 
     it('GET /asistente/estado exige perfil', async () => {
       const service = { estado: vi.fn().mockResolvedValue({ activo: true, topeAlcanzado: false }) };
-      const ctrl = new AsistenteController(service as never, {} as never);
+      const ctrl = new AsistenteController(service as never, {} as never, {} as never);
       await expect(ctrl.estado({ sub: 'u1', profileId: 'p1' } as never)).resolves.toEqual({ activo: true, topeAlcanzado: false });
       await expect(ctrl.estado({ sub: 'u1' } as never)).rejects.toThrow('Perfil requerido');
     });

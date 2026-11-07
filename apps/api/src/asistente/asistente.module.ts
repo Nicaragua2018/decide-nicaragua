@@ -16,6 +16,7 @@ import { AsistenteScheduler } from './asistente.scheduler';
 import { ANTHROPIC_CLIENT, AsistenteService } from './asistente.service';
 import { ModeracionPreviaService } from './moderacion-previa.service';
 import { GuardiaService } from './guardia.service';
+import { PanelService } from './panel.service';
 import { Publicadores } from './publicadores';
 import { RevisionPosteriorService } from './revision-posterior.service';
 
@@ -45,6 +46,7 @@ import { RevisionPosteriorService } from './revision-posterior.service';
     RevisionesService,
     RevisionPosteriorService,
     ContextoPersonaService,
+    PanelService,
     AsistenteScheduler,
   ],
   exports: [AsistenteService, ModeracionPreviaService, GuardiaService, Publicadores, ContextoPersonaService],
