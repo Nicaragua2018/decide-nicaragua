@@ -1,7 +1,7 @@
 'use client';
 
-import { useActionState } from 'react';
-import { openDebate, type ActionResult } from '@/lib/actions';
+import { openDebate } from '@/lib/actions';
+import { useFormConRevision } from '@/components/RevisarAntesDePublicar';
 
 export interface AgendaItem {
   id: string;
@@ -12,9 +12,15 @@ export interface AgendaItem {
 }
 
 export function OpenDebateForm({ groupId, items }: { groupId: string; items: AgendaItem[] }) {
-  const [state, action, pending] = useActionState<ActionResult | null, FormData>(openDebate, null);
+  const { formRef, formAction, onSubmit, state, ocupado, aviso } = useFormConRevision({
+    tipo: 'tema',
+    accion: openDebate,
+    campos: ['title', 'body'],
+    campoSugerencia: 'body',
+    reiniciar: false,
+  });
   return (
-    <form action={action} className="form">
+    <form ref={formRef} action={formAction} onSubmit={onSubmit} className="form">
       <input type="hidden" name="groupId" value={groupId} />
       {items.map((q) => (
         <label key={q.id} className="flex gap-2 items-center">
@@ -45,7 +51,8 @@ export function OpenDebateForm({ groupId, items }: { groupId: string; items: Age
         maxLength={10000}
         placeholder="Planteamiento del debate"
       />
-      <button className="btn btn-primary" disabled={pending}>Abrir debate con las inquietudes marcadas</button>
+      {aviso}
+      <button className="btn btn-primary" disabled={ocupado}>Abrir debate con las inquietudes marcadas</button>
       <p className="text-xs text-muted">Marca una o varias inquietudes de esta comunidad.</p>
       {state && 'error' in state && <p className="alert alert-error">{state.error}</p>}
     </form>

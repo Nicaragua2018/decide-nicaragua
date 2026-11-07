@@ -1,7 +1,8 @@
 'use client';
 
 import { useState } from 'react';
-import { createCommentDirect } from '@/lib/actions';
+import { createComment } from '@/lib/actions';
+import { useFormConRevision } from '@/components/RevisarAntesDePublicar';
 import { ModerarForm } from '@/components/ModerarForm';
 import type { CommentItem } from '@decide/shared';
 import { AppealForm } from './AppealForm';
@@ -16,6 +17,41 @@ interface CommentsSectionProps {
 function HideCommentForm({ proposalId, commentId }: { proposalId: string; commentId: string }) {
   return (
     <ModerarForm target="respuesta" targetId={commentId} topicId={proposalId} colapsable className="comment-reply-form" />
+  );
+}
+
+/** Formulario de un comentario (o de una respuesta si lleva `parentId`) con revisión previa. */
+function ComentarioForm({
+  proposalId,
+  parentId,
+  className,
+  children,
+  textarea,
+  alOk,
+}: {
+  proposalId: string;
+  parentId?: string;
+  className: string;
+  children: (ocupado: boolean) => React.ReactNode;
+  textarea: React.ReactNode;
+  alOk?: () => void;
+}) {
+  const { formRef, formAction, onSubmit, state, ocupado, aviso } = useFormConRevision({
+    tipo: 'comentario',
+    accion: createComment,
+    campos: ['body'],
+    campoSugerencia: 'body',
+    alOk,
+  });
+  return (
+    <form ref={formRef} action={formAction} onSubmit={onSubmit} className={className}>
+      <input type="hidden" name="proposalId" value={proposalId} />
+      {parentId && <input type="hidden" name="parentId" value={parentId} />}
+      {textarea}
+      {aviso}
+      {state && 'error' in state && <p className="alert alert-error">{state.error}</p>}
+      {children(ocupado)}
+    </form>
   );
 }
 
@@ -66,32 +102,35 @@ export function CommentsSection({ proposalId, comments, isOpen, canModerate = fa
             )}
 
             {replyingTo === comment.id && (
-              <form
-                action={createCommentDirect}
-                onSubmit={() => setReplyingTo(null)}
+              <ComentarioForm
+                proposalId={proposalId}
+                parentId={comment.id}
                 className="comment-reply-form"
+                alOk={() => setReplyingTo(null)}
+                textarea={
+                  <textarea
+                    name="body"
+                    required
+                    autoFocus
+                    rows={2}
+                    className="form-textarea"
+                    placeholder={`Responder a ${comment.authorDisplayName ?? 'este comentario'}…`}
+                  />
+                }
               >
-                <input type="hidden" name="proposalId" value={proposalId} />
-                <input type="hidden" name="parentId"   value={comment.id} />
-                <textarea
-                  name="body"
-                  required
-                  autoFocus
-                  rows={2}
-                  className="form-textarea"
-                  placeholder={`Responder a ${comment.authorDisplayName ?? 'este comentario'}…`}
-                />
-                <div className="comment-reply-actions">
-                  <button type="submit" className="btn btn-primary btn-sm">Publicar respuesta</button>
-                  <button
-                    type="button"
-                    className="btn btn-ghost btn-sm"
-                    onClick={() => setReplyingTo(null)}
-                  >
-                    Cancelar
-                  </button>
-                </div>
-              </form>
+                {(ocupado) => (
+                  <div className="comment-reply-actions">
+                    <button type="submit" className="btn btn-primary btn-sm" disabled={ocupado}>Publicar respuesta</button>
+                    <button
+                      type="button"
+                      className="btn btn-ghost btn-sm"
+                      onClick={() => setReplyingTo(null)}
+                    >
+                      Cancelar
+                    </button>
+                  </div>
+                )}
+              </ComentarioForm>
             )}
           </div>
 
@@ -124,21 +163,27 @@ export function CommentsSection({ proposalId, comments, isOpen, canModerate = fa
       ))}
 
       {isOpen && (
-        <form action={createCommentDirect} className="form comment-new-form">
-          <input type="hidden" name="proposalId" value={proposalId} />
-          <div className="form-field">
-            <label className="form-label" htmlFor="body">Añadir comentario</label>
-            <textarea
-              id="body"
-              name="body"
-              required
-              className="form-textarea"
-              placeholder="Escribe tu comentario…"
-              rows={3}
-            />
-          </div>
-          <button type="submit" className="btn btn-primary btn-sm">Publicar comentario</button>
-        </form>
+        <ComentarioForm
+          proposalId={proposalId}
+          className="form comment-new-form"
+          textarea={
+            <div className="form-field">
+              <label className="form-label" htmlFor="body">Añadir comentario</label>
+              <textarea
+                id="body"
+                name="body"
+                required
+                className="form-textarea"
+                placeholder="Escribe tu comentario…"
+                rows={3}
+              />
+            </div>
+          }
+        >
+          {(ocupado) => (
+            <button type="submit" className="btn btn-primary btn-sm" disabled={ocupado}>Publicar comentario</button>
+          )}
+        </ComentarioForm>
       )}
     </div>
   );

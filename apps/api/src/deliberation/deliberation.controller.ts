@@ -52,7 +52,7 @@ export class DeliberationController {
     @Req() req: Request,
   ): Promise<{ id: string }> {
     this.requireProfile(user);
-    return this.deliberationService.createProposal(groupId, dto, user.profileId!, extractIp(req));
+    return this.deliberationService.createProposal(groupId, dto, user.profileId!, extractIp(req), { pedirRevision: dto.pedirRevision });
   }
 
   /**
@@ -113,7 +113,7 @@ export class DeliberationController {
     @Req() req: Request,
   ): Promise<{ id: string }> {
     this.requireProfile(user);
-    return this.deliberationService.addComment(id, dto, user.profileId!, extractIp(req));
+    return this.deliberationService.addComment(id, dto, user.profileId!, extractIp(req), { pedirRevision: dto.pedirRevision });
   }
 
   // ─── Signals ───────────────────────────────────────────────────────────────

@@ -7,6 +7,7 @@ import { validate } from 'class-validator';
 import { GruposService } from './grupos.service';
 import { ProponerGrupoDto } from './dto/proponer-grupo.dto';
 import { LlevarPropuestaDto } from './dto/llevar-propuesta.dto';
+import { guardiaMock, publicadoresMock } from '../test/guardia-mock';
 
 const YO = 'p-yo';
 const AMBITO = '11111111-1111-4111-8111-111111111111';
@@ -86,6 +87,7 @@ describe('GruposService', () => {
     puedePausarEn: ReturnType<typeof vi.fn>;
   };
   let service: GruposService;
+  let guardia: ReturnType<typeof guardiaMock>;
   /** Miembros por grupo, para las comprobaciones de membresía. */
   let miembroDe: Set<string>;
 
@@ -113,6 +115,7 @@ describe('GruposService', () => {
       elegible: vi.fn().mockResolvedValue(false),
       puedePausarEn: vi.fn().mockResolvedValue(false),
     };
+    guardia = guardiaMock();
     service = new GruposService(
       prisma as never,
       access as never,
@@ -120,6 +123,8 @@ describe('GruposService', () => {
       audit as never,
       comisiones as never,
       bifurcaciones as never,
+      guardia as never,
+      publicadoresMock() as never,
     );
     prisma.group.findUnique.mockImplementation(async ({ where }: { where: { id: string } }) =>
       where.id === AMBITO ? ambito() : trabajo(),
@@ -152,6 +157,21 @@ describe('GruposService', () => {
     it('404 si el ámbito no existe', async () => {
       prisma.group.findUnique.mockResolvedValue(null);
       await expect(service.proponer(YO, dto, '1.1.1.1', NOW)).rejects.toBeInstanceOf(NotFoundException);
+    });
+
+    it('guardia: revisa nombre y propósito como subgrupo y no encola (no es moderable)', async () => {
+      tx.group.create.mockImplementation(async ({ data }: { data: { id: string } }) => ({ id: data.id }));
+      guardia.antesDePublicar.mockResolvedValue({ revisado: false });
+      await service.proponer(YO, dto, '1.1.1.1', NOW, { pedirRevision: true });
+      expect(guardia.antesDePublicar).toHaveBeenCalledWith({
+        tipo: 'subgrupo',
+        texto: `${dto.name}\n\n${dto.proposito}`,
+        autorProfileId: YO,
+        args: { ambitoId: dto.ambitoId, name: dto.name, proposito: dto.proposito },
+        pedirRevision: true,
+      });
+      expect(guardia.antesDePublicar.mock.invocationCallOrder[0]).toBeLessThan(prisma.$transaction.mock.invocationCallOrder[0] ?? 0);
+      expect(guardia.despuesDePublicar).not.toHaveBeenCalled();
     });
 
     it('crea el subgrupo convocando, con quien propone como primer miembro y el plazo del ámbito', async () => {

@@ -618,6 +618,54 @@ El spec 3A (§8) pide que las reglas no las fije nadie por su cuenta: la comunid
 
 ---
 
+## ADR-025: Asistente de IA, base y moderación previa (2026-11-06)
+**Fecha:** 2026-11-06
+**Estado:** Aceptado
+
+### Contexto
+El spec 3B (§6 y §7) pide un asistente de IA (Claude) que cuide la conversación sin decidir qué opiniones valen. La crítica política, contra cualquier lado, nunca se frena. Carlos pidió que toda complejidad esté automatizada y que el asistente nunca actúe por su cuenta.
+
+### Decisión
+- **La puerta única.** Toda llamada al servicio de IA pasa por `AsistenteService.pedir()`, que aplica el interruptor, el tope de gasto, la limpieza del texto (`limpiarTexto()` quita correos y teléfonos, pero no los rangos de años ni las fechas), el tiempo máximo y la validación de la salida. Nunca lanza: ante cualquier problema devuelve nada y la plataforma sigue como en 3A.
+  - Las instrucciones son fijas y viven en el código; el texto de los miembros va solo en el turno de usuario, dentro de `<material>`. Si el texto trae `<material>` o `</material>`, se neutraliza (`<\material`, `<\/material`) para que no pueda abrir ni cerrar la etiqueta. Una salida que no cumple el esquema se descarta.
+  - Al servicio de IA nunca van nombres, correos, identificadores de perfil ni datos de verificación.
+  - Solo los modelos Haiku aceptan forzar la herramienta; con Sonnet y Opus se pide por instrucción y se valida (si no hay una llamada válida, no hay resultado).
+- **Los tres niveles** de la moderación previa:
+  - **0:** se publica sin aviso. Incluye siempre la crítica política con argumentos, contra cualquier lado.
+  - **1:** se publica y se avisa en privado y con amabilidad, con una sugerencia que conserva la idea. Un insulto suelto es nivel 1. No se guarda el texto del aviso.
+  - **2:** no se publica sin la mesa, solo por `odio`, `insultos_amenazas` (amenazas y acoso), `datos_personales` o `ilegal_violencia`. Un nivel 2 sin una de esas causas baja a 1. Si el modelo duda entre dos niveles, elige el más bajo.
+  - El servidor revisa aunque la web no lo haya hecho (responde 422 en el nivel 2). Si el asistente no responde en **5 s**, el texto se publica y entra en la cola de la revisión posterior (nivel 3), que reintenta. Con el asistente apagado no se revisa ni se encola nada: la plataforma funciona igual que en 3A.
+  - La sugerencia conserva el título y el cuerpo cuando el texto los tiene; la web la reparte en los dos campos.
+- **La causa `odio`:** «Incita al odio o ataca a un grupo por lo que es (origen, etnia, color, religión, sexo, orientación, discapacidad)», no urgente.
+- **La revisión de la mesa** de un texto de nivel 2: 2 aprobaciones de miembros distintos de la mesa publican y 2 rechazos rechazan; vence a los 7 días y nunca se publica sola. Quien escribió el texto no puede firmar su propia revisión. Pedir dos veces la misma revisión (misma persona, tipo, texto y destino, sin vencer) no crea otra. Si al publicar el destino ya no existe, la revisión queda «no publicable» con el motivo.
+- **Solicitud de moderación del asistente** (revisión posterior, nivel 2). El asistente nunca oculta en firme: su solicitud nunca queda «oculto» por sí sola y nunca cuenta como firma de la mesa.
+  - Con causa urgente queda **provisional**: el contenido se oculta ya durante 48 h y vuelve a mostrarse si la mesa la rechaza o si vence. Si ese contenido ya tuvo antes una solicitud provisional, queda **pendiente**.
+  - Con causa no urgente queda **pendiente**: el contenido sigue visible mientras la mesa decide.
+- **Firmas según el quórum de 3A-3b** para resolver la solicitud del asistente:
+  - donde 3A-3b exige quórum (temas formales y soluciones) hacen falta 2 firmas de personas distintas de la mesa: la primera aprobación queda como primera firma y la solicitud sigue abierta hasta la segunda;
+  - en el resto, una sola aprobación de la mesa la resuelve, como cuando un moderador oculta hoy;
+  - un rechazo de la mesa la cierra.
+- **Fecha al publicar desde la revisión:** el texto aprobado se publica con la fecha actual, no con la original. Pasar la fecha a cada publicador cuesta más de lo que aporta; si importa, se agrega en 3B-2.
+- **El tope de gasto:** `ASISTENTE_TOPE_MENSUAL_USD`, por defecto **20 USD** al mes. Las tareas nocturnas paran al **80 %** y las interactivas al **100 %**; después la moderación funciona como «servicio caído». Al llegar al 100 % se audita y se avisa una sola vez al mes por correo a `ASISTENTE_AVISO_EMAIL` (si falta, solo queda el registro).
+- **El interruptor:** `ASISTENTE_ACTIVO`, apagado por defecto. Solo funciona si vale exactamente `"true"` y hay clave. Apagado, la plataforma funciona igual que en 3A: la revisión previa no toca Redis ni deja nada en la cola del nivel 3 (Ruling 14). Solo «encendido pero sin respuesta» (lento, tope o límite diario) publica y encola.
+- **Límite diario por perfil:** 100 revisiones del asistente por perfil y día UTC, sumando las de la web (`POST /asistente/revisar`) y las de la guardia. Se cuentan en Redis con un hash del perfil (plazo de 26 h); si Redis falla o tarda, se permite. Pasado el límite, el texto cuenta como no revisado: se publica y entra en la cola. `POST /asistente/revisar` admite hasta 5000 caracteres; un texto más largo lo revisa la guardia al enviarlo. Cada operación de Redis tiene un tiempo máximo de 300 ms.
+- **Respuestas de quien organiza** (Ruling 16): pasan por la revisión previa, pero si el asistente no la revisó no se encola la inquietud del miembro; la mesa puede moderarla a mano.
+- **Retención del texto de nivel 2** (Ruling 15): al publicarse o rechazarse, la revisión pierde el texto y los argumentos (quedan causa, estado y fechas; la persona ve «Texto eliminado»). Vencidos y no publicables conservan el texto para que la persona lo reformule, y el programador de cada hora lo borra 30 días después de resolverse.
+- **Registros:** los errores del asistente se registran solo por su nombre (y el código de Prisma), nunca con la pila ni el mensaje, que pueden repetir texto de miembros. La firma de una revisión se audita con quién firmó (`actorId`), sin texto ni autor.
+- **El examen** (`apps/api/src/asistente/examen/casos.json`): casos inventados de manipulación, odio, amenazas, datos personales, insultos, crítica política contra todos los lados y textos neutros, con modismos nicaragüenses. Se corre con `ASISTENTE_ACTIVO=true pnpm --filter @decide/api asistente:examen` y hay que aprobarlo completo para encender el asistente, y otra vez antes de cada cambio de instrucciones o de modelo.
+
+### Consecuencias
+- **Límite conocido: el examen requiere la clave de Carlos y se corre a mano.** No corre en las pruebas automáticas; estas solo comprueban que los casos estén bien formados. Mientras no apruebe, el asistente sigue apagado.
+  - El examen se corre desde una copia del código fuente con las dependencias de desarrollo instaladas (usa `tsx`), no desde la imagen de producción, que no las trae.
+- La caché de Redis guarda durante 10 minutos, bajo una clave que es un hash del texto, solo el nivel, la causa y si se revisó: nunca el texto, la explicación ni la sugerencia. Por eso, en la web, un acierto de nivel 1 o 2 se vuelve a pedir para mostrar la explicación y la sugerencia; la guardia del servidor sí usa el acierto.
+- Los formularios con revisión previa llevan la acción del servidor en `action` (como en 3A): si alguien envía antes de que cargue el JavaScript, el texto va por POST y lo revisa la guardia; nunca por GET en la URL.
+- La relación de la moderación con quien moderó es `Restrict`, como en 3A: borrar un perfil con moderaciones sigue bloqueado.
+- Una revisión que queda «publicando» porque el servidor se cayó a mitad no se recupera sola todavía.
+- Un tema que se abre solo al vencer el plazo de una inquietud no se vuelve a revisar: copia una inquietud que ya pasó por la revisión.
+- Siguen 3B-2 (acompañar) y 3B-3 (acuerdos).
+
+---
+
 ## Decisiones pendientes
 
 | ID | Pregunta | Prioridad |

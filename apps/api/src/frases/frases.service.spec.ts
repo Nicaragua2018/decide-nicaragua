@@ -8,6 +8,7 @@ import { GroupAccessService } from '../groups/group-access.service';
 import { CreateFraseDto } from './dto/create-frase.dto';
 import { VoteFraseDto } from './dto/vote-frase.dto';
 import type { OpinionResult } from './opinion-groups';
+import { guardiaMock, publicadoresMock } from '../test/guardia-mock';
 
 /** Permite sustituir analyzeOpinions en una prueba concreta; por defecto usa el real. */
 const ctl = vi.hoisted(() => ({ override: null as null | (() => OpinionResult) }));
@@ -49,6 +50,7 @@ describe('FrasesService', () => {
   let audit: { log: ReturnType<typeof vi.fn> };
   let rules: { getInt: ReturnType<typeof vi.fn> };
   let service: FrasesService;
+  let guardia: ReturnType<typeof guardiaMock>;
 
   beforeEach(() => {
     ctl.override = null;
@@ -58,7 +60,15 @@ describe('FrasesService', () => {
     prisma.proposal.findUnique.mockResolvedValue({ id: T, groupId: G, status: 'open', hidden: false });
     prisma.groupMembership.findUnique.mockResolvedValue({ id: 'm1' });
     prisma.profile.findUnique.mockResolvedValue({ userId: 'u1' });
-    service = new FrasesService(prisma as never, audit as never, rules as never, new GroupAccessService(prisma as never));
+    guardia = guardiaMock();
+    service = new FrasesService(
+      prisma as never,
+      audit as never,
+      rules as never,
+      new GroupAccessService(prisma as never),
+      guardia as never,
+      publicadoresMock() as never,
+    );
   });
 
   describe('DTOs', () => {
@@ -176,6 +186,21 @@ describe('FrasesService', () => {
   });
 
   describe('escritura', () => {
+    it('guardia: create revisa como frase antes de escribir y encola después', async () => {
+      prisma.frase.create.mockResolvedValue({ id: 'f1' });
+      guardia.antesDePublicar.mockResolvedValue({ revisado: false });
+      await service.create(YO, T, '  Una frase de prueba  ', 'ip', { pedirRevision: true });
+      expect(guardia.antesDePublicar).toHaveBeenCalledWith({
+        tipo: 'frase',
+        texto: 'Una frase de prueba',
+        autorProfileId: YO,
+        args: { proposalId: T, text: '  Una frase de prueba  ' },
+        pedirRevision: true,
+      });
+      expect(guardia.antesDePublicar.mock.invocationCallOrder[0]).toBeLessThan(prisma.frase.create.mock.invocationCallOrder[0] ?? 0);
+      expect(guardia.despuesDePublicar).toHaveBeenCalledWith('frase', 'f1', false);
+    });
+
     it('crea la frase y la audita con { proposalId }', async () => {
       prisma.frase.create.mockResolvedValue({ id: 'f1' });
       expect(await service.create(YO, T, 'Una frase de prueba', '1.1.1.1')).toEqual({ id: 'f1' });

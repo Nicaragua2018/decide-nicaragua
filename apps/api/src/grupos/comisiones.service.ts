@@ -4,11 +4,14 @@ import {
   ForbiddenException,
   Injectable,
   Logger,
+  type OnModuleInit,
 } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
 import { Prisma } from '@prisma/client';
 import type { ComisionView } from '@decide/shared';
 import { PrismaService } from '../prisma/prisma.service';
+import { GuardiaService, type OpcionesPublicar } from '../asistente/guardia.service';
+import { Publicadores } from '../asistente/publicadores';
 import { AuditService } from '../audit/audit.service';
 import { RulesService } from '../rules/rules.service';
 import { EN_PAUSA, GroupAccessService } from '../groups/group-access.service';
@@ -100,7 +103,7 @@ const delAmbito = (grupoId: string, ambitoId: string) => ({
  * y se forman por sorteo verificable o por elección con preferencias (Schulze repetido).
  */
 @Injectable()
-export class ComisionesService {
+export class ComisionesService implements OnModuleInit {
   private readonly logger = new Logger(ComisionesService.name);
 
   constructor(
@@ -109,7 +112,18 @@ export class ComisionesService {
     private readonly rules: RulesService,
     private readonly audit: AuditService,
     private readonly forums: ForumsService,
+    private readonly guardia: GuardiaService,
+    private readonly publicadores: Publicadores,
   ) {}
+
+  /** La revisión de la mesa publica un informe aprobado con la misma llamada (sin ip). */
+  onModuleInit(): void {
+    this.publicadores.registrar('informe', async (autor, args, opts) => {
+      const a = args as { id: string; texto: string; final: boolean };
+      await this.publicarInforme(autor, a.id, a.texto, a.final, '', new Date(), opts);
+      return { id: a.id };
+    });
+  }
 
   private async auditar(
     action: string,
@@ -310,6 +324,7 @@ export class ComisionesService {
     final: boolean,
     ip: string,
     now: Date = new Date(),
+    opts: OpcionesPublicar = {},
   ): Promise<void> {
     const g = await this.comisionLegible(id, profileId);
     // Miembro de la comisión y comisión activa (403 / 409).
@@ -324,17 +339,26 @@ export class ComisionesService {
       );
     }
     const dias = await this.rules.getInt('comision.informe_cada_dias', await this.comunidadDe(g.parentGroupId));
-    await this.prisma.$transaction(async (tx) => {
+    const { revisado } = await this.guardia.antesDePublicar({
+      tipo: 'informe',
+      texto: limpio,
+      autorProfileId: profileId,
+      args: { id, texto: limpio, final },
+      ...opts,
+    });
+    const informeId = await this.prisma.$transaction(async (tx) => {
       const actual = await this.bloquear(tx, id);
       if (actual.trabajoEstado !== 'activo') throw new ConflictException(NO_ACTIVA);
-      await tx.comisionInforme.create({ data: { grupoId: id, autorProfileId: profileId, texto: limpio, final } });
+      const informe = await tx.comisionInforme.create({ data: { grupoId: id, autorProfileId: profileId, texto: limpio, final } });
       const res = await tx.group.updateMany({
         where: { id, trabajoEstado: 'activo' },
         data: final ? { trabajoEstado: 'cerrado' } : { proximoInformeAt: new Date(now.getTime() + dias * DIA_MS) },
       });
       if (res.count !== 1) throw new ConflictException(NO_ACTIVA);
       if (final) await this.cerrarTemasTx(tx, id, now);
+      return informe.id;
     });
+    await this.guardia.despuesDePublicar('informe', informeId, revisado);
     await this.auditar('comision.report_published', id, profileId, ip);
     if (final) await this.auditar('comision.closed', id, profileId, ip);
   }

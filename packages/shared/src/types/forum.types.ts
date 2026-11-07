@@ -67,4 +67,6 @@ export interface ModeracionPorConfirmar {
   esMia: boolean;
   /** Contexto para la mesa: «Propuesta formal», «Debate vinculado a una inquietud oculta» o null. */
   contexto: string | null;
+  /** La abrió el asistente (revisión posterior): no hay quien la pidió y cualquier persona de la mesa firma. */
+  solicitadaPorAsistente: boolean;
 }

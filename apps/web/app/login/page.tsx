@@ -49,7 +49,7 @@ function LoginForm() {
 
         {error && <div className="alert alert-error">{error}</div>}
 
-        <form className="form" onSubmit={handleSubmit}>
+        <form className="form" method="post" onSubmit={handleSubmit}>
           <div className="form-field">
             <label className="form-label" htmlFor="email">Correo electrónico</label>
             <input

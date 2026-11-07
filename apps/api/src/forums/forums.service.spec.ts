@@ -1390,6 +1390,150 @@ describe('ForumsService', () => {
       expect(motivoVisible(null)).toBeNull();
     });
 
+    describe('solicitudes del asistente', () => {
+      const delAsistente = (over: Record<string, unknown> = {}) =>
+        accion({ moderatorProfileId: null, origen: 'asistente', causa: 'odio', ...over });
+
+      it('posterior: urgente queda provisional y oculta; no urgente queda pendiente sin ocultar', async () => {
+        prisma.solucion.findUnique.mockResolvedValue(so());
+        prisma.solucion.update.mockResolvedValue({});
+        prisma.moderationAction.count.mockResolvedValue(0);
+        expect(await service.solicitarPorAsistente('solucion', 's1', 'datos_personales')).toEqual({ id: 'ma1', estado: 'provisional' });
+        expect(prisma.solucion.update).toHaveBeenCalledWith({ where: { id: 's1' }, data: { hidden: true } });
+        expect(prisma.moderationAction.create).toHaveBeenLastCalledWith({
+          data: {
+            target: 'solucion', targetId: 's1', causa: 'datos_personales', reason: '', moderatorProfileId: null, origen: 'asistente',
+            status: 'provisional', venceAt: new Date(AHORA.getTime() + 48 * HORA), fueProvisional: true,
+          },
+        });
+
+        prisma.solucion.update.mockClear();
+        expect(await service.solicitarPorAsistente('solucion', 's1', 'odio')).toEqual({ id: 'ma1', estado: 'pendiente' });
+        expect(prisma.solucion.update).not.toHaveBeenCalled();
+        expect(prisma.moderationAction.create).toHaveBeenLastCalledWith({
+          data: {
+            target: 'solucion', targetId: 's1', causa: 'odio', reason: '', moderatorProfileId: null, origen: 'asistente',
+            status: 'pendiente', venceAt: SIETE_DIAS,
+          },
+        });
+      });
+
+      it('posterior: urgente queda pendiente si el contenido ya tuvo una provisional', async () => {
+        prisma.solucion.findUnique.mockResolvedValue(so());
+        prisma.moderationAction.count.mockResolvedValue(1);
+        expect(await service.solicitarPorAsistente('solucion', 's1', 'datos_personales')).toEqual({ id: 'ma1', estado: 'pendiente' });
+        expect(prisma.moderationAction.count).toHaveBeenCalledWith({ where: { target: 'solucion', targetId: 's1', fueProvisional: true } });
+        expect(prisma.solucion.update).not.toHaveBeenCalled();
+      });
+
+      it('posterior: nunca crea estado oculto', async () => {
+        // Una persona de la mesa oculta una inquietud con una sola firma; el asistente solo lo pide.
+        prisma.inquietud.findUnique.mockResolvedValue({ id: 'q1', groupId: 'g1', hidden: false, proposalId: null });
+        prisma.moderationAction.count.mockResolvedValue(0);
+        expect(await service.solicitarPorAsistente('inquietud', 'q1', 'odio')).toEqual({ id: 'ma1', estado: 'pendiente' });
+        expect(prisma.inquietud.update).not.toHaveBeenCalled();
+        prisma.frase.findUnique.mockResolvedValue({ id: 'f1', hidden: false, proposal: { groupId: 'g1' } });
+        expect(await service.solicitarPorAsistente('frase', 'f1', 'insultos_amenazas')).toEqual({ id: 'ma1', estado: 'pendiente' });
+        expect(prisma.frase.update).not.toHaveBeenCalled();
+        for (const [arg] of prisma.moderationAction.create.mock.calls) expect(arg.data.status).not.toBe('oculto');
+      });
+
+      it('posterior: solicitud abierta existente → null sin error', async () => {
+        prisma.solucion.findUnique.mockResolvedValue(so());
+        prisma.moderationAction.findFirst.mockResolvedValue({ id: 'ma0' });
+        expect(await service.solicitarPorAsistente('solucion', 's1', 'odio')).toBeNull();
+        expect(prisma.moderationAction.create).not.toHaveBeenCalled();
+
+        // Otra se registró a la vez: el índice único da P2002.
+        prisma.moderationAction.findFirst.mockResolvedValue(null);
+        prisma.moderationAction.create.mockRejectedValue(
+          new Prisma.PrismaClientKnownRequestError('dup', { code: 'P2002', clientVersion: 'x' }),
+        );
+        expect(await service.solicitarPorAsistente('solucion', 's1', 'odio')).toBeNull();
+        expect(audit.log).not.toHaveBeenCalled();
+      });
+
+      it('posterior: contenido ya oculto o inexistente → null sin crear nada', async () => {
+        prisma.solucion.findUnique.mockResolvedValue(so({ hidden: true }));
+        expect(await service.solicitarPorAsistente('solucion', 's1', 'odio')).toBeNull();
+        prisma.solucion.findUnique.mockResolvedValue(null);
+        expect(await service.solicitarPorAsistente('solucion', 's1', 'odio')).toBeNull();
+        expect(prisma.moderationAction.create).not.toHaveBeenCalled();
+      });
+
+      it('auditoría: la solicitud del asistente no lleva actorId', async () => {
+        prisma.solucion.findUnique.mockResolvedValue(so());
+        await service.solicitarPorAsistente('solucion', 's1', 'odio');
+        const eventos = audit.log.mock.calls.map(([e]) => e);
+        expect(eventos).toHaveLength(1);
+        expect(eventos[0]).toEqual({ action: 'moderacion.solicitada', resource: 'moderation:ma1', metadata: { origen: 'asistente' } });
+        expect(eventos[0].actorId).toBeUndefined();
+        expect(JSON.stringify(eventos)).not.toContain('Una solución');
+      });
+
+      it('confirmar: solicitud del asistente sobre solución pide dos firmas humanas', async () => {
+        prisma.moderationAction.findUnique.mockResolvedValue(delAsistente());
+        prisma.solucion.update.mockResolvedValue({});
+        // Primera aprobación: queda esa persona como firma y la solicitud sigue pendiente.
+        await service.confirmar(YO, 'ma1', true, 'ip');
+        expect(prisma.moderationAction.updateMany).toHaveBeenCalledTimes(1);
+        expect(prisma.moderationAction.updateMany).toHaveBeenCalledWith({
+          where: { id: 'ma1', status: 'pendiente', venceAt: { gt: AHORA }, moderatorProfileId: null },
+          data: { moderatorProfileId: YO },
+        });
+        expect(prisma.solucion.update).not.toHaveBeenCalled();
+        expect(audit.log).not.toHaveBeenCalledWith(expect.objectContaining({ action: 'moderation.confirmed_by_board' }));
+
+        // La misma persona no firma dos veces.
+        prisma.moderationAction.findUnique.mockResolvedValue(delAsistente({ moderatorProfileId: YO }));
+        await expect(service.confirmar(YO, 'ma1', true, 'ip')).rejects.toThrow(ForbiddenException);
+
+        // Segunda aprobación, de otra persona: se oculta como hoy.
+        await service.confirmar(OTRA, 'ma1', true, 'ip');
+        expect(prisma.moderationAction.updateMany).toHaveBeenLastCalledWith({
+          where: { id: 'ma1', status: 'pendiente', venceAt: { gt: AHORA } },
+          data: { status: 'oculto', confirmadorProfileId: OTRA },
+        });
+        expect(prisma.solucion.update).toHaveBeenCalledWith({ where: { id: 's1' }, data: { hidden: true } });
+      });
+
+      it('confirmar: si otra persona firmó primero a la vez, 409 sin tocar el contenido', async () => {
+        prisma.moderationAction.findUnique.mockResolvedValue(delAsistente());
+        prisma.moderationAction.updateMany.mockResolvedValue({ count: 0 });
+        await expect(service.confirmar(YO, 'ma1', true, 'ip')).rejects.toThrow(ConflictException);
+        expect(prisma.solucion.update).not.toHaveBeenCalled();
+      });
+
+      it('confirmar: solicitud del asistente sobre frase se resuelve con una firma', async () => {
+        prisma.moderationAction.findUnique.mockResolvedValue(delAsistente({ target: 'frase', targetId: 'f1' }));
+        prisma.frase.update.mockResolvedValue({});
+        await service.confirmar(YO, 'ma1', true, 'ip');
+        expect(prisma.moderationAction.updateMany).toHaveBeenCalledTimes(1);
+        expect(prisma.moderationAction.updateMany).toHaveBeenCalledWith({
+          where: { id: 'ma1', status: 'pendiente', venceAt: { gt: AHORA } },
+          data: { status: 'oculto', confirmadorProfileId: YO },
+        });
+        expect(prisma.frase.update).toHaveBeenCalledWith({ where: { id: 'f1' }, data: { hidden: true } });
+      });
+
+      it('confirmar: un rechazo de la solicitud del asistente funciona como hoy', async () => {
+        prisma.moderationAction.findUnique.mockResolvedValue(delAsistente());
+        await service.confirmar(YO, 'ma1', false, 'ip');
+        expect(prisma.moderationAction.updateMany).toHaveBeenCalledWith({
+          where: { id: 'ma1', status: 'pendiente', venceAt: { gt: AHORA } },
+          data: { status: 'rechazado', confirmadorProfileId: YO, resolvedAt: AHORA },
+        });
+      });
+
+      it('la cola por confirmar muestra la solicitud del asistente a toda la mesa', async () => {
+        prisma.moderationAction.findMany.mockResolvedValue([delAsistente(), accion({ id: 'ma2' })]);
+        prisma.solucion.findUnique.mockResolvedValue(so());
+        const r = await service.listPorConfirmar(YO);
+        expect(r[0]).toMatchObject({ id: 'ma1', solicitadaPorAsistente: true, esMia: false });
+        expect(r[1]).toMatchObject({ id: 'ma2', solicitadaPorAsistente: false });
+      });
+    });
+
     describe('ocultación vinculada de una propuesta formal: también pide la segunda firma', () => {
       beforeEach(() => {
         prisma.inquietud.findUnique.mockResolvedValue({ id: 'q1', groupId: 'g1', hidden: false, proposalId: 't1' });
@@ -1521,6 +1665,7 @@ describe('ForumsService', () => {
       expect(r[0]).toEqual({
         id: 'ma1', target: 'solucion', targetId: 's1', causa: 'spam', detalle: '', originalText: 'Una solución\n\nDetalle',
         estado: 'pendiente', venceAt: SIETE_DIAS.toISOString(), createdAt: AHORA.toISOString(), esMia: false, contexto: null,
+        solicitadaPorAsistente: false,
       });
       expect(r[1]).toMatchObject({ id: 'ma2', estado: 'provisional', detalle: 'Teléfono', esMia: true });
     });

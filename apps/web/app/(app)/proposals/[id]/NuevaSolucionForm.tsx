@@ -1,25 +1,28 @@
 'use client';
 
-import { useActionState, useEffect, useState } from 'react';
-import { createSolucion, type ActionResult } from '@/lib/actions';
+import { useState } from 'react';
+import { createSolucion } from '@/lib/actions';
+import { useFormConRevision } from '@/components/RevisarAntesDePublicar';
 
 export function NuevaSolucionForm({ proposalId }: { proposalId: string }) {
-  const [state, action, pending] = useActionState<ActionResult | null, FormData>(
-    createSolucion.bind(null, proposalId),
-    null,
-  );
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
-
-  useEffect(() => {
-    if (state && 'success' in state) {
+  const { formRef, formAction, onSubmit, state, ocupado, aviso } = useFormConRevision({
+    tipo: 'solucion',
+    accion: createSolucion.bind(null, proposalId),
+    campos: ['title', 'description'],
+    campoSugerencia: 'description',
+    alUsarSugerencia: setDescription,
+    alUsarTitulo: setTitle,
+    reiniciar: false,
+    alOk: () => {
       setTitle('');
       setDescription('');
-    }
-  }, [state]);
+    },
+  });
 
   return (
-    <form action={action} className="form">
+    <form ref={formRef} action={formAction} onSubmit={onSubmit} className="form">
       <p className="text-sm font-medium">Proponer una solución</p>
       <div className="form-field">
         <label className="form-label" htmlFor="solucion-title">Título</label>
@@ -46,7 +49,8 @@ export function NuevaSolucionForm({ proposalId }: { proposalId: string }) {
           onChange={(e) => setDescription(e.target.value)}
         />
       </div>
-      <button type="submit" className="btn btn-primary btn-sm" disabled={pending}>Proponer solución</button>
+      {aviso}
+      <button type="submit" className="btn btn-primary btn-sm" disabled={ocupado}>Proponer solución</button>
       {state && 'error' in state && <p role="alert" className="alert alert-error">{state.error}</p>}
       {state && 'success' in state && <p className="alert alert-success">Tu solución quedó publicada.</p>}
     </form>

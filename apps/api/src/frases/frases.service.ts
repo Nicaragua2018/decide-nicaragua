@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException, type OnModuleInit } from '@nestjs/common';
 import type {
   FraseAnalisis,
   FraseItem,
@@ -13,6 +13,8 @@ import { AuditService } from '../audit/audit.service';
 import { RulesService } from '../rules/rules.service';
 import { GroupAccessService } from '../groups/group-access.service';
 import { motivoVisible } from '../forums/moderacion-motivo';
+import { GuardiaService, type OpcionesPublicar } from '../asistente/guardia.service';
+import { Publicadores } from '../asistente/publicadores';
 import { analyzeOpinions, isDivisiva, isPuente, seedFromId, type VoteRow } from './opinion-groups';
 
 const VALOR: Record<FraseVotoValue, -1 | 0 | 1> = { de_acuerdo: 1, en_desacuerdo: -1, paso: 0 };
@@ -44,13 +46,23 @@ interface TemaRow {
 }
 
 @Injectable()
-export class FrasesService {
+export class FrasesService implements OnModuleInit {
   constructor(
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
     private readonly rules: RulesService,
     private readonly access: GroupAccessService,
+    private readonly guardia: GuardiaService,
+    private readonly publicadores: Publicadores,
   ) {}
+
+  /** La revisión de la mesa publica una frase aprobada con la misma llamada (sin ip). */
+  onModuleInit(): void {
+    this.publicadores.registrar('frase', (autor, args, opts) => {
+      const a = args as { proposalId: string; text: string };
+      return this.create(autor, a.proposalId, a.text, '', opts);
+    });
+  }
 
 
   /**
@@ -95,12 +107,26 @@ export class FrasesService {
     };
   }
 
-  async create(profileId: string, proposalId: string, text: string, ip: string): Promise<{ id: string }> {
+  async create(
+    profileId: string,
+    proposalId: string,
+    text: string,
+    ip: string,
+    opts: OpcionesPublicar = {},
+  ): Promise<{ id: string }> {
     const tema = await this.tema(profileId, proposalId, 'participar');
     this.assertWritable(tema);
+    const { revisado } = await this.guardia.antesDePublicar({
+      tipo: 'frase',
+      texto: text.trim(),
+      autorProfileId: profileId,
+      args: { proposalId, text },
+      ...opts,
+    });
     const created = await this.prisma.frase.create({
       data: { proposalId, authorProfileId: profileId, text: text.trim() },
     });
+    await this.guardia.despuesDePublicar('frase', created.id, revisado);
     // Dentro de una bifurcación, sin actor ni ip: delataría quiénes la forman.
     const { quien } = await this.access.rastro(tema.groupId, profileId, ip);
     void this.audit.log({

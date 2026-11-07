@@ -1,5 +1,5 @@
 import { Transform } from 'class-transformer';
-import { IsString, MaxLength, MinLength } from 'class-validator';
+import { IsBoolean, IsOptional, IsString, MaxLength, MinLength } from 'class-validator';
 
 const recortar = ({ value }: { value: unknown }): unknown => (typeof value === 'string' ? value.trim() : value);
 
@@ -16,4 +16,9 @@ export class CreateSolucionDto {
   @MinLength(1, { message: 'La descripción necesita entre 1 y 2000 caracteres.' })
   @MaxLength(2000, { message: 'La descripción necesita entre 1 y 2000 caracteres.' })
   description!: string;
+
+  /** La persona pide que la mesa revise su texto de nivel 2 (responde 202 y no se publica aún). */
+  @IsOptional()
+  @IsBoolean({ message: 'Indica si pides la revisión de la mesa con sí o no.' })
+  pedirRevision?: boolean;
 }

@@ -1,8 +1,8 @@
 'use client';
 
-import { useActionState } from 'react';
 import type { InquietudStatusValue } from '@decide/shared';
-import { respondInquietud, type ActionResult } from '@/lib/actions';
+import { respondInquietud } from '@/lib/actions';
+import { useFormConRevision } from '@/components/RevisarAntesDePublicar';
 import { ModerarForm } from '@/components/ModerarForm';
 
 /** Solo una inquietud abierta o en plazo admite respuesta (igual que en la API). */
@@ -16,12 +16,17 @@ export function OrganizerActions({
   status: InquietudStatusValue;
 }) {
   const canRespond = RESPONDIBLES.includes(status);
-  const [respState, respAction, responding] = useActionState<ActionResult | null, FormData>(respondInquietud, null);
+  const { formRef, formAction, onSubmit, state: respState, ocupado: responding, aviso } = useFormConRevision({
+    tipo: 'respuesta_inquietud',
+    accion: respondInquietud,
+    campos: ['text'],
+    campoSugerencia: 'text',
+  });
 
   return (
     <div className="card mb-4">
       {canRespond && (
-        <form action={respAction} className="form mb-3">
+        <form ref={formRef} action={formAction} onSubmit={onSubmit} className="form mb-3">
           <p className="card-title">Responder en público</p>
           <input type="hidden" name="inquietudId" value={inquietudId} />
           <textarea
@@ -33,6 +38,7 @@ export function OrganizerActions({
             maxLength={2000}
             placeholder="Respuesta pública a la comunidad (mínimo 50 caracteres)"
           />
+          {aviso}
           <button className="btn btn-primary btn-sm" disabled={responding}>Publicar respuesta</button>
           {respState && 'error' in respState && <p className="alert alert-error">{respState.error}</p>}
           {respState && 'success' in respState && <p className="alert alert-success">Respuesta publicada.</p>}

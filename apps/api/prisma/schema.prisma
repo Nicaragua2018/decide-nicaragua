@@ -140,6 +140,7 @@ enum ModeracionCausa {
   spam
   ilegal_violencia
   suplantacion
+  odio
 }
 
 enum AccountStatus {
@@ -265,6 +266,7 @@ model Profile {
   boardActionsProposed  BoardAction[]             @relation("BoardActionProposer")
   forumsCreated         Forum[]                   @relation("ForumCreator")
   moderationsDone       ModerationAction[]        @relation("Moderator")
+  textosEnRevision      TextoEnRevision[]
   inquietudes           Inquietud[]
   inquietudApoyos       InquietudApoyo[]
   comisionVoluntarios   ComisionVoluntario[]
@@ -770,8 +772,10 @@ model ModerationAction {
   target               ModerationTarget
   targetId             String           @db.Uuid
   reason               String           @db.VarChar(500)
-  moderatorProfileId   String           @db.Uuid
-  moderator            Profile          @relation("Moderator", fields: [moderatorProfileId], references: [id])
+  /// Null cuando la solicitud la abrió el asistente.
+  moderatorProfileId   String?          @db.Uuid
+  moderator            Profile?         @relation("Moderator", fields: [moderatorProfileId], references: [id], onDelete: Restrict)
+  origen               Origen           @default(persona)
   status               ModerationStatus @default(oculto)
   appealText           String?          @db.VarChar(1000)
   appealedAt           DateTime?        @db.Timestamptz
@@ -1097,4 +1101,58 @@ model ComisionPapeleta {
 
   @@unique([grupoId, profileId])
   @@map("comision_papeletas")
+}
+
+/// Gasto del asistente por mes («AAAA-MM»), en millonésimas de dólar.
+model UsoAsistente {
+  mes               String    @id
+  costoMicrodolares BigInt    @default(0)
+  /// Cuándo se avisó que se alcanzó el tope (una sola vez al mes).
+  avisoTopeAt       DateTime? @db.Timestamptz
+
+  @@map("uso_asistente")
+}
+
+/// Texto que el asistente detectó como nivel 2 y espera la revisión de la mesa.
+model TextoEnRevision {
+  id            String         @id @default(uuid()) @db.Uuid
+  autorProfileId String        @db.Uuid
+  autor         Profile        @relation(fields: [autorProfileId], references: [id])
+  tipo          String
+  args          Json
+  texto         String         @db.Text
+  causa         ModeracionCausa
+  estado        String         @default("pendiente")
+  motivo        String?
+  creadoAt      DateTime       @default(now()) @db.Timestamptz
+  venceAt       DateTime       @db.Timestamptz
+  resueltoAt    DateTime?      @db.Timestamptz
+
+  firmas FirmaRevision[]
+
+  @@index([estado, venceAt])
+  @@map("textos_en_revision")
+}
+
+model FirmaRevision {
+  revisionId String          @db.Uuid
+  revision   TextoEnRevision @relation(fields: [revisionId], references: [id], onDelete: Cascade)
+  profileId  String          @db.Uuid
+  aprobar    Boolean
+  createdAt  DateTime        @default(now()) @db.Timestamptz
+
+  @@id([revisionId, profileId])
+  @@map("firmas_revision")
+}
+
+/// Contenido publicado cuya revisión posterior (nivel 3) está pendiente.
+model ColaRevisionPosterior {
+  id       String            @id @default(uuid()) @db.Uuid
+  target   ModerationTarget
+  targetId String            @db.Uuid
+  creadaAt DateTime          @default(now()) @db.Timestamptz
+  intentos Int               @default(0)
+
+  @@unique([target, targetId])
+  @@map("cola_revision_posterior")
 }

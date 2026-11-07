@@ -14,4 +14,9 @@ export class InformeComisionDto {
   @IsOptional()
   @IsBoolean({ message: 'Indica si es el informe final con sí o no.' })
   final?: boolean;
+
+  /** La persona pide que la mesa revise su texto de nivel 2 (responde 202 y no se publica aún). */
+  @IsOptional()
+  @IsBoolean({ message: 'Indica si pides la revisión de la mesa con sí o no.' })
+  pedirRevision?: boolean;
 }

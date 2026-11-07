@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Resend } from 'resend';
 import { inviteEmailHtml, inviteEmailText } from './templates/invite.template';
+import { avisoTopeAsistenteHtml, avisoTopeAsistenteText } from './templates/aviso-tope-asistente.template';
 import { INVITE_TOKEN_TTL_HOURS } from '@decide/shared';
 
 export interface SendInviteOptions {
@@ -46,5 +47,23 @@ export class EmailService {
     }
 
     this.logger.log(`Invite email sent to ${to}`);
+  }
+
+  /** Avisa al administrador que el asistente alcanzó el tope de gasto del mes. Sin contenido de miembros. */
+  async sendAvisoTopeAsistente(to: string): Promise<void> {
+    const { error } = await this.resend.emails.send({
+      from: `${this.fromName} <${this.from}>`,
+      to,
+      subject: 'El asistente alcanzó el tope de gasto del mes',
+      html: avisoTopeAsistenteHtml(),
+      text: avisoTopeAsistenteText(),
+    });
+
+    if (error) {
+      this.logger.error(`Failed to send assistant budget email to ${to}`, error);
+      throw new Error(`Email delivery failed: ${error.message}`);
+    }
+
+    this.logger.log(`Assistant budget email sent to ${to}`);
   }
 }

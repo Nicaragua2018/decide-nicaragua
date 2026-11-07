@@ -7,6 +7,7 @@ import { InquietudesService } from './inquietudes.service';
 import { CreateInquietudDto } from './dto/create-inquietud.dto';
 import { OpenDebateDto } from './dto/open-debate.dto';
 import { RespondDto } from './dto/respond.dto';
+import { guardiaMock, publicadoresMock } from '../test/guardia-mock';
 
 function buildPrisma() {
   return {
@@ -49,6 +50,7 @@ describe('InquietudesService', () => {
   let audit: { log: ReturnType<typeof vi.fn> };
   let rules: { getInt: ReturnType<typeof vi.fn> };
   let service: InquietudesService;
+  let guardia: ReturnType<typeof guardiaMock>;
   let forums: { canOrganize: ReturnType<typeof vi.fn> };
   let deliberation: {
     createTopicInDefaultForum: ReturnType<typeof vi.fn>;
@@ -58,6 +60,7 @@ describe('InquietudesService', () => {
 
   beforeEach(() => {
     prisma = buildPrisma();
+    guardia = guardiaMock();
     audit = { log: vi.fn().mockResolvedValue(undefined) };
     rules = {
       getInt: vi.fn(async (key: string) =>
@@ -78,6 +81,8 @@ describe('InquietudesService', () => {
       rules as never,
       forums as never,
       deliberation as never,
+      guardia as never,
+      publicadoresMock() as never,
     );
     prisma.profile.findUnique.mockResolvedValue({ userId: 'u-yo' });
     prisma.groupMembership.findUnique.mockResolvedValue({ id: 'm1' });
@@ -161,6 +166,18 @@ describe('InquietudesService', () => {
   });
 
   describe('create()', () => {
+    it('guardia: revisa título y explicación como inquietud y encola con su id', async () => {
+      prisma.inquietud.create.mockResolvedValue({ id: 'i9' });
+      await service.create(YO, { groupId: G, title: 'Título largo ok', body: 'Cuerpo' }, 'ip');
+      expect(guardia.antesDePublicar).toHaveBeenCalledWith({
+        tipo: 'inquietud',
+        texto: 'Título largo ok\n\nCuerpo',
+        autorProfileId: YO,
+        args: { groupId: G, title: 'Título largo ok', body: 'Cuerpo' },
+      });
+      expect(guardia.despuesDePublicar).toHaveBeenCalledWith('inquietud', 'i9', true);
+    });
+
     it('crea y audita con solo el id del grupo', async () => {
       prisma.inquietud.create.mockResolvedValue({ id: 'i9' });
       expect(await service.create(YO, { groupId: G, title: 'Título largo ok', body: 'b' }, '1.1.1.1')).toEqual({ id: 'i9' });
@@ -383,6 +400,46 @@ describe('InquietudesService', () => {
       { id: ID1, groupId: G, status: 'en_plazo', hidden: false, ...over },
       { id: ID2, groupId: G, status: 'abierta', hidden: false },
     ];
+
+    it('guardia: responder revisa como respuesta_inquietud y no encola la inquietud', async () => {
+      forums.canOrganize.mockResolvedValue(true);
+      prisma.inquietud.findUnique.mockResolvedValue({ id: 'i1', groupId: G, status: 'en_plazo', hidden: false });
+      const texto = 'x'.repeat(50);
+      await service.respond(YO, 'i1', texto, 'ip');
+      expect(guardia.antesDePublicar).toHaveBeenCalledWith({
+        tipo: 'respuesta_inquietud',
+        texto,
+        autorProfileId: YO,
+        args: { id: 'i1', text: texto },
+      });
+      expect(guardia.antesDePublicar.mock.invocationCallOrder[0]).toBeLessThan(prisma.inquietud.updateMany.mock.invocationCallOrder[0] ?? 0);
+      expect(guardia.despuesDePublicar).not.toHaveBeenCalled();
+    });
+
+    it('guardia: una respuesta sin revisar no encola la inquietud del miembro (Ruling 16)', async () => {
+      forums.canOrganize.mockResolvedValue(true);
+      guardia.antesDePublicar.mockResolvedValue({ revisado: false });
+      prisma.inquietud.findUnique.mockResolvedValue({ id: 'i1', groupId: G, status: 'en_plazo', hidden: false });
+      await service.respond(YO, 'i1', 'x'.repeat(50), 'ip');
+      expect(prisma.inquietud.updateMany).toHaveBeenCalled();
+      expect(guardia.despuesDePublicar).not.toHaveBeenCalled();
+    });
+
+    it('guardia: abrir debate revisa el tema antes de la transacción y encola el tema', async () => {
+      forums.canOrganize.mockResolvedValue(true);
+      prisma.inquietud.findMany.mockResolvedValue(filas());
+      tx.inquietud.updateMany.mockResolvedValueOnce({ count: 2 }).mockResolvedValueOnce({ count: 2 });
+      await service.openDebate(YO, dto, 'ip', { pedirRevision: true });
+      expect(guardia.antesDePublicar).toHaveBeenCalledWith({
+        tipo: 'tema',
+        texto: `${dto.title}\n\n${dto.body}`,
+        autorProfileId: YO,
+        args: { via: 'abrir_debate', groupId: G, inquietudIds: [ID1, ID2], title: dto.title, body: dto.body },
+        pedirRevision: true,
+      });
+      expect(guardia.antesDePublicar.mock.invocationCallOrder[0]).toBeLessThan(prisma.$transaction.mock.invocationCallOrder[0] ?? 0);
+      expect(guardia.despuesDePublicar).toHaveBeenCalledWith('tema', 'tema1', true);
+    });
 
     it('un miembro común no abre debate ni responde', async () => {
       await expect(service.openDebate(YO, dto, '1.1.1.1')).rejects.toBeInstanceOf(ForbiddenException);

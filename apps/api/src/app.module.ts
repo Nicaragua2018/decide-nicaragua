@@ -23,6 +23,7 @@ import { InquietudesModule } from './inquietudes/inquietudes.module';
 import { FrasesModule } from './frases/frases.module';
 import { DecisionesModule } from './decisiones/decisiones.module';
 import { GruposModule } from './grupos/grupos.module';
+import { AsistenteModule } from './asistente/asistente.module';
 
 @Module({
   imports: [
@@ -65,6 +66,7 @@ import { GruposModule } from './grupos/grupos.module';
     FrasesModule,
     DecisionesModule,
     GruposModule,
+    AsistenteModule,
   ],
   providers: [
     // ThrottlerGuard aplicado globalmente a todos los endpoints

@@ -4,7 +4,8 @@ export type ModeracionCausaValue =
   | 'insultos_amenazas'
   | 'spam'
   | 'ilegal_violencia'
-  | 'suplantacion';
+  | 'suplantacion'
+  | 'odio';
 
 export interface ModeracionCausa {
   value: ModeracionCausaValue;
@@ -19,4 +20,5 @@ export const MODERACION_CAUSAS: readonly ModeracionCausa[] = [
   { value: 'spam', label: 'Correo basura o publicidad ajena al tema', urgente: false },
   { value: 'ilegal_violencia', label: 'Contenido ilegal o que incita a la violencia', urgente: true },
   { value: 'suplantacion', label: 'Suplantación de una persona u organización', urgente: false },
+  { value: 'odio', label: 'Incita al odio o ataca a un grupo por lo que es (origen, etnia, color, religión, sexo, orientación, discapacidad)', urgente: false },
 ];

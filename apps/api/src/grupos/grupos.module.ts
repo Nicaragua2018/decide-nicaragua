@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { AuditModule } from '../audit/audit.module';
+import { AsistenteModule } from '../asistente/asistente.module';
 import { ForumsModule } from '../forums/forums.module';
 import { GroupsModule } from '../groups/groups.module';
 import { RulesModule } from '../rules/rules.module';
@@ -10,7 +11,7 @@ import { GruposController } from './grupos.controller';
 import { GruposScheduler } from './grupos.scheduler';
 
 @Module({
-  imports: [RulesModule, AuditModule, GroupsModule, ForumsModule],
+  imports: [RulesModule, AuditModule, GroupsModule, ForumsModule, AsistenteModule],
   controllers: [GruposController],
   providers: [GruposService, ComisionesService, BifurcacionesService, GruposScheduler],
   exports: [GruposService],
