@@ -6,6 +6,7 @@ import { AuditService } from '../audit/audit.service';
 import { ForumsService } from '../forums/forums.service';
 import { AsistenteService } from './asistente.service';
 import { ESQUEMA_REVISION, esRevision, normalizarRevision, tareaRevision } from './moderacion-previa.service';
+import { nombreDeError } from './errores';
 
 /** A los 5 intentos sin respuesta del asistente, el contenido sale de la cola. */
 const MAX_INTENTOS = 5;
@@ -57,7 +58,7 @@ export class RevisionPosteriorService {
       try {
         if (await this.revisar(fila)) salieron += 1;
       } catch (err) {
-        this.logger.error('Falló la revisión posterior de un contenido', err instanceof Error ? err.stack : undefined);
+        this.logger.error(`Falló la revisión posterior de un contenido: ${nombreDeError(err)}`);
         try {
           if (await this.fallo(fila)) salieron += 1;
         } catch {

@@ -8,6 +8,7 @@ import { EmailService } from '../email/email.service';
 import { INSTRUCCIONES_BASE } from './instrucciones';
 import { limpiarTexto } from './limpieza';
 import { costoMicrodolares, mesUtc, topeMicrodolares, type UsoTokens } from './gasto';
+import { nombreDeError } from './errores';
 
 /** Token de inyección del cliente de Anthropic (null si falta ANTHROPIC_API_KEY). */
 export const ANTHROPIC_CLIENT = Symbol('ANTHROPIC_CLIENT');
@@ -83,7 +84,7 @@ export class AsistenteService {
       const limite = prioridad === 'nocturna' ? (tope * 8n) / 10n : tope;
       return gasto < limite;
     } catch (err) {
-      this.logger.error('No se pudo leer el gasto del asistente', err instanceof Error ? err.stack : undefined);
+      this.logger.error(`No se pudo leer el gasto del asistente: ${nombreDeError(err)}`);
       return false;
     }
   }
@@ -203,7 +204,7 @@ export class AsistenteService {
       // Sin esperar: un correo o una auditoría lentos no deben llevar a pedir() más allá de su tiempo.
       void this.avisarTope(mes);
     } catch (err) {
-      this.logger.error('No se pudo registrar el gasto del asistente', err instanceof Error ? err.stack : undefined);
+      this.logger.error(`No se pudo registrar el gasto del asistente: ${nombreDeError(err)}`);
     }
   }
 
@@ -230,7 +231,7 @@ export class AsistenteService {
       await this.audit.log({ action: 'asistente.tope_alcanzado', resource: `uso_asistente:${mes}`, metadata: { mes } });
       await this.avisarPorCorreo();
     } catch (err) {
-      this.logger.error('No se pudo avisar del tope del asistente', err instanceof Error ? err.stack : undefined);
+      this.logger.error(`No se pudo avisar del tope del asistente: ${nombreDeError(err)}`);
     }
   }
 
@@ -243,7 +244,7 @@ export class AsistenteService {
     try {
       await this.email.sendAvisoTopeAsistente(destino);
     } catch (err) {
-      this.logger.error('No se pudo enviar el aviso del tope del asistente', err instanceof Error ? err.stack : undefined);
+      this.logger.error(`No se pudo enviar el aviso del tope del asistente: ${nombreDeError(err)}`);
     }
   }
 }

@@ -1,5 +1,7 @@
 import 'reflect-metadata';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { Logger } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { RevisionPosteriorService } from './revision-posterior.service';
 import { ESQUEMA_REVISION, esRevision, tareaRevision } from './moderacion-previa.service';
 
@@ -168,6 +170,22 @@ describe('RevisionPosteriorService', () => {
     });
     expect(t.prisma.colaRevisionPosterior.deleteMany).toHaveBeenCalledWith({ where: { id: 'c2' } });
   });
+
+  it('registro: un fallo se registra por nombre y código de Prisma, sin pila ni argumentos', async () => {
+    const espia = vi.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined);
+    try {
+      t.forums.solicitarPorAsistente.mockRejectedValueOnce(
+        new Prisma.PrismaClientKnownRequestError(`Invalid call with args { text: "${FRASE}" }`, { code: 'P2025', clientVersion: 'x' }),
+      );
+      await t.svc.procesar(AHORA);
+      const registrado = JSON.stringify(espia.mock.calls);
+      expect(registrado).toContain('P2025');
+      expect(registrado).not.toContain('plaga');
+      expect(registrado).not.toContain('at ');
+    } finally {
+      espia.mockRestore();
+    }
+  });
 });
 
 describe('AsistenteScheduler', () => {
@@ -178,5 +196,15 @@ describe('AsistenteScheduler', () => {
     await new AsistenteScheduler(revisiones as never, posterior as never).run();
     expect(posterior.procesar).toHaveBeenCalledTimes(1);
     expect(posterior.procesar.mock.calls[0]![0]).toBeInstanceOf(Date);
+  });
+
+  it('scheduler: cada hora purga el texto de las revisiones resueltas hace más de 30 días', async () => {
+    const { AsistenteScheduler } = await import('./asistente.scheduler');
+    const revisiones = { vencer: vi.fn().mockResolvedValue(0), purgar: vi.fn().mockResolvedValue(0) };
+    const posterior = { procesar: vi.fn().mockResolvedValue(0) };
+    await new AsistenteScheduler(revisiones as never, posterior as never).run();
+    expect(revisiones.purgar).toHaveBeenCalledTimes(1);
+    expect(revisiones.purgar.mock.calls[0]![0]).toBeInstanceOf(Date);
+    expect(posterior.procesar).toHaveBeenCalledTimes(1);
   });
 });

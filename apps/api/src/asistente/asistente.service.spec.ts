@@ -168,6 +168,21 @@ describe('AsistenteService', () => {
       expect(cliente.messages.create).not.toHaveBeenCalled();
     });
 
+    it('registro: un fallo al leer el gasto se registra sin pila ni mensaje', async () => {
+      const { Logger } = await import('@nestjs/common');
+      const espia = vi.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined);
+      try {
+        prisma.usoAsistente.findUnique.mockRejectedValue(new Error('detalle interno con argumentos'));
+        await crear().pedir(op());
+        const registrado = JSON.stringify(espia.mock.calls);
+        expect(registrado).toContain('Error');
+        expect(registrado).not.toContain('detalle interno');
+        expect(registrado).not.toContain('at ');
+      } finally {
+        espia.mockRestore();
+      }
+    });
+
     it('si falla registrar el gasto, igual devuelve el resultado', async () => {
       prisma.usoAsistente.upsert.mockRejectedValue(new Error('db'));
       expect(await crear().pedir(op())).toEqual({ nivel: 0 });
