@@ -5,9 +5,13 @@ import { AuditModule } from '../audit/audit.module';
 import { BoardModule } from '../board/board.module';
 import { EmailModule } from '../email/email.module';
 import { ForumsModule } from '../forums/forums.module';
+import { GroupsModule } from '../groups/groups.module';
+import { RulesModule } from '../rules/rules.module';
+import { VerificationModule } from '../verification/verification.module';
 import { AsistenteController } from './asistente.controller';
 import { RevisionesController } from './revisiones.controller';
 import { RevisionesService } from './revisiones.service';
+import { ContextoPersonaService } from './contexto-persona.service';
 import { AsistenteScheduler } from './asistente.scheduler';
 import { ANTHROPIC_CLIENT, AsistenteService } from './asistente.service';
 import { ModeracionPreviaService } from './moderacion-previa.service';
@@ -16,7 +20,7 @@ import { Publicadores } from './publicadores';
 import { RevisionPosteriorService } from './revision-posterior.service';
 
 @Module({
-  imports: [AuditModule, EmailModule, BoardModule, ForumsModule],
+  imports: [AuditModule, EmailModule, BoardModule, ForumsModule, GroupsModule, RulesModule, VerificationModule],
   controllers: [AsistenteController, RevisionesController],
   providers: [
     {
@@ -40,8 +44,9 @@ import { RevisionPosteriorService } from './revision-posterior.service';
     Publicadores,
     RevisionesService,
     RevisionPosteriorService,
+    ContextoPersonaService,
     AsistenteScheduler,
   ],
-  exports: [AsistenteService, ModeracionPreviaService, GuardiaService, Publicadores],
+  exports: [AsistenteService, ModeracionPreviaService, GuardiaService, Publicadores, ContextoPersonaService],
 })
 export class AsistenteModule {}
