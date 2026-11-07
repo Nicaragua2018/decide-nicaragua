@@ -18,7 +18,7 @@ function buildPrisma() {
     group: { findUnique: vi.fn().mockResolvedValue(null) },
     profile: { findUnique: vi.fn().mockResolvedValue({ userId: 'u1' }) },
     frase: { create: vi.fn().mockResolvedValue({ id: 'f1' }) },
-    textoEnRevision: { create: vi.fn().mockResolvedValue({ id: 'rev1' }) },
+    textoEnRevision: { create: vi.fn().mockResolvedValue({ id: 'rev1' }), findFirst: vi.fn().mockResolvedValue(null) },
     colaRevisionPosterior: { upsert: vi.fn().mockResolvedValue({}) },
   };
 }
@@ -87,6 +87,19 @@ describe('GuardiaService (con frases.create)', () => {
     expect(evento.actorId).toBeUndefined();
     expect(JSON.stringify(evento)).not.toContain('plaga');
     expect(JSON.stringify(evento)).not.toContain(YO);
+  });
+
+  it('guardia: pedir revisión dos veces del mismo texto reutiliza la pendiente', async () => {
+    prisma.textoEnRevision.findFirst.mockResolvedValue({ id: 'rev0' });
+    const err = await frases.create(YO, T, ODIO, 'ip', { pedirRevision: true }).catch((e: unknown) => e);
+    expect((err as HttpException).getStatus()).toBe(202);
+    expect((err as HttpException).getResponse()).toEqual({ codigo: 'en_revision', revisionId: 'rev0' });
+    expect(prisma.textoEnRevision.findFirst).toHaveBeenCalledWith({
+      where: { autorProfileId: YO, tipo: 'frase', texto: ODIO, estado: 'pendiente' },
+      select: { id: true },
+    });
+    expect(prisma.textoEnRevision.create).not.toHaveBeenCalled();
+    expect(audit.log).not.toHaveBeenCalled();
   });
 
   it('guardia: si el asistente no responde, publica y encola', async () => {

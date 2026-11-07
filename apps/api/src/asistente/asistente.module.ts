@@ -2,16 +2,20 @@ import { Logger, Module } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import Anthropic from '@anthropic-ai/sdk';
 import { AuditModule } from '../audit/audit.module';
+import { BoardModule } from '../board/board.module';
 import { EmailModule } from '../email/email.module';
 import { AsistenteController } from './asistente.controller';
+import { RevisionesController } from './revisiones.controller';
+import { RevisionesService } from './revisiones.service';
+import { AsistenteScheduler } from './asistente.scheduler';
 import { ANTHROPIC_CLIENT, AsistenteService } from './asistente.service';
 import { ModeracionPreviaService } from './moderacion-previa.service';
 import { GuardiaService } from './guardia.service';
 import { Publicadores } from './publicadores';
 
 @Module({
-  imports: [AuditModule, EmailModule],
-  controllers: [AsistenteController],
+  imports: [AuditModule, EmailModule, BoardModule],
+  controllers: [AsistenteController, RevisionesController],
   providers: [
     {
       provide: ANTHROPIC_CLIENT,
@@ -32,6 +36,8 @@ import { Publicadores } from './publicadores';
     ModeracionPreviaService,
     GuardiaService,
     Publicadores,
+    RevisionesService,
+    AsistenteScheduler,
   ],
   exports: [AsistenteService, ModeracionPreviaService, GuardiaService, Publicadores],
 })

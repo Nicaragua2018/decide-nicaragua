@@ -49,6 +49,13 @@ export class GuardiaService {
 
     if (!op.pedirRevision) throw new UnprocessableEntityException({ codigo: 'nivel_2', revision });
 
+    // Idempotente: si la misma persona ya tiene esa revisión pendiente con el mismo texto, se reutiliza.
+    const existente = await this.prisma.textoEnRevision.findFirst({
+      where: { autorProfileId: op.autorProfileId, tipo: op.tipo, texto: op.texto, estado: 'pendiente' },
+      select: { id: true },
+    });
+    if (existente) throw new HttpException({ codigo: 'en_revision', revisionId: existente.id }, HttpStatus.ACCEPTED);
+
     const creada = await this.prisma.textoEnRevision.create({
       data: {
         autorProfileId: op.autorProfileId,
