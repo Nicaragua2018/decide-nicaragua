@@ -4,9 +4,10 @@ import {
   ForbiddenException,
   BadRequestException,
   Logger,
+  type OnModuleInit,
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
-import { ProposalStatus, SignalType } from '@decide/shared';
+import { ProposalStatus, SignalType, textoParaRevisar } from '@decide/shared';
 import type {
   ProposalSummary,
   ProposalDetail,
@@ -25,6 +26,8 @@ import { UpdateProposalStatusDto } from './dto/update-proposal-status.dto';
 import { LINKED_TOPIC_REASON } from '../forums/forums.service';
 import { motivoVisible } from '../forums/moderacion-motivo';
 import { NOMBRE_INICIATIVA, temasDeIniciativa } from '../grupos/bifurcacion-reglas';
+import { GuardiaService, type OpcionesPublicar } from '../asistente/guardia.service';
+import { Publicadores } from '../asistente/publicadores';
 
 /** Estados que aceptan nuevos comentarios y señales */
 const MUTABLE_STATUSES: string[] = [ProposalStatus.open];
@@ -32,14 +35,28 @@ const MUTABLE_STATUSES: string[] = [ProposalStatus.open];
 const HIDDEN_TOPIC_TITLE = 'Tema oculto por moderación';
 
 @Injectable()
-export class DeliberationService {
+export class DeliberationService implements OnModuleInit {
   private readonly logger = new Logger(DeliberationService.name);
 
   constructor(
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
     private readonly access: GroupAccessService,
+    private readonly guardia: GuardiaService,
+    private readonly publicadores: Publicadores,
   ) {}
+
+  /** La revisión de la mesa publica un tema o comentario aprobado con la misma llamada (sin ip). */
+  onModuleInit(): void {
+    this.publicadores.registrar('tema', (autor, args, opts) => {
+      const a = args as { groupId: string; dto: CreateProposalDto };
+      return this.createProposal(a.groupId, a.dto, autor, '', opts);
+    });
+    this.publicadores.registrar('comentario', (autor, args, opts) => {
+      const a = args as { proposalId: string; body: string; parentId?: string };
+      return this.addComment(a.proposalId, { body: a.body, ...(a.parentId ? { parentId: a.parentId } : {}) }, autor, '', opts);
+    });
+  }
 
   // ─── Proposals ────────────────────────────────────────────────────────────
 
@@ -48,6 +65,7 @@ export class DeliberationService {
     dto: CreateProposalDto,
     profileId: string,
     ip: string,
+    opts: OpcionesPublicar = {},
   ): Promise<{ id: string }> {
     await this.access.requireParticipant(groupId, profileId);
 
@@ -62,6 +80,22 @@ export class DeliberationService {
       forumId = (await this.defaultForum(groupId)).id;
     }
 
+    const { revisado } = await this.guardia.antesDePublicar({
+      tipo: 'tema',
+      texto: textoParaRevisar(dto.title, dto.body),
+      autorProfileId: profileId,
+      args: {
+        groupId,
+        dto: {
+          title: dto.title,
+          body: dto.body,
+          ...(dto.status ? { status: dto.status } : {}),
+          ...(dto.forumId ? { forumId: dto.forumId } : {}),
+        },
+      },
+      ...opts,
+    });
+
     const proposal = await this.prisma.proposal.create({
       data: {
         groupId,
@@ -73,6 +107,7 @@ export class DeliberationService {
         status: (dto.status ?? ProposalStatus.open) as string as never,
       },
     });
+    await this.guardia.despuesDePublicar('tema', proposal.id, revisado);
 
     // En un grupo reservado (bifurcación) no se registra actor, ip ni el grupo.
     void this.access.rastro(groupId, profileId, ip).then(({ reservado, quien }) =>
@@ -89,6 +124,8 @@ export class DeliberationService {
    * El foro debe existir ya: quien llama invoca antes ensureDefaultForum fuera de la transacción
    * (una violación de unicidad dentro de una transacción de Postgres la aborta).
    * No audita ni exige membresía: quien llama ya validó permisos.
+   * Tampoco revisa el texto (dentro de una transacción no se espera al asistente): quien llama
+   * con texto nuevo de una persona lo pasa antes por la guardia (abrir debate, cambio de regla).
    */
   async createTopicInDefaultForum(
     tx: Prisma.TransactionClient,
@@ -304,6 +341,7 @@ export class DeliberationService {
     dto: CreateCommentDto,
     profileId: string,
     ip: string,
+    opts: OpcionesPublicar = {},
   ): Promise<{ id: string }> {
     const proposal = await this.prisma.proposal.findUnique({ where: { id: proposalId } });
 
@@ -334,6 +372,14 @@ export class DeliberationService {
       }
     }
 
+    const { revisado } = await this.guardia.antesDePublicar({
+      tipo: 'comentario',
+      texto: dto.body,
+      autorProfileId: profileId,
+      args: { proposalId, body: dto.body, ...(dto.parentId ? { parentId: dto.parentId } : {}) },
+      ...opts,
+    });
+
     const comment = await this.prisma.proposalComment.create({
       data: {
         proposalId,
@@ -342,6 +388,7 @@ export class DeliberationService {
         parentId: dto.parentId ?? null,
       },
     });
+    await this.guardia.despuesDePublicar('respuesta', comment.id, revisado);
 
     void this.access.rastro(proposal.groupId, profileId, ip).then(({ quien }) =>
       this.audit

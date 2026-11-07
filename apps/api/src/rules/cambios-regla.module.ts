@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { AuditModule } from '../audit/audit.module';
+import { AsistenteModule } from '../asistente/asistente.module';
 import { DeliberationModule } from '../deliberation/deliberation.module';
 import { GroupsModule } from '../groups/groups.module';
 import { RulesModule } from './rules.module';
@@ -12,7 +13,7 @@ import { CambiosReglaController } from './cambios-regla.controller';
  * (que, vía ForumsModule, ya importa RulesModule), y meterlo ahí cerraría un ciclo de módulos.
  */
 @Module({
-  imports: [RulesModule, DeliberationModule, GroupsModule, AuditModule],
+  imports: [RulesModule, DeliberationModule, GroupsModule, AuditModule, AsistenteModule],
   controllers: [CambiosReglaController],
   providers: [CambiosReglaService, CambiosReglaScheduler],
   exports: [CambiosReglaService],

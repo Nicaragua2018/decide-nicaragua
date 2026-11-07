@@ -35,7 +35,7 @@ export class InquietudesController {
 
   @Post()
   async create(@Body() dto: CreateInquietudDto, @CurrentUser() user: JwtPayload, @Req() req: Request): Promise<{ id: string }> {
-    return this.inquietudes.create(this.perfil(user), dto, extractIp(req));
+    return this.inquietudes.create(this.perfil(user), dto, extractIp(req), { pedirRevision: dto.pedirRevision });
   }
 
   @Get()
@@ -50,7 +50,7 @@ export class InquietudesController {
 
   @Post('debates')
   async openDebate(@Body() dto: OpenDebateDto, @CurrentUser() user: JwtPayload, @Req() req: Request): Promise<{ proposalId: string }> {
-    return this.inquietudes.openDebate(this.perfil(user), dto, extractIp(req));
+    return this.inquietudes.openDebate(this.perfil(user), dto, extractIp(req), { pedirRevision: dto.pedirRevision });
   }
 
   @Get(':id')
@@ -61,7 +61,7 @@ export class InquietudesController {
   @Post(':id/respuesta')
   @HttpCode(HttpStatus.OK)
   async respond(@Param('id', ParseUUIDPipe) id: string, @Body() dto: RespondDto, @CurrentUser() user: JwtPayload, @Req() req: Request): Promise<{ ok: true }> {
-    await this.inquietudes.respond(this.perfil(user), id, dto.text, extractIp(req));
+    await this.inquietudes.respond(this.perfil(user), id, dto.text, extractIp(req), { pedirRevision: dto.pedirRevision });
     return { ok: true };
   }
 

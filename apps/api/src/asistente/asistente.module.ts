@@ -5,6 +5,9 @@ import { AuditModule } from '../audit/audit.module';
 import { EmailModule } from '../email/email.module';
 import { AsistenteController } from './asistente.controller';
 import { ANTHROPIC_CLIENT, AsistenteService } from './asistente.service';
+import { ModeracionPreviaService } from './moderacion-previa.service';
+import { GuardiaService } from './guardia.service';
+import { Publicadores } from './publicadores';
 
 @Module({
   imports: [AuditModule, EmailModule],
@@ -26,7 +29,10 @@ import { ANTHROPIC_CLIENT, AsistenteService } from './asistente.service';
       },
     },
     AsistenteService,
+    ModeracionPreviaService,
+    GuardiaService,
+    Publicadores,
   ],
-  exports: [AsistenteService],
+  exports: [AsistenteService, ModeracionPreviaService, GuardiaService, Publicadores],
 })
 export class AsistenteModule {}

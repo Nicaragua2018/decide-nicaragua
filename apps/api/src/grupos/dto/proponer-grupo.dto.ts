@@ -1,5 +1,5 @@
 import { Transform } from 'class-transformer';
-import { IsString, IsUUID, MaxLength, MinLength } from 'class-validator';
+import { IsBoolean, IsOptional, IsString, IsUUID, MaxLength, MinLength } from 'class-validator';
 
 const recortar = ({ value }: { value: unknown }) => (typeof value === 'string' ? value.trim() : value);
 
@@ -19,4 +19,9 @@ export class ProponerGrupoDto {
   @MinLength(20, { message: 'El propósito necesita entre 20 y 1000 caracteres.' })
   @MaxLength(1000, { message: 'El propósito necesita entre 20 y 1000 caracteres.' })
   proposito!: string;
+
+  /** La persona pide que la mesa revise su texto de nivel 2 (responde 202 y no se publica aún). */
+  @IsOptional()
+  @IsBoolean({ message: 'Indica si pides la revisión de la mesa con sí o no.' })
+  pedirRevision?: boolean;
 }

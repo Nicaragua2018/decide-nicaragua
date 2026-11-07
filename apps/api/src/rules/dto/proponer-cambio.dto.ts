@@ -1,5 +1,5 @@
 import { Transform } from 'class-transformer';
-import { IsOptional, IsString, IsUUID, MaxLength } from 'class-validator';
+import { IsBoolean, IsOptional, IsString, IsUUID, MaxLength } from 'class-validator';
 
 const recortar = ({ value }: { value: unknown }): unknown => (typeof value === 'string' ? value.trim() : value);
 
@@ -21,4 +21,9 @@ export class ProponerCambioDto {
   @IsString({ message: 'El motivo debe ser texto.' })
   @MaxLength(1000, { message: 'El motivo admite hasta 1000 caracteres.' })
   motivo?: string;
+
+  /** La persona pide que la mesa revise su texto de nivel 2 (responde 202 y no se publica aún). */
+  @IsOptional()
+  @IsBoolean({ message: 'Indica si pides la revisión de la mesa con sí o no.' })
+  pedirRevision?: boolean;
 }

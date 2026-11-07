@@ -47,3 +47,28 @@ export interface TextoEnRevisionView {
   yaFirme: boolean;
   motivo: string | null;
 }
+
+/** Todos los tipos de texto que revisa el asistente (para validar la entrada). */
+export const TIPOS_TEXTO: readonly TipoTexto[] = [
+  'inquietud',
+  'respuesta_inquietud',
+  'frase',
+  'solucion',
+  'tema',
+  'comentario',
+  'informe',
+  'motivo_regla',
+  'subgrupo',
+];
+
+/**
+ * Cómo se une un texto de varias partes (título y cuerpo, nombre y propósito)
+ * para revisarlo. La web y la API usan la misma forma, así la revisión previa
+ * de la web y la del servidor dan el mismo texto (y la misma caché).
+ */
+export function textoParaRevisar(...partes: string[]): string {
+  return partes
+    .map((p) => p.trim())
+    .filter((p) => p.length > 0)
+    .join('\n\n');
+}

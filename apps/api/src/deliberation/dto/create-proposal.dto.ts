@@ -1,4 +1,4 @@
-import { IsString, IsEnum, IsOptional, IsUUID, MinLength, MaxLength } from 'class-validator';
+import { IsBoolean, IsEnum, IsOptional, IsString, IsUUID, MaxLength, MinLength } from 'class-validator';
 import { ProposalStatus } from '@decide/shared';
 
 export class CreateProposalDto {
@@ -21,4 +21,9 @@ export class CreateProposalDto {
   @IsOptional()
   @IsUUID('4')
   forumId?: string;
+
+  /** La persona pide que la mesa revise su texto de nivel 2 (responde 202 y no se publica aún). */
+  @IsOptional()
+  @IsBoolean({ message: 'Indica si pides la revisión de la mesa con sí o no.' })
+  pedirRevision?: boolean;
 }

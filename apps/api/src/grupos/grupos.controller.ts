@@ -51,7 +51,7 @@ export class GruposController {
 
   @Post()
   async proponer(@Body() dto: ProponerGrupoDto, @CurrentUser() user: JwtPayload, @Req() req: Request): Promise<{ id: string }> {
-    return this.grupos.proponer(this.perfil(user), dto, extractIp(req));
+    return this.grupos.proponer(this.perfil(user), dto, extractIp(req), undefined, { pedirRevision: dto.pedirRevision });
   }
 
   // ─── Bifurcaciones ────────────────────────────────────────────────────────
@@ -192,7 +192,7 @@ export class GruposController {
     @Req() req: Request,
   ): Promise<GrupoTrabajoDetail> {
     const profileId = this.perfil(user);
-    await this.comisiones.publicarInforme(profileId, id, dto.texto, dto.final === true, extractIp(req));
+    await this.comisiones.publicarInforme(profileId, id, dto.texto, dto.final === true, extractIp(req), undefined, { pedirRevision: dto.pedirRevision });
     return this.grupos.detail(profileId, id);
   }
 

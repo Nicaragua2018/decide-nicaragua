@@ -1,4 +1,4 @@
-import { ArrayMaxSize, ArrayMinSize, IsArray, IsString, IsUUID, MaxLength, MinLength } from 'class-validator';
+import { ArrayMaxSize, ArrayMinSize, IsArray, IsBoolean, IsOptional, IsString, IsUUID, MaxLength, MinLength } from 'class-validator';
 
 export class OpenDebateDto {
   @IsUUID('4', { message: 'Elige una comunidad válida.' })
@@ -19,4 +19,9 @@ export class OpenDebateDto {
   @MinLength(20, { message: 'El texto necesita entre 20 y 10000 caracteres.' })
   @MaxLength(10_000, { message: 'El texto necesita entre 20 y 10000 caracteres.' })
   body!: string;
+
+  /** La persona pide que la mesa revise su texto de nivel 2 (responde 202 y no se publica aún). */
+  @IsOptional()
+  @IsBoolean({ message: 'Indica si pides la revisión de la mesa con sí o no.' })
+  pedirRevision?: boolean;
 }

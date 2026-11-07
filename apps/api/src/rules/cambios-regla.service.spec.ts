@@ -8,6 +8,7 @@ import { GENERAL_GROUP_SLUG } from '@decide/shared';
 import { CambiosReglaService } from './cambios-regla.service';
 import { ProponerCambioDto } from './dto/proponer-cambio.dto';
 import { GroupAccessService } from '../groups/group-access.service';
+import { guardiaMock, publicadoresMock } from '../test/guardia-mock';
 
 const YO = 'p-yo';
 const ORIGEN = 'g-origen';
@@ -45,6 +46,7 @@ describe('CambiosReglaService', () => {
   let deliberation: { ensureDefaultForum: ReturnType<typeof vi.fn>; createTopicInDefaultForum: ReturnType<typeof vi.fn> };
   let audit: { log: ReturnType<typeof vi.fn> };
   let service: CambiosReglaService;
+  let guardia: ReturnType<typeof guardiaMock>;
   const orden: string[] = [];
 
   beforeEach(() => {
@@ -66,17 +68,48 @@ describe('CambiosReglaService', () => {
       return fn(tx);
     });
     audit = { log: vi.fn().mockResolvedValue(undefined) };
+    guardia = guardiaMock();
     service = new CambiosReglaService(
       prisma as never,
       rules as never,
       deliberation as never,
       new GroupAccessService(prisma as never),
       audit as never,
+      guardia as never,
+      publicadoresMock() as never,
     );
   });
 
   const proponer = (over: Record<string, unknown> = {}) =>
     service.proponer(YO, { groupId: ORIGEN, key: 'inquietud.plazo_respuesta_dias', valor: '10', ...over } as never, 'ip');
+
+  describe('guardia', () => {
+    it('con motivo revisa el motivo como motivo_regla y encola el tema del cambio', async () => {
+      guardia.antesDePublicar.mockResolvedValue({ revisado: false });
+      await service.proponer(
+        YO,
+        { groupId: ORIGEN, key: 'inquietud.plazo_respuesta_dias', valor: '10', motivo: '  Siete días no alcanzan.  ' } as never,
+        'ip',
+        { pedirRevision: true },
+      );
+      expect(guardia.antesDePublicar).toHaveBeenCalledWith({
+        tipo: 'motivo_regla',
+        texto: 'Siete días no alcanzan.',
+        autorProfileId: YO,
+        args: { groupId: ORIGEN, key: 'inquietud.plazo_respuesta_dias', valor: '10', motivo: '  Siete días no alcanzan.  ' },
+        pedirRevision: true,
+      });
+      expect(guardia.antesDePublicar.mock.invocationCallOrder[0]).toBeLessThan(prisma.$transaction.mock.invocationCallOrder[0] ?? 0);
+      expect(guardia.despuesDePublicar).toHaveBeenCalledWith('tema', 't-1', false);
+    });
+
+    it('sin motivo no revisa ni encola', async () => {
+      await proponer();
+      await proponer({ motivo: '   ' });
+      expect(guardia.antesDePublicar).not.toHaveBeenCalled();
+      expect(guardia.despuesDePublicar).not.toHaveBeenCalled();
+    });
+  });
 
   describe('crea el tema como propuesta con una sola solución', () => {
     it('regla local: tema en el foro por defecto, propuesta con plazo de debate, solución y cambio', async () => {
@@ -345,7 +378,7 @@ describe('CambiosReglaService.procesarResultados()', () => {
   const crear = (filas: FilaCambio[]) => {
     const f = fakeDb(filas);
     audit = { log: vi.fn().mockResolvedValue(undefined) };
-    const service = new CambiosReglaService(f.db as never, {} as never, {} as never, {} as never, audit as never);
+    const service = new CambiosReglaService(f.db as never, {} as never, {} as never, {} as never, audit as never, {} as never, {} as never);
     return { ...f, service };
   };
 
@@ -509,7 +542,7 @@ describe('CambiosReglaService.vencerPendientesMesa()', () => {
       $transaction: vi.fn(async (fn: (t: unknown) => unknown) => fn(db)),
     };
     const audit = { log: vi.fn().mockResolvedValue(undefined) };
-    const service = new CambiosReglaService(db as never, {} as never, {} as never, {} as never, audit as never);
+    const service = new CambiosReglaService(db as never, {} as never, {} as never, {} as never, audit as never, {} as never, {} as never);
     return { db, audit, service };
   }
 

@@ -4,6 +4,7 @@ import {
   Injectable,
   Logger,
   NotFoundException,
+  type OnModuleInit,
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { GENERAL_GROUP_NAME, RULE_DEFINITIONS, conUnidad } from '@decide/shared';
@@ -24,6 +25,8 @@ import {
   valorVigenteTx,
 } from './ambito-reglas';
 import type { ProponerCambioDto } from './dto/proponer-cambio.dto';
+import { GuardiaService, type OpcionesPublicar } from '../asistente/guardia.service';
+import { Publicadores } from '../asistente/publicadores';
 
 const DIA_MS = 86_400_000;
 const TITULO_MAX = 200;
@@ -44,7 +47,7 @@ const SIN_EFECTO = 'Esta regla aún no tiene efecto: se conecta con las eleccion
  * `cambios_regla`. El resto es el ciclo normal de debate y votación.
  */
 @Injectable()
-export class CambiosReglaService {
+export class CambiosReglaService implements OnModuleInit {
   private readonly logger = new Logger(CambiosReglaService.name);
 
   constructor(
@@ -53,9 +56,23 @@ export class CambiosReglaService {
     private readonly deliberation: DeliberationService,
     private readonly access: GroupAccessService,
     private readonly audit: AuditService,
+    private readonly guardia: GuardiaService,
+    private readonly publicadores: Publicadores,
   ) {}
 
-  async proponer(profileId: string, dto: ProponerCambioDto, ip: string): Promise<{ id: string; proposalId: string }> {
+  /** La revisión de la mesa propone un cambio con motivo aprobado con la misma llamada (sin ip). */
+  onModuleInit(): void {
+    this.publicadores.registrar('motivo_regla', (autor, args, opts) =>
+      this.proponer(autor, args as ProponerCambioDto, '', opts),
+    );
+  }
+
+  async proponer(
+    profileId: string,
+    dto: ProponerCambioDto,
+    ip: string,
+    opts: OpcionesPublicar = {},
+  ): Promise<{ id: string; proposalId: string }> {
     const grupo = await this.prisma.group.findUnique({
       where: { id: dto.groupId },
       select: { id: true, type: true, slug: true },
@@ -88,6 +105,23 @@ export class CambiosReglaService {
     const frase = `Se propone cambiar «${def.label}» de ${conUnidad(def, actual)} a ${conUnidad(def, propuesto)}.`;
     const body = motivo.length > 0 ? `${frase}\n\n${motivo}` : frase;
     const dias = await this.rules.getInt('debate.plazo_dias', grupo.id);
+
+    // Solo el motivo es texto de la persona: sin motivo no hay nada que revisar.
+    const { revisado } =
+      motivo.length > 0
+        ? await this.guardia.antesDePublicar({
+            tipo: 'motivo_regla',
+            texto: motivo,
+            autorProfileId: profileId,
+            args: {
+              groupId: dto.groupId,
+              key: dto.key,
+              valor: dto.valor,
+              ...(dto.motivo !== undefined ? { motivo: dto.motivo } : {}),
+            },
+            ...opts,
+          })
+        : { revisado: true };
 
     // Fuera de la transacción: una violación de unicidad dentro la abortaría.
     await this.deliberation.ensureDefaultForum(grupo.id);
@@ -134,6 +168,8 @@ export class CambiosReglaService {
       }
       throw err;
     }
+    // El motivo se modera con el tema del cambio (sin motivo no hay nada que encolar).
+    if (motivo.length > 0) await this.guardia.despuesDePublicar('tema', creado.proposalId, revisado);
 
     // Cambiar una regla es una acción cívica pública: se audita con quien la propone.
     const p = await this.prisma.profile

@@ -11,6 +11,7 @@ import { VoluntarioDto } from './dto/voluntario.dto';
 import { AjustarComisionDto } from './dto/ajustar-comision.dto';
 import { PapeletaComisionDto } from './dto/papeleta-comision.dto';
 import { InformeComisionDto } from './dto/informe-comision.dto';
+import { guardiaMock, publicadoresMock } from '../test/guardia-mock';
 
 const YO = 'p-yo';
 const OTRA = 'p-otra';
@@ -119,6 +120,7 @@ describe('ComisionesService', () => {
   let audit: { log: ReturnType<typeof vi.fn> };
   let forums: { canOrganize: ReturnType<typeof vi.fn>; canModerate: ReturnType<typeof vi.fn> };
   let service: ComisionesService;
+  let guardia: ReturnType<typeof guardiaMock>;
   let miembroDe: Set<string>;
   let grupoActual: Record<string, unknown>;
 
@@ -146,7 +148,16 @@ describe('ComisionesService', () => {
     };
     audit = { log: vi.fn().mockResolvedValue(undefined) };
     forums = { canOrganize: vi.fn().mockResolvedValue(false), canModerate: vi.fn().mockResolvedValue(false) };
-    service = new ComisionesService(prisma as never, access as never, rules as never, audit as never, forums as never);
+    guardia = guardiaMock();
+    service = new ComisionesService(
+      prisma as never,
+      access as never,
+      rules as never,
+      audit as never,
+      forums as never,
+      guardia as never,
+      publicadoresMock() as never,
+    );
     prisma.group.findUnique.mockImplementation(async ({ where }: { where: { id: string } }) => {
       if (where.id === AMBITO) return ambito();
       if (where.id === BIF) return ambito({ id: BIF, type: 'trabajo', parentGroupId: AMBITO, trabajoTipo: 'bifurcacion' });
@@ -688,6 +699,20 @@ describe('ComisionesService', () => {
     beforeEach(() => {
       miembroDe = new Set([AMBITO, COM]);
       grupoActual = activa();
+    });
+
+    it('guardia: revisa el informe como informe y lo encola con su id', async () => {
+      guardia.antesDePublicar.mockResolvedValue({ revisado: false });
+      await service.publicarInforme(YO, COM, `  ${TEXTO}  `, true, 'ip', NOW, { pedirRevision: true });
+      expect(guardia.antesDePublicar).toHaveBeenCalledWith({
+        tipo: 'informe',
+        texto: TEXTO,
+        autorProfileId: YO,
+        args: { id: COM, texto: TEXTO, final: true },
+        pedirRevision: true,
+      });
+      expect(guardia.antesDePublicar.mock.invocationCallOrder[0]).toBeLessThan(prisma.$transaction.mock.invocationCallOrder[0] ?? 0);
+      expect(guardia.despuesDePublicar).toHaveBeenCalledWith('informe', 'i-1', false);
     });
 
     it('un miembro publica en una comisión activa: guarda, recalcula el próximo informe y audita sin texto', async () => {

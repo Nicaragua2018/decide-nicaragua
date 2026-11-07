@@ -42,7 +42,7 @@ export class DecisionesController {
     @CurrentUser() user: JwtPayload,
     @Req() req: Request,
   ): Promise<{ id: string }> {
-    return this.decisiones.createSolucion(this.perfil(user), proposalId, dto, extractIp(req));
+    return this.decisiones.createSolucion(this.perfil(user), proposalId, dto, extractIp(req), { pedirRevision: dto.pedirRevision });
   }
 
   @Post('soluciones/:id/juntar')

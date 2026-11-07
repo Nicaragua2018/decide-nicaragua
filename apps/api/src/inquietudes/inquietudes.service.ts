@@ -5,8 +5,10 @@ import {
   Injectable,
   Logger,
   NotFoundException,
+  type OnModuleInit,
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
+import { textoParaRevisar } from '@decide/shared';
 import type { InquietudDetail, InquietudStatusValue, InquietudSummary } from '@decide/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { rechazarGrupoDeTrabajo } from '../groups/group-access.service';
@@ -16,6 +18,8 @@ import { ForumsService } from '../forums/forums.service';
 import { motivoVisible } from '../forums/moderacion-motivo';
 import { DeliberationService } from '../deliberation/deliberation.service';
 import { NOMBRE_INICIATIVA, solucionesDeIniciativa } from '../grupos/bifurcacion-reglas';
+import { GuardiaService, type OpcionesPublicar } from '../asistente/guardia.service';
+import { Publicadores } from '../asistente/publicadores';
 
 const DIA_MS = 86_400_000;
 const ESTADOS_ABIERTOS = ['abierta', 'en_plazo'] as const;
@@ -39,7 +43,7 @@ interface InquietudRow {
 }
 
 @Injectable()
-export class InquietudesService {
+export class InquietudesService implements OnModuleInit {
   private readonly logger = new Logger(InquietudesService.name);
 
   constructor(
@@ -48,7 +52,27 @@ export class InquietudesService {
     private readonly rules: RulesService,
     private readonly forums: ForumsService,
     private readonly deliberation: DeliberationService,
+    private readonly guardia: GuardiaService,
+    private readonly publicadores: Publicadores,
   ) {}
+
+  /** La revisión de la mesa publica un texto aprobado con la misma llamada (sin ip). */
+  onModuleInit(): void {
+    this.publicadores.registrar('inquietud', (autor, args, opts) =>
+      this.create(autor, args as { groupId: string; title: string; body: string }, '', opts),
+    );
+    this.publicadores.registrar('respuesta_inquietud', (autor, args, opts) => {
+      const a = args as { id: string; text: string };
+      return this.respond(autor, a.id, a.text, '', opts);
+    });
+    // Un tema también nace al juntar inquietudes en un debate: variante «abrir_debate».
+    this.publicadores.registrar(
+      'tema',
+      (autor, args, opts) =>
+        this.openDebate(autor, args as { groupId: string; inquietudIds: string[]; title: string; body: string }, '', opts),
+      'abrir_debate',
+    );
+  }
 
   private async requireMembership(groupId: string, profileId: string): Promise<void> {
     const m = await this.prisma.groupMembership.findUnique({
@@ -114,12 +138,21 @@ export class InquietudesService {
     profileId: string,
     dto: { groupId: string; title: string; body: string },
     ip: string,
+    opts: OpcionesPublicar = {},
   ): Promise<{ id: string }> {
     await this.requireMembership(dto.groupId, profileId);
     await rechazarGrupoDeTrabajo(this.prisma, dto.groupId);
+    const { revisado } = await this.guardia.antesDePublicar({
+      tipo: 'inquietud',
+      texto: textoParaRevisar(dto.title, dto.body),
+      autorProfileId: profileId,
+      args: { groupId: dto.groupId, title: dto.title, body: dto.body },
+      ...opts,
+    });
     const created = await this.prisma.inquietud.create({
       data: { groupId: dto.groupId, authorProfileId: profileId, title: dto.title, body: dto.body },
     });
+    await this.guardia.despuesDePublicar('inquietud', created.id, revisado);
     void this.audit.log({
       ...(await this.actorId(profileId)),
       action: 'inquietud.created',
@@ -302,6 +335,7 @@ export class InquietudesService {
     profileId: string,
     dto: { groupId: string; inquietudIds: string[]; title: string; body: string },
     ip: string,
+    opts: OpcionesPublicar = {},
   ): Promise<{ proposalId: string }> {
     await this.requireOrganizer(profileId, dto.groupId);
     const ids = [...new Set(dto.inquietudIds)];
@@ -317,6 +351,14 @@ export class InquietudesService {
       throw new BadRequestException('Solo se pueden juntar inquietudes abiertas o en plazo.');
     }
 
+    // El tema lo escribe quien organiza: se revisa antes de la transacción (no se espera al asistente dentro).
+    const { revisado } = await this.guardia.antesDePublicar({
+      tipo: 'tema',
+      texto: textoParaRevisar(dto.title, dto.body),
+      autorProfileId: profileId,
+      args: { via: 'abrir_debate', groupId: dto.groupId, inquietudIds: ids, title: dto.title, body: dto.body },
+      ...opts,
+    });
     const actor = await this.actorId(profileId);
     await this.deliberation.ensureDefaultForum(dto.groupId);
     const proposalId = await this.prisma.$transaction(async (tx) => {
@@ -335,6 +377,7 @@ export class InquietudesService {
       await tx.inquietud.updateMany({ where: { id: { in: ids } }, data: { proposalId: topic.id } });
       return topic.id;
     });
+    await this.guardia.despuesDePublicar('tema', proposalId, revisado);
 
     void this.audit.log({
       ...actor,
@@ -346,7 +389,7 @@ export class InquietudesService {
     return { proposalId };
   }
 
-  async respond(profileId: string, id: string, text: string, ip: string): Promise<void> {
+  async respond(profileId: string, id: string, text: string, ip: string, opts: OpcionesPublicar = {}): Promise<void> {
     const row = await this.prisma.inquietud.findUnique({
       where: { id },
       select: { id: true, groupId: true, status: true, hidden: true },
@@ -356,12 +399,21 @@ export class InquietudesService {
     if (row.hidden || !(ESTADOS_ABIERTOS as readonly string[]).includes(row.status as string)) {
       throw new BadRequestException('Esta inquietud ya no admite respuesta.');
     }
+    const { revisado } = await this.guardia.antesDePublicar({
+      tipo: 'respuesta_inquietud',
+      texto: text,
+      autorProfileId: profileId,
+      args: { id, text },
+      ...opts,
+    });
     const actor = await this.actorId(profileId);
     const res = await this.prisma.inquietud.updateMany({
       where: { id, hidden: false, status: { in: [...ESTADOS_ABIERTOS] } },
       data: { status: 'respondida', response: text, respondedAt: new Date(), respondedByProfileId: profileId },
     });
     if (res.count === 0) throw new ConflictException('Esta inquietud ya cambió de estado.');
+    // La respuesta se modera junto con su inquietud.
+    await this.guardia.despuesDePublicar('inquietud', id, revisado);
     void this.audit.log({
       ...actor,
       action: 'inquietud.responded',

@@ -23,6 +23,7 @@ import { DeliberationService } from './deliberation.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { GroupAccessService } from '../groups/group-access.service';
+import { guardiaMock, publicadoresMock } from '../test/guardia-mock';
 
 // ─── Fixtures ────────────────────────────────────────────────────────────────
 
@@ -105,6 +106,7 @@ function buildAuditMock() {
 
 describe('DeliberationService', () => {
   let service: DeliberationService;
+  let guardia: ReturnType<typeof guardiaMock>;
   let prisma: ReturnType<typeof buildPrismaMock>;
   let audit: ReturnType<typeof buildAuditMock>;
 
@@ -112,12 +114,15 @@ describe('DeliberationService', () => {
     vi.resetAllMocks();
     prisma = buildPrismaMock();
     audit = buildAuditMock();
+    guardia = guardiaMock();
     audit.log.mockResolvedValue(undefined);
     prisma.profile.findUnique.mockResolvedValue({ userId: 'user-uuid-1' });
     service = new DeliberationService(
       prisma as unknown as PrismaService,
       audit as unknown as AuditService,
       new GroupAccessService(prisma as unknown as PrismaService),
+      guardia as never,
+      publicadoresMock() as never,
     );
   });
 
@@ -131,6 +136,22 @@ describe('DeliberationService', () => {
 
     beforeEach(() => {
       prisma.forum.findFirst.mockResolvedValue({ id: 'forum-uuid-1', groupId: GROUP_ID });
+    });
+
+    it('guardia: revisa título y cuerpo como tema y encola con su id', async () => {
+      prisma.groupMembership.findUnique.mockResolvedValue(mockMembership);
+      prisma.proposal.create.mockResolvedValue({ id: PROPOSAL_ID });
+      guardia.antesDePublicar.mockResolvedValue({ revisado: false });
+      await service.createProposal(GROUP_ID, dto, PROFILE_ID, IP, { pedirRevision: true });
+      expect(guardia.antesDePublicar).toHaveBeenCalledWith({
+        tipo: 'tema',
+        texto: `${dto.title}\n\n${dto.body}`,
+        autorProfileId: PROFILE_ID,
+        args: { groupId: GROUP_ID, dto: { title: dto.title, body: dto.body } },
+        pedirRevision: true,
+      });
+      expect(guardia.antesDePublicar.mock.invocationCallOrder[0]).toBeLessThan(prisma.proposal.create.mock.invocationCallOrder[0] ?? 0);
+      expect(guardia.despuesDePublicar).toHaveBeenCalledWith('tema', PROPOSAL_ID, false);
     });
 
     it('crea una propuesta cuando el usuario es miembro del grupo', async () => {
@@ -496,6 +517,22 @@ describe('DeliberationService', () => {
 
   describe('addComment', () => {
     const dto = { body: 'Este es un comentario de prueba.' };
+
+    it('guardia: revisa el comentario y lo encola como respuesta', async () => {
+      prisma.proposal.findUnique.mockResolvedValue(mockProposal);
+      prisma.groupMembership.findUnique.mockResolvedValue(mockMembership);
+      prisma.proposalComment.create.mockResolvedValue({ id: COMMENT_ID });
+      guardia.antesDePublicar.mockResolvedValue({ revisado: false });
+      await service.addComment(PROPOSAL_ID, dto, PROFILE_ID, IP);
+      expect(guardia.antesDePublicar).toHaveBeenCalledWith({
+        tipo: 'comentario',
+        texto: dto.body,
+        autorProfileId: PROFILE_ID,
+        args: { proposalId: PROPOSAL_ID, body: dto.body },
+      });
+      expect(guardia.antesDePublicar.mock.invocationCallOrder[0]).toBeLessThan(prisma.proposalComment.create.mock.invocationCallOrder[0] ?? 0);
+      expect(guardia.despuesDePublicar).toHaveBeenCalledWith('respuesta', COMMENT_ID, false);
+    });
 
     it('agrega un comentario a una propuesta abierta', async () => {
       prisma.proposal.findUnique.mockResolvedValue(mockProposal);

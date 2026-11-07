@@ -19,6 +19,6 @@ export class CambiosReglaController {
     @Req() req: Request,
   ): Promise<{ id: string; proposalId: string }> {
     if (!user.profileId) throw new ForbiddenException('Perfil requerido');
-    return this.cambios.proponer(user.profileId, dto, extractIp(req));
+    return this.cambios.proponer(user.profileId, dto, extractIp(req), { pedirRevision: dto.pedirRevision });
   }
 }

@@ -5,12 +5,15 @@ import {
   Injectable,
   Logger,
   NotFoundException,
+  type OnModuleInit,
 } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
 import { Prisma } from '@prisma/client';
-import { GENERAL_GROUP_SLUG } from '@decide/shared';
+import { GENERAL_GROUP_SLUG, textoParaRevisar } from '@decide/shared';
 import type { GrupoTrabajoDetail, GrupoTrabajoItem, GruposAmbitoResponse } from '@decide/shared';
 import { PrismaService } from '../prisma/prisma.service';
+import { GuardiaService, type OpcionesPublicar } from '../asistente/guardia.service';
+import { Publicadores } from '../asistente/publicadores';
 import { AuditService } from '../audit/audit.service';
 import { RulesService } from '../rules/rules.service';
 import { GroupAccessService } from '../groups/group-access.service';
@@ -58,7 +61,7 @@ function tipoDeAmbito(g: { type: string; slug: string }): { tipo: AmbitoTipo; ra
 }
 
 @Injectable()
-export class GruposService {
+export class GruposService implements OnModuleInit {
   private readonly logger = new Logger(GruposService.name);
 
   constructor(
@@ -68,7 +71,16 @@ export class GruposService {
     private readonly audit: AuditService,
     private readonly comisiones: ComisionesService,
     private readonly bifurcaciones: BifurcacionesService,
+    private readonly guardia: GuardiaService,
+    private readonly publicadores: Publicadores,
   ) {}
+
+  /** La revisión de la mesa crea un subgrupo aprobado con la misma llamada (sin ip). */
+  onModuleInit(): void {
+    this.publicadores.registrar('subgrupo', (autor, args, opts) =>
+      this.proponer(autor, args as { ambitoId: string; name: string; proposito: string }, '', new Date(), opts),
+    );
+  }
 
   private async actorId(profileId: string): Promise<{ actorId: string } | Record<never, never>> {
     const p = await this.prisma.profile.findUnique({ where: { id: profileId }, select: { userId: true } });
@@ -255,12 +267,21 @@ export class GruposService {
     dto: { ambitoId: string; name: string; proposito: string },
     ip: string,
     now: Date = new Date(),
+    opts: OpcionesPublicar = {},
   ): Promise<{ id: string }> {
     const ambito = await this.prisma.group.findUnique({ where: { id: dto.ambitoId } });
     if (!ambito) throw new NotFoundException('Comunidad no encontrada.');
     if (!tipoDeAmbito({ type: ambito.type as string, slug: ambito.slug })) throw new BadRequestException(NO_AMBITO);
     if (!(await this.access.isParticipant(ambito.id, profileId))) throw new ForbiddenException(NO_MIEMBRO_AMBITO);
 
+    // Un subgrupo no es moderable después: solo se revisa antes (no entra en la cola posterior).
+    await this.guardia.antesDePublicar({
+      tipo: 'subgrupo',
+      texto: textoParaRevisar(dto.name, dto.proposito),
+      autorProfileId: profileId,
+      args: { ambitoId: dto.ambitoId, name: dto.name, proposito: dto.proposito },
+      ...opts,
+    });
     const plazo = await this.rules.getInt('subgrupo.plazo_dias', ambito.id);
     const id = randomUUID();
     await this.prisma.$transaction(async (tx) => {

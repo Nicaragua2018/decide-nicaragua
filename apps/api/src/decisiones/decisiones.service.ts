@@ -1,6 +1,13 @@
 import { Prisma } from '@prisma/client';
-import { BadRequestException, ForbiddenException, Injectable, Logger, NotFoundException } from '@nestjs/common';
-import { GENERAL_GROUP_SLUG } from '@decide/shared';
+import {
+  BadRequestException,
+  ForbiddenException,
+  Injectable,
+  Logger,
+  NotFoundException,
+  type OnModuleInit,
+} from '@nestjs/common';
+import { GENERAL_GROUP_SLUG, textoParaRevisar } from '@decide/shared';
 import type {
   ComunidadDecisiones,
   ComunidadTipo,
@@ -25,6 +32,8 @@ import {
   grupoEnMarcha,
 } from '../grupos/bifurcacion-reglas';
 import { PrismaService } from '../prisma/prisma.service';
+import { GuardiaService, type OpcionesPublicar } from '../asistente/guardia.service';
+import { Publicadores } from '../asistente/publicadores';
 import { AuditService } from '../audit/audit.service';
 import { ForumsService } from '../forums/forums.service';
 import { RulesService } from '../rules/rules.service';
@@ -136,7 +145,7 @@ interface TemaRow {
 }
 
 @Injectable()
-export class DecisionesService {
+export class DecisionesService implements OnModuleInit {
   private readonly logger = new Logger(DecisionesService.name);
 
   constructor(
@@ -145,7 +154,17 @@ export class DecisionesService {
     private readonly forums: ForumsService,
     private readonly rules: RulesService,
     private readonly access: GroupAccessService,
+    private readonly guardia: GuardiaService,
+    private readonly publicadores: Publicadores,
   ) {}
+
+  /** La revisión de la mesa publica una solución aprobada con la misma llamada (sin ip). */
+  onModuleInit(): void {
+    this.publicadores.registrar('solucion', (autor, args, opts) => {
+      const a = args as { proposalId: string; title: string; description: string };
+      return this.createSolucion(autor, a.proposalId, { title: a.title, description: a.description }, '', opts);
+    });
+  }
 
   /**
    * El tema debe existir. Para `participar`, la persona debe ser miembro de su grupo; para
@@ -181,11 +200,19 @@ export class DecisionesService {
     proposalId: string,
     dto: { title: string; description: string },
     ip: string,
+    opts: OpcionesPublicar = {},
   ): Promise<{ id: string }> {
     const tema = await this.tema(profileId, proposalId, 'participar');
     await this.assertDebate(tema);
     // Lo que se vota es el valor propuesto: otra solución cambiaría la pregunta.
     if (tema.cambioRegla) throw new BadRequestException('Un cambio de regla se vota con su única solución.');
+    const { revisado } = await this.guardia.antesDePublicar({
+      tipo: 'solucion',
+      texto: textoParaRevisar(dto.title, dto.description),
+      autorProfileId: profileId,
+      args: { proposalId, title: dto.title, description: dto.description },
+      ...opts,
+    });
     const created = await this.prisma.$transaction(async (tx) => {
       await bloquearDebate(tx, proposalId);
       return tx.solucion.create({
@@ -198,6 +225,7 @@ export class DecisionesService {
         },
       });
     });
+    await this.guardia.despuesDePublicar('solucion', created.id, revisado);
     // Dentro de una bifurcación (reservada), sin actor ni ip.
     void this.audit.log({
       ...(await this.access.rastro(tema.groupId, profileId, ip)).quien,

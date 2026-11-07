@@ -12,6 +12,7 @@ import { ProposeModoDto } from './dto/propose-modo.dto';
 import { ObjecionDto } from './dto/objecion.dto';
 import { PapeletaDto } from './dto/papeleta.dto';
 import { GRUPO_EN_MARCHA, grupoEnMarcha } from '../grupos/bifurcacion-reglas';
+import { guardiaMock, publicadoresMock } from '../test/guardia-mock';
 
 const YO = 'p-yo';
 const G = 'g1';
@@ -69,6 +70,7 @@ describe('DecisionesService', () => {
   let forums: { canOrganize: ReturnType<typeof vi.fn> };
   let rules: { getInt: ReturnType<typeof vi.fn> };
   let service: DecisionesService;
+  let guardia: ReturnType<typeof guardiaMock>;
 
   beforeEach(() => {
     prisma = buildPrisma();
@@ -82,7 +84,16 @@ describe('DecisionesService', () => {
     prisma.profile.findUnique.mockResolvedValue({ userId: 'u1' });
     prisma.decision.findUnique.mockResolvedValue(null);
     prisma.$transaction.mockImplementation((fn: (tx: unknown) => unknown) => fn(prisma));
-    service = new DecisionesService(prisma as never, audit as never, forums as never, rules as never, new GroupAccessService(prisma as never));
+    guardia = guardiaMock();
+    service = new DecisionesService(
+      prisma as never,
+      audit as never,
+      forums as never,
+      rules as never,
+      new GroupAccessService(prisma as never),
+      guardia as never,
+      publicadoresMock() as never,
+    );
   });
 
   describe('DTOs', () => {
@@ -115,6 +126,20 @@ describe('DecisionesService', () => {
   describe('createSolucion()', () => {
     const dto = { title: 'Crear una mesa de salud', description: 'Con voluntarios.' };
     beforeEach(() => prisma.$queryRaw.mockResolvedValue([{ id: T }]));
+
+    it('guardia: revisa título y descripción como solución y encola con su id', async () => {
+      prisma.solucion.create.mockResolvedValue({ id: 's1' });
+      guardia.antesDePublicar.mockResolvedValue({ revisado: false });
+      await service.createSolucion(YO, T, dto, 'ip');
+      expect(guardia.antesDePublicar).toHaveBeenCalledWith({
+        tipo: 'solucion',
+        texto: `${dto.title}\n\n${dto.description}`,
+        autorProfileId: YO,
+        args: { proposalId: T, title: dto.title, description: dto.description },
+      });
+      expect(guardia.antesDePublicar.mock.invocationCallOrder[0]).toBeLessThan(prisma.$transaction.mock.invocationCallOrder[0] ?? 0);
+      expect(guardia.despuesDePublicar).toHaveBeenCalledWith('solucion', 's1', false);
+    });
 
     it('crea la solución como persona y audita sin texto', async () => {
       prisma.solucion.create.mockResolvedValue({ id: 's1' });

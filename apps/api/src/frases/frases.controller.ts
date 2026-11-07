@@ -42,7 +42,7 @@ export class FrasesController {
     @CurrentUser() user: JwtPayload,
     @Req() req: Request,
   ): Promise<{ id: string }> {
-    return this.frases.create(this.perfil(user), proposalId, dto.text, extractIp(req));
+    return this.frases.create(this.perfil(user), proposalId, dto.text, extractIp(req), { pedirRevision: dto.pedirRevision });
   }
 
   @Get('temas/:proposalId')
