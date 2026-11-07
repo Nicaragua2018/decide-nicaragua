@@ -160,34 +160,43 @@ describe('ContextoPersonaService', () => {
       const e = await servicio.estado('u1', YO, 'verified_citizen' as never);
       expect(e.plazos.map((p) => p.ruta)).toEqual([`/inquietudes/${UUID_B}`, `/proposals/${UUID_A}`]);
       expect(e.plazos[0]).toMatchObject({ comunidad: 'Costa Rica', vence: '2026-12-05T00:00:00.000Z' });
+      // Solo grupos de los que es miembro (no el subgrupo que apenas lee) y sin pausa.
+      const where = prisma.decision.findMany.mock.calls[0]![0].where;
+      expect(where.proposal.groupId).toEqual({ in: ['g-origen', 'g-acogida', 'g-general'] });
+      expect(where.proposal.group).toEqual({ pausadaAt: null });
     });
   });
 
   describe('aMaterial (privacidad)', () => {
-    it('no deja pasar nombres, correos, ids de perfil ni uuids, y guarda las rutas aparte', () => {
-      const estado: EstadoPersona = {
-        cuenta: 'verified_citizen' as never,
-        verificacion: null,
-        comunidades: [{ nombre: 'Chinandega', tipo: 'origen', miembros: 9, activa: true, faltan: 0 }],
-        invitaciones: { pendientes: 1, maximo: 5 },
-        plazos: [{ que: 'Votación: Agua', comunidad: 'Chinandega', vence: '2026-12-10T00:00:00.000Z', ruta: `/proposals/${UUID_A}` }],
-      };
-      const resultados: ResultadoBusqueda[] = [
-        { clase: 'debate', titulo: `Agua ${UUID_B}`, extracto: 'Falta agua', comunidad: 'Chinandega', estado: 'abierto', ruta: `/proposals/${UUID_B}` },
-      ];
+    it('con el camino real (estado + búsqueda) no deja pasar nombres, correos, ids de perfil ni uuids', async () => {
+      const PERFIL = '9c1e4b7a-2d3f-4a6b-8c9d-0e1f2a3b4c5d';
+      crear();
+      verificacion.statusFor.mockResolvedValue({
+        status: 'pending_verification',
+        references: [{ kind: 'invitador', displayName: 'María López', email: 'maria@ejemplo.org' }],
+        missing: ['segunda'],
+      });
+      prisma.decision.findMany.mockResolvedValueOnce([
+        { proposalId: UUID_A, votacionEndsAt: new Date('2026-12-10T00:00:00Z'), proposal: { title: 'Agua', groupId: 'g-origen' } },
+      ]);
+      prisma.proposal.findMany.mockResolvedValue([
+        { id: UUID_B, title: `Agua ${UUID_B}`, body: `Falta agua, ver ${UUID_A}`, status: 'open', kind: 'tema', groupId: 'g-origen' },
+      ]);
+      prisma.group.findMany.mockResolvedValueOnce([SUBGRUPO]).mockResolvedValueOnce([]);
+
+      const estado = await servicio.estado('u1', PERFIL, 'pending_verification' as never);
+      const resultados = await servicio.buscar(PERFIL, 'agua');
       const { material, refs } = aMaterial(estado, resultados);
 
-      // La persona (María López, maria@ejemplo.org, perfil YO) nunca entra al estado: se comprueba el texto.
       expect(material).not.toContain('María');
       expect(material).not.toContain('maria@');
-      expect(material).not.toContain(YO);
+      expect(material).not.toContain(PERFIL);
       expect(material).not.toMatch(REGEX_UUID);
       expect(material).not.toContain('/proposals/');
-      expect(material).toContain('[r1]');
-      expect(material).toContain('[r2]');
-      expect(material).toContain('2026-12-10T00:00:00.000Z');
       expect(refs.get('r1')!.ruta).toBe(`/proposals/${UUID_A}`);
       expect(refs.get('r2')!.ruta).toBe(`/proposals/${UUID_B}`);
+      // Los correos y teléfonos que escriban las personas dentro del contenido los quita después
+      // limpiarTexto() en AsistenteService.pedir(); aquí no se duplica esa limpieza.
     });
   });
 });

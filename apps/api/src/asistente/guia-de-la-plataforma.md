@@ -8,7 +8,7 @@ Cada persona verificada pertenece a dos comunidades: la de su territorio de orig
 
 ## Verificar una cuenta
 
-Una cuenta nueva empieza «pendiente de verificación». Para ser ciudadano verificado necesita 2 confirmaciones de personas ya verificadas: la de quien la invitó y una segunda, de otra persona verificada que la conozca. Quien confirma lo hace desde la página de verificaciones [g10]. Mientras la cuenta no esté verificada, la persona todavía no entra a las comunidades. Cuando llega la segunda confirmación, la cuenta pasa a verificada sola y la persona entra a sus comunidades.
+Una cuenta nueva empieza «pendiente de verificación». Para ser ciudadano verificado necesita 2 confirmaciones de personas ya verificadas: la de quien la invitó y una segunda, que da el administrador u otro miembro de su mismo territorio de origen o de su misma comunidad de acogida. Quien confirma lo hace desde la página de verificaciones [g10]. Mientras la cuenta no esté verificada, la persona todavía no entra a las comunidades. Cuando llega la segunda confirmación, la cuenta pasa a verificada sola y la persona entra a sus comunidades.
 
 ## Las invitaciones
 
@@ -24,7 +24,14 @@ Un debate es una conversación sobre un tema, con un plazo (por defecto 7 días)
 
 ## Las soluciones y la papeleta
 
-Después del debate, las personas proponen soluciones: respuestas concretas al problema. La plataforma propone un modo de decisión y, si un tercio de la comunidad lo objeta, se cambia. Luego se abre la votación (por defecto 7 días). La papeleta tiene una opción para cada solución: «Apruebo», «No apruebo» o «Me abstengo». Si hay varias soluciones, la persona también las ordena de la que más le gusta a la que menos. La plataforma cuenta los votos sola y publica el resultado, con las soluciones ganadoras. Para que una votación valga, tiene que votar un mínimo de la comunidad (por defecto 20 %). Las votaciones abiertas y los resultados están en la página de decisiones [g3].
+Después del debate, las personas proponen soluciones: respuestas concretas al problema. Con varias soluciones, quien organiza la comunidad propone el modo de decisión (excluyentes o compatibles) dentro de un plazo (por defecto 3 días); si nadie lo propone, el sistema propone «excluyentes». Si al menos un tercio de quienes participaron en el debate lo objeta, se usa el otro modo. Con una sola solución no hay modo que elegir.
+
+Luego se abre la votación (por defecto 7 días). La papeleta cambia según el caso:
+
+- Con una sola solución: «Apruebo», «No apruebo» o «Me abstengo».
+- Con varias soluciones: la persona ordena solo las que acepta, y las que deja fuera cuentan como rechazadas. También puede elegir «Rechazo todas» o «Me abstengo».
+
+La papeleta se puede cambiar hasta que cierra la votación. La plataforma cuenta los votos sola y publica el resultado, con las soluciones ganadoras. Para que una votación valga, tiene que votar un mínimo de la comunidad (por defecto 20 %, contando las abstenciones). Las votaciones abiertas y los resultados están en la página de decisiones [g3].
 
 ## Las comisiones, los subgrupos y las bifurcaciones
 
@@ -54,7 +61,7 @@ Las personas que escriben pueden ver sus textos en revisión en su página [g8].
 
 ## La privacidad
 
-El voto es secreto. La plataforma guarda que una persona votó, pero no cómo votó, y los resultados nunca muestran nombres. Los grupos de opinión, los apoyos y las iniciativas de un grupo tampoco revelan quién es quién. El asistente tampoco puede saberlo ni se lo dicen: a él nunca llegan nombres, correos ni identificadores de personas. La página de la persona [g6] muestra su propio estado.
+El voto es secreto: nadie puede ver la papeleta de otra persona, no se muestra ninguna cifra antes del conteo, los resultados no llevan nombres y las papeletas no se auditan. Los grupos de opinión, los apoyos y las iniciativas de un grupo tampoco revelan quién es quién. El asistente tampoco puede saberlo ni se lo dicen: a él nunca llegan nombres, correos ni identificadores de personas. La página de la persona [g6] muestra su propio estado.
 
 ## Qué hace el asistente y qué no
 

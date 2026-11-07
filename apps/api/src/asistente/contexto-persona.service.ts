@@ -152,7 +152,7 @@ export class ContextoPersonaService {
     const maximo = await this.rules.getInt('invitaciones.pendientes_max', null);
 
     const plazos = await this.plazos(
-      legibles,
+      legibles.filter((g) => miembroDe.some((m) => m.id === g.id)),
       comunidades.map((c) => c.id),
     );
 
@@ -198,6 +198,7 @@ export class ContextoPersonaService {
       }),
       this.prisma.decision.findMany({
         where: {
+          // La búsqueda de decisiones compara solo el título de la propuesta.
           fase: { in: ['votacion', 'contada'] },
           proposal: { groupId: { in: ids }, hidden: false, OR: enTitulo },
         },
@@ -309,7 +310,7 @@ export class ContextoPersonaService {
     return esNivelGeneral(g) ? 'general' : null;
   }
 
-  /** Votaciones abiertas en sus grupos e inquietudes con plazo en sus comunidades, la más próxima primero. */
+  /** Votaciones abiertas en los grupos de los que es miembro (no en pausa) e inquietudes con plazo en sus comunidades, la más próxima primero. */
   private async plazos(legibles: GrupoLegible[], comunidadIds: string[]): Promise<EstadoPersona['plazos']> {
     if (legibles.length === 0) return [];
     const nombre = new Map(legibles.map((g) => [g.id, g.nombre]));
@@ -318,7 +319,7 @@ export class ContextoPersonaService {
         where: {
           fase: 'votacion',
           votacionEndsAt: { not: null, gt: new Date() },
-          proposal: { groupId: { in: legibles.map((g) => g.id) }, hidden: false },
+          proposal: { groupId: { in: legibles.map((g) => g.id) }, hidden: false, group: { pausadaAt: null } },
         },
         select: { proposalId: true, votacionEndsAt: true, proposal: { select: { title: true, groupId: true } } },
         orderBy: { votacionEndsAt: 'asc' },
