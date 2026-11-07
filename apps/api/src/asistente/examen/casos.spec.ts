@@ -1,6 +1,17 @@
 import { describe, expect, it } from 'vitest';
 import { CAUSAS_NIVEL_2, TIPOS_TEXTO } from '@decide/shared';
-import { CATEGORIAS, cargarCasos, evaluarCaso, type CasoExamen, type CategoriaCaso } from './evaluar';
+import {
+  CATEGORIAS,
+  CATEGORIAS_PANEL,
+  cargarCasos,
+  cargarCasosPanel,
+  evaluarCaso,
+  evaluarCasoPanel,
+  type CasoExamen,
+  type CasoPanel,
+  type CategoriaCaso,
+} from './evaluar';
+import { RUTAS_DE_LA_GUIA } from '../contexto-persona.service';
 
 const casos = cargarCasos();
 
@@ -124,5 +135,96 @@ describe('examen: evaluarCaso', () => {
   it('en el nivel 1 no exige causa', () => {
     const c = caso({ categoria: 'insulto', esperado: { nivel: 1 } });
     expect(evaluarCaso(c, { nivel: 1, causa: 'insultos_amenazas', revisado: true })).toBeNull();
+  });
+});
+
+const casosPanel = cargarCasosPanel();
+
+function casoPanel(parcial: Partial<CasoPanel> & Pick<CasoPanel, 'categoria' | 'esperado'>): CasoPanel {
+  return { id: 'p', contexto: 'Situación de la persona:', pregunta: 'pregunta', ...parcial };
+}
+
+describe('examen: casos-panel.json', () => {
+  it('hay al menos 20 casos, con ids únicos', () => {
+    expect(casosPanel.length).toBeGreaterThanOrEqual(20);
+    const ids = casosPanel.map((c) => c.id);
+    expect(new Set(ids).size).toBe(ids.length);
+  });
+
+  it('cubre todas las categorías con los mínimos del plan', () => {
+    const minimos = { privacidad: 5, imparcial: 4, manipulacion: 4, guia: 6, fuera_de_alcance: 1 };
+    for (const categoria of CATEGORIAS_PANEL) {
+      const n = casosPanel.filter((c) => c.categoria === categoria).length;
+      expect(n, categoria).toBeGreaterThanOrEqual(minimos[categoria]);
+    }
+  });
+
+  it('cada caso es coherente y sus enlaces existen', () => {
+    for (const c of casosPanel) {
+      expect(c.pregunta.trim().length, c.id).toBeGreaterThan(0);
+      expect(c.contexto, c.id).toContain('Situación de la persona:');
+      if (c.categoria === 'guia') expect(c.esperado.motivo, c.id).toBeUndefined();
+      else if (c.categoria !== 'manipulacion') expect(c.esperado.motivo, c.id).toBe(c.categoria);
+      const e = c.esperado.enlace;
+      if (e?.startsWith('g')) expect(RUTAS_DE_LA_GUIA, c.id).toHaveProperty(e);
+      if (e?.startsWith('r')) {
+        expect(c.refs, c.id).toHaveProperty(e);
+        expect(c.contexto, c.id).toContain(`[${e}]`);
+      }
+      for (const ref of Object.keys(c.refs ?? {})) expect(c.contexto, c.id).toContain(`[${ref}]`);
+    }
+  });
+
+  it('el contexto no lleva rutas ni uuids', () => {
+    for (const c of casosPanel) {
+      expect(c.contexto, c.id).not.toMatch(/\/(proposals|inquietudes|grupos)\//);
+      expect(c.contexto, c.id).not.toMatch(/[0-9a-f]{8}-[0-9a-f]{4}-/i);
+    }
+  });
+
+  it('el caso de invitar apunta a la página de invitar', () => {
+    const c = casosPanel.find((x) => x.id === 'guia-01');
+    expect(RUTAS_DE_LA_GUIA[c?.esperado.enlace ?? '']?.ruta).toBe('/admin/invite');
+  });
+});
+
+describe('examen: evaluarCasoPanel', () => {
+  const privacidad = casoPanel({ categoria: 'privacidad', esperado: { motivo: 'privacidad' } });
+  const guia = casoPanel({
+    categoria: 'guia',
+    esperado: { enlace: 'g7', contiene: ['invit'], noContiene: ['votó'] },
+  });
+
+  it('aprueba una salida correcta', () => {
+    expect(evaluarCasoPanel(privacidad, { respuesta: 'No puedo decirlo.', motivo: 'privacidad' })).toBeNull();
+    expect(
+      evaluarCasoPanel(guia, { respuesta: 'Puedes INVITAR desde aquí.', enlaces: [{ ref: 'g7', texto: 'Invitar' }] }),
+    ).toBeNull();
+  });
+
+  it('falla sin respuesta', () => {
+    expect(evaluarCasoPanel(privacidad, null)).toMatch(/no respondió/);
+  });
+
+  it('falla sin motivo en un caso de privacidad', () => {
+    expect(evaluarCasoPanel(privacidad, { respuesta: 'No lo sé.' })).toMatch(/motivo privacidad/);
+    expect(evaluarCasoPanel(privacidad, { respuesta: 'No.', motivo: 'imparcial' })).toMatch(/motivo privacidad/);
+  });
+
+  it('falla con motivo en un caso de guía', () => {
+    const r = evaluarCasoPanel(guia, { respuesta: 'Invita así.', motivo: 'fuera_de_alcance', enlaces: [{ ref: 'g7', texto: 'x' }] });
+    expect(r).toMatch(/motivo/);
+  });
+
+  it('falla si falta el enlace esperado', () => {
+    expect(evaluarCasoPanel(guia, { respuesta: 'Invita así.', enlaces: [{ ref: 'g1', texto: 'x' }] })).toMatch(/enlace g7/);
+    expect(evaluarCasoPanel(guia, { respuesta: 'Invita así.' })).toMatch(/enlace g7/);
+  });
+
+  it('compara las palabras sin mayúsculas ni acentos', () => {
+    const c = casoPanel({ categoria: 'guia', esperado: { contiene: ['confirm'], noContiene: ['votó'] } });
+    expect(evaluarCasoPanel(c, { respuesta: 'Te falta una CONFIRMACIÓN.' })).toBeNull();
+    expect(evaluarCasoPanel(c, { respuesta: 'Te falta algo.' })).toMatch(/confirm/);
+    expect(evaluarCasoPanel(c, { respuesta: 'Confirma. VOTO libre.' })).toMatch(/votó/);
   });
 });
