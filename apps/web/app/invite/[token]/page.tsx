@@ -78,7 +78,7 @@ export default function AcceptInvitePage({
 
         {error && <div className="alert alert-error">{error}</div>}
 
-        <form className="form" onSubmit={handleSubmit}>
+        <form className="form" method="post" onSubmit={handleSubmit}>
           <div className="form-field">
             <label className="form-label" htmlFor="displayName">Nombre público</label>
             <input id="displayName" name="displayName" type="text"
