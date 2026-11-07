@@ -1,4 +1,4 @@
-import { ArrayMaxSize, ArrayMinSize, IsArray, IsIn, IsString, MaxLength, MinLength, ValidateNested } from 'class-validator';
+import { ArrayMaxSize, ArrayMinSize, IsArray, IsIn, IsString, Matches, MaxLength, MinLength, ValidateNested } from 'class-validator';
 import { Type } from 'class-transformer';
 import type { MensajePanel } from '@decide/shared';
 
@@ -8,6 +8,7 @@ export class MensajePanelDto implements MensajePanel {
 
   @IsString({ message: 'El mensaje debe ser texto.' })
   @MinLength(1, { message: 'El mensaje está vacío.' })
+  @Matches(/\S/, { message: 'El mensaje está vacío.' })
   @MaxLength(1000, { message: 'Cada mensaje admite hasta 1000 caracteres.' })
   texto!: string;
 }

@@ -114,7 +114,13 @@ export class PanelService {
     refs: Refs,
     mensajes: MensajePanel[],
   ): Promise<{ salida: SalidaPanel | null; respuesta: RespuestaPanel }> {
-    const conversacion = mensajes.map((m) => `${m.rol === 'persona' ? 'Persona' : 'Asistente'}: ${m.texto}`).join('\n');
+    // Turnos numerados y con cada línea sangrada: un mensaje no puede hacerse pasar por otro turno.
+    const conversacion = mensajes
+      .map((m, i) => {
+        const texto = m.texto.replace(/\r?\n/g, '\n    ');
+        return `[${(i + 1).toString()}] ${m.rol === 'persona' ? 'Persona' : 'Asistente'}: ${texto}`;
+      })
+      .join('\n');
     const salida = await this.asistente.pedir({
       modelo: 'rapido',
       prioridad: 'interactiva',
@@ -129,9 +135,11 @@ export class PanelService {
     const enlaces: { texto: string; ruta: string }[] = [];
     for (const e of salida.enlaces ?? []) {
       // La ruta sale siempre del servidor, nunca del modelo.
-      const destino = refs.get(e.ref) ?? RUTAS_DE_LA_GUIA[e.ref];
-      if (!destino) continue;
-      enlaces.push({ texto: e.texto.trim() || destino.texto, ruta: destino.ruta });
+      const esGuia = Object.prototype.hasOwnProperty.call(RUTAS_DE_LA_GUIA, e.ref);
+      const destino = esGuia ? RUTAS_DE_LA_GUIA[e.ref] : refs.get(e.ref);
+      if (typeof destino?.ruta !== 'string') continue;
+      const propio = e.texto.replace(/[\p{Cc}\p{Zl}\p{Zp}]+/gu, ' ').trim();
+      enlaces.push({ texto: esGuia ? destino.texto : propio || destino.texto, ruta: destino.ruta });
     }
     return { salida, respuesta: { tipo: 'respuesta', texto: salida.respuesta, enlaces } };
   }
