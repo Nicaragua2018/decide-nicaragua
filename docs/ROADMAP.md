@@ -1,6 +1,6 @@
 # ROADMAP.md — Decide Nicaragua
 
-> Última actualización: 2026-04-02
+> Última actualización: 2026-11-06
 
 ---
 
@@ -29,6 +29,22 @@ Base del diseño «Primeros 200» entregada en las tareas 1 a 9:
 - [x] Panel de usuarios solo para el administrador
 - [x] Semilla del administrador fundador
 - [x] Web: registro con comunidad de acogida, «Tu verificación», «Verificaciones» y «Mesa»
+
+---
+
+## Primeros 200 — Plan 3B-1 (asistente: base y moderación): COMPLETO
+
+El asistente de IA cuida la conversación sin decidir qué opiniones valen (ADR-025):
+
+- [x] Puerta única hacia Claude con interruptor apagado por defecto, tope de gasto de 20 USD (80 % y 100 %) y limpieza del texto
+- [x] Guía de valores e instrucciones fijas; el texto de los miembros va aparte, como material
+- [x] Moderación previa en tres niveles, con la causa nueva `odio`; la crítica política nunca se frena
+- [x] Revisión de la mesa para los textos de nivel 2, con 2 firmas y vencimiento a los 7 días
+- [x] Revisión posterior para lo que se publicó sin revisar
+- [x] Web: aviso amable, bloqueo del nivel 2 y textos en revisión
+- [x] Examen del asistente (pendiente de correrlo en el servidor con la clave)
+
+**Siguen:** 3B-2 Acompañar (panel de preguntas, ponerse al día y crecer la comunidad) y 3B-3 Acuerdos (agrupar inquietudes, mapas de opiniones, borradores y las once preguntas iniciales).
 
 ---
 
