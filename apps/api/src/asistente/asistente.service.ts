@@ -45,6 +45,14 @@ const TIMEOUT_POR_DEFECTO_MS = 30_000;
  * claude-api, typescript/claude-api/tool-use.md). Con el resto se usa `auto` y
  * las instrucciones nombran la herramienta; `validar` descarta cualquier otra salida.
  */
+/**
+ * El texto del miembro no puede abrir ni cerrar la etiqueta <material>: «</material» pasa a
+ * «<\/material» y «<material» a «<\material» (sin importar mayúsculas).
+ */
+export function neutralizarEtiquetas(texto: string): string {
+  return texto.replace(/<(\/?)(material)/gi, (_m, barra: string, nombre: string) => `<\\${barra}${nombre}`);
+}
+
 function admiteHerramientaForzada(modelo: string): boolean {
   return modelo.startsWith('claude-haiku-');
 }
@@ -119,7 +127,7 @@ export class AsistenteService {
             system,
             tools: [herramienta],
             tool_choice: forzada ? { type: 'tool', name: op.herramienta.nombre } : { type: 'auto' },
-            messages: [{ role: 'user', content: `<material>\n${limpiarTexto(op.material)}\n</material>` }],
+            messages: [{ role: 'user', content: `<material>\n${neutralizarEtiquetas(limpiarTexto(op.material))}\n</material>` }],
           },
           { signal, ...(op.prioridad === 'interactiva' ? { maxRetries: 0 } : {}) },
         ),
