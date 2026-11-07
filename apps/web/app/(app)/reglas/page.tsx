@@ -12,6 +12,7 @@ const UNIT_LABEL: Record<string, string> = {
   porcentaje: '%',
   dias: 'días',
   meses: 'meses',
+  preguntas: 'preguntas',
 };
 
 const ESTADO_LABEL: Record<string, string> = {

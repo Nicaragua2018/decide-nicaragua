@@ -8,5 +8,6 @@ import { VerificationController } from './verification.controller';
   imports: [AuditModule, GroupsModule],
   controllers: [VerificationController],
   providers: [VerificationService],
+  exports: [VerificationService],
 })
 export class VerificationModule {}

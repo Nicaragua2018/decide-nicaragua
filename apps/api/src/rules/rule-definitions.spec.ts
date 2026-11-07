@@ -66,4 +66,11 @@ describe('RULE_DEFINITIONS', () => {
     expect(conUnidad(ruleDefinition('cargos.periodo_mesa_meses'), '12')).toBe('12 meses');
     expect(conUnidad(ruleDefinition('comision.forma'), 'sorteo')).toBe('sorteo');
   });
+
+  it('asistente.preguntas_por_dia es de la colmena, 30 de 10 a 100, conectada', () => {
+    const d = ruleDefinition('asistente.preguntas_por_dia');
+    expect([d.level, d.default, d.min, d.max, d.unit, d.conectada]).toEqual(['colmena', '30', 10, 100, 'preguntas', true]);
+    expect(conUnidad(d, '1')).toBe('1 pregunta');
+    expect(conUnidad(d, '30')).toBe('30 preguntas');
+  });
 });

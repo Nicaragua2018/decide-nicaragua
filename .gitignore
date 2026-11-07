@@ -54,3 +54,6 @@ infra/traefik/acme.json
 *.pem
 *.key
 *.cert
+
+# Next.js (generado)
+apps/web/next-env.d.ts

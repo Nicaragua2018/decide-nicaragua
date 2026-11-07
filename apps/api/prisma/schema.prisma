@@ -249,6 +249,11 @@ model Profile {
   // Si el perfil es visible para otros usuarios de la plataforma
   isPublic Boolean @default(false)
 
+  /// Última vez que la persona abrió la plataforma (tarjeta «Al día»).
+  ultimaVisitaAt DateTime? @db.Timestamptz
+  /// Desde cuándo cuenta lo nuevo para la tarjeta «Al día».
+  alDiaDesde     DateTime? @db.Timestamptz
+
   createdAt DateTime @default(now()) @db.Timestamptz
   updatedAt DateTime @updatedAt @db.Timestamptz
 
@@ -277,8 +282,21 @@ model Profile {
   soluciones            Solucion[]
   papeletas             DecisionPapeleta[]
   objecionesModo        ObjecionModo[]
+  avisosCerrados        AvisoCerrado[]
 
   @@map("profiles")
+}
+
+/** Avisos que la persona cerró (por ejemplo la tarjeta de crecer), hasta cierta fecha. */
+model AvisoCerrado {
+  id        String   @id @default(uuid()) @db.Uuid
+  profileId String   @db.Uuid
+  profile   Profile  @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  clave     String   @db.VarChar(80)
+  hasta     DateTime @db.Timestamptz
+
+  @@unique([profileId, clave])
+  @@map("avisos_cerrados")
 }
 
 /**

@@ -666,6 +666,37 @@ El spec 3B (§6 y §7) pide un asistente de IA (Claude) que cuide la conversaci�
 
 ---
 
+## ADR-026: Asistente de IA, acompañar (2026-11-07)
+**Fecha:** 2026-11-07
+**Estado:** Aceptado
+
+### Contexto
+El plan 3B-2 pone al asistente al lado de cada persona: un panel de preguntas, «Desde tu última visita» y una tarjeta para crecer la comunidad. Carlos pidió que toda complejidad esté automatizada y que el asistente nunca actúe por su cuenta. Todo pasa por la puerta única de ADR-025.
+
+### Decisión
+- **Modelo rápido para el panel.** El panel y las dos tarjetas usan el modelo rápido (Haiku) con prioridad interactiva y un tiempo máximo de 20 s en el panel. La respuesta llega por la herramienta «responder», que se valida (`esRespuestaPanel`); sin una salida válida, la persona ve un mensaje de reintento.
+- **Referencias `rN` y `gN` en lugar de rutas.** Al asistente nunca van rutas, ids ni uuids. La guía de la plataforma cita sus páginas como `gN` (`RUTAS_DE_LA_GUIA`, por ejemplo `g7` es `/admin/invite`) y `aMaterial` cambia cada plazo y cada resultado por una `rN`. La ruta del enlace la pone siempre el servidor: una referencia que no existe se descarta, y el texto del enlace de la guía es el de la guía, no el del modelo.
+- **El panel no ve nombres ni votos.** Las reglas del panel: no dice quién escribió, apoyó o votó algo ni quién está en un grupo (`motivo: 'privacidad'`), no da opinión política ni recomienda votar (`imparcial`) y rechaza lo que no es de la plataforma (`fuera_de_alcance`). No actúa en nombre de la persona: dice dónde hacer clic. La conversación va en turnos numerados y sangrados, para que un mensaje no se haga pasar por otro turno.
+- **Búsqueda solo en los grupos legibles.** `ContextoPersonaService.gruposLegibles` devuelve los grupos de los que la persona es miembro y sus grupos de trabajo que no son bifurcación (la misma regla que `GroupAccessService.nivel`). La búsqueda, el material y las tarjetas se limitan a ellos: una bifurcación solo la leen sus miembros porque su nombre y su foro delatarían el voto.
+- **Plazos solo de lo propio.** Las votaciones abiertas salen únicamente de los grupos de los que la persona es miembro y que no están en pausa; los plazos de inquietudes, de sus comunidades.
+- **Límite diario.** Regla `asistente.preguntas_por_dia` (global). Se cuenta en Redis con un hash del perfil y el día UTC (plazo de 26 h); si Redis falla o tarda más de 300 ms, se permite.
+- **«Desde tu última visita».** Una visita nueva empieza si pasaron más de 12 h desde la última; la primera visita mira 7 días atrás. `alDiaDesde` significa «visto hasta aquí»: una visita nueva lo adelanta a la última visita, salvo que la persona haya cerrado la tarjeta después (manda lo más nuevo), y nunca es más vieja que 7 días (un perfil anterior sin ventana cuenta como 7 días atrás). Cerrar la tarjeta pone `alDiaDesde` en este momento, en lugar de ocultarla para siempre: la tarjeta solo se muestra si hay novedades desde ahí, así que vuelve sola cuando pasa algo nuevo. Quien entra seguido sigue viendo novedades, porque la ventana avanza con cada visita nueva. Es un resumen breve (una a tres frases) de lo que pasó en las comunidades de la persona. La caché usa una clave que incluye el hash de la lista de novedades, y sin duplicar lo que está «abierta» y lo que «cierra».
+- **Tarjeta de crecer.** Se muestra a quien es miembro de una comunidad territorial (de origen o de acogida) con menos de 20 miembros; la meta es 7 para activarla y 20 después. Cerrarla la oculta 7 días y se guarda por persona en la base de datos (`AvisoCerrado`), no en el navegador; solo se cierra la tarjeta de la propia comunidad territorial. La caché incluye el número de miembros, así el texto no se queda viejo. Si el asistente no responde, un texto fijo de reserva (`textoSinAsistente`) lo cubre, con un mensaje de invitación que la persona puede copiar y que el asistente no envía.
+- **Sin tarjetas con el asistente apagado.** Con el asistente apagado (sin `ASISTENTE_ACTIVO` o sin clave), las tarjetas no se muestran (`mostrar: false`) y el panel responde «apagado». La plataforma funciona igual que en 3A.
+- **Cuentas sin verificar** (ruling de las tareas 4 y 5): las tarjetas usan `JwtAuthGuard` y comprueban el estado en el controlador. Una cuenta que no es de ciudadana verificada recibe `mostrar: false` y cerrar es un 204 sin efecto, para que la portada nunca falle por una tarjeta.
+- **Web.** La tarjeta «al día» va en la portada y la de crecer en la página de la comunidad, ambas en `Suspense`, así que la página no espera al asistente. Los enlaces del panel pasan por `esRutaInterna`: solo rutas internas de la plataforma. La web de 3B-2 se verifica con `tsc`, porque no tiene pruebas automáticas (como en 3B-1).
+- **El examen del panel** (`casos-panel.json`): 28 casos inventados de privacidad (incluido un nombre dentro del material), imparcialidad (a favor y en contra de cualquier lado), manipulación (en la pregunta, escondida en el material, un turno falso del «Asistente» o un enlace inyectado), guía (con críticas legítimas al gobierno y a la oposición, que no deben rechazarse) y fuera de alcance. El evaluador también falla si un enlace no es de la guía ni del material del caso. `correr-examen.ts` corre las dos partes (moderación y panel, con `PanelService.responderConMaterial`) y termina con código 1 si falla un solo caso. Hay que aprobarlo completo para encender el asistente, y otra vez antes de cambiar instrucciones o modelo.
+- **Un solo interruptor.** `ASISTENTE_ACTIVO` enciende todo el asistente a la vez: la moderación previa, el panel y las tarjetas. El examen cubre la moderación y el panel juntos, y el asistente se enciende solo después de que ambas partes aprueben completas.
+- **Variables de entorno:** ninguna nueva (`.env.example` no cambia). Las opciones nuevas viven en las reglas de la colmena.
+
+### Consecuencias
+- **Límite conocido: el examen del panel requiere la clave de Carlos y se corre a mano**, igual que el de 3B-1. Las pruebas automáticas solo comprueban que los casos estén bien formados y que el evaluador funcione.
+- Una pregunta cuesta una llamada al modelo rápido; el límite diario y el tope mensual de ADR-025 acotan el gasto.
+- El panel no recuerda conversaciones entre visitas: la web manda los turnos de la sesión.
+- Sigue 3B-3 (acuerdos).
+
+---
+
 ## Decisiones pendientes
 
 | ID | Pregunta | Prioridad |

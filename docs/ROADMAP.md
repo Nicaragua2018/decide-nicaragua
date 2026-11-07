@@ -44,7 +44,23 @@ El asistente de IA cuida la conversación sin decidir qué opiniones valen (ADR-
 - [x] Web: aviso amable, bloqueo del nivel 2 y textos en revisión
 - [x] Examen del asistente (pendiente de correrlo en el servidor con la clave)
 
-**Siguen:** 3B-2 Acompañar (panel de preguntas, ponerse al día y crecer la comunidad) y 3B-3 Acuerdos (agrupar inquietudes, mapas de opiniones, borradores y las once preguntas iniciales).
+**Sigue:** 3B-3 Acuerdos (agrupar inquietudes, mapas de opiniones, borradores y las once preguntas iniciales).
+
+---
+
+## Primeros 200 — Plan 3B-2 (asistente: acompañar): COMPLETO
+
+El asistente acompaña a cada persona sin decidir por ella (ADR-026):
+
+- [x] Panel de preguntas con el modelo rápido, límite diario por perfil y enlaces que pone el servidor
+- [x] Privacidad e imparcialidad: no dice quién votó ni qué opción elegir
+- [x] «Desde tu última visita»: resumen breve de las novedades de tus comunidades
+- [x] Tarjeta para hacer crecer la comunidad, que se cierra por 7 días
+- [x] Búsqueda y plazos solo de lo que la persona puede leer
+- [x] Con el asistente apagado no hay tarjetas ni panel
+- [x] Examen del panel (23 casos; pendiente de correrlo en el servidor con la clave)
+
+**Sigue:** 3B-3 Acuerdos.
 
 ---
 

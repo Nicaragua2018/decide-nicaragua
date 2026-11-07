@@ -1,6 +1,8 @@
 import Link from 'next/link';
 import type { Metadata } from 'next';
 import { serverFetch } from '@/lib/api';
+import { Suspense } from 'react';
+import CrecerSeccion from '@/components/CrecerSeccion';
 import type {
   GroupDetail,
   ProposalListResponse,
@@ -103,6 +105,10 @@ export default async function GroupPage({
           {meta.cta}
         </Link>
       </div>
+
+      <Suspense fallback={null}>
+        <CrecerSeccion groupId={id} />
+      </Suspense>
 
       {/* ── Tabs ────────────────────────────────────────────────── */}
       <nav className="tab-nav" aria-label="Secciones del grupo">
