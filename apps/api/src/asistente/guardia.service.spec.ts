@@ -18,7 +18,7 @@ function buildPrisma() {
     group: { findUnique: vi.fn().mockResolvedValue(null) },
     profile: { findUnique: vi.fn().mockResolvedValue({ userId: 'u1' }) },
     frase: { create: vi.fn().mockResolvedValue({ id: 'f1' }) },
-    textoEnRevision: { create: vi.fn().mockResolvedValue({ id: 'rev1' }), findFirst: vi.fn().mockResolvedValue(null) },
+    textoEnRevision: { create: vi.fn().mockResolvedValue({ id: 'rev1' }), findMany: vi.fn().mockResolvedValue([]) },
     colaRevisionPosterior: { upsert: vi.fn().mockResolvedValue({}) },
   };
 }
@@ -90,16 +90,37 @@ describe('GuardiaService (con frases.create)', () => {
   });
 
   it('guardia: pedir revisión dos veces del mismo texto reutiliza la pendiente', async () => {
-    prisma.textoEnRevision.findFirst.mockResolvedValue({ id: 'rev0' });
+    prisma.textoEnRevision.findMany.mockResolvedValue([
+      // Mismos argumentos (en otro orden de claves) y aún vigente.
+      { id: 'rev0', args: { text: ODIO, proposalId: T }, venceAt: new Date(Date.now() + DIA_MS) },
+    ]);
     const err = await frases.create(YO, T, ODIO, 'ip', { pedirRevision: true }).catch((e: unknown) => e);
     expect((err as HttpException).getStatus()).toBe(202);
     expect((err as HttpException).getResponse()).toEqual({ codigo: 'en_revision', revisionId: 'rev0' });
-    expect(prisma.textoEnRevision.findFirst).toHaveBeenCalledWith({
+    expect(prisma.textoEnRevision.findMany).toHaveBeenCalledWith({
       where: { autorProfileId: YO, tipo: 'frase', texto: ODIO, estado: 'pendiente' },
-      select: { id: true },
+      select: { id: true, args: true, venceAt: true },
     });
     expect(prisma.textoEnRevision.create).not.toHaveBeenCalled();
     expect(audit.log).not.toHaveBeenCalled();
+  });
+
+  it('guardia: mismo texto a otro destino crea su propia revisión', async () => {
+    prisma.textoEnRevision.findMany.mockResolvedValue([
+      { id: 'rev0', args: { proposalId: 'otro-tema', text: ODIO }, venceAt: new Date(Date.now() + DIA_MS) },
+    ]);
+    const err = await frases.create(YO, T, ODIO, 'ip', { pedirRevision: true }).catch((e: unknown) => e);
+    expect((err as HttpException).getResponse()).toEqual({ codigo: 'en_revision', revisionId: 'rev1' });
+    expect(prisma.textoEnRevision.create).toHaveBeenCalledTimes(1);
+  });
+
+  it('guardia: una pendiente ya vencida no se reutiliza', async () => {
+    prisma.textoEnRevision.findMany.mockResolvedValue([
+      { id: 'rev0', args: { proposalId: T, text: ODIO }, venceAt: new Date(Date.now() - 1000) },
+    ]);
+    const err = await frases.create(YO, T, ODIO, 'ip', { pedirRevision: true }).catch((e: unknown) => e);
+    expect((err as HttpException).getResponse()).toEqual({ codigo: 'en_revision', revisionId: 'rev1' });
+    expect(prisma.textoEnRevision.create).toHaveBeenCalledTimes(1);
   });
 
   it('guardia: si el asistente no responde, publica y encola', async () => {

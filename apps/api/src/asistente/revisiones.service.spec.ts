@@ -82,6 +82,14 @@ describe('RevisionesService', () => {
     expect(r.revisiones).toHaveLength(1);
   });
 
+  it('revisiones: quien escribió el texto no firma su revisión aunque esté en la mesa', async () => {
+    t.rev.autorProfileId = M1;
+    const err = await t.svc.firmar(M1, ID, true).catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(ForbiddenException);
+    expect((err as ForbiddenException).message).toBe('No puedes firmar la revisión de tu propio texto.');
+    expect(t.prisma['firmaRevision'].create).not.toHaveBeenCalled();
+  });
+
   it('revisiones: dos aprobaciones distintas publican una vez', async () => {
     await t.svc.firmar(M1, ID, true);
     expect(t.rev.estado).toBe('pendiente');

@@ -49,11 +49,14 @@ export class GuardiaService {
 
     if (!op.pedirRevision) throw new UnprocessableEntityException({ codigo: 'nivel_2', revision });
 
-    // Idempotente: si la misma persona ya tiene esa revisión pendiente con el mismo texto, se reutiliza.
-    const existente = await this.prisma.textoEnRevision.findFirst({
+    // Idempotente: si la misma persona ya tiene una revisión pendiente y vigente con el mismo texto
+    // y los mismos argumentos (el mismo destino), se reutiliza. El mismo texto a otro destino es otra.
+    const candidatas = await this.prisma.textoEnRevision.findMany({
       where: { autorProfileId: op.autorProfileId, tipo: op.tipo, texto: op.texto, estado: 'pendiente' },
-      select: { id: true },
+      select: { id: true, args: true, venceAt: true },
     });
+    const ahora = Date.now();
+    const existente = candidatas.find((c) => c.venceAt.getTime() > ahora && mismoJson(c.args, op.args));
     if (existente) throw new HttpException({ codigo: 'en_revision', revisionId: existente.id }, HttpStatus.ACCEPTED);
 
     const creada = await this.prisma.textoEnRevision.create({
@@ -91,5 +94,30 @@ export class GuardiaService {
     } catch (err) {
       this.logger.error('No se pudo encolar la revisión posterior', err instanceof Error ? err.stack : undefined);
     }
+  }
+}
+
+/** Forma canónica de un valor JSON: claves ordenadas, sin `undefined` (como lo guarda la base). */
+function canonico(x: unknown): unknown {
+  if (Array.isArray(x)) return x.map(canonico);
+  if (x !== null && typeof x === 'object') {
+    const o = x as Record<string, unknown>;
+    return Object.fromEntries(
+      Object.keys(o)
+        .filter((k) => o[k] !== undefined)
+        .sort()
+        .map((k) => [k, canonico(o[k])]),
+    );
+  }
+  return x;
+}
+
+/** Igualdad profunda de dos valores JSON (el guardado en la base y el de la llamada). */
+function mismoJson(a: unknown, b: unknown): boolean {
+  try {
+    const forma = (x: unknown): string => JSON.stringify(canonico(JSON.parse(JSON.stringify(x ?? null))));
+    return forma(a) === forma(b);
+  } catch {
+    return false;
   }
 }
