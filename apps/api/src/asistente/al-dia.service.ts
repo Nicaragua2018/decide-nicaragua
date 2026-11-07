@@ -23,21 +23,26 @@ const REDIS_MAXIMO_MS = 300;
 export const VISTA_VACIA: AlDiaView = { mostrar: false, desde: null, items: [], resumen: null };
 
 /**
- * Ventana de «Desde tu última visita». Pura.
+ * Ventana de «Desde tu última visita». Pura. `alDiaDesde` significa «visto hasta aquí».
  * - Sin visita previa: una semana atrás.
- * - Más de 12 h desde la última visita: empieza una visita nueva, desde esa visita.
- * - Si no, se conserva la ventana que había (puede ser null si la persona la cerró).
+ * - Más de 12 h desde la última visita: empieza una visita nueva, desde esa visita,
+ *   salvo que la persona haya cerrado la tarjeta después (entonces manda lo más nuevo).
+ * - Si no, se conserva la ventana que había (null en un perfil anterior cuenta como una semana atrás).
+ * - Nunca es más vieja que una semana.
+ * - Siempre se anota la visita actual.
  */
 export function ventana(
   perfil: { ultimaVisitaAt: Date | null; alDiaDesde: Date | null },
   ahora: Date,
-): { ultimaVisitaAt: Date; alDiaDesde: Date | null } {
-  let alDiaDesde = perfil.alDiaDesde;
+): { ultimaVisitaAt: Date; alDiaDesde: Date } {
+  const piso = new Date(ahora.getTime() - SIN_VISITA_MS);
+  let alDiaDesde = perfil.alDiaDesde ?? piso;
   if (perfil.ultimaVisitaAt === null) {
-    alDiaDesde = new Date(ahora.getTime() - SIN_VISITA_MS);
+    alDiaDesde = piso;
   } else if (ahora.getTime() - perfil.ultimaVisitaAt.getTime() > VISITA_NUEVA_MS) {
-    alDiaDesde = perfil.ultimaVisitaAt;
+    if (perfil.ultimaVisitaAt.getTime() > alDiaDesde.getTime()) alDiaDesde = perfil.ultimaVisitaAt;
   }
+  if (alDiaDesde.getTime() < piso.getTime()) alDiaDesde = piso;
   return { ultimaVisitaAt: ahora, alDiaDesde };
 }
 
@@ -103,7 +108,7 @@ export class AlDiaService {
       data: { ultimaVisitaAt: v.ultimaVisitaAt, alDiaDesde: v.alDiaDesde },
     });
 
-    if (!this.asistente.activo() || v.alDiaDesde === null) return VISTA_VACIA;
+    if (!this.asistente.activo()) return VISTA_VACIA;
 
     const items = await this.armarItems(profileId, v.alDiaDesde, ahora);
     if (items.length === 0) return VISTA_VACIA;
@@ -113,7 +118,7 @@ export class AlDiaService {
   }
 
   async cerrar(profileId: string): Promise<void> {
-    await this.prisma.profile.update({ where: { id: profileId }, data: { alDiaDesde: null } });
+    await this.prisma.profile.update({ where: { id: profileId }, data: { alDiaDesde: new Date() } });
   }
 
   private async armarItems(profileId: string, desde: Date, ahora: Date): Promise<ItemAlDia[]> {

@@ -30,9 +30,25 @@ describe('ventana', () => {
     expect(r.alDiaDesde).toEqual(previa);
   });
 
-  it('2 h y sin ventana (ya cerrada): sigue sin ventana', () => {
+  it('2 h y la ventana es más vieja que una semana: se recorta a una semana', () => {
+    const r = ventana({ ultimaVisitaAt: new Date(AHORA.getTime() - 2 * HORA), alDiaDesde: new Date('2026-10-01T00:00:00Z') }, AHORA);
+    expect(r.alDiaDesde).toEqual(new Date(AHORA.getTime() - 7 * 24 * HORA));
+  });
+
+  it('pasaron 13 h pero la persona cerró después de la última visita: se conserva la más nueva', () => {
+    const cierre = new Date(AHORA.getTime() - 5 * HORA);
+    const r = ventana({ ultimaVisitaAt: new Date(AHORA.getTime() - 13 * HORA), alDiaDesde: cierre }, AHORA);
+    expect(r.alDiaDesde).toEqual(cierre);
+  });
+
+  it('pasaron 13 h y la última visita fue hace más de una semana: se recorta a una semana', () => {
+    const r = ventana({ ultimaVisitaAt: new Date('2026-10-01T00:00:00Z'), alDiaDesde: null }, AHORA);
+    expect(r.alDiaDesde).toEqual(new Date(AHORA.getTime() - 7 * 24 * HORA));
+  });
+
+  it('2 h y sin ventana (perfil anterior): cuenta como una semana atrás', () => {
     const r = ventana({ ultimaVisitaAt: new Date(AHORA.getTime() - 2 * HORA), alDiaDesde: null }, AHORA);
-    expect(r.alDiaDesde).toBeNull();
+    expect(r.alDiaDesde).toEqual(new Date(AHORA.getTime() - 7 * 24 * HORA));
     expect(r.ultimaVisitaAt).toEqual(AHORA);
   });
 });
@@ -203,11 +219,11 @@ describe('AlDiaService', () => {
     expect(asistente.pedir).not.toHaveBeenCalled();
   });
 
-  it('sin ventana (ya cerrada): no muestra y no consulta', async () => {
+  it('perfil anterior sin ventana: mira una semana atrás', async () => {
     prisma.profile.findUnique.mockResolvedValue({ ultimaVisitaAt: new Date(AHORA.getTime() - 2 * HORA), alDiaDesde: null });
     const r = await service.ver('p1', AHORA);
-    expect(r.mostrar).toBe(false);
-    expect(prisma.proposal.findMany).not.toHaveBeenCalled();
+    expect(r.mostrar).toBe(true);
+    expect(r.desde).toBe(new Date(AHORA.getTime() - 7 * 24 * HORA).toISOString());
   });
 
   it('pone primero lo que cierra antes y limita a 20', async () => {
@@ -225,9 +241,31 @@ describe('AlDiaService', () => {
     expect(r.items[1]!.titulo).toBe('Tema 24');
   });
 
-  it('cerrar deja alDiaDesde en null', async () => {
-    await service.cerrar('p1');
-    expect(prisma.profile.update).toHaveBeenCalledWith({ where: { id: 'p1' }, data: { alDiaDesde: null } });
+  it('cerrar deja alDiaDesde en el momento actual (visto hasta ahora)', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(AHORA);
+    try {
+      await service.cerrar('p1');
+    } finally {
+      vi.useRealTimers();
+    }
+    expect(prisma.profile.update).toHaveBeenCalledWith({ where: { id: 'p1' }, data: { alDiaDesde: AHORA } });
+  });
+
+  it('cerrar y luego algo nuevo: la tarjeta vuelve sola, solo con lo nuevo', async () => {
+    const nuevo = { id: P1, title: 'Debate nuevo', groupId: G1, createdAt: new Date(AHORA.getTime() + HORA) };
+    const viejo = { id: P1, title: 'Arreglar el parque', groupId: G1, createdAt: new Date(AHORA.getTime() - HORA) };
+    // La base de datos simulada respeta el filtro de fecha de la consulta.
+    prisma.proposal.findMany.mockImplementation(async (args: any) =>
+      [viejo, nuevo].filter((p) => p.createdAt >= args.where.createdAt.gte && p.createdAt <= args.where.createdAt.lte),
+    );
+    // Cierre en AHORA: la persona vuelve 30 min después y luego 2 h después.
+    prisma.profile.findUnique.mockResolvedValue({ ultimaVisitaAt: AHORA, alDiaDesde: AHORA });
+    const antes = await service.ver('p1', new Date(AHORA.getTime() + 30 * 60_000));
+    expect(antes.mostrar).toBe(false);
+    const despues = await service.ver('p1', new Date(AHORA.getTime() + 2 * HORA));
+    expect(despues.mostrar).toBe(true);
+    expect(despues.items.map((i) => i.titulo)).toEqual(['Debate nuevo']);
   });
 });
 
