@@ -16,7 +16,7 @@ export function OrganizerActions({
   status: InquietudStatusValue;
 }) {
   const canRespond = RESPONDIBLES.includes(status);
-  const { formRef, onSubmit, state: respState, ocupado: responding, aviso } = useFormConRevision({
+  const { formRef, formAction, onSubmit, state: respState, ocupado: responding, aviso } = useFormConRevision({
     tipo: 'respuesta_inquietud',
     accion: respondInquietud,
     campos: ['text'],
@@ -26,7 +26,7 @@ export function OrganizerActions({
   return (
     <div className="card mb-4">
       {canRespond && (
-        <form ref={formRef} onSubmit={onSubmit} className="form mb-3">
+        <form ref={formRef} action={formAction} onSubmit={onSubmit} className="form mb-3">
           <p className="card-title">Responder en público</p>
           <input type="hidden" name="inquietudId" value={inquietudId} />
           <textarea

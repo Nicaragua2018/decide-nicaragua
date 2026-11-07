@@ -36,7 +36,7 @@ function ComentarioForm({
   textarea: React.ReactNode;
   alOk?: () => void;
 }) {
-  const { formRef, onSubmit, state, ocupado, aviso } = useFormConRevision({
+  const { formRef, formAction, onSubmit, state, ocupado, aviso } = useFormConRevision({
     tipo: 'comentario',
     accion: createComment,
     campos: ['body'],
@@ -44,7 +44,7 @@ function ComentarioForm({
     alOk,
   });
   return (
-    <form ref={formRef} onSubmit={onSubmit} className={className}>
+    <form ref={formRef} action={formAction} onSubmit={onSubmit} className={className}>
       <input type="hidden" name="proposalId" value={proposalId} />
       {parentId && <input type="hidden" name="parentId" value={parentId} />}
       {textarea}

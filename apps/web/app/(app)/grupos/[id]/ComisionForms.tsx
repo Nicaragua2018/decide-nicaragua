@@ -35,6 +35,7 @@ export function OfrecerseForm({ grupoId, yoVoluntario }: { grupoId: string; yoVo
   }
   return (
     <form
+      method="post"
       className="form mt-3"
       onSubmit={(e) => {
         e.preventDefault();
@@ -65,6 +66,7 @@ export function AjustarForm({ grupoId, tarea, puestos }: { grupoId: string; tare
     <details className="mt-3">
       <summary className="text-sm">Ajustar tarea y puestos</summary>
       <form
+        method="post"
         className="form mt-2"
         onSubmit={(e) => {
           e.preventDefault();
@@ -118,6 +120,7 @@ export function PapeletaForm({
 
   return (
     <form
+      method="post"
       className="form mt-3"
       onSubmit={(e) => {
         e.preventDefault();
@@ -176,6 +179,7 @@ export function InformeForm({ grupoId }: { grupoId: string }) {
 
   return (
     <form
+      method="post"
       className="form mt-3"
       onSubmit={(e) => {
         e.preventDefault();

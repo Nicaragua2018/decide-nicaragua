@@ -6,7 +6,7 @@ import { useFormConRevision } from '@/components/RevisarAntesDePublicar';
 
 export function NuevaFraseForm({ proposalId }: { proposalId: string }) {
   const [text, setText] = useState('');
-  const { formRef, onSubmit, state, ocupado, aviso } = useFormConRevision({
+  const { formRef, formAction, onSubmit, state, ocupado, aviso } = useFormConRevision({
     tipo: 'frase',
     accion: createFrase.bind(null, proposalId),
     campos: ['text'],
@@ -17,7 +17,7 @@ export function NuevaFraseForm({ proposalId }: { proposalId: string }) {
   });
 
   return (
-    <form ref={formRef} onSubmit={onSubmit} className="form">
+    <form ref={formRef} action={formAction} onSubmit={onSubmit} className="form">
       <div className="form-field">
         <label className="form-label" htmlFor="frase-text">Escribe una frase</label>
         <textarea

@@ -7,7 +7,7 @@ import { useFormConRevision } from '@/components/RevisarAntesDePublicar';
 export function NuevaSolucionForm({ proposalId }: { proposalId: string }) {
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
-  const { formRef, onSubmit, state, ocupado, aviso } = useFormConRevision({
+  const { formRef, formAction, onSubmit, state, ocupado, aviso } = useFormConRevision({
     tipo: 'solucion',
     accion: createSolucion.bind(null, proposalId),
     campos: ['title', 'description'],
@@ -22,7 +22,7 @@ export function NuevaSolucionForm({ proposalId }: { proposalId: string }) {
   });
 
   return (
-    <form ref={formRef} onSubmit={onSubmit} className="form">
+    <form ref={formRef} action={formAction} onSubmit={onSubmit} className="form">
       <p className="text-sm font-medium">Proponer una solución</p>
       <div className="form-field">
         <label className="form-label" htmlFor="solucion-title">Título</label>

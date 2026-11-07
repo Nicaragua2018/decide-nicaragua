@@ -4,14 +4,14 @@ import { createTopic } from '@/lib/actions';
 import { useFormConRevision } from '@/components/RevisarAntesDePublicar';
 
 export function NewTopicForm({ groupId, forumId }: { groupId: string; forumId: string }) {
-  const { formRef, onSubmit, state, ocupado, aviso } = useFormConRevision({
+  const { formRef, formAction, onSubmit, state, ocupado, aviso } = useFormConRevision({
     tipo: 'tema',
     accion: createTopic,
     campos: ['title', 'body'],
     campoSugerencia: 'body',
   });
   return (
-    <form ref={formRef} onSubmit={onSubmit} className="form">
+    <form ref={formRef} action={formAction} onSubmit={onSubmit} className="form">
       <input type="hidden" name="groupId" value={groupId} />
       <input type="hidden" name="forumId" value={forumId} />
       <div className="form-field">

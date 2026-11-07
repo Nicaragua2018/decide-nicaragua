@@ -11,7 +11,7 @@ export default function NewProposalPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = use(params);
-  const { formRef, onSubmit, state, ocupado: isPending, aviso } = useFormConRevision({
+  const { formRef, formAction, onSubmit, state, ocupado: isPending, aviso } = useFormConRevision({
     tipo: 'tema',
     accion: createProposal,
     campos: ['title', 'body'],
@@ -29,7 +29,7 @@ export default function NewProposalPage({
       </div>
 
       <div className="card" style={{ maxWidth: 640 }}>
-        <form ref={formRef} onSubmit={onSubmit} className="form">
+        <form ref={formRef} action={formAction} onSubmit={onSubmit} className="form">
           <input type="hidden" name="groupId" value={id} />
 
           <div className="form-field">

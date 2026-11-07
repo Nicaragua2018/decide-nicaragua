@@ -14,7 +14,7 @@ export function ProponerGrupoForm({ ambitos }: { ambitos: AmbitoOpcion[] }) {
   const [ambitoId, setAmbitoId] = useState(ambitos[0]?.id ?? '');
   const [name, setName] = useState('');
   const [proposito, setProposito] = useState('');
-  const { formRef, onSubmit, state, ocupado, aviso } = useFormConRevision({
+  const { formRef, formAction, onSubmit, state, ocupado, aviso } = useFormConRevision({
     tipo: 'subgrupo',
     accion: proponerGrupo,
     campos: ['name', 'proposito'],
@@ -31,7 +31,7 @@ export function ProponerGrupoForm({ ambitos }: { ambitos: AmbitoOpcion[] }) {
   const minimo = ambitos.find((a) => a.id === ambitoId)?.minimo ?? 5;
 
   return (
-    <form ref={formRef} onSubmit={onSubmit} className="form card mt-4">
+    <form ref={formRef} action={formAction} onSubmit={onSubmit} className="form card mt-4">
       <p className="card-title">Proponer un grupo de trabajo</p>
       <div className="form-field">
         <label className="form-label" htmlFor="grupo-ambito">Comunidad</label>

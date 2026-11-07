@@ -226,14 +226,32 @@ export function useFormConRevision({
     if (el instanceof HTMLTextAreaElement || el instanceof HTMLInputElement) el.value = valor;
   }
 
+  /** El largo máximo del campo (atributo maxLength), o null si no tiene. */
+  function largoMaximo(nombre: string): number | null {
+    const el = formRef.current?.elements.namedItem(nombre);
+    if ((el instanceof HTMLTextAreaElement || el instanceof HTMLInputElement) && el.maxLength > 0) return el.maxLength;
+    return null;
+  }
+
   function usarSugerencia(texto: string) {
-    // Con título y cuerpo, el asistente devuelve «título, línea en blanco, cuerpo».
-    const corte = campos.length === 2 ? /\r?\n\r?\n/.exec(texto) : null;
-    const titulo = corte ? texto.slice(0, corte.index).trim() : null;
-    const cuerpo = corte ? texto.slice(corte.index + corte[0].length).trim() : texto;
-    if (titulo !== null && campos[0]) {
+    // Con título y cuerpo, el asistente devuelve «título, línea en blanco, cuerpo». Solo se parte
+    // si el título no está vacío, es una sola línea y cabe en el campo del título; si no, el título
+    // actual se queda y toda la sugerencia va al cuerpo.
+    const campoTitulo = campos.length === 2 ? campos[0] : undefined;
+    const corte = campoTitulo ? /\r?\n\r?\n/.exec(texto) : null;
+    let titulo: string | null = null;
+    let cuerpo = texto;
+    if (campoTitulo && corte) {
+      const candidato = texto.slice(0, corte.index).trim();
+      const maximo = largoMaximo(campoTitulo);
+      if (candidato.length > 0 && !/[\r\n]/.test(candidato) && (maximo === null || candidato.length <= maximo)) {
+        titulo = candidato;
+        cuerpo = texto.slice(corte.index + corte[0].length).trim();
+      }
+    }
+    if (titulo !== null && campoTitulo) {
       if (alUsarTitulo) alUsarTitulo(titulo);
-      else ponerCampo(campos[0], titulo);
+      else ponerCampo(campoTitulo, titulo);
     }
     if (alUsarSugerencia) alUsarSugerencia(cuerpo);
     else ponerCampo(campoSugerencia, cuerpo);
@@ -248,5 +266,9 @@ export function useFormConRevision({
     onPedirRevision: () => lanzar('pedir'),
   });
 
-  return { formRef, onSubmit, state, ocupado, revisando: rev.revisando, pendiente, aviso };
+  // `formAction` va en `action` del formulario: si alguien envía antes de que cargue el JavaScript,
+  // React lo manda por POST a la acción del servidor (nunca por GET con el texto en la URL), y la
+  // guardia del servidor lo revisa igual. Con JavaScript, onSubmit hace preventDefault y React no
+  // ejecuta la acción por su cuenta: se envía solo con `lanzar`, después de revisar.
+  return { formRef, formAction: dispatch, onSubmit, state, ocupado, revisando: rev.revisando, pendiente, aviso };
 }

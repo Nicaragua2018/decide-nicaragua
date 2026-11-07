@@ -4,14 +4,14 @@ import { createInquietud } from '@/lib/actions';
 import { useFormConRevision } from '@/components/RevisarAntesDePublicar';
 
 export function NewInquietudForm({ groupId }: { groupId: string }) {
-  const { formRef, onSubmit, state, ocupado, aviso } = useFormConRevision({
+  const { formRef, formAction, onSubmit, state, ocupado, aviso } = useFormConRevision({
     tipo: 'inquietud',
     accion: createInquietud,
     campos: ['title', 'body'],
     campoSugerencia: 'body',
   });
   return (
-    <form ref={formRef} onSubmit={onSubmit} className="form">
+    <form ref={formRef} action={formAction} onSubmit={onSubmit} className="form">
       <input type="hidden" name="groupId" value={groupId} />
       <input
         name="title"

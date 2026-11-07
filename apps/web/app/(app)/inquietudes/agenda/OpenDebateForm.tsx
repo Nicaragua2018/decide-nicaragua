@@ -12,7 +12,7 @@ export interface AgendaItem {
 }
 
 export function OpenDebateForm({ groupId, items }: { groupId: string; items: AgendaItem[] }) {
-  const { formRef, onSubmit, state, ocupado, aviso } = useFormConRevision({
+  const { formRef, formAction, onSubmit, state, ocupado, aviso } = useFormConRevision({
     tipo: 'tema',
     accion: openDebate,
     campos: ['title', 'body'],
@@ -20,7 +20,7 @@ export function OpenDebateForm({ groupId, items }: { groupId: string; items: Age
     reiniciar: false,
   });
   return (
-    <form ref={formRef} onSubmit={onSubmit} className="form">
+    <form ref={formRef} action={formAction} onSubmit={onSubmit} className="form">
       <input type="hidden" name="groupId" value={groupId} />
       {items.map((q) => (
         <label key={q.id} className="flex gap-2 items-center">

@@ -50,15 +50,15 @@ export function ProponerCambio({ groupId, ruleKey, type, value, min, max, option
   function enviar(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
-    // El motivo es opcional: sin motivo no hay texto que revisar.
-    void rev.revisar(motivo).then((puede) => {
+    // El motivo es opcional: sin motivo no hay texto que revisar. Se revisa recortado, como lo guarda el servidor.
+    void rev.revisar(motivo.trim()).then((puede) => {
       if (puede) enviarCambio('normal');
     });
   }
 
   const id = `cambio-${ruleKey}`;
   return (
-    <form onSubmit={enviar} className="mt-2">
+    <form method="post" onSubmit={enviar} className="mt-2">
       <label htmlFor={`${id}-valor`} className="text-sm font-medium">Nuevo valor</label>
       {type === 'choice' ? (
         <select id={`${id}-valor`} className="input" value={valor} onChange={(e) => setValor(e.target.value)}>
