@@ -93,19 +93,8 @@ export class CrecerService {
   async ver(groupId: string, profileId: string, ahora: Date = new Date()): Promise<CrecerView> {
     if (!this.asistente.activo()) return { mostrar: false };
 
-    const grupo = await this.prisma.group.findUnique({
-      where: { id: groupId },
-      select: { name: true, type: true, isActive: true },
-    });
-    if (!grupo || !grupo.isActive || (grupo.type !== 'territorial_origin' && grupo.type !== 'territorial_residence')) {
-      return { mostrar: false };
-    }
-
-    const miembro = await this.prisma.groupMembership.findUnique({
-      where: { groupId_profileId: { groupId, profileId } },
-      select: { id: true },
-    });
-    if (!miembro) return { mostrar: false };
+    const grupo = await this.grupoDeLaPersona(groupId, profileId);
+    if (!grupo) return { mostrar: false };
 
     const cerrado = await this.prisma.avisoCerrado.findUnique({
       where: { profileId_clave: { profileId, clave: `crecer:${groupId}` } },
@@ -127,6 +116,7 @@ export class CrecerService {
   }
 
   async cerrar(groupId: string, profileId: string, ahora: Date = new Date()): Promise<void> {
+    if (!(await this.grupoDeLaPersona(groupId, profileId))) return;
     const clave = `crecer:${groupId}`;
     const hasta = new Date(ahora.getTime() + AVISO_DIAS * DIA_MS);
     await this.prisma.avisoCerrado.upsert({
@@ -136,12 +126,28 @@ export class CrecerService {
     });
   }
 
+  /** La comunidad territorial activa de la que la persona es miembro, o null. */
+  private async grupoDeLaPersona(groupId: string, profileId: string): Promise<{ name: string } | null> {
+    const grupo = await this.prisma.group.findUnique({
+      where: { id: groupId },
+      select: { name: true, type: true, isActive: true },
+    });
+    if (!grupo || !grupo.isActive || (grupo.type !== 'territorial_origin' && grupo.type !== 'territorial_residence')) {
+      return null;
+    }
+    const miembro = await this.prisma.groupMembership.findUnique({
+      where: { groupId_profileId: { groupId, profileId } },
+      select: { id: true },
+    });
+    return miembro ? { name: grupo.name } : null;
+  }
+
   /**
    * Texto del día, en caché. Devuelve null si Redis no responde (y entonces no se pide a la IA)
    * o si la IA no responde: en ambos casos se usa el texto fijo.
    */
   private async redactar(groupId: string, datos: Datos, ahora: Date): Promise<Texto | null> {
-    const clave = `asistente:crecer:${groupId}:${ahora.toISOString().slice(0, 10)}`;
+    const clave = `asistente:crecer:${groupId}:${datos.miembros}:${ahora.toISOString().slice(0, 10)}`;
     // conLimite da null si Redis falla o tarda; un fallo de caché llega envuelto en { valor }.
     const lectura = await conLimite(
       Promise.resolve()

@@ -78,6 +78,41 @@ describe('CrecerService', () => {
     expect(r.mostrar).toBe(true);
   });
 
+  it('aviso con hasta igual a ahora: ya no oculta la tarjeta', async () => {
+    prisma.avisoCerrado.findUnique.mockResolvedValue({ hasta: AHORA });
+    expect((await service.ver(G1, P1, AHORA)).mostrar).toBe(true);
+  });
+
+  it('7 miembros: activa, meta 20, faltan 13', async () => {
+    prisma.groupMembership.count.mockResolvedValue(7);
+    expect(await service.ver(G1, P1, AHORA)).toMatchObject({ activa: true, meta: 20, faltan: 13 });
+  });
+
+  it('19 miembros: faltan 1', async () => {
+    prisma.groupMembership.count.mockResolvedValue(19);
+    expect(await service.ver(G1, P1, AHORA)).toMatchObject({ activa: true, meta: 20, faltan: 1 });
+  });
+
+  it('cambia el número de miembros: la caché del día anterior no se reutiliza', async () => {
+    await service.ver(G1, P1, AHORA);
+    prisma.groupMembership.count.mockResolvedValue(5);
+    await service.ver(G1, P1, AHORA);
+    expect(asistente.pedir).toHaveBeenCalledTimes(2);
+  });
+
+  it('Redis get que nunca responde: texto fijo sin llamar a la IA', async () => {
+    vi.useFakeTimers();
+    try {
+      redis.get.mockReturnValue(new Promise(() => {}));
+      const pendiente = service.ver(G1, P1, AHORA);
+      await vi.advanceTimersByTimeAsync(400);
+      expect(await pendiente).toMatchObject({ mostrar: true, deAsistente: false });
+      expect(asistente.pedir).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('20 miembros: no muestra nada', async () => {
     prisma.groupMembership.count.mockResolvedValue(META_ACTIVA);
     expect(await service.ver(G1, P1, AHORA)).toEqual({ mostrar: false });
@@ -108,6 +143,25 @@ describe('CrecerService', () => {
     await service.ver(G1, P1, AHORA);
     const args = asistente.pedir.mock.calls[0]![0];
     expect(args.herramienta.nombre).toBe('animar_comunidad');
+    expect(args.material).toBe(
+      [
+        'Comunidad: Masaya',
+        'Miembros: 4',
+        'Activa: no',
+        'Faltan: 3',
+        'Garantías:',
+        '- identidad protegida',
+        '- voto secreto',
+        '- reglas votadas por todos',
+        '- sin caudillos',
+        '- cada miembro avalado por dos personas',
+        'Facilidades:',
+        '- debates y votaciones propios',
+        '- grupos de trabajo',
+        '- comisiones',
+        '- apoyo mutuo en papeles, trabajo y seguridad',
+      ].join('\n'),
+    );
     expect(args.material).not.toMatch(UUID);
     expect(args.material).not.toContain(P1);
     expect(args.material).toContain('Comunidad: Masaya');
@@ -125,7 +179,7 @@ describe('CrecerService', () => {
     const r = await service.ver(G1, P1, new Date('2026-11-07T20:00:00Z'));
     expect(asistente.pedir).toHaveBeenCalledTimes(1);
     expect(r).toMatchObject({ ...SALIDA, deAsistente: true });
-    expect(redis.set).toHaveBeenCalledWith(`asistente:crecer:${G1}:2026-11-07`, JSON.stringify(SALIDA), 26 * 3600);
+    expect(redis.set).toHaveBeenCalledWith(`asistente:crecer:${G1}:4:2026-11-07`, JSON.stringify(SALIDA), 26 * 3600);
   });
 
   it('al día siguiente se pide de nuevo', async () => {
@@ -135,10 +189,10 @@ describe('CrecerService', () => {
   });
 
   it('caché con contenido inválido: se pide de nuevo', async () => {
-    redis.mem.set(`asistente:crecer:${G1}:2026-11-07`, '{"texto":5}');
+    redis.mem.set(`asistente:crecer:${G1}:4:2026-11-07`, '{"texto":5}');
     await service.ver(G1, P1, AHORA);
     expect(asistente.pedir).toHaveBeenCalledTimes(1);
-    redis.mem.set(`asistente:crecer:${G1}:2026-11-07`, 'no es json');
+    redis.mem.set(`asistente:crecer:${G1}:4:2026-11-07`, 'no es json');
     await service.ver(G1, P1, AHORA);
     expect(asistente.pedir).toHaveBeenCalledTimes(2);
   });
@@ -161,6 +215,22 @@ describe('CrecerService', () => {
     redis.set.mockRejectedValue(new Error('caído'));
     const r = await service.ver(G1, P1, AHORA);
     expect(r).toMatchObject({ ...SALIDA, deAsistente: true });
+  });
+
+  it('cerrar no hace nada si el grupo no es comunidad territorial, está inactivo o no existe', async () => {
+    prisma.group.findUnique.mockResolvedValue({ name: 'X', type: 'custom', isActive: true });
+    await service.cerrar(G1, P1, AHORA);
+    prisma.group.findUnique.mockResolvedValue({ name: 'X', type: 'territorial_origin', isActive: false });
+    await service.cerrar(G1, P1, AHORA);
+    prisma.group.findUnique.mockResolvedValue(null);
+    await service.cerrar(G1, P1, AHORA);
+    expect(prisma.avisoCerrado.upsert).not.toHaveBeenCalled();
+  });
+
+  it('cerrar no hace nada si la persona no es miembro', async () => {
+    prisma.groupMembership.findUnique.mockResolvedValue(null);
+    await service.cerrar(G1, P1, AHORA);
+    expect(prisma.avisoCerrado.upsert).not.toHaveBeenCalled();
   });
 
   it('cerrar guarda el aviso por 7 días', async () => {
