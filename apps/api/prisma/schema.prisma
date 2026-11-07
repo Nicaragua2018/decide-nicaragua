@@ -774,7 +774,7 @@ model ModerationAction {
   reason               String           @db.VarChar(500)
   /// Null cuando la solicitud la abrió el asistente.
   moderatorProfileId   String?          @db.Uuid
-  moderator            Profile?         @relation("Moderator", fields: [moderatorProfileId], references: [id])
+  moderator            Profile?         @relation("Moderator", fields: [moderatorProfileId], references: [id], onDelete: Restrict)
   origen               Origen           @default(persona)
   status               ModerationStatus @default(oculto)
   appealText           String?          @db.VarChar(1000)
