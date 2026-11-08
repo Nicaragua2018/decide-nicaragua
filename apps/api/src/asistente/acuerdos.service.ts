@@ -1,11 +1,13 @@
 import { Injectable, Logger } from '@nestjs/common';
-import type { FraseVotoValue } from '@decide/shared';
+import type { FraseVotoValue, SugerenciaTipo } from '@decide/shared';
 import { PrismaService } from '../prisma/prisma.service';
+import { RedisService } from '../redis/redis.service';
 import { agregadoPublico, currentMembers } from '../frases/agregado';
 import { analyzeOpinions, seedFromId, type VoteRow } from '../frases/opinion-groups';
 import { AsistenteService, type PedidoAsistente } from './asistente.service';
 import { SugerenciasService } from './sugerencias.service';
 import { nombreDeError } from './errores';
+import { conLimite } from './con-limite';
 import {
   ESQUEMA_AGRUPAR,
   esSalidaAgrupar,
@@ -35,34 +37,62 @@ import { ESQUEMA_COMISION, esSalidaComision, materialComision, TAREA_COMISION } 
 import { contenidoMapa, ESQUEMA_MAPA, esSalidaMapa, materialMapa, MIN_VOTOS_MAPA, TAREA_MAPA } from './acuerdos/mapa';
 
 export const MAX_PEDIDOS_POR_RONDA = 20;
-const NULOS_SEGUIDOS_PARA_PARAR = 2;
+/** Las tareas nocturnas son largas (mapa y borradores): más tiempo que los 30 s de una consulta interactiva. */
+export const TIEMPO_MAXIMO_NOCTURNO_MS = 120_000;
+/** Un objeto cuya respuesta falló no se vuelve a pedir hasta pasado este plazo. */
+const ESPERA_TRAS_FALLO_S = 24 * 3_600;
+const REDIS_MAXIMO_MS = 300;
 const REFRESCO_AGRUPAR_MS = 20 * 3_600_000;
 const REFRESCO_MAPA_MS = 24 * 3_600_000;
 const VALOR: Record<FraseVotoValue, -1 | 0 | 1> = { de_acuerdo: 1, en_desacuerdo: -1, paso: 0 };
 const ABIERTAS = ['abierta', 'en_plazo'] as const;
 
-/** Cuenta de una ronda: tope de pedidos y parada tras dos nulos seguidos. La comparten todos los pasos. */
+const claveFallo = (tipo: SugerenciaTipo, objetoId: string) => `asistente:acuerdos:fallo:${tipo}:${objetoId}`;
+
+/**
+ * Cuenta de una ronda, compartida por todos los pasos: tope de pedidos y parada cuando el
+ * asistente deja de estar disponible (apagado o sin margen). Un objeto que falla (sin respuesta
+ * o salida descartada) queda en espera 24 horas y no frena a los demás.
+ */
 export class Ronda {
   pedidos = 0;
   guardadas = 0;
-  private nulosSeguidos = 0;
+  private sinMargen = false;
 
   constructor(
     private readonly asistente: AsistenteService,
+    private readonly redis: RedisService,
     readonly now: Date,
   ) {}
 
   get agotada(): boolean {
-    return this.pedidos >= MAX_PEDIDOS_POR_RONDA || this.nulosSeguidos >= NULOS_SEGUIDOS_PARA_PARAR;
+    return this.pedidos >= MAX_PEDIDOS_POR_RONDA || this.sinMargen;
   }
 
-  /** Hace un pedido si la ronda no está agotada. */
-  async pedir<T>(op: PedidoAsistente<T>): Promise<T | null> {
+  /** Hace un pedido para un objeto si la ronda no está agotada y el objeto no está en espera. */
+  async pedir<T>(tipo: SugerenciaTipo, objetoId: string, op: PedidoAsistente<T>): Promise<T | null> {
     if (this.agotada) return null;
+    if (await this.enEspera(tipo, objetoId)) return null;
     this.pedidos++;
-    const salida = await this.asistente.pedir(op);
-    this.nulosSeguidos = salida === null ? this.nulosSeguidos + 1 : 0;
-    return salida;
+    const salida = await this.asistente.pedir({ ...op, timeoutMs: TIEMPO_MAXIMO_NOCTURNO_MS });
+    if (salida !== null) return salida;
+    // Sin respuesta: si es porque el asistente ya no está disponible, la ronda para; si no, falló este objeto.
+    if (!this.asistente.activo() || !(await this.asistente.tieneMargen('nocturna'))) {
+      this.sinMargen = true;
+      return null;
+    }
+    await this.fallo(tipo, objetoId);
+    return null;
+  }
+
+  /** Deja el objeto en espera 24 horas. Si Redis falla, no pasa nada: se volverá a intentar. */
+  async fallo(tipo: SugerenciaTipo, objetoId: string): Promise<void> {
+    await conLimite(Promise.resolve().then(() => this.redis.set(claveFallo(tipo, objetoId), '1', ESPERA_TRAS_FALLO_S)), REDIS_MAXIMO_MS);
+  }
+
+  /** Si Redis falla o tarda, el objeto no se considera en espera (falla abierto). */
+  private async enEspera(tipo: SugerenciaTipo, objetoId: string): Promise<boolean> {
+    return (await conLimite(Promise.resolve().then(() => this.redis.get(claveFallo(tipo, objetoId))), REDIS_MAXIMO_MS)) !== null;
   }
 }
 
@@ -79,11 +109,14 @@ export class AcuerdosService {
     private readonly prisma: PrismaService,
     private readonly asistente: AsistenteService,
     private readonly sugerencias: SugerenciasService,
+    private readonly redis: RedisService,
   ) {}
 
   /** Devuelve cuántas sugerencias guardó en la ronda. */
   async procesar(now: Date): Promise<number> {
-    const ronda = new Ronda(this.asistente, now);
+    // Apagado o sin margen: ni siquiera se recorren los temas.
+    if (!this.asistente.activo() || !(await this.asistente.tieneMargen('nocturna'))) return 0;
+    const ronda = new Ronda(this.asistente, this.redis, now);
     for (const paso of this.pasos) {
       if (ronda.agotada) break;
       try {
@@ -123,7 +156,7 @@ export class AcuerdosService {
 
       const enviadas = lista.slice(0, MAX_MATERIAL_AGRUPAR);
       const { material, refs } = materialAgrupar(enviadas);
-      const salida = await ronda.pedir({
+      const salida = await ronda.pedir('agrupar', groupId, {
         modelo: 'capaz',
         prioridad: 'nocturna',
         tarea: TAREA_AGRUPAR,
@@ -133,7 +166,7 @@ export class AcuerdosService {
       });
       if (!salida) return;
       const grupos = gruposConIds(salida, refs);
-      if (!grupos.length) return;
+      if (!grupos.length) return void (await ronda.fallo('agrupar', groupId));
       await this.sugerencias.guardar('agrupar', groupId, groupId, { grupos }, { at: ronda.now.toISOString(), inquietudes: enviadas.length });
       ronda.guardadas++;
     });
@@ -147,7 +180,7 @@ export class AcuerdosService {
     });
     await this.cadaUno(filas, ronda, async (f) => {
       if (await this.sugerencias.existe('umbral', f.id)) return;
-      const salida = await ronda.pedir({
+      const salida = await ronda.pedir('umbral', f.id, {
         modelo: 'rapido',
         prioridad: 'nocturna',
         tarea: TAREA_UMBRAL,
@@ -182,7 +215,7 @@ export class AcuerdosService {
         take: MAX_MATERIAL_PRESENTACION,
       });
       if (!inquietudes.length) return;
-      const salida = await ronda.pedir({
+      const salida = await ronda.pedir('presentacion', t.id, {
         modelo: 'capaz',
         prioridad: 'nocturna',
         tarea: TAREA_PRESENTACION,
@@ -223,7 +256,7 @@ export class AcuerdosService {
       const { frases, rows, agregado } = datos;
       const material = materialMapa(agregado);
       if (!material) return;
-      const salida = await ronda.pedir({
+      const salida = await ronda.pedir('mapa', t.id, {
         modelo: 'capaz',
         prioridad: 'nocturna',
         tarea: TAREA_MAPA,
@@ -233,7 +266,7 @@ export class AcuerdosService {
       });
       if (!salida) return;
       const contenido = contenidoMapa(salida, material.letras, material.refs);
-      if (!contenido) return;
+      if (!contenido) return void (await ronda.fallo('mapa', t.id));
       await this.sugerencias.guardar(
         'mapa',
         t.id,
@@ -274,7 +307,7 @@ export class AcuerdosService {
       const { rows, agregado } = await this.votosDelTema(t);
       const material = materialBorradores(t, agregado);
       if (!material) return;
-      const salida = await ronda.pedir({
+      const salida = await ronda.pedir('borradores', t.id, {
         modelo: 'capaz',
         prioridad: 'nocturna',
         tarea: TAREA_BORRADORES,
@@ -284,7 +317,7 @@ export class AcuerdosService {
       });
       if (!salida) return;
       const contenido = contenidoBorradores(salida, material.refs);
-      if (!contenido) return;
+      if (!contenido) return void (await ronda.fallo('borradores', t.id));
       await this.sugerencias.guardar('borradores', t.id, t.groupId, contenido, {
         at: ronda.now.toISOString(),
         frases: material.frases,
@@ -301,8 +334,10 @@ export class AcuerdosService {
       orderBy: { createdAt: 'asc' },
     });
     await this.cadaUno(grupos, ronda, async (g) => {
+      // Sin propósito ni tarea no hay nada que comentar.
+      if (!g.proposito?.trim() && !g.tarea?.trim()) return;
       if (await this.sugerencias.existe('comision', g.id)) return;
-      const salida = await ronda.pedir({
+      const salida = await ronda.pedir('comision', g.id, {
         modelo: 'rapido',
         prioridad: 'nocturna',
         tarea: TAREA_COMISION,

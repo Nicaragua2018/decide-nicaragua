@@ -27,6 +27,7 @@ describe('SugerenciasService', () => {
   let audit: { log: ReturnType<typeof vi.fn> };
   let access: { requireReader: ReturnType<typeof vi.fn> };
   let forums: { canOrganize: ReturnType<typeof vi.fn> };
+  let asistente: { activo: ReturnType<typeof vi.fn> };
   let service: SugerenciasService;
 
   beforeEach(() => {
@@ -47,7 +48,37 @@ describe('SugerenciasService', () => {
     audit = { log: vi.fn() };
     access = { requireReader: vi.fn().mockResolvedValue({ participa: true }) };
     forums = { canOrganize: vi.fn().mockResolvedValue(true) };
-    service = new SugerenciasService(prisma as never, audit as never, access as never, forums as never);
+    asistente = { activo: vi.fn().mockReturnValue(true) };
+    service = new SugerenciasService(prisma as never, audit as never, access as never, forums as never, asistente as never);
+  });
+
+  describe('asistente apagado', () => {
+    it('con el asistente apagado no muestra ninguna sugerencia guardada, pero sigue comprobando el acceso', async () => {
+      asistente.activo.mockReturnValue(false);
+      prisma.inquietud.findUnique.mockResolvedValue({ groupId: G, hidden: false, status: 'en_plazo' });
+      prisma.inquietud.findMany.mockResolvedValue([{ id: I1, title: 'Uno' }, { id: I2, title: 'Dos' }]);
+      prisma.proposal.findUnique.mockResolvedValue({ id: T, groupId: G, status: 'closed', hidden: false, deliberationEndsAt: PASADO, decision: { id: 'd' } });
+      const contenidos: Record<string, object> = {
+        agrupar: { grupos: [{ titulo: 'A', descripcion: 'd', inquietudIds: [I1, I2] }] },
+        umbral: { resumen: 'r', borradorRespuesta: 'b' },
+        presentacion: { presentacion: 'p' },
+        mapa: { resumen: 'r', grupos: [], puentes: { texto: 't', citaIds: [] } },
+        borradores: { borradores: [{ titulo: 't', descripcion: 'd', adoptado: false }] },
+        comision: { capacidades: ['a'], comentario: 'c' },
+      };
+      for (const tipo of ['agrupar', 'umbral', 'presentacion', 'mapa', 'borradores', 'comision'] as const) {
+        const objeto = tipo === 'agrupar' ? G : T;
+        prisma.sugerenciaAsistente.findUnique.mockResolvedValue(fila(tipo, objeto, contenidos[tipo]!, { final: true }));
+        expect(await service.ver(YO, tipo, objeto), tipo).toBeNull();
+      }
+      // Encendido, la misma fila sí se ve: el null viene del interruptor.
+      asistente.activo.mockReturnValue(true);
+      expect(await service.ver(YO, 'comision', T)).toMatchObject({ tipo: 'comision' });
+      // El 403 no cambia aunque esté apagado.
+      asistente.activo.mockReturnValue(false);
+      forums.canOrganize.mockResolvedValue(false);
+      await expect(service.ver(YO, 'agrupar', G)).rejects.toBeInstanceOf(ForbiddenException);
+    });
   });
 
   describe('guardar', () => {

@@ -449,6 +449,15 @@ describe('ForumsService', () => {
       expect(data.description).toHaveLength(2000);
     });
 
+    it('un tema sin autor (del asistente) pasa a propuesta sin sembrar la primera solución', async () => {
+      prisma.proposal.findUnique.mockResolvedValue({ id: 't1', groupId: 'g1', authorProfileId: null, origen: 'asistente', status: 'open', kind: 'tema', hidden: false, title: 'Pregunta semilla', body: 'Cuerpo' });
+      board.roleOf.mockResolvedValue('administrador');
+      prisma.solucion.count.mockResolvedValue(0);
+      await service.formalize(YO, 't1', 'ip');
+      expect(prisma.proposal.updateMany.mock.calls[0]![0].data.kind).toBe('propuesta');
+      expect(prisma.solucion.create).not.toHaveBeenCalled();
+    });
+
     it('si el cuerpo está vacío la descripción usa el título; si ya hay una solución no siembra', async () => {
       prisma.proposal.findUnique.mockResolvedValue({ id: 't1', groupId: 'g1', authorProfileId: YO, status: 'open', kind: 'tema', hidden: false, title: 'Un título', body: '' });
       prisma.proposal.update.mockResolvedValue({});

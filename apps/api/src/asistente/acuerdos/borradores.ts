@@ -1,5 +1,6 @@
 import type { AgregadoPublico } from '../../frases/agregado';
 import { conReferencias } from './referencias';
+import { enUnaLinea } from './una-linea';
 
 const MAX_TITULO = 140;
 const MAX_DESCRIPCION = 2000;
@@ -73,11 +74,11 @@ export function materialBorradores(tema: { title: string; body: string }, agrega
   if (!puentes.length) return null;
   const refs = conReferencias(puentes.map((f) => f.fraseId), 'f');
   const material = [
-    `Título del tema: ${tema.title}`,
-    `Cuerpo del tema: ${tema.body.slice(0, MAX_CUERPO)}`,
+    `Título del tema: ${enUnaLinea(tema.title)}`,
+    `Cuerpo del tema: ${enUnaLinea(tema.body).slice(0, MAX_CUERPO)}`,
     '',
     'Frases puente:',
-    ...puentes.map((f) => `[${refs.ref(f.fraseId)}] ${f.texto}`),
+    ...puentes.map((f) => `[${refs.ref(f.fraseId)}] ${enUnaLinea(f.texto)}`),
   ].join('\n');
   return { material, refs, frases: puentes.length };
 }

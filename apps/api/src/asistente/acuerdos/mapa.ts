@@ -1,5 +1,6 @@
 import type { AgregadoPublico } from '../../frases/agregado';
 import { conReferencias } from './referencias';
+import { enUnaLinea } from './una-linea';
 
 /** Votos mínimos de frases visibles (de miembros actuales) para hacer el mapa. */
 export const MIN_VOTOS_MAPA = 20;
@@ -104,7 +105,7 @@ export function materialMapa(agregado: AgregadoPublico) {
       .map((a) => `grupo ${letras.get(a.grupo)!} ${a.acuerdoPct!} %`);
     const marcas = [f.puente ? 'puente' : '', f.divisiva ? 'divide' : ''].filter(Boolean);
     const detalle = [acuerdos.length ? `de acuerdo: ${acuerdos.join(', ')}` : '', marcas.join(', ')].filter(Boolean).join('; ');
-    return `[${refs.ref(f.fraseId)}] ${f.texto}${detalle ? ` (${detalle})` : ''}`;
+    return `[${refs.ref(f.fraseId)}] ${enUnaLinea(f.texto)}${detalle ? ` (${detalle})` : ''}`;
   });
   const material = [`Participantes: unos ${agregado.participantes}`, ...lineasGrupos, '', 'Frases:', ...lineasFrases].join('\n');
   return { material, refs, letras: agregado.grupos.map((g) => ({ letra: letras.get(g.id)!, tamano: g.tamano })) };

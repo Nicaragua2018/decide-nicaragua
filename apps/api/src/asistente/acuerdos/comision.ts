@@ -1,3 +1,4 @@
+import { enUnaLinea } from './una-linea';
 const MAX_CAPACIDAD = 80;
 const MAX_CAPACIDADES = 5;
 const MAX_COMENTARIO = 600;
@@ -43,5 +44,5 @@ export function esSalidaComision(x: unknown): x is SalidaComision {
 }
 
 export function materialComision(g: { proposito: string | null; tarea: string | null }) {
-  return { material: `Propósito: ${g.proposito ?? ''}\nTarea: ${g.tarea ?? ''}` };
+  return { material: `Propósito: ${enUnaLinea(g.proposito ?? '')}\nTarea: ${enUnaLinea(g.tarea ?? '')}` };
 }

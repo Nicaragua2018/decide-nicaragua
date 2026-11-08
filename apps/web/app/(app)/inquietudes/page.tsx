@@ -4,6 +4,7 @@ import { serverFetch } from '@/lib/api';
 import type { GroupListResponse, InquietudSummary } from '@decide/shared';
 import { NewInquietudForm } from './NewInquietudForm';
 import { SupportButton } from './SupportButton';
+import { MarcaAsistente } from '@/components/SugerenciaAsistente';
 import { INQUIETUD_STATUS_BADGE, INQUIETUD_STATUS_LABEL, formatDate } from './status';
 
 export const metadata: Metadata = { title: 'Inquietudes — Decide Nicaragua' };
@@ -81,6 +82,7 @@ export default async function InquietudesPage({
                     <span className={`badge ${INQUIETUD_STATUS_BADGE[q.status]}`}>
                       {INQUIETUD_STATUS_LABEL[q.status]}
                     </span>
+                    {!q.hidden && q.origen === 'asistente' && <> <MarcaAsistente /></>}
                   </p>
                   <p className="card-meta mt-2">
                     {q.supportCount} apoyos de {q.threshold} necesarios

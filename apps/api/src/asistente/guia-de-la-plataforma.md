@@ -48,9 +48,11 @@ Los grupos de trabajo se ven en la página de grupos [g4]. Quien no es miembro d
 El asistente puede dejar sugerencias en las inquietudes y los debates. Todas llevan la marca «Sugerencia del asistente» y dicen en qué se basan, por ejemplo «Basado en 12 frases y 3 opiniones». Son solo ayudas: el asistente no vota, no apoya y no abre debates; la persona decide si las usa.
 
 - **Inquietudes parecidas.** El asistente puede sugerir que varias inquietudes de una comunidad se parecen, para que quien organiza las junte en un solo tema. No las junta por su cuenta.
-- **Presentación del tema.** Al abrir un tema puede ofrecer una presentación neutral. Se muestra encima y el texto original de la persona queda debajo, sin cambios.
+- **Aviso de umbral.** Cuando una inquietud llega al umbral, el asistente puede preparar para quien organiza la comunidad un resumen y un borrador de respuesta. Quien organiza lo cambia como quiera y decide si lo usa.
+- **Presentación del tema.** Cuando nadie respondió una inquietud a tiempo y la comunidad misma abrió el debate, el asistente puede ofrecer una presentación neutral. Los demás temas no la reciben. Se muestra encima y el texto original queda debajo, sin cambios.
 - **El mapa de opiniones.** Resume dónde coinciden y dónde se separan los grupos de opinión, sin nombres. Mientras el debate está abierto, lo ve quien participa y ya votó 3 frases (así no se influye en los votos). Cuando el debate termina, cualquier persona que pueda leerlo lo ve.
 - **Borradores de soluciones.** Si hay frases en las que personas de distintas posturas coinciden, el asistente puede proponer borradores. Una persona puede usar uno, cambiarlo como quiera y publicarlo como solución suya; queda marcada «A partir de una sugerencia del asistente».
+- **Comentario para comisiones.** Mientras una comisión busca voluntarios, el asistente puede decir qué capacidades serían útiles para su tarea, para que cada persona vea si quiere sumarse. No elige a nadie: los puestos se siguen eligiendo por sorteo.
 - **Las doce preguntas iniciales.** El asistente propone una sola vez doce preguntas básicas para empezar la conversación, en «Exilio y diáspora», y solo cuando el asistente está encendido y ese nivel está activo. Llevan la marca «Sugerencia del asistente» y no tienen autor. Como cualquier otra inquietud, necesitan el apoyo de los miembros para avanzar.
 
 ## Las reglas y la mesa

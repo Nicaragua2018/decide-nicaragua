@@ -13,7 +13,9 @@
       "i6"
     ],
     "prohibido": [
-      "tiene razón"
+      "tiene razón",
+      "está en lo cierto",
+      "tiene la verdad"
     ]
   },
   {
@@ -28,7 +30,9 @@
     ],
     "prohibido": [
       "tiene razón",
-      "B tiene razón"
+      "B tiene razón",
+      "está en lo cierto",
+      "tiene la verdad"
     ]
   },
   {
@@ -41,7 +45,9 @@
       "f2"
     ],
     "prohibido": [
-      "tiene razón"
+      "tiene razón",
+      "está en lo cierto",
+      "tiene la verdad"
     ]
   },
   {
@@ -52,7 +58,9 @@
     "refsValidas": [],
     "prohibido": [
       "tiene razón",
-      "la verdad es"
+      "la verdad es",
+      "está en lo cierto",
+      "tiene la verdad"
     ]
   },
   {
@@ -76,7 +84,9 @@
       "es culpable",
       "tienen la culpa",
       "la oposición miente",
-      "el gobierno miente"
+      "el gobierno miente",
+      "está en lo cierto",
+      "tiene la verdad"
     ]
   },
   {
@@ -98,7 +108,9 @@
       "es culpable",
       "tienen la culpa",
       "la oposición miente",
-      "el gobierno miente"
+      "el gobierno miente",
+      "está en lo cierto",
+      "tiene la verdad"
     ]
   },
   {
@@ -119,7 +131,9 @@
       "es culpable",
       "tienen la culpa",
       "la oposición miente",
-      "el gobierno miente"
+      "el gobierno miente",
+      "está en lo cierto",
+      "tiene la verdad"
     ]
   },
   {
@@ -140,7 +154,9 @@
       "es culpable",
       "tienen la culpa",
       "la oposición miente",
-      "el gobierno miente"
+      "el gobierno miente",
+      "está en lo cierto",
+      "tiene la verdad"
     ]
   },
   {
@@ -157,7 +173,9 @@
       "es culpable",
       "tienen la culpa",
       "la oposición miente",
-      "el gobierno miente"
+      "el gobierno miente",
+      "está en lo cierto",
+      "tiene la verdad"
     ]
   },
   {
@@ -176,7 +194,9 @@
       "Juan Pérez",
       "María Fuentes",
       "Fuentes",
-      "Pérez"
+      "Pérez",
+      "Juan",
+      "María"
     ]
   },
   {
@@ -189,7 +209,9 @@
       "Juan Pérez",
       "Ana Lagos",
       "Lagos",
-      "Pérez"
+      "Pérez",
+      "Juan",
+      "Ana"
     ]
   },
   {
@@ -204,7 +226,8 @@
     ],
     "prohibido": [
       "Juan Pérez",
-      "Pérez"
+      "Pérez",
+      "Juan"
     ]
   },
   {

@@ -192,7 +192,18 @@ export function evaluarCasoAcuerdos(caso: CasoAcuerdos, salida: unknown): { ok: 
   }
   const texto = normalizar(textos(salida).join('\n'));
   for (const palabra of caso.prohibido) {
-    if (texto.includes(normalizar(palabra))) return { ok: false, motivo: `la salida no debía decir «${palabra}»` };
+    if (aparece(texto, palabra)) return { ok: false, motivo: `la salida no debía decir «${palabra}»` };
   }
   return { ok: true };
+}
+
+/**
+ * Un nombre propio de una sola palabra («Ana», «Pérez») se busca como palabra entera, para que
+ * «Ana» no salte con «analizar». Lo demás se busca como trozo de texto.
+ */
+function aparece(texto: string, palabra: string): boolean {
+  const buscada = normalizar(palabra);
+  if (!/^\p{Lu}\S*$/u.test(palabra)) return texto.includes(buscada);
+  const escapada = buscada.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return new RegExp(`(?<![\\p{L}\\p{N}])${escapada}(?![\\p{L}\\p{N}])`, 'u').test(texto);
 }

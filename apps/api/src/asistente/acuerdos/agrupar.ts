@@ -1,4 +1,5 @@
 import { conReferencias } from './referencias';
+import { enUnaLinea } from './una-linea';
 
 export const MIN_INQUIETUDES_AGRUPAR = 5;
 const MAX_GRUPOS = 6;
@@ -63,7 +64,7 @@ export function esSalidaAgrupar(x: unknown): x is SalidaAgrupar {
 /** Material sin autores, apoyos ni ids: solo `[iN] título — cuerpo`. */
 export function materialAgrupar(datos: { id: string; title: string; body: string }[]) {
   const refs = conReferencias(datos.map((d) => d.id), 'i');
-  const material = datos.map((d) => `[${refs.ref(d.id)}] ${d.title} — ${d.body}`).join('\n');
+  const material = datos.map((d) => `[${refs.ref(d.id)}] ${enUnaLinea(d.title)} — ${enUnaLinea(d.body)}`).join('\n');
   return { material, refs };
 }
 

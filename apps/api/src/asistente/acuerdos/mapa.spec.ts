@@ -1,6 +1,7 @@
 import 'reflect-metadata';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { AcuerdosService } from '../acuerdos.service';
+import { asistenteMock, redisMock } from '../../test/acuerdos-mock';
 
 const AHORA = new Date('2026-11-09T12:00:00Z');
 const UUID = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i;
@@ -31,7 +32,7 @@ const salidaBuena = {
 
 describe('AcuerdosService: mapa de opiniones', () => {
   let prisma: Record<string, any>;
-  let asistente: { pedir: ReturnType<typeof vi.fn> };
+  let asistente: ReturnType<typeof asistenteMock>;
   let sugerencias: { guardar: ReturnType<typeof vi.fn>; existe: ReturnType<typeof vi.fn> };
   let service: AcuerdosService;
 
@@ -42,9 +43,9 @@ describe('AcuerdosService: mapa de opiniones', () => {
       frase: { findMany: vi.fn().mockResolvedValue(FRASES) },
       fraseVoto: { findMany: vi.fn().mockResolvedValue(votos()) },
     };
-    asistente = { pedir: vi.fn().mockResolvedValue(salidaBuena) };
+    asistente = asistenteMock(salidaBuena);
     sugerencias = { guardar: vi.fn().mockResolvedValue(undefined), existe: vi.fn().mockResolvedValue(null) };
-    service = new AcuerdosService(prisma as never, asistente as never, sugerencias as never);
+    service = new AcuerdosService(prisma as never, asistente as never, sugerencias as never, redisMock() as never);
   });
 
   const pedidosMapa = () => asistente.pedir.mock.calls.map((c: any[]) => c[0]).filter((p: any) => p.herramienta.nombre === 'mapear_opiniones');
@@ -57,6 +58,7 @@ describe('AcuerdosService: mapa de opiniones', () => {
     const pedido = pedidosMapa()[0];
     expect(pedido.modelo).toBe('capaz');
     expect(pedido.prioridad).toBe('nocturna');
+    expect(pedido.timeoutMs).toBe(120_000);
     expect(guardadosMapa()).toEqual([
       [
         'mapa',

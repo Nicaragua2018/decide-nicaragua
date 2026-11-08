@@ -8,6 +8,7 @@ vi.mock('../../frases/agregado', async (orig) => ({
 
 import { agregadoPublico } from '../../frases/agregado';
 import { AcuerdosService } from '../acuerdos.service';
+import { asistenteMock, redisMock } from '../../test/acuerdos-mock';
 import { esSalidaBorradores } from './borradores';
 
 const AHORA = new Date('2026-11-09T12:00:00Z');
@@ -35,7 +36,7 @@ const b = (n: number, refs = ['f1']) => ({ titulo: `Titulo ${n}`, descripcion: `
 
 describe('AcuerdosService: borradores de soluciones', () => {
   let prisma: Record<string, any>;
-  let asistente: { pedir: ReturnType<typeof vi.fn> };
+  let asistente: ReturnType<typeof asistenteMock>;
   let sugerencias: { guardar: ReturnType<typeof vi.fn>; existe: ReturnType<typeof vi.fn> };
   let service: AcuerdosService;
 
@@ -50,9 +51,9 @@ describe('AcuerdosService: borradores de soluciones', () => {
       frase: { findMany: vi.fn().mockResolvedValue(FRASES) },
       fraseVoto: { findMany: vi.fn().mockResolvedValue([{ profileId: id('a', 1), fraseId: FRASES[0]!.id, value: 'de_acuerdo' }]) },
     };
-    asistente = { pedir: vi.fn().mockResolvedValue({ borradores: [b(1), b(2, ['f2', 'f9'])] }) };
+    asistente = asistenteMock({ borradores: [b(1), b(2, ['f2', 'f9'])] });
     sugerencias = { guardar: vi.fn().mockResolvedValue(undefined), existe: vi.fn().mockResolvedValue(null) };
-    service = new AcuerdosService(prisma as never, asistente as never, sugerencias as never);
+    service = new AcuerdosService(prisma as never, asistente as never, sugerencias as never, redisMock() as never);
   });
 
   const pedidos = () => asistente.pedir.mock.calls.map((c: any[]) => c[0]).filter((p: any) => p.herramienta.nombre === 'proponer_soluciones');
@@ -63,6 +64,7 @@ describe('AcuerdosService: borradores de soluciones', () => {
     const p = pedidos()[0];
     expect(p.modelo).toBe('capaz');
     expect(p.prioridad).toBe('nocturna');
+    expect(p.timeoutMs).toBe(120_000);
     expect(p.material).not.toMatch(UUID);
     expect(p.material).toContain('[f1] Frase visible 1');
     expect(p.material).not.toContain('Frase visible 3');

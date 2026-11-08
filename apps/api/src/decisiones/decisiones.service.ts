@@ -219,7 +219,12 @@ export class DecisionesService implements OnModuleInit {
     const created = await this.prisma.$transaction(async (tx) => {
       await bloquearDebate(tx, proposalId);
       if (dto.borrador && !(await this.sugerencias.marcarBorradorAdoptado(tx, proposalId, dto.borrador.indice))) {
-        throw new BadRequestException('Ese borrador ya no está disponible.');
+        // Tras la revisión de la mesa este mensaje queda como motivo del texto no publicable.
+        throw new BadRequestException(
+          opts.sinModeracion
+            ? 'Ese borrador ya lo usó otra persona. Puedes publicar tu texto como una solución propia.'
+            : 'Ese borrador ya no está disponible.',
+        );
       }
       return tx.solucion.create({
         data: {

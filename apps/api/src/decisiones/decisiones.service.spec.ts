@@ -171,6 +171,13 @@ describe('DecisionesService', () => {
         expect(prisma.solucion.create).not.toHaveBeenCalled();
         expect(guardia.despuesDePublicar).not.toHaveBeenCalled();
       });
+      it('al publicar tras la mesa, si otra persona ya usó el borrador, el motivo invita a publicarlo como solución propia', async () => {
+        sugerencias.marcarBorradorAdoptado.mockResolvedValue(false);
+        await expect(service.createSolucion(YO, T, conBorrador, '', { sinModeracion: true })).rejects.toThrow(
+          new BadRequestException('Ese borrador ya lo usó otra persona. Puedes publicar tu texto como una solución propia.'),
+        );
+        expect(prisma.solucion.create).not.toHaveBeenCalled();
+      });
       it('adoptar pasa por la revisión previa y guarda el borrador en los args', async () => {
         prisma.solucion.create.mockResolvedValue({ id: 's1' });
         await service.createSolucion(YO, T, conBorrador, 'ip');

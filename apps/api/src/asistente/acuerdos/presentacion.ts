@@ -1,3 +1,4 @@
+import { enUnaLinea } from './una-linea';
 const MAX_PRESENTACION = 1500;
 /** Cuántas inquietudes entran como máximo en un pedido. */
 export const MAX_MATERIAL_PRESENTACION = 40;
@@ -27,5 +28,5 @@ export function esSalidaPresentacion(x: unknown): x is SalidaPresentacion {
 }
 
 export function materialPresentacion(datos: { title: string; body: string }[]) {
-  return { material: datos.map((d, i) => `[${i + 1}] ${d.title} — ${d.body}`).join('\n') };
+  return { material: datos.map((d, i) => `[${i + 1}] ${enUnaLinea(d.title)} — ${enUnaLinea(d.body)}`).join('\n') };
 }

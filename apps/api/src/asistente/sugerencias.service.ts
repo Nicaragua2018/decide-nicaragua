@@ -5,6 +5,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { GroupAccessService } from '../groups/group-access.service';
 import { ForumsService } from '../forums/forums.service';
+import { AsistenteService } from './asistente.service';
 
 export const SUGERENCIA_TIPOS: readonly SugerenciaTipo[] = ['agrupar', 'umbral', 'presentacion', 'mapa', 'borradores', 'comision'];
 
@@ -31,6 +32,7 @@ export class SugerenciasService {
     private readonly audit: AuditService,
     private readonly access: GroupAccessService,
     private readonly forums: ForumsService,
+    private readonly asistente: AsistenteService,
   ) {}
 
   /** Crea o actualiza la sugerencia de un objeto. Una fila final nunca se reescribe. */
@@ -120,6 +122,9 @@ export class SugerenciasService {
       if (!tema) throw new NotFoundException('Tema no encontrado.');
       ({ participa } = await this.access.requireReader(tema.groupId, profileId));
     }
+
+    // Con el asistente apagado no se muestra ninguna sugerencia, tampoco las guardadas (las filas se conservan).
+    if (!this.asistente.activo()) return null;
 
     const fila = await this.prisma.sugerenciaAsistente.findUnique({ where: { tipo_objetoId: { tipo, objetoId } } });
     if (!fila) return null;

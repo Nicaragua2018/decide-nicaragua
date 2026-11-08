@@ -1,3 +1,4 @@
+import { enUnaLinea } from './una-linea';
 const MAX_RESUMEN = 600;
 const MAX_BORRADOR = 2000;
 
@@ -31,5 +32,5 @@ export function esSalidaUmbral(x: unknown): x is SalidaUmbral {
 }
 
 export function materialUmbral(d: { title: string; body: string; apoyos: number }) {
-  return { material: `Título: ${d.title}\nCuerpo: ${d.body}\nApoyos: ${d.apoyos}` };
+  return { material: `Título: ${enUnaLinea(d.title)}\nCuerpo: ${enUnaLinea(d.body)}\nApoyos: ${d.apoyos}` };
 }
