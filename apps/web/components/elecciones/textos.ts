@@ -26,3 +26,20 @@ export function cuentaAtras(e: Pick<EleccionResumen, 'fase' | 'candidaturasEndsA
 export function fechaLarga(iso: string): string {
   return new Date(iso).toLocaleDateString('es-NI', { day: 'numeric', month: 'long', year: 'numeric' });
 }
+
+const EVENTO_ETIQUETA: Record<string, string> = {
+  'eleccion.convocada': 'Se convocó una elección',
+  'eleccion.contada': 'Se contó una elección',
+  'cargo.posesion': 'Alguien tomó un cargo',
+  'cargo.renuncia': 'Alguien renunció a un cargo',
+  'candidatura.ocultada': 'La mesa ocultó una candidatura',
+  'revocacion.abierta': 'Se pidió una revocación',
+  'revocacion.lograda': 'Una revocación reunió los apoyos',
+  'board.action_executed': 'La mesa ejecutó una acción',
+  'reactivacion.aprobada': 'La mesa reactivó una cuenta',
+};
+
+/** Texto sencillo para un código de la auditoría; los desconocidos no muestran el código. */
+export function eventoEtiqueta(action: string): string {
+  return EVENTO_ETIQUETA[action] ?? 'Un evento de la auditoría';
+}

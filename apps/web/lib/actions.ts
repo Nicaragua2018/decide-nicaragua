@@ -3,7 +3,6 @@
 import { cookies } from 'next/headers';
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
-import { fechaLarga } from '@/components/elecciones/textos';
 import { COMPROMISOS_MAX, MODERACION_CAUSAS, type RevisionTexto, type TipoTexto } from '@decide/shared';
 
 const API_URL = process.env.API_URL ?? 'http://localhost:4000';
@@ -1005,17 +1004,7 @@ export async function pedirRevocacion(cargoId: string, _prev: ActionResult | nul
   });
   const rev = await respuestaDeRevision(res);
   if (rev) return rev;
-  if (!res.ok) {
-    let mensaje = await parseError(res);
-    if (res.status === 409) {
-      try {
-        const body = (await res.clone().json()) as { desde?: string };
-        if (body.desde) mensaje += ` Podrás volver a pedirlo desde el ${fechaLarga(body.desde)}.`;
-      } catch {
-        // sin cuerpo legible: queda el mensaje de la API
-      }
-    }
-    return { error: mensaje };
+  if (!res.ok) return { error: await parseError(res) };;
   }
   revalidatePath('/elecciones/revocaciones');
   revalidatePath('/representantes');

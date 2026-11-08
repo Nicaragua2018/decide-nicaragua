@@ -2,7 +2,7 @@ import Link from 'next/link';
 import type { Metadata } from 'next';
 import { CARGO_ETIQUETA, type RepresentantesVista, type RevocacionResumen } from '@decide/shared';
 import { Hexagono } from '@/components/elecciones/Hexagono';
-import { fechaLarga } from '@/components/elecciones/textos';
+import { eventoEtiqueta, fechaLarga } from '@/components/elecciones/textos';
 
 export const metadata: Metadata = {
   title: 'Quiénes nos representan — Decide Nicaragua',
@@ -208,7 +208,7 @@ export default async function RepresentantesPage() {
                         <div className="el-mesa-datos">
                           <p className="font-medium">{o.autor}</p>
                           <p className="el-nota">
-                            {fechaLarga(o.createdAt)} · sobre el hecho «{o.evento.action}» del {fechaLarga(o.evento.createdAt)}
+                            {fechaLarga(o.createdAt)} · sobre el hecho «{eventoEtiqueta(o.evento.action)}» del {fechaLarga(o.evento.createdAt)}
                           </p>
                         </div>
                       </div>
