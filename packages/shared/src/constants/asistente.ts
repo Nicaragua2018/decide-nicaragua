@@ -10,7 +10,8 @@ export type TipoTexto =
   | 'comentario'
   | 'informe'
   | 'motivo_regla'
-  | 'subgrupo';
+  | 'subgrupo'
+  | 'candidatura';
 
 /** 0 = sin problema, 1 = aviso al autor, 2 = no se publica sin la mesa. */
 export type NivelRevision = 0 | 1 | 2;
@@ -59,6 +60,7 @@ export const TIPOS_TEXTO: readonly TipoTexto[] = [
   'informe',
   'motivo_regla',
   'subgrupo',
+  'candidatura',
 ];
 
 /**

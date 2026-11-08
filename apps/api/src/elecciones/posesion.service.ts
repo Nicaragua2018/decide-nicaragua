@@ -7,8 +7,7 @@ import { RulesService } from '../rules/rules.service';
 import { generateSeed } from '../sortition/sortition-algorithm';
 import { ConvocatoriaService } from './convocatoria.service';
 import { contarEleccion } from './conteo';
-
-const MESA: CargoTipoValue[] = ['administrador', 'coordinador_general', 'secretario'];
+import { MESA, conOtroCargo } from './incompatibilidad';
 
 /** Suma meses sin desbordar el fin de mes (31 ago + 6 meses = 28 feb). Todo en UTC. */
 export function sumarMeses(fecha: Date, meses: number): Date {
@@ -72,7 +71,7 @@ export class PosesionService {
     const vivas = candidaturas.filter((c) => c.retiradaAt === null);
     const candidatas = vivas.map((c) => c.id);
     const enLista = new Set(candidatas);
-    const incompatibles = await this.conOtroCargo(e, vivas.map((c) => c.profileId));
+    const incompatibles = await conOtroCargo(this.prisma, e, vivas.map((c) => c.profileId));
     const excluidas = vivas
       .filter((c) => c.oculta || c.profile.user.status !== 'verified_citizen' || incompatibles.has(c.profileId))
       .map((c) => c.id);
@@ -138,36 +137,6 @@ export class PosesionService {
       });
     }
     return true;
-  }
-
-  /**
-   * Personas que ya ocupan un cargo incompatible con este: un cargo vigente de otro tipo o ámbito,
-   * o un asiento de la mesa elegido por votación para otro rol (cualquiera, si esta elección no
-   * es de la mesa). Repetir el mismo cargo no es incompatible. Los asientos fundadores no cuentan, salvo en elecciones de coordinadores: ahí excluyen (la comunidad puede contar antes que la mesa y liberar el asiento la dejaría corta).
-   */
-  private async conOtroCargo(
-    e: { groupId: string; cargo: CargoTipoValue },
-    perfiles: string[],
-  ): Promise<Set<string>> {
-    if (perfiles.length === 0) return new Set();
-    const [cargos, asientos] = await Promise.all([
-      this.prisma.cargo.findMany({
-        where: { profileId: { in: perfiles }, terminadoAt: null },
-        select: { profileId: true, tipo: true, groupId: true },
-      }),
-      this.prisma.boardSeat.findMany({
-        where: { profileId: { in: perfiles }, ...(e.cargo === 'coordinador' ? {} : { source: 'eleccion' as const }) },
-        select: { profileId: true, role: true },
-      }),
-    ]);
-    const otros = new Set<string>();
-    for (const c of cargos) {
-      if (c.tipo !== e.cargo || c.groupId !== e.groupId) otros.add(c.profileId);
-    }
-    for (const a of asientos) {
-      if (!MESA.includes(e.cargo) || (a.role as string) !== e.cargo) otros.add(a.profileId);
-    }
-    return otros;
   }
 
   private async darPosesion(

@@ -21,6 +21,15 @@ const ABIERTA = ['candidaturas', 'votacion'] as const;
 
 type Ambito = { groupId: string; cargo: CargoTipoValue };
 
+/**
+ * Quién forma el electorado: cuentas verificadas de toda la plataforma; en coordinadores, solo
+ * las de esa comunidad. Sirve como filtro de perfiles (también para contar papeletas).
+ */
+export function filtroElectorado(eleccion: Ambito): Prisma.ProfileWhereInput {
+  const user = { status: 'verified_citizen' as const };
+  return eleccion.cargo === 'coordinador' ? { user, memberships: { some: { groupId: eleccion.groupId } } } : { user };
+}
+
 const esDuplicado = (err: unknown): boolean =>
   err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002';
 
@@ -101,15 +110,13 @@ export class ConvocatoriaService {
 
   /** Perfiles que pueden votar (y presentarse) en esa elección. */
   async electorado(eleccion: Ambito): Promise<string[]> {
-    const verificado = { status: 'verified_citizen' as const };
-    const perfiles = await this.prisma.profile.findMany({
-      where:
-        eleccion.cargo === 'coordinador'
-          ? { user: verificado, memberships: { some: { groupId: eleccion.groupId } } }
-          : { user: verificado },
-      select: { id: true },
-    });
+    const perfiles = await this.prisma.profile.findMany({ where: filtroElectorado(eleccion), select: { id: true } });
     return perfiles.map((p) => p.id);
+  }
+
+  /** Si una persona está en el electorado de esa elección (misma regla que `electorado`). */
+  async enElectorado(profileId: string, eleccion: Ambito): Promise<boolean> {
+    return (await this.prisma.profile.count({ where: { id: profileId, ...filtroElectorado(eleccion) } })) > 0;
   }
 
   /**

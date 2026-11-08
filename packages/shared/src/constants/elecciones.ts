@@ -34,6 +34,7 @@ export type ResultadoEleccionVista = {
   abstenciones: number;
   miembros: number;
   filas: { candidaturaId: string; nombre: string; aprobacionesPct: number; electa: boolean }[];
+  /** `gana` y `pierde` son ids de candidatura (los nombres están en `filas`). */
   duelos: { gana: string; pierde: string; aFavor: number; enContra: number }[];
   candidatasOrden: string[];
   pairwiseMatrix: number[][];
@@ -64,7 +65,8 @@ export type EleccionDetalle = EleccionResumen & {
 };
 
 export type RepresentantesVista = {
-  mesa: { tipo: CargoTipoValue; nombre: string; iniciales: string; desde: string; hasta: string; enFunciones: boolean; fundador: boolean }[];
+  /** `hasta` es null en un asiento fundador: no tiene período, sigue en funciones hasta su elección. */
+  mesa: { tipo: CargoTipoValue; nombre: string; iniciales: string; desde: string; hasta: string | null; enFunciones: boolean; fundador: boolean }[];
   observadores: { nombre: string; iniciales: string; desde: string; hasta: string }[];
   comunidades: {
     id: string;

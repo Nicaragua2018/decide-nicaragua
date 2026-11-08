@@ -339,6 +339,16 @@ describe('ConvocatoriaService', () => {
       expect(await service.electorado({ groupId: GEN, cargo: 'observador' })).toEqual(['p1']);
       expect(prisma.profile.findMany).toHaveBeenCalledWith({ where: { user: { status: 'verified_citizen' } }, select: { id: true } });
     });
+
+    it('enElectorado aplica la misma regla a una sola persona', async () => {
+      prisma.profile.count.mockResolvedValue(1);
+      expect(await service.enElectorado('p1', { groupId: 'c1', cargo: 'coordinador' })).toBe(true);
+      expect(prisma.profile.count).toHaveBeenCalledWith({
+        where: { id: 'p1', user: { status: 'verified_citizen' }, memberships: { some: { groupId: 'c1' } } },
+      });
+      prisma.profile.count.mockResolvedValue(0);
+      expect(await service.enElectorado('p1', { groupId: GEN, cargo: 'secretario' })).toBe(false);
+    });
   });
 
   describe('dejarEnFunciones', () => {
