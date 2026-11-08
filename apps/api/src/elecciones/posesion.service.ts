@@ -143,7 +143,7 @@ export class PosesionService {
   /**
    * Personas que ya ocupan un cargo incompatible con este: un cargo vigente de otro tipo o ámbito,
    * o un asiento de la mesa elegido por votación para otro rol (cualquiera, si esta elección no
-   * es de la mesa). Repetir el mismo cargo no es incompatible. Los asientos fundadores no cuentan.
+   * es de la mesa). Repetir el mismo cargo no es incompatible. Los asientos fundadores no cuentan, salvo en elecciones de coordinadores: ahí excluyen (la comunidad puede contar antes que la mesa y liberar el asiento la dejaría corta).
    */
   private async conOtroCargo(
     e: { groupId: string; cargo: CargoTipoValue },
@@ -156,7 +156,7 @@ export class PosesionService {
         select: { profileId: true, tipo: true, groupId: true },
       }),
       this.prisma.boardSeat.findMany({
-        where: { profileId: { in: perfiles }, source: 'eleccion' },
+        where: { profileId: { in: perfiles }, ...(e.cargo === 'coordinador' ? {} : { source: 'eleccion' as const }) },
         select: { profileId: true, role: true },
       }),
     ]);

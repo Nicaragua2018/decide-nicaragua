@@ -205,6 +205,17 @@ describe('PosesionService', () => {
     expect(guardado().data['electas']).toEqual([]);
   });
 
+  it('un fundador que se presenta a coordinador queda excluido y conserva su asiento', async () => {
+    prisma.eleccion.findUnique.mockResolvedValue(eleccion({ cargo: 'coordinador', groupId: 'g-com', puestos: 2 }));
+    preparar([{ id: 'c1', profileId: 'p1' }, { id: 'c2', profileId: 'p2' }], voto(10, ['c1', 'c2']), votantes(10));
+    prisma.boardSeat.findMany.mockResolvedValue([{ profileId: 'p1', role: 'secretario' }]);
+    await service.contar('e1', NOW);
+    expect(prisma.boardSeat.findMany.mock.calls[0]![0].where).toEqual({ profileId: { in: ['p1', 'p2'] } });
+    expect(guardado().data['electas']).toEqual(['c2']);
+    expect(prisma.boardSeat.deleteMany).toHaveBeenCalledTimes(1);
+    expect(prisma.boardSeat.deleteMany.mock.calls[0]![0].where.profileId).toBe('p2');
+  });
+
   it('un fundador elegido para otro asiento libera su asiento fundador', async () => {
     preparar([{ id: 'c1', profileId: 'p1' }], voto(10, ['c1']), votantes(10));
     prisma.eleccion.findUnique.mockResolvedValue(eleccion({ cargo: 'administrador' }));
