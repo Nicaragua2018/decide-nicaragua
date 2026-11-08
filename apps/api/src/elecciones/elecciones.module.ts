@@ -4,6 +4,7 @@ import { AsistenteModule } from '../asistente/asistente.module';
 import { RulesModule } from '../rules/rules.module';
 import { ConvocatoriaService } from './convocatoria.service';
 import { PosesionService } from './posesion.service';
+import { RevocacionService } from './revocacion.service';
 import { EleccionesScheduler } from './elecciones.scheduler';
 import { EleccionesService } from './elecciones.service';
 import { EleccionesController, RepresentantesController } from './elecciones.controller';
@@ -11,7 +12,7 @@ import { EleccionesController, RepresentantesController } from './elecciones.con
 @Module({
   imports: [RulesModule, AuditModule, AsistenteModule],
   controllers: [EleccionesController, RepresentantesController],
-  providers: [ConvocatoriaService, PosesionService, EleccionesScheduler, EleccionesService],
-  exports: [ConvocatoriaService, PosesionService, EleccionesService],
+  providers: [ConvocatoriaService, PosesionService, RevocacionService, EleccionesScheduler, EleccionesService],
+  exports: [ConvocatoriaService, PosesionService, RevocacionService, EleccionesService],
 })
 export class EleccionesModule {}

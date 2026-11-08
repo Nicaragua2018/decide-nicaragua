@@ -11,17 +11,29 @@ import {
   Put,
   UseGuards,
 } from '@nestjs/common';
-import type { EleccionDetalle, EleccionResumen, JwtPayload, MiCargoVista, RepresentantesVista } from '@decide/shared';
+import type {
+  EleccionDetalle,
+  EleccionResumen,
+  JwtPayload,
+  MiCargoVista,
+  RepresentantesVista,
+  RevocacionVista,
+} from '@decide/shared';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { EleccionesService } from './elecciones.service';
+import { RevocacionService } from './revocacion.service';
 import { CandidaturaDto } from './dto/candidatura.dto';
 import { PapeletaEleccionDto } from './dto/papeleta-eleccion.dto';
+import { RevocacionDto } from './dto/revocacion.dto';
 
 @Controller('elecciones')
 @UseGuards(JwtAuthGuard)
 export class EleccionesController {
-  constructor(private readonly elecciones: EleccionesService) {}
+  constructor(
+    private readonly elecciones: EleccionesService,
+    private readonly revocacion: RevocacionService,
+  ) {}
 
   private perfil(user: JwtPayload): string {
     if (!user.profileId) throw new ForbiddenException('Perfil requerido');
@@ -43,6 +55,37 @@ export class EleccionesController {
   @HttpCode(204)
   async renunciar(@Param('cargoId', ParseUUIDPipe) cargoId: string, @CurrentUser() user: JwtPayload): Promise<void> {
     await this.elecciones.renunciar(this.perfil(user), cargoId, new Date());
+  }
+
+  // ─── Revocación (rutas fijas, antes de `:id`) ───────────────────────────────
+
+  /** Los pedidos de revocación abiertos que la persona puede ver y apoyar. */
+  @Get('revocaciones')
+  async revocaciones(@CurrentUser() user: JwtPayload): Promise<RevocacionVista[]> {
+    return this.revocacion.listar(this.perfil(user), new Date());
+  }
+
+  /** Responde 202 (sin crear el pedido) cuando el motivo queda en revisión de la mesa. */
+  @Post('cargos/:cargoId/revocacion')
+  async pedirRevocacion(
+    @Param('cargoId', ParseUUIDPipe) cargoId: string,
+    @Body() dto: RevocacionDto,
+    @CurrentUser() user: JwtPayload,
+  ): Promise<{ id: string }> {
+    return this.revocacion.pedir(this.perfil(user), cargoId, dto.motivo, new Date(), { pedirRevision: dto.pedirRevision });
+  }
+
+  @Put('revocaciones/:id/apoyo')
+  async apoyarRevocacion(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() user: JwtPayload): Promise<RevocacionVista> {
+    return this.revocacion.apoyar(this.perfil(user), id, new Date());
+  }
+
+  @Delete('revocaciones/:id/apoyo')
+  async quitarApoyoRevocacion(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() user: JwtPayload,
+  ): Promise<RevocacionVista> {
+    return this.revocacion.quitarApoyo(this.perfil(user), id, new Date());
   }
 
   @Get(':id')

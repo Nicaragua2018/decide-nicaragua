@@ -95,6 +95,7 @@ describe('EleccionesService', () => {
   let convocatoria: { enElectorado: ReturnType<typeof vi.fn>; anticipada: ReturnType<typeof vi.fn> };
   let guardia: ReturnType<typeof guardiaMock>;
   let publicadores: ReturnType<typeof publicadoresMock>;
+  let revocacion: { resumenPorCargo: ReturnType<typeof vi.fn> };
   let service: EleccionesService;
 
   beforeEach(() => {
@@ -109,6 +110,7 @@ describe('EleccionesService', () => {
       convocatoria as never,
       guardia as never,
       (publicadores = publicadoresMock()) as never,
+      (revocacion = { resumenPorCargo: vi.fn().mockResolvedValue(new Map()) }) as never,
     );
   });
 
@@ -493,6 +495,13 @@ describe('EleccionesService', () => {
     ]);
     expect(r.observaciones).toEqual([]);
     expect(JSON.stringify(r)).not.toContain('@');
+
+    // Con un pedido de revocación abierto, el cargo muestra cuánto apoyo lleva.
+    const resumen = { apoyos: 3, umbral: 4, venceAt: hasta.toISOString() };
+    revocacion.resumenPorCargo.mockResolvedValue(new Map([['c-obs', resumen]]));
+    const conPedido = await service.representantes();
+    expect(conPedido.observadores[0]!.revocacion).toEqual(resumen);
+    expect(conPedido.mesa[1]!.revocacion).toBeNull();
     // Sin guard: también para visitantes. El resto de elecciones pide sesión.
     expect(Reflect.getMetadata('__guards__', RepresentantesController)).toBeUndefined();
     expect(Reflect.getMetadata('__guards__', EleccionesController)).toHaveLength(1);

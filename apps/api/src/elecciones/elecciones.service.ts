@@ -27,6 +27,7 @@ import { Publicadores } from '../asistente/publicadores';
 import { round5 } from '../frases/agregado';
 import { ConvocatoriaService, filtroElectorado } from './convocatoria.service';
 import { MESA, conOtroCargo } from './incompatibilidad';
+import { RevocacionService } from './revocacion.service';
 
 const DIA_MS = 86_400_000;
 /** Las elecciones contadas se siguen listando este tiempo. */
@@ -150,6 +151,7 @@ export class EleccionesService implements OnModuleInit {
     private readonly convocatoria: ConvocatoriaService,
     private readonly guardia: GuardiaService,
     private readonly publicadores: Publicadores,
+    private readonly revocacion: RevocacionService,
   ) {}
 
   /** La revisión de la mesa publica una candidatura aprobada con la misma llamada. */
@@ -283,7 +285,7 @@ export class EleccionesService implements OnModuleInit {
 
   /** «Quiénes nos representan»: pública. Solo el nombre visible, nunca el correo. */
   async representantes(): Promise<RepresentantesVista> {
-    const [asientos, cargos, comunidades, abiertas] = await Promise.all([
+    const [asientos, cargos, comunidades, abiertas, revocaciones] = await Promise.all([
       this.prisma.boardSeat.findMany({
         select: { role: true, source: true, since: true, profileId: true, profile: { select: { displayName: true } } },
       }),
@@ -304,7 +306,9 @@ export class EleccionesService implements OnModuleInit {
         where: { cargo: 'coordinador', fase: { in: [...ABIERTA] } },
         select: { groupId: true },
       }),
+      this.revocacion.resumenPorCargo(),
     ]);
+    const revocacionDe = (cargoId: string | null) => (cargoId ? revocaciones.get(cargoId) ?? null : null);
 
     const persona = (nombre: string) => ({ nombre, iniciales: iniciales(nombre) });
     const mesa: RepresentantesVista['mesa'] = [];
@@ -327,13 +331,13 @@ export class EleccionesService implements OnModuleInit {
         enFunciones: c?.enFunciones ?? false,
         fundador: false,
         cargoId: c?.id ?? null,
-        revocacion: null,
+        revocacion: revocacionDe(c?.id ?? null),
       });
     }
 
     const observadores = cargos
       .filter((c) => c.tipo === 'observador')
-      .map((c) => ({ ...persona(c.profile.displayName), desde: c.desde.toISOString(), hasta: c.hasta.toISOString(), cargoId: c.id, revocacion: null }));
+      .map((c) => ({ ...persona(c.profile.displayName), desde: c.desde.toISOString(), hasta: c.hasta.toISOString(), cargoId: c.id, revocacion: revocacionDe(c.id) }));
 
     const conEleccion = new Set(abiertas.map((e) => e.groupId));
     return {
@@ -351,7 +355,7 @@ export class EleccionesService implements OnModuleInit {
             hasta: c.hasta.toISOString(),
             enFunciones: c.enFunciones,
             cargoId: c.id,
-            revocacion: null,
+            revocacion: revocacionDe(c.id),
           })),
         eleccionAbierta: conEleccion.has(g.id),
       })),
