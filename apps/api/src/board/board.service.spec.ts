@@ -70,6 +70,16 @@ describe('BoardService', () => {
       await expect(service.assignFounderSeat(ADMIN, 'secretario' as never, 'p-x', 'ip')).rejects.toThrow(ForbiddenException);
     });
 
+    it('sigue bloqueado tras la primera posesión de una elección', async () => {
+      prisma.boardSeat.findFirst.mockResolvedValue(asiento('administrador'));
+      prisma.boardSeat.count.mockResolvedValue(1); // un asiento con source 'eleccion'
+      await expect(
+        service.assignFounderSeat(ADMIN, 'coordinador_general' as never, 'p-x', 'ip'),
+      ).rejects.toThrow('ya se eligen por votación');
+      expect(prisma.boardSeat.count).toHaveBeenCalledWith({ where: { source: 'eleccion' } });
+      expect(prisma.boardSeat.create).not.toHaveBeenCalled();
+    });
+
     it('solo un miembro verificado sin otro cargo puede ocupar un cargo', async () => {
       prisma.boardSeat.findFirst
         .mockResolvedValueOnce(asiento('administrador')) // rol del actor

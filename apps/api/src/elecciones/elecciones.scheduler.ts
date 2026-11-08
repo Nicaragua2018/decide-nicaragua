@@ -1,5 +1,6 @@
 import { Injectable, Logger, OnApplicationBootstrap, OnModuleDestroy } from '@nestjs/common';
 import { ConvocatoriaService } from './convocatoria.service';
+import { PosesionService } from './posesion.service';
 
 const HORA_MS = 3_600_000;
 
@@ -14,7 +15,10 @@ export class EleccionesScheduler implements OnApplicationBootstrap, OnModuleDest
   private timer: NodeJS.Timeout | null = null;
   private running = false;
 
-  constructor(private readonly convocatoria: ConvocatoriaService) {}
+  constructor(
+    private readonly convocatoria: ConvocatoriaService,
+    private readonly posesion: PosesionService,
+  ) {}
 
   onApplicationBootstrap(): void {
     if (process.env['NODE_ENV'] === 'test' || process.env['VITEST']) return;
@@ -32,6 +36,7 @@ export class EleccionesScheduler implements OnApplicationBootstrap, OnModuleDest
     return [
       { nombre: 'Elecciones convocadas', correr: (now) => this.convocatoria.convocar(now) },
       { nombre: 'Elecciones que cambiaron de fase', correr: (now) => this.convocatoria.avanzar(now) },
+      { nombre: 'Elecciones contadas', correr: (now) => this.posesion.contarVencidas(now) },
     ];
   }
 

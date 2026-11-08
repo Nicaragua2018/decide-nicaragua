@@ -116,8 +116,12 @@ export class ConvocatoriaService {
    * Los cargos vigentes de ese tipo y ámbito que vencen quedan «en funciones» hasta que haya
    * quien los reemplace. `puestos` es cuántos puestos quedaron sin cubrir.
    */
-  async dejarEnFunciones(eleccion: Ambito & { puestos: number }, now: Date): Promise<void> {
-    const vencen = await this.prisma.cargo.findMany({
+  async dejarEnFunciones(
+    eleccion: Ambito & { puestos: number },
+    now: Date,
+    db: Pick<Prisma.TransactionClient, 'cargo'> = this.prisma,
+  ): Promise<void> {
+    const vencen = await db.cargo.findMany({
       where: {
         groupId: eleccion.groupId,
         tipo: eleccion.cargo,
@@ -129,7 +133,7 @@ export class ConvocatoriaService {
       select: { id: true },
     });
     if (vencen.length === 0) return;
-    await this.prisma.cargo.updateMany({
+    await db.cargo.updateMany({
       where: { id: { in: vencen.map((c) => c.id) } },
       data: { enFunciones: true },
     });
