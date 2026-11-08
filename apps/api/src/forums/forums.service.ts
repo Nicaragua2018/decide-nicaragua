@@ -54,6 +54,8 @@ export interface ModeracionDeEleccion {
    * (`huella`) y aún aplica. Devuelve la auditoría que se escribe tras confirmar, o null si ya no aplica.
    */
   ocultar(tx: Prisma.TransactionClient, id: string, causa: ModeracionCausaValue, huella: string | null): Promise<(() => void) | null>;
+  /** Conflicto de interés: el motivo (en español) por el que esta persona no firma, o null si puede. */
+  puedeFirmar(profileId: string, id: string): Promise<string | null>;
 }
 
 type Objetivo = ModTarget | ObjetivoEleccion;
@@ -640,6 +642,15 @@ export class ForumsService {
     const vencida = (al: Date): boolean => action.venceAt === null || action.venceAt.getTime() <= al.getTime();
     if (vencida(now)) throw new ConflictException(YA_VENCIO);
     const target = checkObjetivo(action.target);
+    if (esDeEleccion(target)) {
+      // Fichas, pedidos y observaciones: solo la mesa elegida (no los suplentes, ADR-029) y sin
+      // conflicto de interés, en la primera firma y en la segunda (también para rechazar).
+      if ((await this.board.roleOf(profileId)) === null) {
+        throw new ForbiddenException('Solo la mesa directiva confirma las solicitudes sobre elecciones.');
+      }
+      const motivo = (await this.deEleccion.get(target)?.puedeFirmar(profileId, action.targetId)) ?? null;
+      if (motivo) throw new ForbiddenException(motivo);
+    }
     const canceladas: string[] = [];
     let auditarEfecto: (() => void) | null = null;
     const resultado = await this.prisma.$transaction(async (tx): Promise<'primera_firma' | 'resuelta' | 'sin_efecto'> => {
@@ -726,8 +737,11 @@ export class ForumsService {
       orderBy: { createdAt: 'asc' },
     });
     const result: ModeracionPorConfirmar[] = [];
+    // Un suplente no firma las solicitudes sobre elecciones: no se las mostramos.
+    const esMesaElegida = (await this.board.roleOf(profileId)) !== null;
     for (const a of actions) {
       const estado = a.status as string;
+      if (!esMesaElegida && esDeEleccion(checkObjetivo(a.target))) continue;
       // Toda solicitud abierta nace con causa; una fila sin ella no se puede mostrar bien.
       if ((estado !== 'pendiente' && estado !== 'provisional') || !a.causa) continue;
       const target = checkObjetivo(a.target);

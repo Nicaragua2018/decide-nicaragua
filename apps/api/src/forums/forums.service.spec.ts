@@ -1678,6 +1678,7 @@ describe('ForumsService', () => {
           estaOculto: ReturnType<typeof vi.fn>;
           contexto: ReturnType<typeof vi.fn>;
           ocultar: ReturnType<typeof vi.fn>;
+          puedeFirmar: ReturnType<typeof vi.fn>;
         };
         let auditarEfecto: ReturnType<typeof vi.fn>;
         beforeEach(() => {
@@ -1687,6 +1688,7 @@ describe('ForumsService', () => {
             estaOculto: vi.fn().mockResolvedValue(false),
             contexto: vi.fn().mockResolvedValue('Ficha de candidatura · Secretaría'),
             ocultar: vi.fn().mockResolvedValue(auditarEfecto),
+            puedeFirmar: vi.fn().mockResolvedValue(null),
           };
           service.registrarModeracion('candidatura', ficha);
         });
@@ -1740,6 +1742,44 @@ describe('ForumsService', () => {
           expect(audit.log).toHaveBeenCalledWith(
             expect.objectContaining({ action: 'moderation.confirmed_by_board', resource: 'candidatura:k1' }),
           );
+        });
+
+        it('conflicto de interés: quien no puede firmar (p. ej. candidata) recibe 403 en cualquiera de las dos firmas', async () => {
+          const NO = 'Te presentaste a una elección abierta: no puedes firmar que se oculte una ficha.';
+          ficha.puedeFirmar.mockResolvedValue(NO);
+          prisma.moderationAction.findUnique.mockResolvedValue(delAsistente({ target: 'candidatura', targetId: 'k1' }));
+          await expect(service.confirmar(YO, 'ma1', true, 'ip')).rejects.toThrow(new ForbiddenException(NO));
+          prisma.moderationAction.findUnique.mockResolvedValue(delAsistente({ target: 'candidatura', targetId: 'k1', moderatorProfileId: OTRA }));
+          await expect(service.confirmar(YO, 'ma1', true, 'ip')).rejects.toThrow(new ForbiddenException(NO));
+          await expect(service.confirmar(YO, 'ma1', false, 'ip')).rejects.toThrow(ForbiddenException);
+          expect(ficha.puedeFirmar).toHaveBeenCalledWith(YO, 'k1');
+          expect(prisma.moderationAction.updateMany).not.toHaveBeenCalled();
+          expect(ficha.ocultar).not.toHaveBeenCalled();
+        });
+
+        it('solo la mesa firma estas solicitudes: un suplente recibe 403, pero sigue firmando las del foro', async () => {
+          board.roleOf.mockResolvedValue(null);
+          board.puedeFirmarRevision.mockResolvedValue(true);
+          prisma.moderationAction.findUnique.mockResolvedValue(delAsistente({ target: 'candidatura', targetId: 'k1' }));
+          await expect(service.confirmar(YO, 'ma1', true, 'ip')).rejects.toThrow(ForbiddenException);
+          expect(prisma.moderationAction.updateMany).not.toHaveBeenCalled();
+
+          prisma.moderationAction.findUnique.mockResolvedValue(delAsistente({ target: 'frase', targetId: 'f1' }));
+          prisma.frase.update.mockResolvedValue({});
+          await service.confirmar(YO, 'ma1', true, 'ip');
+          expect(prisma.frase.update).toHaveBeenCalledWith({ where: { id: 'f1' }, data: { hidden: true } });
+        });
+
+        it('la cola por confirmar no muestra estas solicitudes a un suplente', async () => {
+          board.roleOf.mockResolvedValue(null);
+          board.puedeFirmarRevision.mockResolvedValue(true);
+          prisma.moderationAction.findMany.mockResolvedValue([
+            delAsistente({ target: 'candidatura', targetId: 'k1' }),
+            delAsistente({ id: 'ma2', target: 'frase', targetId: 'f1' }),
+          ]);
+          prisma.frase.findUnique.mockResolvedValue({ text: 'Una frase' });
+          const r = await service.listPorConfirmar(YO);
+          expect(r.map((x) => x.id)).toEqual(['ma2']);
         });
 
         it('si con la segunda firma el efecto ya no aplica (texto editado, elección cerrada), la solicitud queda rechazada sin efecto', async () => {

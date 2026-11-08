@@ -11,7 +11,7 @@ const TEXTO_FICHA = textoParaRevisar(PRESENTACION, ...COMPROMISOS);
 
 function buildPrisma() {
   return {
-    candidatura: { findUnique: vi.fn(), updateMany: vi.fn().mockResolvedValue({ count: 1 }) },
+    candidatura: { findUnique: vi.fn(), updateMany: vi.fn().mockResolvedValue({ count: 1 }), count: vi.fn().mockResolvedValue(0) },
     revocacion: { findUnique: vi.fn(), updateMany: vi.fn().mockResolvedValue({ count: 1 }) },
     observacionPublica: { findUnique: vi.fn(), updateMany: vi.fn().mockResolvedValue({ count: 1 }) },
     $queryRaw: vi.fn().mockResolvedValue([]),
@@ -88,6 +88,17 @@ describe('ModeracionEleccionesService (la mesa decide, 3C)', () => {
       expect(JSON.stringify(audit.log.mock.calls)).not.toContain('Masaya');
     });
 
+    it('conflicto de interés: quien tiene una candidatura viva en una elección abierta no firma', async () => {
+      expect(await m('candidatura').puedeFirmar('p-mesa', 'k1')).toBeNull();
+      expect(prisma.candidatura.count).toHaveBeenCalledWith({
+        where: { profileId: 'p-mesa', retiradaAt: null, eleccion: { fase: { in: ['candidaturas', 'votacion'] } } },
+      });
+      prisma.candidatura.count.mockResolvedValue(1);
+      expect(await m('candidatura').puedeFirmar('p-mesa', 'k1')).toBe(
+        'Te presentaste a una elección abierta: no puedes firmar que se oculte una ficha.',
+      );
+    });
+
     it('una ficha editada desde la revisión no se oculta', async () => {
       prisma.candidatura.findUnique.mockResolvedValue(ficha({ presentacion: 'Texto nuevo' }));
       expect(await m('candidatura').ocultar(prisma as never, 'k1', 'odio', huellaDe(TEXTO_FICHA))).toBeNull();
@@ -132,6 +143,14 @@ describe('ModeracionEleccionesService (la mesa decide, 3C)', () => {
       });
     });
 
+    it('conflicto de interés: la persona cuyo cargo se pide revocar no firma', async () => {
+      prisma.revocacion.findUnique.mockResolvedValue({ cargo: { profileId: 'p-titular' } });
+      expect(await m('revocacion').puedeFirmar('p-titular', 'v1')).toBe(
+        'Se pide revocar tu cargo: no puedes firmar esta moderación.',
+      );
+      expect(await m('revocacion').puedeFirmar('p-otra', 'v1')).toBeNull();
+    });
+
     it('si ya no está abierta, no hace nada', async () => {
       prisma.revocacion.updateMany.mockResolvedValue({ count: 0 });
       expect(await m('revocacion').ocultar(prisma as never, 'v1', 'odio', null)).toBeNull();
@@ -146,6 +165,12 @@ describe('ModeracionEleccionesService (la mesa decide, 3C)', () => {
       expect(await m('observacion').estaOculto('o1')).toBe(false);
       prisma.observacionPublica.findUnique.mockResolvedValue({ texto: 'x', oculta: true, auditEventId: 'ev1' });
       expect(await m('observacion').estaOculto('o1')).toBe(true);
+    });
+
+    it('conflicto de interés: quien escribió la observación no firma', async () => {
+      prisma.observacionPublica.findUnique.mockResolvedValue({ autorProfileId: 'p-autor' });
+      expect(await m('observacion').puedeFirmar('p-autor', 'o1')).toBe('Escribiste esta observación: no puedes firmar su moderación.');
+      expect(await m('observacion').puedeFirmar('p-otra', 'o1')).toBeNull();
     });
 
     it('con 2 firmas se oculta (no se borra) con la causa, y se audita sin texto', async () => {

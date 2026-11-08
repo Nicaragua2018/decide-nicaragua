@@ -42,6 +42,13 @@ export class ModeracionEleccionesService implements OnModuleInit {
         return `Ficha de candidatura · ${CARGO_ETIQUETA[c.eleccion.cargo as CargoTipoValue]} · ${c.eleccion.group.name}`;
       },
       ocultar: (tx, id, causa, huella) => this.ocultarFicha(tx, id, causa, huella),
+      // Como `BoardService.sinConflicto`: quien compite en una elección abierta no oculta fichas.
+      puedeFirmar: async (profileId) => {
+        const propias = await this.prisma.candidatura.count({
+          where: { profileId, retiradaAt: null, eleccion: { fase: { in: [...ELECCION_ABIERTA] } } },
+        });
+        return propias > 0 ? 'Te presentaste a una elección abierta: no puedes firmar que se oculte una ficha.' : null;
+      },
     });
 
     this.forums.registrarModeracion('revocacion', {
@@ -68,6 +75,10 @@ export class ModeracionEleccionesService implements OnModuleInit {
           void this.audit.log({ action: 'revocacion.retirada_por_moderacion', resource: `revocacion:${id}`, metadata: { causa, origen: ORIGEN } });
         };
       },
+      puedeFirmar: async (profileId, id) => {
+        const r = await this.prisma.revocacion.findUnique({ where: { id }, select: { cargo: { select: { profileId: true } } } });
+        return r?.cargo.profileId === profileId ? 'Se pide revocar tu cargo: no puedes firmar esta moderación.' : null;
+      },
     });
 
     this.forums.registrarModeracion('observacion', {
@@ -89,6 +100,10 @@ export class ModeracionEleccionesService implements OnModuleInit {
             metadata: { auditEventId: o.auditEventId, causa, origen: ORIGEN },
           });
         };
+      },
+      puedeFirmar: async (profileId, id) => {
+        const o = await this.prisma.observacionPublica.findUnique({ where: { id }, select: { autorProfileId: true } });
+        return o?.autorProfileId === profileId ? 'Escribiste esta observación: no puedes firmar su moderación.' : null;
       },
     });
   }
