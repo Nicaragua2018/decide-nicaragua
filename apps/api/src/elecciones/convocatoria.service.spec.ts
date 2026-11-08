@@ -39,6 +39,7 @@ function buildPrisma() {
       updateMany: vi.fn().mockResolvedValue({ count: 1 }),
     },
     candidatura: { count: vi.fn().mockResolvedValue(0) },
+    $transaction: vi.fn(),
   };
 }
 
@@ -53,6 +54,7 @@ describe('ConvocatoriaService', () => {
 
   beforeEach(() => {
     prisma = buildPrisma();
+    prisma.$transaction.mockImplementation((fn: (tx: unknown) => unknown) => fn(prisma));
     audit = { log: vi.fn().mockResolvedValue(undefined) };
     valores = { ...REGLAS };
     rules = { getInt: vi.fn(async (k: string) => valores[k]) };
@@ -87,23 +89,29 @@ describe('ConvocatoriaService', () => {
       );
     });
 
-    it('no convoca la primera jornada si ya hay una mesa elegida', async () => {
-      prisma.profile.count.mockResolvedValue(50);
-      prisma.cargo.count.mockResolvedValue(1);
-      expect(await service.convocar(NOW)).toBe(0);
-      expect(prisma.eleccion.create).not.toHaveBeenCalled();
-    });
-
-    it('no convoca la primera jornada si ya hay una elección de mesa abierta', async () => {
+    it('no convoca la primera jornada si ya hubo elecciones de mesa, en cualquier fase', async () => {
       prisma.profile.count.mockResolvedValue(50);
       prisma.eleccion.count.mockResolvedValue(1);
       expect(await service.convocar(NOW)).toBe(0);
+      expect(prisma.eleccion.create).not.toHaveBeenCalled();
+      expect(prisma.eleccion.count.mock.calls[0]![0].where).not.toHaveProperty('fase');
+    });
+
+    it('tras una primera jornada contada sin mesa elegida, solo vuelve el reintento a los 30 días', async () => {
+      prisma.profile.count.mockResolvedValue(50);
+      prisma.eleccion.count.mockResolvedValue(3);
+      const createdAt = new Date(NOW.getTime() - 40 * DIA);
+      prisma.eleccion.findMany.mockResolvedValue([
+        { id: 'e1', groupId: GEN, cargo: 'secretario', puestos: 1, electas: [], contadaAt: new Date(NOW.getTime() - 31 * DIA), createdAt },
+      ]);
+      expect(await service.convocar(NOW)).toBe(1);
+      expect(creadas()[0]).toMatchObject({ cargo: 'secretario', puestos: 1, motivo: 'reintento' });
     });
   });
 
   describe('convocar: comunidades', () => {
     it('activa una comunidad al llegar a 7 y abre su elección de coordinadores', async () => {
-      prisma.cargo.count.mockResolvedValue(1); // mesa ya elegida
+      prisma.eleccion.count.mockResolvedValue(1); // mesa ya elegida
       prisma.group.findMany.mockResolvedValue([
         { id: 'c1', type: 'territorial_origin' },
         { id: 'c2', type: 'territorial_residence' },
@@ -119,8 +127,28 @@ describe('ConvocatoriaService', () => {
       expect(d!['candidaturasEndsAt']).toEqual(new Date(NOW.getTime() + 7 * DIA));
     });
 
+    it('la activación y la elección van en una transacción; si algo falla, no se escribe nada', async () => {
+      prisma.eleccion.count.mockResolvedValue(1);
+      prisma.group.findMany.mockResolvedValue([{ id: 'c1', type: 'territorial_origin' }]);
+      prisma.profile.count.mockResolvedValue(9);
+      prisma.eleccion.create.mockRejectedValue(new Error('base caída'));
+      await expect(service.convocar(NOW)).rejects.toThrow('base caída');
+      expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+      expect(prisma.group.updateMany).toHaveBeenCalledTimes(1);
+      expect(audit.log).not.toHaveBeenCalled();
+    });
+
+    it('un P2002 al abrir la elección de coordinadores deja la comunidad activada sin duplicar', async () => {
+      prisma.eleccion.count.mockResolvedValue(1);
+      prisma.group.findMany.mockResolvedValue([{ id: 'c1', type: 'territorial_origin' }]);
+      prisma.profile.count.mockResolvedValue(9);
+      prisma.eleccion.create.mockRejectedValue(new Prisma.PrismaClientKnownRequestError('dup', { code: 'P2002', clientVersion: 'x' }));
+      expect(await service.convocar(NOW)).toBe(0);
+      expect(prisma.group.updateMany).toHaveBeenLastCalledWith({ where: { id: 'c1', activadaAt: null }, data: { activadaAt: NOW } });
+    });
+
     it('si otra ejecución activó la comunidad antes, no abre una segunda elección', async () => {
-      prisma.cargo.count.mockResolvedValue(1);
+      prisma.eleccion.count.mockResolvedValue(1);
       prisma.group.findMany.mockResolvedValue([{ id: 'c1', type: 'territorial_origin' }]);
       prisma.profile.count.mockResolvedValue(9);
       prisma.group.updateMany.mockResolvedValue({ count: 0 });
@@ -130,7 +158,7 @@ describe('ConvocatoriaService', () => {
 
   describe('convocar: renovación', () => {
     it('convoca la renovación 21 días antes del fin del período', async () => {
-      prisma.cargo.count.mockResolvedValue(1);
+      prisma.eleccion.count.mockResolvedValue(1);
       const cerca = new Date(NOW.getTime() + 21 * DIA);
       prisma.cargo.findMany.mockResolvedValue([
         { tipo: 'administrador', groupId: GEN, hasta: cerca },
@@ -144,15 +172,27 @@ describe('ConvocatoriaService', () => {
       expect(mesa).toHaveLength(2);
       expect(mesa[0]!['jornadaId']).toBeTruthy();
       expect(mesa[0]!['jornadaId']).toBe(mesa[1]!['jornadaId']);
-      expect(datos.find((d) => d['cargo'] === 'coordinador')).toMatchObject({ puestos: 2, jornadaId: null });
-      expect(prisma.cargo.findMany.mock.calls[0]![0].where).toMatchObject({
-        terminadoAt: null,
-        hasta: { lte: new Date(NOW.getTime() + 21 * DIA) },
-      });
+      expect(datos.find((d) => d['cargo'] === 'coordinador')).toMatchObject({ puestos: 1, jornadaId: null });
+      expect(prisma.cargo.findMany.mock.calls[0]![0].where).toMatchObject({ terminadoAt: null });
+    });
+
+    it('pide solo los puestos de los cargos que vencen', async () => {
+      prisma.eleccion.count.mockResolvedValue(1);
+      const vence = new Date(NOW.getTime() + 10 * DIA);
+      const sigue = new Date(NOW.getTime() + 100 * DIA);
+      prisma.cargo.findMany.mockResolvedValue([
+        ...[vence, vence, vence, sigue, sigue, sigue, sigue].map((hasta) => ({ tipo: 'observador', groupId: GEN, hasta })),
+        { tipo: 'coordinador', groupId: 'c1', hasta: vence },
+        { tipo: 'coordinador', groupId: 'c1', hasta: sigue },
+      ]);
+      expect(await service.convocar(NOW)).toBe(2);
+      const datos = creadas();
+      expect(datos.find((d) => d['cargo'] === 'observador')).toMatchObject({ puestos: 3, motivo: 'renovacion' });
+      expect(datos.find((d) => d['cargo'] === 'coordinador')).toMatchObject({ puestos: 1, groupId: 'c1' });
     });
 
     it('no renueva si ya hay una elección abierta de ese cargo y ámbito', async () => {
-      prisma.cargo.count.mockResolvedValue(1);
+      prisma.eleccion.count.mockResolvedValue(1);
       prisma.cargo.findMany.mockResolvedValue([{ tipo: 'secretario', groupId: GEN, hasta: new Date(NOW.getTime() + 5 * DIA) }]);
       prisma.eleccion.findFirst.mockResolvedValue({ id: 'abierta' });
       expect(await service.convocar(NOW)).toBe(0);
@@ -161,7 +201,7 @@ describe('ConvocatoriaService', () => {
 
   describe('convocar: reintento', () => {
     it('convoca el reintento 30 días después con los puestos que faltan', async () => {
-      prisma.cargo.count.mockResolvedValue(1);
+      prisma.eleccion.count.mockResolvedValue(1);
       const contadaAt = new Date(NOW.getTime() - 30 * DIA);
       const createdAt = new Date(NOW.getTime() - 45 * DIA);
       prisma.eleccion.findMany.mockResolvedValue([
@@ -174,7 +214,7 @@ describe('ConvocatoriaService', () => {
     });
 
     it('no repite el reintento si ya hay otra elección posterior', async () => {
-      prisma.cargo.count.mockResolvedValue(1);
+      prisma.eleccion.count.mockResolvedValue(1);
       prisma.eleccion.findMany.mockResolvedValue([
         {
           id: 'e1', groupId: GEN, cargo: 'observador', puestos: 7, electas: [],

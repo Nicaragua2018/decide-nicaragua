@@ -138,11 +138,10 @@ export class ConvocatoriaService {
   // ---------------------------------------------------------------- disparadores
 
   private async primeraJornada(generalId: string, now: Date): Promise<number> {
-    const [mesaElegida, mesaAbierta] = await Promise.all([
-      this.prisma.cargo.count({ where: { tipo: { in: MESA }, eleccionId: { not: null }, terminadoAt: null } }),
-      this.prisma.eleccion.count({ where: { cargo: { in: MESA }, fase: { in: [...ABIERTA] } } }),
-    ]);
-    if (mesaElegida > 0 || mesaAbierta > 0) return 0;
+    // Solo si nunca hubo una elección de mesa (en cualquier fase): los puestos sin cubrir
+    // de esa primera jornada los retoma el reintento a los 30 días.
+    const hubo = await this.prisma.eleccion.count({ where: { cargo: { in: MESA } } });
+    if (hubo > 0) return 0;
     const minimo = await this.rules.getInt('eleccion.minimo_primera', null);
     const verificadas = await this.prisma.profile.count({ where: { user: { status: 'verified_citizen' } } });
     if (verificadas < minimo) return 0;
@@ -171,11 +170,32 @@ export class ConvocatoriaService {
         where: { user: { status: 'verified_citizen' }, memberships: { some: { groupId: g.id } } },
       });
       if (verificadas < minimo) continue;
-      const r = await this.prisma.group.updateMany({ where: { id: g.id, activadaAt: null }, data: { activadaAt: now } });
-      if (r.count === 0) continue;
-      n += await this.crearJornada([{ cargo: 'coordinador', puestos: PUESTOS_COORDINADORES }], g.id, 'primera', now, false);
+      n += await this.activar(g.id, now);
     }
     return n;
+  }
+
+  /**
+   * Activa la comunidad y abre su elección de coordinadores en una sola transacción: si algo
+   * falla no se escribe nada y la próxima ronda lo reintenta.
+   */
+  private async activar(groupId: string, now: Date): Promise<number> {
+    const fechas = await this.fechas(now);
+    try {
+      const e = await this.prisma.$transaction(async (tx) => {
+        const r = await tx.group.updateMany({ where: { id: groupId, activadaAt: null }, data: { activadaAt: now } });
+        if (r.count === 0) return null;
+        return this.crearUna(tx, groupId, 'coordinador', PUESTOS_COORDINADORES, 'primera', null, fechas);
+      });
+      if (!e) return 0;
+      this.auditarConvocada(e.id, 'coordinador', 'primera', groupId);
+      return 1;
+    } catch (err) {
+      if (!esDuplicado(err)) throw err;
+      // Ya hay una elección abierta de coordinadores: solo falta dejar la comunidad activada.
+      await this.prisma.group.updateMany({ where: { id: groupId, activadaAt: null }, data: { activadaAt: now } });
+      return 0;
+    }
   }
 
   private async reintentos(now: Date): Promise<number> {
@@ -205,15 +225,23 @@ export class ConvocatoriaService {
   private async renovaciones(generalId: string | null, now: Date): Promise<number> {
     const hasta = new Date(now.getTime() + RENOVACION_ANTES_DIAS * DIA_MS);
     const vigentes = await this.prisma.cargo.findMany({
-      where: { terminadoAt: null, hasta: { lte: hasta } },
+      where: { terminadoAt: null },
       select: { tipo: true, groupId: true, hasta: true },
     });
-    const claves = new Map<string, Ambito>();
-    for (const c of vigentes) claves.set(`${c.groupId}:${c.tipo}`, { groupId: c.groupId, cargo: c.tipo });
+    // Por cargo y ámbito: cuántos vencen dentro de la ventana y cuántos siguen sin vencer.
+    const claves = new Map<string, Ambito & { vencen: number; siguen: number }>();
+    for (const c of vigentes) {
+      const k = `${c.groupId}:${c.tipo}`;
+      const a = claves.get(k) ?? { groupId: c.groupId, cargo: c.tipo, vencen: 0, siguen: 0 };
+      if (c.hasta.getTime() <= hasta.getTime()) a.vencen += 1;
+      else a.siguen += 1;
+      claves.set(k, a);
+    }
 
     const recien = new Date(now.getTime() - REINTENTO_DESPUES_DIAS * DIA_MS);
-    const pendientes: Ambito[] = [];
+    const pendientes: (Ambito & { puestos: number })[] = [];
     for (const a of claves.values()) {
+      if (a.vencen === 0) continue;
       // Abierta, o contada hace poco (si quedaron puestos, el reintento se ocupa).
       const hay = await this.prisma.eleccion.findFirst({
         where: {
@@ -223,17 +251,23 @@ export class ConvocatoriaService {
         },
         select: { id: true },
       });
-      if (!hay) pendientes.push(a);
+      if (hay) continue;
+      // Tantos puestos como cargos vencen (al menos 1), sin pasar de los puestos libres del cargo.
+      const plenos =
+        a.cargo === 'observador'
+          ? await this.rules.getInt('observadores.numero', null)
+          : a.cargo === 'coordinador'
+            ? PUESTOS_COORDINADORES
+            : 1;
+      const libres = Math.max(plenos - a.siguen, 1);
+      pendientes.push({ groupId: a.groupId, cargo: a.cargo, puestos: Math.min(Math.max(a.vencen, 1), libres) });
     }
 
     let n = 0;
-    const mesa = pendientes.filter((a) => a.groupId === generalId && a.cargo !== 'coordinador' && a.cargo !== 'observador');
-    const observa = pendientes.filter((a) => a.groupId === generalId && a.cargo === 'observador');
-    const mesaYObservadores = [...mesa, ...observa];
-    if (generalId && mesaYObservadores.length > 0) {
-      const observadores = await this.rules.getInt('observadores.numero', null);
+    const enMesa = pendientes.filter((a) => a.groupId === generalId && a.cargo !== 'coordinador');
+    if (generalId && enMesa.length > 0) {
       n += await this.crearJornada(
-        mesaYObservadores.map((a) => ({ cargo: a.cargo, puestos: a.cargo === 'observador' ? observadores : 1 })),
+        enMesa.map((a) => ({ cargo: a.cargo, puestos: a.puestos })),
         generalId,
         'renovacion',
         now,
@@ -241,7 +275,7 @@ export class ConvocatoriaService {
     }
     for (const a of pendientes) {
       if (a.groupId === generalId && a.cargo !== 'coordinador') continue;
-      n += await this.crearJornada([{ cargo: a.cargo, puestos: PUESTOS_COORDINADORES }], a.groupId, 'renovacion', now, false);
+      n += await this.crearJornada([{ cargo: a.cargo, puestos: a.puestos }], a.groupId, 'renovacion', now, false);
     }
     return n;
   }
@@ -259,29 +293,43 @@ export class ConvocatoriaService {
     now: Date,
     conJornada = true,
   ): Promise<number> {
-    const [candidaturasDias, votacionDias] = await Promise.all([
-      this.rules.getInt('eleccion.plazo_candidaturas_dias', null),
-      this.rules.getInt('eleccion.plazo_votacion_dias', null),
-    ]);
-    const candidaturasEndsAt = new Date(now.getTime() + candidaturasDias * DIA_MS);
-    const votacionEndsAt = new Date(candidaturasEndsAt.getTime() + votacionDias * DIA_MS);
+    const fechas = await this.fechas(now);
     const jornadaId = conJornada && cargos.length > 1 ? randomUUID() : null;
     let n = 0;
     for (const { cargo, puestos } of cargos) {
       try {
-        const e = await this.prisma.eleccion.create({
-          data: { groupId, cargo, puestos, motivo, jornadaId, candidaturasEndsAt, votacionEndsAt },
-        });
+        const e = await this.crearUna(this.prisma, groupId, cargo, puestos, motivo, jornadaId, fechas);
         n += 1;
-        void this.audit.log({
-          action: 'eleccion.convocada',
-          resource: `eleccion:${e.id}`,
-          metadata: { cargo, motivo, groupId },
-        });
+        this.auditarConvocada(e.id, cargo, motivo, groupId);
       } catch (err) {
         if (!esDuplicado(err)) throw err;
       }
     }
     return n;
+  }
+
+  private async fechas(now: Date): Promise<{ candidaturasEndsAt: Date; votacionEndsAt: Date }> {
+    const [candidaturasDias, votacionDias] = await Promise.all([
+      this.rules.getInt('eleccion.plazo_candidaturas_dias', null),
+      this.rules.getInt('eleccion.plazo_votacion_dias', null),
+    ]);
+    const candidaturasEndsAt = new Date(now.getTime() + candidaturasDias * DIA_MS);
+    return { candidaturasEndsAt, votacionEndsAt: new Date(candidaturasEndsAt.getTime() + votacionDias * DIA_MS) };
+  }
+
+  private crearUna(
+    db: Pick<Prisma.TransactionClient, 'eleccion'>,
+    groupId: string,
+    cargo: CargoTipoValue,
+    puestos: number,
+    motivo: EleccionMotivoValue,
+    jornadaId: string | null,
+    fechas: { candidaturasEndsAt: Date; votacionEndsAt: Date },
+  ) {
+    return db.eleccion.create({ data: { groupId, cargo, puestos, motivo, jornadaId, ...fechas } });
+  }
+
+  private auditarConvocada(id: string, cargo: CargoTipoValue, motivo: EleccionMotivoValue, groupId: string): void {
+    void this.audit.log({ action: 'eleccion.convocada', resource: `eleccion:${id}`, metadata: { cargo, motivo, groupId } });
   }
 }
