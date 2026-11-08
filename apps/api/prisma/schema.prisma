@@ -283,6 +283,9 @@ model Profile {
   papeletas             DecisionPapeleta[]
   objecionesModo        ObjecionModo[]
   avisosCerrados        AvisoCerrado[]
+  candidaturas          Candidatura[]
+  papeletasEleccion     PapeletaEleccion[]
+  cargos                Cargo[]
 
   @@map("profiles")
 }
@@ -364,6 +367,8 @@ model Group {
   ruleValues     RuleValue[]
   cambiosRegla   CambioRegla[]
   inquietudes    Inquietud[]
+  elecciones     Eleccion[]
+  cargos         Cargo[]
 
   @@index([type])
   @@index([isActive])
@@ -1209,4 +1214,120 @@ model MarcaAsistente {
   createdAt DateTime @default(now()) @db.Timestamptz
 
   @@map("marcas_asistente")
+}
+
+enum CargoTipo {
+  administrador
+  coordinador_general
+  secretario
+  observador
+  coordinador
+}
+
+enum EleccionFase {
+  candidaturas
+  votacion
+  contada
+}
+
+enum EleccionMotivo {
+  primera
+  renovacion
+  reintento
+}
+
+/**
+ * Eleccion — elección automática de un cargo (mesa, observadores o coordinación de una comunidad).
+ * Índice único parcial hecho a mano en SQL (Prisma no lo conoce; no lo borre en migraciones futuras):
+ *  - elecciones_abierta_por_cargo: UNIQUE ("groupId", "cargo") WHERE "fase" IN ('candidaturas','votacion')
+ * Las matrices se guardan solo tras el conteo; candidatasOrden es el orden de filas y columnas.
+ */
+model Eleccion {
+  id                  String         @id @default(uuid()) @db.Uuid
+  groupId             String         @db.Uuid
+  group               Group          @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  cargo               CargoTipo
+  puestos             Int
+  motivo              EleccionMotivo
+  jornadaId           String?        @db.Uuid
+  fase                EleccionFase   @default(candidaturas)
+  candidaturasEndsAt  DateTime       @db.Timestamptz
+  votacionEndsAt      DateTime       @db.Timestamptz
+  prorrogada          Boolean        @default(false)
+  miembros            Int?
+  papeletasTotal      Int?
+  abstenciones        Int?
+  aprobaciones        Int[]          @default([])
+  candidatasOrden     String[]       @default([]) @db.Uuid
+  pairwiseMatrix      Json?
+  schulzeMatrix       Json?
+  ordenFinal          String[]       @default([]) @db.Uuid
+  electas             String[]       @default([]) @db.Uuid
+  semilla             String?
+  sinQuorum           Boolean        @default(false)
+  contadaAt           DateTime?      @db.Timestamptz
+  createdAt           DateTime       @default(now()) @db.Timestamptz
+  updatedAt           DateTime       @updatedAt @db.Timestamptz
+
+  candidaturas Candidatura[]
+  papeletas    PapeletaEleccion[]
+  cargos       Cargo[]
+
+  @@index([fase])
+  @@index([groupId, cargo])
+  @@map("elecciones")
+}
+
+/** Candidatura — ficha de una persona que se presenta a una elección. */
+model Candidatura {
+  id           String    @id @default(uuid()) @db.Uuid
+  eleccionId   String    @db.Uuid
+  eleccion     Eleccion  @relation(fields: [eleccionId], references: [id], onDelete: Cascade)
+  profileId    String    @db.Uuid
+  profile      Profile   @relation(fields: [profileId], references: [id], onDelete: Restrict)
+  presentacion String    @db.VarChar(600)
+  compromisos  String[]
+  oculta       Boolean   @default(false)
+  retiradaAt   DateTime? @db.Timestamptz
+  createdAt    DateTime  @default(now()) @db.Timestamptz
+  updatedAt    DateTime  @updatedAt @db.Timestamptz
+
+  @@unique([eleccionId, profileId])
+  @@map("candidaturas")
+}
+
+/** PapeletaEleccion — voto secreto: abstención o un orden de candidaturas aceptadas. */
+model PapeletaEleccion {
+  id         String   @id @default(uuid()) @db.Uuid
+  eleccionId String   @db.Uuid
+  eleccion   Eleccion @relation(fields: [eleccionId], references: [id], onDelete: Cascade)
+  profileId  String   @db.Uuid
+  profile    Profile  @relation(fields: [profileId], references: [id], onDelete: Restrict)
+  abstencion Boolean
+  orden      String[] @db.Uuid
+  updatedAt  DateTime @updatedAt @db.Timestamptz
+
+  @@unique([eleccionId, profileId])
+  @@map("papeletas_eleccion")
+}
+
+/** Cargo — período en que una persona ocupa un cargo. Vigente si terminadoAt es null. */
+model Cargo {
+  id          String    @id @default(uuid()) @db.Uuid
+  tipo        CargoTipo
+  groupId     String    @db.Uuid
+  group       Group     @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  profileId   String    @db.Uuid
+  profile     Profile   @relation(fields: [profileId], references: [id], onDelete: Restrict)
+  eleccionId  String?   @db.Uuid
+  eleccion    Eleccion? @relation(fields: [eleccionId], references: [id], onDelete: SetNull)
+  desde       DateTime  @db.Timestamptz
+  hasta       DateTime  @db.Timestamptz
+  enFunciones Boolean   @default(false)
+  terminadoAt DateTime? @db.Timestamptz
+  createdAt   DateTime  @default(now()) @db.Timestamptz
+
+  @@index([groupId, tipo])
+  @@index([profileId])
+  @@map("cargos")
 }

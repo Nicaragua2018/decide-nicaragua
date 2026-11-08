@@ -40,3 +40,4 @@ export * from './communities.js';
 export * from './rules.js';
 export * from './moderacion.js';
 export * from './asistente.js';
+export * from './elecciones.js';
