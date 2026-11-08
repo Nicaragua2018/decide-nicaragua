@@ -244,7 +244,7 @@ export class EleccionesService implements OnModuleInit {
         where: { terminadoAt: null },
         orderBy: { desde: 'asc' },
         select: {
-          tipo: true, groupId: true, profileId: true, desde: true, hasta: true, enFunciones: true,
+          id: true, tipo: true, groupId: true, profileId: true, desde: true, hasta: true, enFunciones: true,
           profile: { select: { displayName: true } },
         },
       }),
@@ -267,7 +267,7 @@ export class EleccionesService implements OnModuleInit {
       // Un asiento fundador no tiene fila Cargo: sigue «en funciones» hasta que se elija el puesto.
       if (a.source === 'fundador') {
         mesa.push({
-          tipo, ...persona(a.profile.displayName), desde: a.since.toISOString(), hasta: null, enFunciones: true, fundador: true,
+          tipo, ...persona(a.profile.displayName), desde: a.since.toISOString(), hasta: null, enFunciones: true, fundador: true, cargoId: null, revocacion: null,
         });
         continue;
       }
@@ -279,12 +279,14 @@ export class EleccionesService implements OnModuleInit {
         hasta: c ? c.hasta.toISOString() : null,
         enFunciones: c?.enFunciones ?? false,
         fundador: false,
+        cargoId: c?.id ?? null,
+        revocacion: null,
       });
     }
 
     const observadores = cargos
       .filter((c) => c.tipo === 'observador')
-      .map((c) => ({ ...persona(c.profile.displayName), desde: c.desde.toISOString(), hasta: c.hasta.toISOString() }));
+      .map((c) => ({ ...persona(c.profile.displayName), desde: c.desde.toISOString(), hasta: c.hasta.toISOString(), cargoId: c.id, revocacion: null }));
 
     const conEleccion = new Set(abiertas.map((e) => e.groupId));
     return {
@@ -301,9 +303,12 @@ export class EleccionesService implements OnModuleInit {
             desde: c.desde.toISOString(),
             hasta: c.hasta.toISOString(),
             enFunciones: c.enFunciones,
+            cargoId: c.id,
+            revocacion: null,
           })),
         eleccionAbierta: conEleccion.has(g.id),
       })),
+      observaciones: [],
     };
   }
 

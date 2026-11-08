@@ -465,9 +465,9 @@ describe('EleccionesService', () => {
       { role: 'secretario', source: 'eleccion', since: desde, profileId: 'p2', profile: prof('Luis Mora') },
     ]);
     prisma.cargo.findMany.mockResolvedValue([
-      { tipo: 'secretario', groupId: GEN, profileId: 'p2', desde, hasta, enFunciones: false, profile: prof('Luis Mora') },
-      { tipo: 'observador', groupId: GEN, profileId: 'p3', desde, hasta, enFunciones: false, profile: prof('Eva Paz') },
-      { tipo: 'coordinador', groupId: 'g-leon', profileId: 'p4', desde, hasta, enFunciones: true, profile: prof('Juan Gil') },
+      { id: 'c-sec', tipo: 'secretario', groupId: GEN, profileId: 'p2', desde, hasta, enFunciones: false, profile: prof('Luis Mora') },
+      { id: 'c-obs', tipo: 'observador', groupId: GEN, profileId: 'p3', desde, hasta, enFunciones: false, profile: prof('Eva Paz') },
+      { id: 'c-coo', tipo: 'coordinador', groupId: 'g-leon', profileId: 'p4', desde, hasta, enFunciones: true, profile: prof('Juan Gil') },
     ]);
     prisma.group.findMany.mockResolvedValue([
       { id: 'g-leon', name: 'León', activadaAt: desde },
@@ -477,16 +477,17 @@ describe('EleccionesService', () => {
     const r = await service.representantes();
 
     expect(r.mesa).toEqual([
-      { tipo: 'administrador', nombre: 'Ana Ruiz', iniciales: 'AR', desde: desde.toISOString(), hasta: null, enFunciones: true, fundador: true },
-      { tipo: 'secretario', nombre: 'Luis Mora', iniciales: 'LM', desde: desde.toISOString(), hasta: hasta.toISOString(), enFunciones: false, fundador: false },
+      { tipo: 'administrador', nombre: 'Ana Ruiz', iniciales: 'AR', desde: desde.toISOString(), hasta: null, enFunciones: true, fundador: true, cargoId: null, revocacion: null },
+      { tipo: 'secretario', nombre: 'Luis Mora', iniciales: 'LM', desde: desde.toISOString(), hasta: hasta.toISOString(), enFunciones: false, fundador: false, cargoId: 'c-sec', revocacion: null },
     ]);
-    expect(r.observadores).toEqual([{ nombre: 'Eva Paz', iniciales: 'EP', desde: desde.toISOString(), hasta: hasta.toISOString() }]);
+    expect(r.observadores).toEqual([{ nombre: 'Eva Paz', iniciales: 'EP', desde: desde.toISOString(), hasta: hasta.toISOString(), cargoId: 'c-obs', revocacion: null }]);
     expect(r.comunidades).toEqual([
       { id: 'g-leon', nombre: 'León', activa: true, eleccionAbierta: false, coordinadores: [
-        { nombre: 'Juan Gil', iniciales: 'JG', desde: desde.toISOString(), hasta: hasta.toISOString(), enFunciones: true },
+        { nombre: 'Juan Gil', iniciales: 'JG', desde: desde.toISOString(), hasta: hasta.toISOString(), enFunciones: true, cargoId: 'c-coo', revocacion: null },
       ] },
       { id: 'g-cr', nombre: 'Costa Rica', activa: false, eleccionAbierta: true, coordinadores: [] },
     ]);
+    expect(r.observaciones).toEqual([]);
     expect(JSON.stringify(r)).not.toContain('@');
     // Sin guard: también para visitantes. El resto de elecciones pide sesión.
     expect(Reflect.getMetadata('__guards__', RepresentantesController)).toBeUndefined();

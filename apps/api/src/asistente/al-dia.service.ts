@@ -73,6 +73,8 @@ const ETIQUETA: Record<ItemAlDia['clase'], string> = {
   decision: 'Resultado de una decisión',
   informe: 'Informe de una comisión',
   umbral: 'Una inquietud llegó al apoyo necesario',
+  eleccion_candidaturas: 'Elecciones',
+  eleccion_votar: 'Elecciones',
 };
 
 const PALABRA_RESULTADO: Record<string, string> = {

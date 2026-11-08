@@ -11,6 +11,7 @@ const MOTIVO: Record<EleccionResumen['motivo'], string> = {
   primera: 'Primera elección',
   renovacion: 'Renovación',
   reintento: 'Se repite: quedó un puesto sin elegir',
+  anticipada: 'Elección anticipada',
 };
 
 /** El único botón con la acción del momento. */

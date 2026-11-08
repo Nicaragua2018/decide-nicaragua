@@ -18,6 +18,10 @@ export enum BoardActionType {
   change_rule = 'change_rule',
   /** Oculta una ficha de candidatura publicada. params: { candidaturaId, causa }. */
   ocultar_candidatura = 'ocultar_candidatura',
+  /** Reactiva a una persona suspendida. params: { solicitudId }. */
+  reactivate_user = 'reactivate_user',
+  /** Rechaza una solicitud de reactivación. params: { solicitudId, motivo }. */
+  rechazar_reactivacion = 'rechazar_reactivacion',
 }
 
 export interface BoardSeatSummary {
