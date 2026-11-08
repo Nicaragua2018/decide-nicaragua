@@ -1254,6 +1254,9 @@ model Eleccion {
   candidaturasEndsAt  DateTime       @db.Timestamptz
   votacionEndsAt      DateTime       @db.Timestamptz
   prorrogada          Boolean        @default(false)
+  /// Reglas fijadas al convocar: un cambio de regla rige desde la siguiente convocatoria.
+  quorumPct           Int?
+  periodoMeses        Int?
   miembros            Int?
   papeletasTotal      Int?
   abstenciones        Int?

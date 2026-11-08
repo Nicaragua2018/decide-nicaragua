@@ -16,6 +16,7 @@ const REGLAS: Record<string, number> = {
   'eleccion.plazo_votacion_dias': 7,
   'cargos.periodo_mesa_meses': 12,
   'cargos.periodo_coordinadores_meses': 6,
+  'votacion.quorum_porcentaje': 20,
 };
 
 function buildPrisma() {
@@ -78,6 +79,8 @@ describe('ConvocatoriaService', () => {
         expect(d['motivo']).toBe('primera');
         expect(d['candidaturasEndsAt']).toEqual(new Date(NOW.getTime() + 7 * DIA));
         expect(d['votacionEndsAt']).toEqual(new Date(NOW.getTime() + 14 * DIA));
+        expect(d['quorumPct']).toBe(20);
+        expect(d['periodoMeses']).toBe(12);
       }
       expect(datos.find((d) => d['cargo'] === 'observador')!['puestos']).toBe(7);
       expect(datos.find((d) => d['cargo'] === 'secretario')!['puestos']).toBe(1);
@@ -124,6 +127,7 @@ describe('ConvocatoriaService', () => {
       expect(prisma.group.updateMany).toHaveBeenCalledTimes(1);
       const [d] = creadas();
       expect(d).toMatchObject({ groupId: 'c1', cargo: 'coordinador', puestos: 2, motivo: 'primera', jornadaId: null });
+      expect(d).toMatchObject({ quorumPct: 20, periodoMeses: 6 });
       expect(d!['candidaturasEndsAt']).toEqual(new Date(NOW.getTime() + 7 * DIA));
     });
 

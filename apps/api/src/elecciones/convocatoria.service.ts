@@ -184,7 +184,7 @@ export class ConvocatoriaService {
    * falla no se escribe nada y la próxima ronda lo reintenta.
    */
   private async activar(groupId: string, now: Date): Promise<number> {
-    const fechas = await this.fechas(now);
+    const fechas = { ...(await this.fechas(now)), ...(await this.reglasFijas(groupId, 'coordinador')) };
     try {
       const e = await this.prisma.$transaction(async (tx) => {
         const r = await tx.group.updateMany({ where: { id: groupId, activadaAt: null }, data: { activadaAt: now } });
@@ -302,7 +302,8 @@ export class ConvocatoriaService {
     let n = 0;
     for (const { cargo, puestos } of cargos) {
       try {
-        const e = await this.crearUna(this.prisma, groupId, cargo, puestos, motivo, jornadaId, fechas);
+        const fijas = await this.reglasFijas(groupId, cargo);
+        const e = await this.crearUna(this.prisma, groupId, cargo, puestos, motivo, jornadaId, { ...fechas, ...fijas });
         n += 1;
         this.auditarConvocada(e.id, cargo, motivo, groupId);
       } catch (err) {
@@ -321,6 +322,18 @@ export class ConvocatoriaService {
     return { candidaturasEndsAt, votacionEndsAt: new Date(candidaturasEndsAt.getTime() + votacionDias * DIA_MS) };
   }
 
+  /** Reglas que quedan fijadas en la elección al convocarla. */
+  private async reglasFijas(groupId: string, cargo: CargoTipoValue): Promise<{ quorumPct: number; periodoMeses: number }> {
+    const [quorumPct, periodoMeses] = await Promise.all([
+      this.rules.getInt('votacion.quorum_porcentaje', groupId),
+      this.rules.getInt(
+        cargo === 'coordinador' ? 'cargos.periodo_coordinadores_meses' : 'cargos.periodo_mesa_meses',
+        null,
+      ),
+    ]);
+    return { quorumPct, periodoMeses };
+  }
+
   private crearUna(
     db: Pick<Prisma.TransactionClient, 'eleccion'>,
     groupId: string,
@@ -328,7 +341,7 @@ export class ConvocatoriaService {
     puestos: number,
     motivo: EleccionMotivoValue,
     jornadaId: string | null,
-    fechas: { candidaturasEndsAt: Date; votacionEndsAt: Date },
+    fechas: { candidaturasEndsAt: Date; votacionEndsAt: Date; quorumPct: number; periodoMeses: number },
   ) {
     return db.eleccion.create({ data: { groupId, cargo, puestos, motivo, jornadaId, ...fechas } });
   }

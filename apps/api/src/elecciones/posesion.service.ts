@@ -72,15 +72,17 @@ export class PosesionService {
     const vivas = candidaturas.filter((c) => c.retiradaAt === null);
     const candidatas = vivas.map((c) => c.id);
     const enLista = new Set(candidatas);
+    const incompatibles = await this.conOtroCargo(e, vivas.map((c) => c.profileId));
     const excluidas = vivas
-      .filter((c) => c.oculta || (c.profile.user.status as string) !== 'verified_citizen')
+      .filter((c) => c.oculta || c.profile.user.status !== 'verified_citizen' || incompatibles.has(c.profileId))
       .map((c) => c.id);
 
     const papeletas = await this.prisma.papeletaEleccion.findMany({
       where: { eleccionId: e.id, profileId: { in: electorado } },
       select: { abstencion: true, orden: true },
     });
-    const quorumPct = await this.rules.getInt('votacion.quorum_porcentaje', e.groupId);
+    // La regla queda fijada al convocar; solo si falta (elecciones antiguas) se lee ahora.
+    const quorumPct = e.quorumPct ?? (await this.rules.getInt('votacion.quorum_porcentaje', e.groupId));
     const semilla = generateSeed();
 
     const r = contarEleccion({
@@ -138,22 +140,44 @@ export class PosesionService {
     return true;
   }
 
+  /**
+   * Personas que ya ocupan un cargo incompatible con este: un cargo vigente de otro tipo o ámbito,
+   * o un asiento de la mesa elegido por votación para otro rol (cualquiera, si esta elección no
+   * es de la mesa). Repetir el mismo cargo no es incompatible. Los asientos fundadores no cuentan.
+   */
+  private async conOtroCargo(
+    e: { groupId: string; cargo: CargoTipoValue },
+    perfiles: string[],
+  ): Promise<Set<string>> {
+    if (perfiles.length === 0) return new Set();
+    const [cargos, asientos] = await Promise.all([
+      this.prisma.cargo.findMany({
+        where: { profileId: { in: perfiles }, terminadoAt: null },
+        select: { profileId: true, tipo: true, groupId: true },
+      }),
+      this.prisma.boardSeat.findMany({
+        where: { profileId: { in: perfiles }, source: 'eleccion' },
+        select: { profileId: true, role: true },
+      }),
+    ]);
+    const otros = new Set<string>();
+    for (const c of cargos) {
+      if (c.tipo !== e.cargo || c.groupId !== e.groupId) otros.add(c.profileId);
+    }
+    for (const a of asientos) {
+      if (!MESA.includes(e.cargo) || (a.role as string) !== e.cargo) otros.add(a.profileId);
+    }
+    return otros;
+  }
+
   private async darPosesion(
     tx: Prisma.TransactionClient,
-    e: { id: string; groupId: string; cargo: CargoTipoValue },
+    e: { id: string; groupId: string; cargo: CargoTipoValue; periodoMeses: number | null },
     perfiles: string[],
     now: Date,
   ): Promise<void> {
     if (perfiles.length === 0) return;
     const termina = { terminadoAt: now, enFunciones: false };
-
-    // Nadie queda con dos cargos: si la persona electa tenía otro, se termina primero.
-    for (const profileId of perfiles) {
-      await tx.cargo.updateMany({
-        where: { profileId, terminadoAt: null, NOT: { tipo: e.cargo, groupId: e.groupId } },
-        data: termina,
-      });
-    }
 
     // Salen tantos cargos como personas electas: primero los «en funciones», luego los que vencen antes.
     const salen = await tx.cargo.findMany({
@@ -166,14 +190,24 @@ export class PosesionService {
       await tx.cargo.updateMany({ where: { id: { in: salen.map((c) => c.id) } }, data: termina });
     }
 
-    const meses = await this.rules.getInt(
-      e.cargo === 'coordinador' ? 'cargos.periodo_coordinadores_meses' : 'cargos.periodo_mesa_meses',
-      null,
-    );
+    const meses =
+      e.periodoMeses ??
+      (await this.rules.getInt(
+        e.cargo === 'coordinador' ? 'cargos.periodo_coordinadores_meses' : 'cargos.periodo_mesa_meses',
+        null,
+      ));
     const hasta = sumarMeses(now, meses);
     for (const profileId of perfiles) {
       await tx.cargo.create({
         data: { tipo: e.cargo, groupId: e.groupId, profileId, eleccionId: e.id, desde: now, hasta },
+      });
+      // Un asiento fundador que no es este cargo se libera: queda vacante y el reintento lo cubre.
+      await tx.boardSeat.deleteMany({
+        where: {
+          profileId,
+          source: 'fundador',
+          ...(MESA.includes(e.cargo) ? { NOT: { role: e.cargo as 'administrador' | 'coordinador_general' | 'secretario' } } : {}),
+        },
       });
       if (MESA.includes(e.cargo)) {
         const role = e.cargo as 'administrador' | 'coordinador_general' | 'secretario';
