@@ -73,6 +73,8 @@ describe('AlDiaService', () => {
       decision: { findMany: vi.fn().mockResolvedValue([]) },
       comisionInforme: { findMany: vi.fn().mockResolvedValue([]) },
       inquietud: { findMany: vi.fn().mockResolvedValue([]) },
+      eleccion: { findMany: vi.fn().mockResolvedValue([]) },
+      papeletaEleccion: { findMany: vi.fn().mockResolvedValue([]) },
     };
     asistente = {
       activo: vi.fn().mockReturnValue(true),
@@ -239,6 +241,88 @@ describe('AlDiaService', () => {
     expect(r.items).toHaveLength(20);
     expect(r.items[0]).toMatchObject({ clase: 'votacion_cierra', titulo: 'Vota', ruta: `/proposals/${P1}` });
     expect(r.items[1]!.titulo).toBe('Tema 24');
+  });
+
+  describe('elecciones', () => {
+    const G2 = '44444444-4444-4444-8444-444444444444';
+    const E1 = '55555555-5555-4555-8555-555555555555';
+    const E2 = '66666666-6666-4666-8666-666666666666';
+    const abierta = (extra: Record<string, unknown> = {}) => ({
+      id: E1,
+      groupId: G1,
+      cargo: 'administrador',
+      fase: 'candidaturas',
+      createdAt: new Date('2026-11-06T09:00:00Z'),
+      candidaturasEndsAt: new Date('2026-11-13T09:00:00Z'),
+      votacionEndsAt: new Date('2026-11-21T20:00:00Z'),
+      group: { name: 'Masaya' },
+      ...extra,
+    });
+    /** La base simulada aplica el filtro de fase; el electorado se simula con profile.count. */
+    const conElecciones = (lista: any[]) =>
+      prisma.eleccion.findMany.mockImplementation(async (args: any) => lista.filter((e) => e.fase === args.where.fase));
+
+    beforeEach(() => {
+      prisma.proposal.findMany.mockResolvedValue([]);
+      prisma.profile.count = vi.fn().mockResolvedValue(1);
+    });
+
+    it('aparece «Se abrieron las candidaturas» para quien está en el electorado', async () => {
+      conElecciones([abierta()]);
+      const r = await service.ver('p1', AHORA);
+      expect(r.items).toEqual([
+        {
+          clase: 'eleccion_candidaturas',
+          titulo: 'Se abrieron las candidaturas para Administración',
+          comunidad: 'Masaya',
+          ruta: `/elecciones/${E1}`,
+          fecha: '2026-11-13T09:00:00.000Z',
+        },
+      ]);
+      expect(prisma.eleccion.findMany.mock.calls[0]![0].where).toMatchObject({ fase: 'candidaturas', createdAt: { gte: desde, lte: AHORA } });
+    });
+
+    it('en coordinadores el título lleva la comunidad', async () => {
+      conElecciones([abierta({ cargo: 'coordinador' })]);
+      const r = await service.ver('p1', AHORA);
+      expect(r.items[0]!.titulo).toBe('Se abrieron las candidaturas para Coordinación de la comunidad · Masaya');
+    });
+
+    it('no aparece la elección de coordinadores de otra comunidad', async () => {
+      conElecciones([abierta({ cargo: 'coordinador', groupId: G2, group: { name: 'León' } })]);
+      // El electorado se evalúa con el filtro de esa comunidad: la persona no es miembro.
+      prisma.profile.count.mockImplementation(async (args: any) => (args.where.memberships?.some?.groupId === G1 ? 1 : 0));
+      const r = await service.ver('p1', AHORA);
+      expect(prisma.profile.count.mock.calls[0]![0].where).toMatchObject({ id: 'p1', memberships: { some: { groupId: G2 } } });
+      expect(r.items).toEqual([]);
+      expect(r.mostrar).toBe(false);
+    });
+
+    it('«Vota antes del…» aparece y desaparece al votar', async () => {
+      const votando = abierta({ fase: 'votacion', createdAt: new Date('2026-10-01T00:00:00Z') });
+      conElecciones([votando]);
+      const r = await service.ver('p1', AHORA);
+      expect(r.items).toEqual([
+        {
+          clase: 'eleccion_votar',
+          titulo: 'Vota antes del 21 de noviembre',
+          comunidad: 'Masaya',
+          ruta: `/elecciones/${E1}`,
+          fecha: '2026-11-21T20:00:00.000Z',
+        },
+      ]);
+      expect(prisma.eleccion.findMany.mock.calls.some((c: any) => c[0].where.fase === 'votacion' && c[0].where.votacionEndsAt?.gt)).toBe(true);
+      // Ya votó: hay papeleta.
+      prisma.papeletaEleccion.findMany.mockResolvedValue([{ eleccionId: E1 }]);
+      const despues = await service.ver('p1', AHORA);
+      expect(despues.items).toEqual([]);
+    });
+
+    it('nunca pasa de 20 items', async () => {
+      conElecciones(Array.from({ length: 25 }, (_, i) => abierta({ id: i === 0 ? E1 : E2, createdAt: new Date(Date.UTC(2026, 10, 6, 0, i)) })));
+      const r = await service.ver('p1', AHORA);
+      expect(r.items).toHaveLength(20);
+    });
   });
 
   it('cerrar deja alDiaDesde en el momento actual (visto hasta ahora)', async () => {
