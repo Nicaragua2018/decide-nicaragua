@@ -32,9 +32,6 @@ function int(
   return { key, level, label, type: 'int', default: String(def), min, max, unit, conectada };
 }
 
-/** Regla de la colmena que aún no tiene efecto (ver `conectada`). */
-const SIN_CONECTAR = false;
-
 export const RULE_DEFINITIONS: readonly RuleDefinition[] = [
   int('inquietud.apoyo_minimo_personas', 'local', 'Apoyo mínimo para que una inquietud pida respuesta (personas)', 3, 2, 50, 'personas'),
   int('inquietud.apoyo_minimo_porcentaje', 'local', 'Apoyo mínimo para que una inquietud pida respuesta (% del grupo)', 10, 1, 50, 'porcentaje'),
@@ -68,7 +65,7 @@ export const RULE_DEFINITIONS: readonly RuleDefinition[] = [
   int('eleccion.minimo_primera', 'colmena', 'Personas mínimas para la primera elección (personas)', 12, 5, 100, 'personas'),
   int('invitaciones.pendientes_max', 'colmena', 'Invitaciones pendientes por persona (máximo)', 5, 1, 20, 'personas'),
   int('asistente.preguntas_por_dia', 'colmena', 'Preguntas al asistente por persona y día', 30, 10, 100, 'preguntas'),
-  int('revocacion.fraccion', 'colmena', 'Apoyos necesarios para revocar un cargo (%)', 33, 10, 50, 'porcentaje', SIN_CONECTAR),
+  int('revocacion.fraccion', 'colmena', 'Apoyos necesarios para revocar un cargo (%)', 33, 10, 50, 'porcentaje'),
   int('cargos.periodo_mesa_meses', 'colmena', 'Duración del cargo en la mesa (meses)', 12, 6, 24, 'meses'),
   int('cargos.periodo_coordinadores_meses', 'colmena', 'Duración del cargo de coordinación (meses)', 6, 3, 12, 'meses'),
   int('eleccion.plazo_candidaturas_dias', 'colmena', 'Plazo para presentar candidaturas (días)', 7, 3, 30, 'dias'),

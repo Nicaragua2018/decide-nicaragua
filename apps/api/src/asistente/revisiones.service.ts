@@ -44,18 +44,21 @@ export class RevisionesService {
     return filas.map((f) => this.vista(f, null));
   }
 
-  /** Solo la mesa. Las pendientes, y si hay mesa suficiente (2 o más cargos ocupados) para resolverlas. */
+  /**
+   * Solo la mesa (o un suplente provisional). Las pendientes, y si hay firmantes suficientes (2 o
+   * más entre la mesa verificada y los suplentes) para resolverlas.
+   */
   async listarPendientes(profileId: string): Promise<{ mesaSuficiente: boolean; revisiones: TextoEnRevisionView[] }> {
     await this.exigirMesa(profileId);
-    const [filas, cargos] = await Promise.all([
+    const [filas, firmantes] = await Promise.all([
       this.prisma.textoEnRevision.findMany({
         where: { estado: 'pendiente' },
         include: { firmas: true },
         orderBy: { venceAt: 'asc' },
       }),
-      this.prisma.boardSeat.count({ where: { profile: { user: { status: 'verified_citizen' } } } }),
+      this.board.firmantesDisponibles(),
     ]);
-    return { mesaSuficiente: cargos >= FIRMAS_PARA_RESOLVER, revisiones: filas.map((f) => this.vista(f, profileId)) };
+    return { mesaSuficiente: firmantes >= FIRMAS_PARA_RESOLVER, revisiones: filas.map((f) => this.vista(f, profileId)) };
   }
 
   /**
@@ -172,8 +175,9 @@ export class RevisionesService {
     }
   }
 
+  /** La mesa, o un suplente provisional cuando la mesa está incompleta. */
   private async exigirMesa(profileId: string): Promise<void> {
-    if (!(await this.board.roleOf(profileId))) throw new ForbiddenException('Esta sección es solo para la mesa directiva.');
+    if (!(await this.board.puedeFirmarRevision(profileId))) throw new ForbiddenException('Esta sección es solo para la mesa directiva.');
   }
 
   /** `publicando` es interno: para quien mira sigue pendiente. `viewer` null: no se marca `yaFirme`. */

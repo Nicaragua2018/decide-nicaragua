@@ -54,6 +54,8 @@ const QUE_ES: Record<TipoTexto, string> = {
   motivo_regla: 'el motivo para cambiar una regla de la comunidad',
   subgrupo: 'el nombre y el propósito de un grupo de trabajo nuevo',
   candidatura: 'la ficha de una persona que se presenta a un cargo (presentación y compromisos)',
+  revocacion: 'el motivo de un pedido de revocación de un cargo de la comunidad',
+  observacion: 'una observación pública sobre un hecho del registro de la plataforma',
 };
 
 /**

@@ -1,21 +1,32 @@
 import 'reflect-metadata';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { BadRequestException, ConflictException, ForbiddenException } from '@nestjs/common';
+import { BadRequestException, ConflictException, ForbiddenException, Logger, NotFoundException } from '@nestjs/common';
 import { BoardService } from './board.service';
 
 function buildPrisma() {
   const prisma = {
     $transaction: vi.fn(),
     $queryRaw: vi.fn().mockResolvedValue([]),
-    boardSeat: { findFirst: vi.fn(), findUnique: vi.fn(), findMany: vi.fn(), count: vi.fn(), upsert: vi.fn(), create: vi.fn() },
-    profile: { findUnique: vi.fn(), update: vi.fn() },
-    user: { findUnique: vi.fn(), update: vi.fn() },
+    boardSeat: {
+      findFirst: vi.fn(), findUnique: vi.fn(), findMany: vi.fn().mockResolvedValue([]), count: vi.fn(), upsert: vi.fn(), create: vi.fn(),
+      deleteMany: vi.fn().mockResolvedValue({ count: 0 }),
+    },
+    cargo: { findMany: vi.fn().mockResolvedValue([]), updateMany: vi.fn().mockResolvedValue({ count: 0 }) },
+    group: { findUnique: vi.fn().mockResolvedValue({ id: 'g-general' }) },
+    eleccion: { findMany: vi.fn().mockResolvedValue([]), count: vi.fn().mockResolvedValue(0) },
+    revocacion: { updateMany: vi.fn().mockResolvedValue({ count: 0 }) },
+    profile: { findUnique: vi.fn(), update: vi.fn(), findMany: vi.fn().mockResolvedValue([]) },
+    user: { findUnique: vi.fn(), update: vi.fn(), updateMany: vi.fn().mockResolvedValue({ count: 1 }) },
+    solicitudReactivacion: {
+      findUnique: vi.fn(), findFirst: vi.fn(), findMany: vi.fn().mockResolvedValue([]),
+      updateMany: vi.fn().mockResolvedValue({ count: 1 }),
+    },
     groupMembership: { deleteMany: vi.fn() },
-    boardAction: { create: vi.fn(), findUnique: vi.fn(), findMany: vi.fn(), update: vi.fn(), updateMany: vi.fn() },
+    boardAction: { create: vi.fn(), findUnique: vi.fn(), findFirst: vi.fn().mockResolvedValue(null), findMany: vi.fn(), update: vi.fn(), updateMany: vi.fn() },
     boardApproval: { create: vi.fn(), findMany: vi.fn() },
     cambioRegla: { findFirst: vi.fn(), updateMany: vi.fn() },
     ruleValue: { findFirst: vi.fn(), create: vi.fn(), update: vi.fn() },
-    candidatura: { findUnique: vi.fn(), updateMany: vi.fn(), count: vi.fn().mockResolvedValue(0) },
+    candidatura: { findUnique: vi.fn(), findMany: vi.fn().mockResolvedValue([]), updateMany: vi.fn(), count: vi.fn().mockResolvedValue(0) },
   };
   // tx === prisma: la transacción de prueba ejecuta el callback con el mismo mock
   prisma.$transaction.mockImplementation((fn: (tx: unknown) => unknown) => fn(prisma));
@@ -288,7 +299,10 @@ describe('BoardService', () => {
       ];
       expect([...orden].sort((a, b) => a - b)).toEqual(orden);
       expect(prisma.$transaction).toHaveBeenCalledTimes(1);
-      expect(prisma.boardAction.update).not.toHaveBeenCalled();
+      // El estado se resuelve con el updateMany condicionado; `update` solo guarda el estado previo.
+      expect(prisma.boardAction.update).not.toHaveBeenCalledWith(
+        expect.objectContaining({ data: expect.objectContaining({ status: expect.anything() }) }),
+      );
     });
 
     it('dos firmas finales a la vez: la segunda espera, ve la acción ya resuelta (400) y no la pisa', async () => {
@@ -665,6 +679,397 @@ describe('BoardService', () => {
       votos(true, true);
       await service.voteAction(ADMIN, 'a2', true, 'ip');
       expect(prisma.user.update).toHaveBeenCalled();
+    });
+  });
+
+  describe('suspend_user: cargos y asientos (3C-2)', () => {
+    const HASTA = new Date('2027-06-01T00:00:00Z');
+    const accion = { id: 'a1', type: 'suspend_user', targetUserId: 'u-t', params: { x: 1 }, status: 'pending', approvals: [{ profileId: 'p-sec', approve: true }] };
+    beforeEach(() => {
+      prisma.boardSeat.findFirst.mockResolvedValue(asiento('administrador'));
+      prisma.boardAction.findUnique.mockResolvedValue(accion);
+      prisma.boardApproval.create.mockResolvedValue({});
+      prisma.boardAction.updateMany.mockResolvedValue({ count: 1 });
+      prisma.boardAction.update.mockResolvedValue({});
+      prisma.user.findUnique.mockResolvedValue({ status: 'verified_citizen' });
+      prisma.user.update.mockResolvedValue({});
+      votos(true, true);
+    });
+
+    it('suspender termina los cargos, borra los asientos y guarda el estado previo', async () => {
+      prisma.cargo.findMany.mockResolvedValue([{ id: 'c1', tipo: 'secretario', groupId: 'g-general', hasta: HASTA }]);
+      prisma.boardSeat.findMany.mockResolvedValue([{ role: 'secretario' }]);
+
+      await service.voteAction(ADMIN, 'a1', true, 'ip');
+
+      expect(prisma.cargo.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({ where: { profile: { userId: 'u-t' }, terminadoAt: null } }),
+      );
+      expect(prisma.cargo.updateMany).toHaveBeenCalledWith({
+        where: { id: { in: ['c1'] }, terminadoAt: null },
+        data: { terminadoAt: expect.any(Date), finCausa: 'suspension', enFunciones: false },
+      });
+      expect(prisma.boardSeat.deleteMany).toHaveBeenCalledWith({ where: { profile: { userId: 'u-t' } } });
+      expect(prisma.boardAction.update).toHaveBeenCalledWith({
+        where: { id: 'a1' },
+        data: { params: { x: 1, estadoPrevio: 'verified_citizen' } },
+      });
+      // El estado previo se lee antes de suspender.
+      expect(prisma.user.findUnique.mock.invocationCallOrder[0]!).toBeLessThan(prisma.user.update.mock.invocationCallOrder[0]!);
+      expect(resuelta()).toMatchObject({ data: { status: 'executed' } });
+    });
+
+    it('suspender a alguien de la mesa abre la anticipada con el mandato del cargo, tras confirmar', async () => {
+      const alSuspender = vi.fn().mockResolvedValue('e-1');
+      service.registrarAlSuspender(alSuspender);
+      prisma.cargo.findMany.mockResolvedValue([{ id: 'c1', tipo: 'secretario', groupId: 'g-general', hasta: HASTA }]);
+      prisma.boardSeat.findMany.mockResolvedValue([{ role: 'secretario' }]);
+
+      await service.voteAction(ADMIN, 'a1', true, 'ip');
+
+      expect(alSuspender).toHaveBeenCalledTimes(1);
+      expect(alSuspender).toHaveBeenCalledWith({ groupId: 'g-general', cargo: 'secretario', mandatoHasta: HASTA });
+      expect(alSuspender.mock.invocationCallOrder[0]!).toBeGreaterThan(prisma.boardAction.updateMany.mock.invocationCallOrder[0]!);
+    });
+
+    it('suspender cierra los pedidos de revocación abiertos de sus cargos, dentro de la transacción', async () => {
+      const alSuspender = vi.fn().mockResolvedValue('e-1');
+      service.registrarAlSuspender(alSuspender);
+      prisma.cargo.findMany.mockResolvedValue([{ id: 'c1', tipo: 'secretario', groupId: 'g-general', hasta: HASTA }]);
+      prisma.boardSeat.findMany.mockResolvedValue([{ role: 'secretario' }]);
+
+      await service.voteAction(ADMIN, 'a1', true, 'ip');
+
+      expect(prisma.revocacion.updateMany).toHaveBeenCalledWith({
+        where: { cargoId: { in: ['c1'] }, estado: 'abierta' },
+        data: { estado: 'vencida' },
+      });
+      expect(prisma.revocacion.updateMany.mock.invocationCallOrder[0]!).toBeLessThan(alSuspender.mock.invocationCallOrder[0]!);
+    });
+
+    it('suspender a un fundador antes de la primera jornada no abre anticipada: la primera jornada cubre el puesto', async () => {
+      const alSuspender = vi.fn().mockResolvedValue('e-1');
+      service.registrarAlSuspender(alSuspender);
+      prisma.cargo.findMany.mockResolvedValue([]);
+      prisma.boardSeat.findMany.mockResolvedValue([{ role: 'coordinador_general' }]);
+      prisma.eleccion.count.mockResolvedValue(0);
+
+      await service.voteAction(ADMIN, 'a1', true, 'ip');
+
+      expect(prisma.eleccion.count).toHaveBeenCalledWith({
+        where: { cargo: { in: ['administrador', 'coordinador_general', 'secretario'] } },
+      });
+      expect(alSuspender).not.toHaveBeenCalled();
+      expect(prisma.boardSeat.deleteMany).toHaveBeenCalledWith({ where: { profile: { userId: 'u-t' } } });
+      expect(resuelta()).toMatchObject({ data: { status: 'executed' } });
+    });
+
+    it('un asiento fundador sin cargo, tras alguna elección de mesa, abre la anticipada sin mandato (null) en el grupo general', async () => {
+      const alSuspender = vi.fn().mockResolvedValue('e-1');
+      service.registrarAlSuspender(alSuspender);
+      prisma.eleccion.count.mockResolvedValue(1);
+      prisma.cargo.findMany.mockResolvedValue([]);
+      prisma.boardSeat.findMany.mockResolvedValue([{ role: 'coordinador_general' }]);
+      prisma.group.findUnique.mockResolvedValue({ id: 'g-general' });
+
+      await service.voteAction(ADMIN, 'a1', true, 'ip');
+
+      expect(prisma.group.findUnique).toHaveBeenCalledWith({ where: { slug: 'general' }, select: { id: true } });
+      expect(alSuspender).toHaveBeenCalledWith({ groupId: 'g-general', cargo: 'coordinador_general', mandatoHasta: null });
+    });
+
+    it('un cargo fuera de la mesa (coordinador) también queda vacante y abre su anticipada', async () => {
+      const alSuspender = vi.fn().mockResolvedValue(null);
+      service.registrarAlSuspender(alSuspender);
+      prisma.cargo.findMany.mockResolvedValue([{ id: 'c2', tipo: 'coordinador', groupId: 'g-leon', hasta: HASTA }]);
+
+      await service.voteAction(ADMIN, 'a1', true, 'ip');
+
+      expect(alSuspender).toHaveBeenCalledWith({ groupId: 'g-leon', cargo: 'coordinador', mandatoHasta: HASTA });
+    });
+
+    it('si la anticipada falla, la suspensión ya ejecutada no se deshace', async () => {
+      const warn = vi.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
+      service.registrarAlSuspender(vi.fn().mockRejectedValue(new Error('boom')));
+      prisma.cargo.findMany.mockResolvedValue([{ id: 'c1', tipo: 'secretario', groupId: 'g-general', hasta: HASTA }]);
+
+      await expect(service.voteAction(ADMIN, 'a1', true, 'ip')).resolves.toBeUndefined();
+
+      expect(warn).toHaveBeenCalled();
+      expect(audit.log).toHaveBeenCalledWith(expect.objectContaining({ action: 'board.action_executed' }));
+      warn.mockRestore();
+    });
+
+    it('sin cargos ni asientos no se llama a la anticipada', async () => {
+      const alSuspender = vi.fn();
+      service.registrarAlSuspender(alSuspender);
+      await service.voteAction(ADMIN, 'a1', true, 'ip');
+      expect(prisma.cargo.updateMany).not.toHaveBeenCalled();
+      expect(alSuspender).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('mesa incompleta: suplentes provisionales (3C-2)', () => {
+    const NOW = new Date('2026-11-08T12:00:00Z');
+    const miembro = (profileId: string, status = 'verified_citizen') => ({ profileId, profile: { user: { status } } });
+    const obs = (id: string, profileId: string, eleccionId: string, desde: string, status = 'verified_citizen') => ({
+      id, profileId, eleccionId, desde: new Date(desde), profile: { user: { status } },
+    });
+
+    it('con 2 en la mesa no hay suplentes', async () => {
+      prisma.boardSeat.findMany.mockResolvedValue([miembro('p-a'), miembro('p-b')]);
+      await expect(service.suplentesProvisionales(NOW)).resolves.toEqual([]);
+      expect(prisma.cargo.findMany).not.toHaveBeenCalled();
+      await expect(service.firmantesDisponibles(NOW)).resolves.toBe(2);
+    });
+
+    it('con 1 en la mesa firman los 2 observadores mejor colocados', async () => {
+      prisma.boardSeat.findMany.mockResolvedValue([miembro('p-a'), miembro('p-b', 'suspended')]);
+      prisma.cargo.findMany.mockResolvedValue([
+        obs('c1', 'o1', 'e1', '2026-01-01T00:00:00Z'),
+        obs('c2', 'o2', 'e1', '2026-01-01T00:00:00Z'),
+        obs('c3', 'o3', 'e2', '2025-06-01T00:00:00Z'),
+      ]);
+      prisma.candidatura.findMany.mockResolvedValue([
+        { id: 'k1', eleccionId: 'e1', profileId: 'o1' },
+        { id: 'k2', eleccionId: 'e1', profileId: 'o2' },
+        { id: 'k3', eleccionId: 'e2', profileId: 'o3' },
+      ]);
+      prisma.eleccion.findMany.mockResolvedValue([
+        { id: 'e1', ordenFinal: ['k2', 'kx', 'k1'] },
+        { id: 'e2', ordenFinal: ['k3'] },
+      ]);
+
+      // o2 y o3 empatan en la posición 0: va antes quien tiene el cargo desde antes.
+      await expect(service.suplentesProvisionales(NOW)).resolves.toEqual(['o3', 'o2']);
+      expect(prisma.cargo.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({ tipo: 'observador', terminadoAt: null, profile: { user: { status: 'verified_citizen' } } }),
+        }),
+      );
+      await expect(service.firmantesDisponibles(NOW)).resolves.toBe(3);
+      prisma.boardSeat.findFirst.mockResolvedValue(null);
+      await expect(service.puedeFirmarRevision('o2', NOW)).resolves.toBe(true);
+      await expect(service.puedeFirmarRevision('o1', NOW)).resolves.toBe(false);
+    });
+
+    it('un observador sin candidatura en el orden final va al final; desempate por id', async () => {
+      prisma.boardSeat.findMany.mockResolvedValue([]);
+      prisma.cargo.findMany.mockResolvedValue([
+        obs('c9', 'o9', 'e1', '2026-01-01T00:00:00Z'),
+        obs('c8', 'o8', 'e1', '2026-01-01T00:00:00Z'),
+        obs('c1', 'o1', 'e1', '2026-01-01T00:00:00Z'),
+      ]);
+      prisma.candidatura.findMany.mockResolvedValue([{ id: 'k1', eleccionId: 'e1', profileId: 'o1' }]);
+      prisma.eleccion.findMany.mockResolvedValue([{ id: 'e1', ordenFinal: ['k1'] }]);
+      await expect(service.suplentesProvisionales(NOW)).resolves.toEqual(['o1', 'o8']);
+    });
+
+    it('un observador suspendido nunca es suplente', async () => {
+      prisma.boardSeat.findMany.mockResolvedValue([miembro('p-a')]);
+      prisma.cargo.findMany.mockResolvedValue([
+        obs('c1', 'o1', 'e1', '2026-01-01T00:00:00Z', 'suspended'),
+        obs('c2', 'o2', 'e1', '2026-01-01T00:00:00Z'),
+      ]);
+      prisma.candidatura.findMany.mockResolvedValue([
+        { id: 'k1', eleccionId: 'e1', profileId: 'o1' },
+        { id: 'k2', eleccionId: 'e1', profileId: 'o2' },
+      ]);
+      prisma.eleccion.findMany.mockResolvedValue([{ id: 'e1', ordenFinal: ['k1', 'k2'] }]);
+      await expect(service.suplentesProvisionales(NOW)).resolves.toEqual(['o2']);
+      prisma.boardSeat.findFirst.mockResolvedValue(null);
+      await expect(service.puedeFirmarRevision('o1', NOW)).resolves.toBe(false);
+    });
+
+    it('un observador que ocupa un asiento de la mesa no cuenta como suplente', async () => {
+      prisma.boardSeat.findMany.mockResolvedValue([miembro('o1')]);
+      prisma.cargo.findMany.mockResolvedValue([obs('c1', 'o1', 'e1', '2026-01-01T00:00:00Z')]);
+      prisma.candidatura.findMany.mockResolvedValue([{ id: 'k1', eleccionId: 'e1', profileId: 'o1' }]);
+      prisma.eleccion.findMany.mockResolvedValue([{ id: 'e1', ordenFinal: ['k1'] }]);
+      await expect(service.suplentesProvisionales(NOW)).resolves.toEqual([]);
+    });
+
+    it('un suplente firma una revisión de texto pero no una acción de la mesa', async () => {
+      prisma.boardSeat.findMany.mockResolvedValue([miembro('p-a')]);
+      prisma.cargo.findMany.mockResolvedValue([obs('c1', 'o1', 'e1', '2026-01-01T00:00:00Z')]);
+      prisma.candidatura.findMany.mockResolvedValue([{ id: 'k1', eleccionId: 'e1', profileId: 'o1' }]);
+      prisma.eleccion.findMany.mockResolvedValue([{ id: 'e1', ordenFinal: ['k1'] }]);
+      prisma.boardSeat.findFirst.mockResolvedValue(null); // sin asiento propio
+      await expect(service.puedeFirmarRevision('o1', NOW)).resolves.toBe(true);
+      const SUPLENTE = { sub: 'u-o1', email: 'o@x', status: 'verified_citizen', profileId: 'o1' } as never;
+      await expect(
+        service.proposeAction(SUPLENTE, { type: 'suspend_user' as never, targetUserId: 'u-t', reason: 'spam', params: {} }, 'ip'),
+      ).rejects.toThrow(ForbiddenException);
+      await expect(service.voteAction(SUPLENTE, 'a1', true, 'ip')).rejects.toThrow(ForbiddenException);
+    });
+  });
+  describe('reactivación (3C-2)', () => {
+    const pendiente = { id: 's1', userId: 'u-t', estado: 'pendiente' };
+
+    describe('proposeAction()', () => {
+      beforeEach(() => {
+        prisma.boardSeat.findFirst.mockResolvedValue(asiento('secretario'));
+        prisma.user.findUnique.mockResolvedValue({ id: 'u-t', status: 'suspended' });
+        prisma.solicitudReactivacion.findUnique.mockResolvedValue(pendiente);
+        prisma.boardAction.create.mockResolvedValue({ id: 'a9' });
+      });
+      const proponer = (type: string, params: Record<string, unknown>, targetUserId = 'u-t') =>
+        service.proposeAction(SECRE, { type: type as never, targetUserId, reason: 'Revisamos el caso', params }, 'ip');
+
+      it('reactivar exige una solicitud pendiente de esa persona', async () => {
+        await expect(proponer('reactivate_user', {})).rejects.toThrow(BadRequestException);
+        prisma.solicitudReactivacion.findUnique.mockResolvedValue(null);
+        await expect(proponer('reactivate_user', { solicitudId: 's1' })).rejects.toThrow(NotFoundException);
+        prisma.solicitudReactivacion.findUnique.mockResolvedValue({ ...pendiente, estado: 'rechazada' });
+        await expect(proponer('rechazar_reactivacion', { solicitudId: 's1' })).rejects.toThrow(BadRequestException);
+        prisma.solicitudReactivacion.findUnique.mockResolvedValue({ ...pendiente, userId: 'u-otra' });
+        await expect(proponer('reactivate_user', { solicitudId: 's1' })).rejects.toThrow(BadRequestException);
+        expect(prisma.boardAction.create).not.toHaveBeenCalled();
+      });
+
+      it('reactivar exige que la cuenta siga suspendida', async () => {
+        prisma.user.findUnique.mockResolvedValue({ id: 'u-t', status: 'verified_citizen' });
+        await expect(proponer('reactivate_user', { solicitudId: 's1' })).rejects.toThrow(BadRequestException);
+      });
+
+      it('con una solicitud válida crea la acción solo con el solicitudId', async () => {
+        await proponer('rechazar_reactivacion', { solicitudId: 's1', otro: 'x' });
+        expect(prisma.boardAction.create).toHaveBeenCalledWith(
+          expect.objectContaining({
+            data: expect.objectContaining({ type: 'rechazar_reactivacion', targetUserId: 'u-t', params: { solicitudId: 's1' }, reason: 'Revisamos el caso' }),
+          }),
+        );
+      });
+    });
+
+    describe('execute (con 2 firmas)', () => {
+      const accion = (type: string) => ({
+        id: 'a9', type, targetUserId: 'u-t', params: { solicitudId: 's1' }, reason: 'Todavía no vemos un cambio.',
+        status: 'pending', approvals: [{ profileId: 'p-sec', approve: true }],
+      });
+      beforeEach(() => {
+        prisma.boardSeat.findFirst.mockResolvedValue(asiento('administrador'));
+        prisma.boardApproval.create.mockResolvedValue({});
+        prisma.boardAction.updateMany.mockResolvedValue({ count: 1 });
+        prisma.user.findUnique.mockResolvedValue({ status: 'suspended' });
+        prisma.solicitudReactivacion.findFirst.mockResolvedValue(pendiente);
+        prisma.profile.findUnique.mockResolvedValue({ birthDepartment: 'Leon', currentCountry: 'CR', currentRegion: null });
+        votos(true, true);
+      });
+
+      it('reactivar devuelve el estado previo y resincroniza las comunidades, sin cargos', async () => {
+        prisma.boardAction.findUnique.mockResolvedValue(accion('reactivate_user'));
+        prisma.boardAction.findFirst.mockResolvedValue({ params: { estadoPrevio: 'verified_citizen' } });
+
+        await service.voteAction(ADMIN, 'a9', true, 'ip');
+
+        expect(prisma.boardAction.findFirst).toHaveBeenCalledWith(
+          expect.objectContaining({ where: { type: 'suspend_user', targetUserId: 'u-t', status: 'executed' } }),
+        );
+        expect(prisma.user.updateMany).toHaveBeenCalledWith({ where: { id: 'u-t', status: 'suspended' }, data: { status: 'verified_citizen' } });
+        expect(prisma.solicitudReactivacion.updateMany).toHaveBeenCalledWith({
+          where: { id: 's1', userId: 'u-t', estado: 'pendiente' },
+          data: { estado: 'aprobada', resueltaAt: expect.any(Date) },
+        });
+        expect(groups.syncMemberships).toHaveBeenCalledWith('u-t', 'Leon', 'CR', null);
+        // Tras confirmar la acción, no dentro de la transacción.
+        expect(groups.syncMemberships.mock.invocationCallOrder[0]!).toBeGreaterThan(prisma.boardAction.updateMany.mock.invocationCallOrder[0]!);
+        // No recupera cargos ni asientos.
+        expect(prisma.boardSeat.create).not.toHaveBeenCalled();
+        expect(prisma.cargo.updateMany).not.toHaveBeenCalled();
+        expect(resuelta()).toMatchObject({ data: { status: 'executed' } });
+        expect(audit.log).toHaveBeenCalledWith({ action: 'reactivacion.aprobada', resource: 'user:u-t', metadata: { solicitudId: 's1' } });
+      });
+
+      it('sin estado previo, reactiva a pending_verification', async () => {
+        prisma.boardAction.findUnique.mockResolvedValue(accion('reactivate_user'));
+        prisma.boardAction.findFirst.mockResolvedValue({ params: {} });
+
+        await service.voteAction(ADMIN, 'a9', true, 'ip');
+
+        expect(prisma.user.updateMany).toHaveBeenCalledWith({ where: { id: 'u-t', status: 'suspended' }, data: { status: 'pending_verification' } });
+        expect(groups.syncMemberships).not.toHaveBeenCalled();
+      });
+
+      it('un estado previo raro (p. ej. suspended) también vuelve a pending_verification', async () => {
+        prisma.boardAction.findUnique.mockResolvedValue(accion('reactivate_user'));
+        prisma.boardAction.findFirst.mockResolvedValue({ params: { estadoPrevio: 'suspended' } });
+
+        await service.voteAction(ADMIN, 'a9', true, 'ip');
+
+        expect(prisma.user.updateMany).toHaveBeenCalledWith({ where: { id: 'u-t', status: 'suspended' }, data: { status: 'pending_verification' } });
+      });
+
+      it('un estado previo rejected se devuelve tal cual (no pasa a pending_verification) y no resincroniza', async () => {
+        prisma.boardAction.findUnique.mockResolvedValue(accion('reactivate_user'));
+        prisma.boardAction.findFirst.mockResolvedValue({ params: { estadoPrevio: 'rejected' } });
+
+        await service.voteAction(ADMIN, 'a9', true, 'ip');
+
+        expect(prisma.user.updateMany).toHaveBeenCalledWith({ where: { id: 'u-t', status: 'suspended' }, data: { status: 'rejected' } });
+        expect(groups.syncMemberships).not.toHaveBeenCalled();
+      });
+
+      it('un estado previo que no es un AccountStatus vuelve a pending_verification', async () => {
+        prisma.boardAction.findUnique.mockResolvedValue(accion('reactivate_user'));
+        prisma.boardAction.findFirst.mockResolvedValue({ params: { estadoPrevio: 'inventado' } });
+
+        await service.voteAction(ADMIN, 'a9', true, 'ip');
+
+        expect(prisma.user.updateMany).toHaveBeenCalledWith({ where: { id: 'u-t', status: 'suspended' }, data: { status: 'pending_verification' } });
+      });
+
+      it('si la cuenta ya no está suspendida, la acción queda rechazada sin tocar la solicitud', async () => {
+        prisma.boardAction.findUnique.mockResolvedValue(accion('reactivate_user'));
+        prisma.user.updateMany.mockResolvedValue({ count: 0 });
+
+        await service.voteAction(ADMIN, 'a9', true, 'ip');
+
+        expect(prisma.solicitudReactivacion.updateMany).not.toHaveBeenCalled();
+        expect(groups.syncMemberships).not.toHaveBeenCalled();
+        expect(resuelta()).toMatchObject({ data: { status: 'rejected' } });
+      });
+
+      it('si la solicitud ya no está pendiente, no reactiva', async () => {
+        prisma.boardAction.findUnique.mockResolvedValue(accion('reactivate_user'));
+        prisma.solicitudReactivacion.findFirst.mockResolvedValue(null);
+
+        await service.voteAction(ADMIN, 'a9', true, 'ip');
+
+        expect(prisma.user.updateMany).not.toHaveBeenCalled();
+        expect(resuelta()).toMatchObject({ data: { status: 'rejected' } });
+      });
+
+      it('rechazar guarda el motivo que ve la persona', async () => {
+        prisma.boardAction.findUnique.mockResolvedValue(accion('rechazar_reactivacion'));
+
+        await service.voteAction(ADMIN, 'a9', true, 'ip');
+
+        expect(prisma.solicitudReactivacion.updateMany).toHaveBeenCalledWith({
+          where: { id: 's1', userId: 'u-t', estado: 'pendiente' },
+          data: { estado: 'rechazada', motivoRechazo: 'Todavía no vemos un cambio.', resueltaAt: expect.any(Date) },
+        });
+        expect(prisma.user.updateMany).not.toHaveBeenCalled();
+        expect(resuelta()).toMatchObject({ data: { status: 'executed' } });
+        expect(audit.log).toHaveBeenCalledWith({ action: 'reactivacion.rechazada', resource: 'user:u-t', metadata: { solicitudId: 's1' } });
+      });
+    });
+
+    describe('listarReactivaciones()', () => {
+      it('devuelve las pendientes con el nombre visible y el motivo, nunca el correo', async () => {
+        const createdAt = new Date('2026-11-12T00:00:00Z');
+        prisma.solicitudReactivacion.findMany.mockResolvedValue([{ id: 's1', userId: 'u-t', texto: 'Pido revisión', createdAt }]);
+        prisma.profile.findMany.mockResolvedValue([{ userId: 'u-t', displayName: 'Ana' }]);
+        prisma.boardAction.findMany.mockResolvedValue([{ targetUserId: 'u-t', reason: 'Spam repetido' }]);
+
+        const r = await service.listarReactivaciones();
+
+        expect(prisma.solicitudReactivacion.findMany).toHaveBeenCalledWith(expect.objectContaining({ where: { estado: 'pendiente' } }));
+        expect(r).toEqual([
+          { id: 's1', userId: 'u-t', nombre: 'Ana', motivoSuspension: 'Spam repetido', texto: 'Pido revisión', createdAt: createdAt.toISOString() },
+        ]);
+        expect(JSON.stringify(r)).not.toContain('@');
+      });
     });
   });
 });

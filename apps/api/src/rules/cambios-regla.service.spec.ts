@@ -214,13 +214,6 @@ describe('CambiosReglaService', () => {
       noCrea();
     });
 
-    it('una regla de la colmena que aún no tiene efecto no se puede proponer (400)', async () => {
-      await expect(proponer({ groupId: GENERAL, key: 'revocacion.fraccion', valor: '40' })).rejects.toThrow(
-        new BadRequestException('Esta regla aún no tiene efecto: se conecta con las elecciones (plan 3C).'),
-      );
-      noCrea();
-    });
-
     it('puestos de una comisión: el mínimo no puede pasar del máximo vigente (ni el máximo bajar del mínimo)', async () => {
       // El doble de RulesService da 7 a ambas reglas.
       const msg = new BadRequestException('El mínimo de puestos no puede ser mayor que el máximo.');

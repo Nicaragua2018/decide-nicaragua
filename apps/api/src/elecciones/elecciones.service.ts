@@ -1,8 +1,10 @@
 import { createHash } from 'node:crypto';
 import {
   BadRequestException,
+  ConflictException,
   ForbiddenException,
   Injectable,
+  Logger,
   NotFoundException,
   type OnModuleInit,
 } from '@nestjs/common';
@@ -15,16 +17,19 @@ import type {
   EleccionFaseValue,
   EleccionMotivoValue,
   EleccionResumen,
+  MiCargoVista,
   RepresentantesVista,
   ResultadoEleccionVista,
 } from '@decide/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
+import { BoardService } from '../board/board.service';
 import { GuardiaService, type OpcionesPublicar } from '../asistente/guardia.service';
 import { Publicadores } from '../asistente/publicadores';
 import { round5 } from '../frases/agregado';
 import { ConvocatoriaService, filtroElectorado } from './convocatoria.service';
 import { MESA, conOtroCargo } from './incompatibilidad';
+import { RevocacionService } from './revocacion.service';
 
 const DIA_MS = 86_400_000;
 /** Las elecciones contadas se siguen listando este tiempo. */
@@ -37,6 +42,7 @@ const TERRITORIALES = ['territorial_origin', 'territorial_residence'] as const;
 const NO_ELECTORADO = 'Esta elección es para otra comunidad o para cuentas verificadas.';
 const NO_ENCONTRADA = 'Elección no encontrada.';
 const PLAZO_CERRADO = 'El plazo para presentarse no está abierto.';
+const CARGO_TERMINADO = 'Este cargo ya terminó.';
 const VOTACION_CERRADA = 'La votación no está abierta.';
 
 type Ficha = { presentacion: string; compromisos: string[] };
@@ -141,16 +147,25 @@ function claveDeOrden(eleccionId: string, profileId: string, candidaturaId: stri
  */
 @Injectable()
 export class EleccionesService implements OnModuleInit {
+  private readonly logger = new Logger(EleccionesService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
     private readonly convocatoria: ConvocatoriaService,
     private readonly guardia: GuardiaService,
     private readonly publicadores: Publicadores,
+    private readonly revocacion: RevocacionService,
+    private readonly board: BoardService,
   ) {}
 
-  /** La revisión de la mesa publica una candidatura aprobada con la misma llamada. */
+  /**
+   * La revisión de la mesa publica una candidatura aprobada con la misma llamada. Y cada puesto que
+   * deja vacante una suspensión abre su elección anticipada (tras confirmar la suspensión, sin
+   * transacción: audita al momento). El gancho evita que la mesa importe las elecciones.
+   */
   onModuleInit(): void {
+    this.board.registrarAlSuspender((p) => this.convocatoria.anticipada(p, new Date()));
     this.publicadores.registrar('candidatura', (autor, args, opts) => {
       const a = args as { eleccionId: string; presentacion: string; compromisos: string[] };
       return this.presentarse(autor, a.eleccionId, { presentacion: a.presentacion, compromisos: a.compromisos }, opts);
@@ -234,9 +249,61 @@ export class EleccionesService implements OnModuleInit {
     };
   }
 
+  /** Los cargos vigentes de la persona. Puede renunciar a uno que no esté en funciones. */
+  async misCargos(profileId: string): Promise<MiCargoVista[]> {
+    const cargos = await this.prisma.cargo.findMany({
+      where: { profileId, terminadoAt: null },
+      orderBy: { desde: 'asc' },
+      select: { id: true, tipo: true, desde: true, hasta: true, enFunciones: true, group: { select: { name: true } } },
+    });
+    return cargos.map((c) => ({
+      id: c.id,
+      tipo: c.tipo,
+      comunidad: c.tipo === 'coordinador' ? c.group.name : null,
+      desde: c.desde.toISOString(),
+      hasta: c.hasta ? c.hasta.toISOString() : null,
+      enFunciones: c.enFunciones,
+      puedeRenunciar: !c.enFunciones,
+    }));
+  }
+
+  /** Renuncia a un cargo propio: termina, libera el asiento de la mesa y abre la elección anticipada. */
+  async renunciar(profileId: string, cargoId: string, now: Date): Promise<void> {
+    const cargo = await this.prisma.cargo.findFirst({
+      where: { id: cargoId, profileId, terminadoAt: null },
+      select: { tipo: true, groupId: true, hasta: true },
+    });
+    if (!cargo) throw new ConflictException(CARGO_TERMINADO);
+    await this.prisma.$transaction(async (tx) => {
+      const r = await tx.cargo.updateMany({
+        where: { id: cargoId, profileId, terminadoAt: null },
+        data: { terminadoAt: now, finCausa: 'renuncia', enFunciones: false },
+      });
+      if (r.count === 0) throw new ConflictException(CARGO_TERMINADO);
+      if (MESA.includes(cargo.tipo)) {
+        const role = cargo.tipo as 'administrador' | 'coordinador_general' | 'secretario';
+        await tx.boardSeat.deleteMany({ where: { role, profileId } });
+      }
+      // Un pedido de revocación de un cargo que ya terminó no tiene objeto: se cierra con el cargo.
+      await tx.revocacion.updateMany({ where: { cargoId, estado: 'abierta' }, data: { estado: 'vencida' } });
+    });
+    void this.audit.log({
+      action: 'cargo.renuncia',
+      resource: `cargo:${cargoId}`,
+      metadata: { tipo: cargo.tipo, groupId: cargo.groupId },
+    });
+    // La renuncia ya está confirmada: si la anticipada falla, la convocatoria de cada hora cubre la vacante.
+    try {
+      await this.convocatoria.anticipada({ groupId: cargo.groupId, cargo: cargo.tipo, mandatoHasta: cargo.hasta }, now);
+    } catch (err) {
+      const nombre = err instanceof Error ? err.name : 'Error';
+      this.logger.warn(`No se abrió la elección anticipada tras una renuncia (${cargo.tipo}): ${nombre}`);
+    }
+  }
+
   /** «Quiénes nos representan»: pública. Solo el nombre visible, nunca el correo. */
   async representantes(): Promise<RepresentantesVista> {
-    const [asientos, cargos, comunidades, abiertas] = await Promise.all([
+    const [asientos, cargos, comunidades, abiertas, revocaciones, observaciones] = await Promise.all([
       this.prisma.boardSeat.findMany({
         select: { role: true, source: true, since: true, profileId: true, profile: { select: { displayName: true } } },
       }),
@@ -244,7 +311,7 @@ export class EleccionesService implements OnModuleInit {
         where: { terminadoAt: null },
         orderBy: { desde: 'asc' },
         select: {
-          tipo: true, groupId: true, profileId: true, desde: true, hasta: true, enFunciones: true,
+          id: true, tipo: true, groupId: true, profileId: true, desde: true, hasta: true, enFunciones: true,
           profile: { select: { displayName: true } },
         },
       }),
@@ -257,7 +324,27 @@ export class EleccionesService implements OnModuleInit {
         where: { cargo: 'coordinador', fase: { in: [...ABIERTA] } },
         select: { groupId: true },
       }),
+      this.revocacion.resumenPorCargo(),
+      this.prisma.observacionPublica.findMany({
+        orderBy: { createdAt: 'desc' },
+        take: 20,
+        select: { id: true, autorProfileId: true, auditEventId: true, texto: true, createdAt: true },
+      }),
     ]);
+    // Sin FK en la tabla: el nombre y el evento se buscan aparte, y una observación cuyo evento ya no existe se omite.
+    const [autores, eventos] = await Promise.all([
+      this.prisma.profile.findMany({
+        where: { id: { in: [...new Set(observaciones.map((o) => o.autorProfileId))] } },
+        select: { id: true, displayName: true },
+      }),
+      this.prisma.auditEvent.findMany({
+        where: { id: { in: observaciones.map((o) => o.auditEventId) } },
+        select: { id: true, action: true, createdAt: true },
+      }),
+    ]);
+    const autorDe = new Map(autores.map((a) => [a.id, a.displayName]));
+    const eventoDe = new Map(eventos.map((e) => [e.id, e]));
+    const revocacionDe = (cargoId: string | null) => (cargoId ? revocaciones.get(cargoId) ?? null : null);
 
     const persona = (nombre: string) => ({ nombre, iniciales: iniciales(nombre) });
     const mesa: RepresentantesVista['mesa'] = [];
@@ -267,7 +354,7 @@ export class EleccionesService implements OnModuleInit {
       // Un asiento fundador no tiene fila Cargo: sigue «en funciones» hasta que se elija el puesto.
       if (a.source === 'fundador') {
         mesa.push({
-          tipo, ...persona(a.profile.displayName), desde: a.since.toISOString(), hasta: null, enFunciones: true, fundador: true,
+          tipo, ...persona(a.profile.displayName), desde: a.since.toISOString(), hasta: null, enFunciones: true, fundador: true, cargoId: null, revocacion: null,
         });
         continue;
       }
@@ -279,12 +366,14 @@ export class EleccionesService implements OnModuleInit {
         hasta: c ? c.hasta.toISOString() : null,
         enFunciones: c?.enFunciones ?? false,
         fundador: false,
+        cargoId: c?.id ?? null,
+        revocacion: revocacionDe(c?.id ?? null),
       });
     }
 
     const observadores = cargos
       .filter((c) => c.tipo === 'observador')
-      .map((c) => ({ ...persona(c.profile.displayName), desde: c.desde.toISOString(), hasta: c.hasta.toISOString() }));
+      .map((c) => ({ ...persona(c.profile.displayName), desde: c.desde.toISOString(), hasta: c.hasta.toISOString(), cargoId: c.id, revocacion: revocacionDe(c.id) }));
 
     const conEleccion = new Set(abiertas.map((e) => e.groupId));
     return {
@@ -301,9 +390,26 @@ export class EleccionesService implements OnModuleInit {
             desde: c.desde.toISOString(),
             hasta: c.hasta.toISOString(),
             enFunciones: c.enFunciones,
+            cargoId: c.id,
+            revocacion: revocacionDe(c.id),
           })),
         eleccionAbierta: conEleccion.has(g.id),
       })),
+      observaciones: observaciones.flatMap((o) => {
+        const evento = eventoDe.get(o.auditEventId);
+        if (!evento) return [];
+        const autor = autorDe.get(o.autorProfileId) ?? '';
+        return [
+          {
+            id: o.id,
+            autor,
+            iniciales: iniciales(autor),
+            texto: o.texto,
+            evento: { action: evento.action, createdAt: evento.createdAt.toISOString() },
+            createdAt: o.createdAt.toISOString(),
+          },
+        ];
+      }),
     };
   }
 

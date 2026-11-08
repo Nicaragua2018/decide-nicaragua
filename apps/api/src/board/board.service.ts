@@ -3,19 +3,24 @@ import {
   ConflictException,
   ForbiddenException,
   Injectable,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import {
+  AccountStatus,
   BOARD_ROLES,
   BoardActionType,
+  GENERAL_GROUP_SLUG,
   MODERACION_CAUSAS,
   NICARAGUA_DEPARTMENTS,
   type ModeracionCausaValue,
   RULE_DEFINITIONS,
   type BoardActionSummary,
+  type ReactivacionPendiente,
   type BoardRole,
   type BoardSeatSummary,
+  type CargoTipoValue,
   type JwtPayload,
 } from '@decide/shared';
 import { PrismaService } from '../prisma/prisma.service';
@@ -30,6 +35,19 @@ const VOTOS_PARA_RESOLVER = 2;
 /** Una ficha solo se oculta mientras la elección está abierta (después ya está contada). */
 const ELECCION_ABIERTA = ['candidaturas', 'votacion'] as const;
 
+/** Suplentes provisionales que puede haber cuando la mesa no llega a dos miembros verificados. */
+const MAX_SUPLENTES = 2;
+/** Los cargos de la mesa (los mismos que convoca la primera jornada). */
+const CARGOS_MESA = ['administrador', 'coordinador_general', 'secretario'] as const;
+
+/** Puesto que queda vacante al suspender a su titular (lo recibe la elección anticipada). */
+export interface VacantePorSuspension {
+  groupId: string;
+  cargo: CargoTipoValue;
+  /** Fin del mandato que faltaba; null para un asiento fundador sin cargo. */
+  mandatoHasta: Date | null;
+}
+
 interface ResultadoCambioRegla {
   status: 'executed' | 'rejected';
   cambio: { id: string; key: string } | null;
@@ -37,6 +55,10 @@ interface ResultadoCambioRegla {
 
 @Injectable()
 export class BoardService {
+  private readonly logger = new Logger(BoardService.name);
+  /** Ganchos de «al suspender» (los registra EleccionesModule: así este módulo no importa elecciones). */
+  private readonly alSuspender: ((p: VacantePorSuspension) => Promise<unknown>)[] = [];
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
@@ -56,6 +78,88 @@ export class BoardService {
     });
     if (!seat || (seat.profile.user.status as string) !== 'verified_citizen') return null;
     return seat.role as BoardRole;
+  }
+
+  /** Registra lo que se hace con cada puesto que deja vacante una suspensión (la elección anticipada). */
+  registrarAlSuspender(fn: (p: VacantePorSuspension) => Promise<unknown>): void {
+    this.alSuspender.push(fn);
+  }
+
+  /**
+   * Mesa incompleta: si hay menos de 2 miembros de la mesa con cuenta verificada, hasta 2
+   * observadores vigentes y verificados (que no ocupen un asiento) firman las revisiones de texto y
+   * las moderaciones. Van primero los mejor colocados en el orden final de su elección; desempate
+   * por antigüedad en el cargo y por id. Con la mesa completa no hay suplentes.
+   */
+  async suplentesProvisionales(now: Date = new Date()): Promise<string[]> {
+    return (await this.firmantes(now)).suplentes;
+  }
+
+  /** Quien firma revisiones de texto y moderaciones: la mesa o un suplente provisional. Nunca una acción de la mesa. */
+  async puedeFirmarRevision(profileId: string, now: Date = new Date()): Promise<boolean> {
+    if ((await this.roleOf(profileId)) !== null) return true;
+    return (await this.suplentesProvisionales(now)).includes(profileId);
+  }
+
+  /** Miembros verificados de la mesa más los suplentes provisionales. */
+  async firmantesDisponibles(now: Date = new Date()): Promise<number> {
+    const f = await this.firmantes(now);
+    return f.mesa + f.suplentes.length;
+  }
+
+  private async firmantes(now: Date): Promise<{ mesa: number; suplentes: string[] }> {
+    const asientos = await this.prisma.boardSeat.findMany({
+      select: { profileId: true, profile: { select: { user: { select: { status: true } } } } },
+    });
+    const mesa = asientos.filter((a) => (a.profile.user.status as string) === 'verified_citizen').length;
+    if (mesa >= VOTOS_PARA_RESOLVER) return { mesa, suplentes: [] };
+
+    const conAsiento = new Set(asientos.map((a) => a.profileId));
+    const observadores = (
+      await this.prisma.cargo.findMany({
+        where: {
+          tipo: 'observador',
+          terminadoAt: null,
+          desde: { lte: now },
+          profile: { user: { status: 'verified_citizen' } },
+        },
+        select: { id: true, profileId: true, eleccionId: true, desde: true, profile: { select: { user: { select: { status: true } } } } },
+      })
+    ).filter((c) => (c.profile.user.status as string) === 'verified_citizen' && !conAsiento.has(c.profileId));
+    if (observadores.length === 0) return { mesa, suplentes: [] };
+
+    const conEleccion = observadores.filter((c): c is typeof c & { eleccionId: string } => c.eleccionId !== null);
+    const [candidaturas, elecciones] = conEleccion.length
+      ? await Promise.all([
+          this.prisma.candidatura.findMany({
+            where: { OR: conEleccion.map((c) => ({ eleccionId: c.eleccionId, profileId: c.profileId })) },
+            select: { id: true, eleccionId: true, profileId: true },
+          }),
+          this.prisma.eleccion.findMany({
+            where: { id: { in: [...new Set(conEleccion.map((c) => c.eleccionId))] } },
+            select: { id: true, ordenFinal: true },
+          }),
+        ])
+      : [[], []];
+    const posicion = (c: (typeof observadores)[number]): number => {
+      const k = candidaturas.find((x) => x.eleccionId === c.eleccionId && x.profileId === c.profileId);
+      const i = k ? (elecciones.find((e) => e.id === c.eleccionId)?.ordenFinal.indexOf(k.id) ?? -1) : -1;
+      return i < 0 ? Number.POSITIVE_INFINITY : i;
+    };
+    const ordenados = observadores
+      .map((c) => ({ c, pos: posicion(c) }))
+      .sort(
+        (a, b) =>
+          a.pos - b.pos ||
+          a.c.desde.getTime() - b.c.desde.getTime() ||
+          (a.c.id < b.c.id ? -1 : a.c.id > b.c.id ? 1 : 0),
+      );
+    const suplentes: string[] = [];
+    for (const { c } of ordenados) {
+      if (!suplentes.includes(c.profileId)) suplentes.push(c.profileId);
+      if (suplentes.length === MAX_SUPLENTES) break;
+    }
+    return { mesa, suplentes };
   }
 
   async isAdministrator(profileId: string): Promise<boolean> {
@@ -143,6 +247,10 @@ export class BoardService {
       const target = await this.prisma.user.findUnique({ where: { id: dto.targetUserId } });
       if (!target) throw new NotFoundException('Persona no encontrada');
       targetUserId = dto.targetUserId;
+      if (dto.type === BoardActionType.reactivate_user || dto.type === BoardActionType.rechazar_reactivacion) {
+        if ((target.status as string) !== 'suspended') throw new BadRequestException('Esa cuenta ya no está suspendida.');
+        params = { solicitudId: await this.validarSolicitud(dto.params, targetUserId) };
+      }
     }
 
     if (dto.type === BoardActionType.change_origin) {
@@ -221,6 +329,7 @@ export class BoardService {
       action.type as unknown as BoardActionType,
       action.targetUserId,
       action.params as Record<string, unknown>,
+      action.reason,
     );
     // Lo que va fuera de la transacción, solo si se confirmó: comunidades del nuevo origen y auditoría.
     for (const tarea of r.despues) await tarea();
@@ -250,6 +359,7 @@ export class BoardService {
     type: BoardActionType,
     targetUserId: string | null,
     params: Record<string, unknown>,
+    reason: string,
   ): Promise<{ status: 'pending' | 'executed' | 'rejected'; despues: (() => Promise<void>)[] }> {
     try {
       return await this.prisma.$transaction(async (tx) => {
@@ -263,7 +373,8 @@ export class BoardService {
         const despues: (() => Promise<void>)[] = [];
         if (aFavor < VOTOS_PARA_RESOLVER && enContra < VOTOS_PARA_RESOLVER) return { status: 'pending' as const, despues };
 
-        const ejecutada = aFavor >= VOTOS_PARA_RESOLVER && (await this.execute(tx, type, targetUserId, params, despues));
+        const ejecutada =
+          aFavor >= VOTOS_PARA_RESOLVER && (await this.execute(tx, actionId, type, targetUserId, params, reason, despues));
         const status = ejecutada ? ('executed' as const) : ('rejected' as const);
         const tomada = await tx.boardAction.updateMany({
           where: { id: actionId, status: 'pending' },
@@ -397,6 +508,132 @@ export class BoardService {
     return { status, cambio: { id: cambio.id, key: cambio.key } };
   }
 
+  /** La solicitud de reactivación de la propuesta: existe, sigue pendiente y es de esa persona. */
+  private async validarSolicitud(params: Record<string, unknown>, targetUserId: string): Promise<string> {
+    const solicitudId = params['solicitudId'];
+    if (typeof solicitudId !== 'string') throw new BadRequestException('Indica la solicitud de reactivación.');
+    const s = await this.prisma.solicitudReactivacion.findUnique({
+      where: { id: solicitudId },
+      select: { userId: true, estado: true },
+    });
+    if (!s) throw new NotFoundException('Solicitud no encontrada');
+    if (s.userId !== targetUserId) throw new BadRequestException('Esa solicitud es de otra persona.');
+    if ((s.estado as string) !== 'pendiente') throw new BadRequestException('Esa solicitud ya se resolvió.');
+    return solicitudId;
+  }
+
+  /** Pedidos de reactivación pendientes, para la mesa: nombre visible (nunca el correo) y motivo de la suspensión. */
+  async listarReactivaciones(): Promise<ReactivacionPendiente[]> {
+    const pendientes = await this.prisma.solicitudReactivacion.findMany({
+      where: { estado: 'pendiente' },
+      orderBy: { createdAt: 'asc' },
+      select: { id: true, userId: true, texto: true, createdAt: true },
+    });
+    if (pendientes.length === 0) return [];
+    const userIds = [...new Set(pendientes.map((p) => p.userId))];
+    const [perfiles, suspensiones] = await Promise.all([
+      this.prisma.profile.findMany({ where: { userId: { in: userIds } }, select: { userId: true, displayName: true } }),
+      this.prisma.boardAction.findMany({
+        where: { type: 'suspend_user', status: 'executed', targetUserId: { in: userIds } },
+        orderBy: { resolvedAt: 'desc' },
+        select: { targetUserId: true, reason: true },
+      }),
+    ]);
+    return pendientes.map((p) => ({
+      id: p.id,
+      userId: p.userId,
+      nombre: perfiles.find((x) => x.userId === p.userId)?.displayName ?? 'Sin nombre',
+      // La más reciente primero (orderBy): el motivo de la suspensión vigente.
+      motivoSuspension: suspensiones.find((x) => x.targetUserId === p.userId)?.reason ?? 'La mesa no dejó un motivo.',
+      texto: p.texto,
+      createdAt: p.createdAt.toISOString(),
+    }));
+  }
+
+  /**
+   * Reactiva la cuenta dentro de la transacción de la firma. Se bloquean la cuenta y la solicitud
+   * (una suspensión o la otra resolución de la misma solicitud, a la vez, esperan). La cuenta vuelve
+   * al estado previo a la última suspensión (`params.estadoPrevio`, sea cual sea, también `rejected`;
+   * solo si falta, no es un estado válido o es `suspended`, `pending_verification`). No recupera cargos ni asientos. Si la solicitud ya no está
+   * pendiente o la cuenta ya no está suspendida, devuelve false sin tocar nada.
+   */
+  private async reactivar(
+    tx: Prisma.TransactionClient,
+    targetUserId: string,
+    params: Record<string, unknown>,
+    despues: (() => Promise<void>)[],
+  ): Promise<boolean> {
+    const solicitudId = String(params['solicitudId']);
+    await tx.$queryRaw(Prisma.sql`SELECT id FROM users WHERE id = ${targetUserId}::uuid FOR UPDATE`);
+    await tx.$queryRaw(Prisma.sql`SELECT id FROM solicitudes_reactivacion WHERE id = ${solicitudId}::uuid FOR UPDATE`);
+    const solicitud = await tx.solicitudReactivacion.findFirst({
+      where: { id: solicitudId, userId: targetUserId, estado: 'pendiente' },
+      select: { id: true },
+    });
+    if (!solicitud) return false;
+
+    const suspension = await tx.boardAction.findFirst({
+      where: { type: 'suspend_user', targetUserId, status: 'executed' },
+      orderBy: { resolvedAt: 'desc' },
+      select: { params: true },
+    });
+    const previo = (suspension?.params as Record<string, unknown> | null | undefined)?.['estadoPrevio'];
+    const estado =
+      typeof previo === 'string' &&
+      previo !== (AccountStatus.suspended as string) &&
+      (Object.values(AccountStatus) as string[]).includes(previo)
+        ? previo
+        : AccountStatus.pending_verification;
+
+    const r = await tx.user.updateMany({
+      where: { id: targetUserId, status: 'suspended' },
+      data: { status: estado as never },
+    });
+    if (r.count === 0) return false;
+    const cerrada = await tx.solicitudReactivacion.updateMany({
+      where: { id: solicitudId, userId: targetUserId, estado: 'pendiente' },
+      data: { estado: 'aprobada', resueltaAt: new Date() },
+    });
+    // Imposible con los bloqueos; si pasara, se deshace la reactivación entera.
+    if (cerrada.count === 0) throw new ConflictException('La solicitud ya se resolvió.');
+
+    if (estado === (AccountStatus.verified_citizen as string)) {
+      const perfil = await tx.profile.findUnique({
+        where: { userId: targetUserId },
+        select: { birthDepartment: true, currentCountry: true, currentRegion: true },
+      });
+      if (perfil) {
+        despues.push(() =>
+          this.groups.syncMemberships(targetUserId, perfil.birthDepartment, perfil.currentCountry, perfil.currentRegion),
+        );
+      }
+    }
+    despues.push(async () => {
+      void this.audit.log({ action: 'reactivacion.aprobada', resource: `user:${targetUserId}`, metadata: { solicitudId } });
+    });
+    return true;
+  }
+
+  /** Rechaza la solicitud con el `reason` de la acción, que la persona verá. False si ya no está pendiente. */
+  private async rechazarReactivacion(
+    tx: Prisma.TransactionClient,
+    targetUserId: string,
+    params: Record<string, unknown>,
+    reason: string,
+    despues: (() => Promise<void>)[],
+  ): Promise<boolean> {
+    const solicitudId = String(params['solicitudId']);
+    const r = await tx.solicitudReactivacion.updateMany({
+      where: { id: solicitudId, userId: targetUserId, estado: 'pendiente' },
+      data: { estado: 'rechazada', motivoRechazo: reason, resueltaAt: new Date() },
+    });
+    if (r.count === 0) return false;
+    despues.push(async () => {
+      void this.audit.log({ action: 'reactivacion.rechazada', resource: `user:${targetUserId}`, metadata: { solicitudId } });
+    });
+    return true;
+  }
+
   /** Valida una propuesta de ocultar una ficha: causa de la lista cerrada y elección abierta. */
   private async validarOcultar(
     params: Record<string, unknown>,
@@ -451,24 +688,101 @@ export class BoardService {
   }
 
   /**
+   * Suspende la cuenta dentro de la transacción de la firma. Guarda en la acción el estado previo
+   * (para una reactivación), quita las membresías (los guards de participación las miran), termina
+   * todos sus cargos vigentes y borra sus asientos de la mesa. Tras confirmar, cada puesto vacante
+   * va a los ganchos `alSuspender` (la elección anticipada); un asiento fundador sin cargo, con
+   * `mandatoHasta: null`, pero solo si ya hubo alguna elección de mesa (si no, la cubre la primera
+   * jornada). Cierra también los pedidos de revocación abiertos de esos cargos. Si un gancho falla no se deshace la suspensión: la convocatoria de cada
+   * hora cubre después la vacante.
+   */
+  private async suspender(
+    tx: Prisma.TransactionClient,
+    actionId: string,
+    targetUserId: string,
+    params: Record<string, unknown>,
+    despues: (() => Promise<void>)[],
+  ): Promise<boolean> {
+    const now = new Date();
+    const previo = await tx.user.findUnique({ where: { id: targetUserId }, select: { status: true } });
+    await tx.user.update({ where: { id: targetUserId }, data: { status: 'suspended' } });
+    await tx.groupMembership.deleteMany({ where: { profile: { userId: targetUserId } } });
+    await tx.boardAction.update({
+      where: { id: actionId },
+      data: { params: { ...params, estadoPrevio: (previo?.status as string | undefined) ?? null } as Prisma.InputJsonValue },
+    });
+
+    const cargos = await tx.cargo.findMany({
+      where: { profile: { userId: targetUserId }, terminadoAt: null },
+      select: { id: true, tipo: true, groupId: true, hasta: true },
+    });
+    if (cargos.length > 0) {
+      await tx.cargo.updateMany({
+        where: { id: { in: cargos.map((c) => c.id) }, terminadoAt: null },
+        data: { terminadoAt: now, finCausa: 'suspension', enFunciones: false },
+      });
+      // Un pedido de revocación de un cargo que ya terminó no tiene objeto: se cierra con el cargo.
+      await tx.revocacion.updateMany({
+        where: { cargoId: { in: cargos.map((c) => c.id) }, estado: 'abierta' },
+        data: { estado: 'vencida' },
+      });
+    }
+    const asientos = await tx.boardSeat.findMany({ where: { profile: { userId: targetUserId } }, select: { role: true } });
+    await tx.boardSeat.deleteMany({ where: { profile: { userId: targetUserId } } });
+
+    const vacantes: VacantePorSuspension[] = cargos.map((c) => ({
+      groupId: c.groupId,
+      cargo: c.tipo as CargoTipoValue,
+      mandatoHasta: c.hasta,
+    }));
+    const fundadores = asientos.filter((a) => !cargos.some((c) => (c.tipo as string) === (a.role as string)));
+    // Antes de la primera jornada (nunca hubo una elección de mesa) no se abre anticipada para un
+    // asiento fundador: bloquearía la primera jornada, que ya cubre el puesto vacante.
+    const huboEleccionMesa =
+      fundadores.length > 0 && (await tx.eleccion.count({ where: { cargo: { in: [...CARGOS_MESA] } } })) > 0;
+    if (huboEleccionMesa) {
+      const general = await tx.group.findUnique({ where: { slug: GENERAL_GROUP_SLUG }, select: { id: true } });
+      if (general) {
+        for (const a of fundadores) vacantes.push({ groupId: general.id, cargo: a.role as CargoTipoValue, mandatoHasta: null });
+      }
+    }
+    if (vacantes.length > 0) despues.push(() => this.avisarVacantes(vacantes));
+    return true;
+  }
+
+  private async avisarVacantes(vacantes: VacantePorSuspension[]): Promise<void> {
+    for (const v of vacantes) {
+      for (const fn of this.alSuspender) {
+        try {
+          await fn(v);
+        } catch (err) {
+          const nombre = err instanceof Error ? err.name : 'Error';
+          this.logger.warn(`No se abrió la elección anticipada de un puesto vacante por suspensión (${v.cargo}): ${nombre}`);
+        }
+      }
+    }
+  }
+
+  /**
    * Aplica la acción aprobada dentro de la transacción de la firma. Devuelve false si ya no se
    * puede aplicar (queda rechazada). Lo que no cabe en la transacción va a `despues`.
    */
   private async execute(
     tx: Prisma.TransactionClient,
+    actionId: string,
     type: BoardActionType,
     targetUserId: string | null,
     params: Record<string, unknown>,
+    reason: string,
     despues: (() => Promise<void>)[],
   ): Promise<boolean> {
     if (type === BoardActionType.ocultar_candidatura) return this.ocultarCandidatura(tx, params, despues);
     // change_rule se resuelve aparte (votarCambioRegla); las demás acciones exigen persona objetivo.
     if (targetUserId === null) throw new BadRequestException('La acción no tiene persona objetivo');
-    if (type === BoardActionType.suspend_user) {
-      // Los guards de participación miran la membresía: suspender también la quita.
-      await tx.user.update({ where: { id: targetUserId }, data: { status: 'suspended' } });
-      await tx.groupMembership.deleteMany({ where: { profile: { userId: targetUserId } } });
-      return true;
+    if (type === BoardActionType.suspend_user) return this.suspender(tx, actionId, targetUserId, params, despues);
+    if (type === BoardActionType.reactivate_user) return this.reactivar(tx, targetUserId, params, despues);
+    if (type === BoardActionType.rechazar_reactivacion) {
+      return this.rechazarReactivacion(tx, targetUserId, params, reason, despues);
     }
     const birthDepartment = params['birthDepartment'] as string;
     const profile = await tx.profile.update({

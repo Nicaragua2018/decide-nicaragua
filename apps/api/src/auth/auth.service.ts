@@ -17,6 +17,7 @@ import { EmailService } from '../email/email.service';
 import { AuditService } from '../audit/audit.service';
 import { GroupsService } from '../groups/groups.service';
 import { RulesService } from '../rules/rules.service';
+import { ReactivacionService } from './reactivacion.service';
 import { InviteUserDto } from './dto/invite-user.dto';
 import { AcceptInviteDto } from './dto/accept-invite.dto';
 import { LoginDto } from './dto/login.dto';
@@ -57,6 +58,7 @@ export class AuthService {
     private readonly config: ConfigService,
     private readonly groups: GroupsService,
     private readonly rules: RulesService,
+    private readonly reactivacion: ReactivacionService,
   ) {}
 
   // ─── Invitación ────────────────────────────────────────────────────────────
@@ -225,6 +227,16 @@ export class AuthService {
     }
 
     const status = user.status as unknown as AccountStatus;
+
+    // Solo después de comprobar la contraseña: a quien no la tiene no se le revela la suspensión.
+    // Sin sesión: el token solo sirve para ver el motivo y pedir la reactivación (JwtStrategy lo rechaza).
+    if (status === AccountStatus.suspended) {
+      throw new ForbiddenException({
+        codigo: 'cuenta_suspendida',
+        message: 'Tu cuenta está suspendida.',
+        reactivacionToken: this.reactivacion.firmarToken(user.id),
+      });
+    }
 
     if (!LOGIN_STATUSES.includes(status)) {
       throw new ForbiddenException(`Account not active (status: ${user.status as string})`);

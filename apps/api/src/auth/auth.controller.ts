@@ -16,6 +16,8 @@ import { Throttle } from '@nestjs/throttler';
 import type { Request, Response, CookieOptions } from 'express';
 
 import { AuthService } from './auth.service';
+import { ReactivacionService } from './reactivacion.service';
+import { CasoReactivacionDto, PedirReactivacionDto } from './dto/reactivacion.dto';
 import { UsersService } from '../users/users.service';
 import { extractIp } from '../common/utils/ip.util';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
@@ -25,7 +27,7 @@ import { InviteUserDto } from './dto/invite-user.dto';
 import { AcceptInviteDto } from './dto/accept-invite.dto';
 import { LoginDto } from './dto/login.dto';
 import { UpdateProfileDto } from './dto/update-profile.dto';
-import { AccountStatus, type JwtPayload, type AuthResponse } from '@decide/shared';
+import { AccountStatus, type CasoSuspension, type JwtPayload, type AuthResponse } from '@decide/shared';
 
 /** Duración del access token en ms (15 min) */
 const ACCESS_TOKEN_MAX_AGE_MS = 15 * 60 * 1000;
@@ -37,6 +39,7 @@ const REFRESH_TOKEN_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000;
 export class AuthController {
   constructor(
     private readonly authService: AuthService,
+    private readonly reactivacion: ReactivacionService,
     private readonly usersService: UsersService,
     private readonly config: ConfigService,
   ) {}
@@ -145,6 +148,29 @@ export class AuthController {
     const result = await this.authService.login(dto, extractIp(req));
     this.setAuthCookies(res, result.accessToken, result.refreshTokenId);
     return { user: result.user };
+  }
+
+  /**
+   * POST /api/auth/reactivacion/caso
+   * Con el token que da el login de una cuenta suspendida (sin sesión): motivo de la suspensión,
+   * el último pedido y desde cuándo se puede volver a pedir. Mismo límite que el login.
+   */
+  @Post('reactivacion/caso')
+  @HttpCode(HttpStatus.OK)
+  @Throttle({ default: { limit: 5, ttl: 15 * 60_000 } })
+  async casoReactivacion(@Body() dto: CasoReactivacionDto): Promise<CasoSuspension> {
+    return this.reactivacion.caso(dto.token);
+  }
+
+  /**
+   * POST /api/auth/reactivacion
+   * Pide a la mesa que reactive la cuenta (sin sesión, con el mismo token). Mismo límite que el login.
+   */
+  @Post('reactivacion')
+  @HttpCode(HttpStatus.CREATED)
+  @Throttle({ default: { limit: 5, ttl: 15 * 60_000 } })
+  async pedirReactivacion(@Body() dto: PedirReactivacionDto): Promise<CasoSuspension> {
+    return this.reactivacion.pedir(dto.token, dto.texto);
   }
 
   /**

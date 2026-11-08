@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { randomUUID } from 'node:crypto';
-import { GENERAL_GROUP_SLUG } from '@decide/shared';
+import { ANTICIPADA_MINIMO_DIAS, GENERAL_GROUP_SLUG } from '@decide/shared';
 import type { CargoTipoValue, EleccionMotivoValue } from '@decide/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
@@ -143,6 +143,38 @@ export class ConvocatoriaService {
       },
       data: { enFunciones: true },
     });
+  }
+
+  /**
+   * Abre la elección anticipada de un puesto (renuncia, revocación o suspensión) con el mandato que
+   * faltaba. No la abre si ya hay una abierta de ese cargo y ámbito, ni si al mandato le quedan
+   * {@link ANTICIPADA_MINIMO_DIAS} días o menos. Con `db` (dentro de una transacción) comprueba antes
+   * si hay una abierta, porque un P2002 abortaría la transacción. Devuelve el id o `null`.
+   */
+  async anticipada(
+    p: { groupId: string; cargo: CargoTipoValue; mandatoHasta: Date | null },
+    now: Date,
+    db?: Prisma.TransactionClient,
+  ): Promise<string | null> {
+    if (p.mandatoHasta !== null && p.mandatoHasta.getTime() - now.getTime() <= ANTICIPADA_MINIMO_DIAS * DIA_MS) {
+      return null;
+    }
+    if (db) {
+      const abierta = await db.eleccion.findFirst({
+        where: { groupId: p.groupId, cargo: p.cargo, fase: { in: [...ABIERTA] } },
+        select: { id: true },
+      });
+      if (abierta) return null;
+    }
+    const fechas = { ...(await this.fechas(now)), ...(await this.reglasFijas(p.groupId, p.cargo)), mandatoHasta: p.mandatoHasta };
+    try {
+      const e = await this.crearUna(db ?? this.prisma, p.groupId, p.cargo, 1, 'anticipada', null, fechas);
+      this.auditarConvocada(e.id, p.cargo, 'anticipada', p.groupId);
+      return e.id;
+    } catch (err) {
+      if (!esDuplicado(err)) throw err;
+      return null;
+    }
   }
 
   // ---------------------------------------------------------------- disparadores
@@ -343,7 +375,14 @@ export class ConvocatoriaService {
     puestos: number,
     motivo: EleccionMotivoValue,
     jornadaId: string | null,
-    fechas: { candidaturasEndsAt: Date; votacionEndsAt: Date; quorumPct: number; periodoMeses: number; plenos: number },
+    fechas: {
+      candidaturasEndsAt: Date;
+      votacionEndsAt: Date;
+      quorumPct: number;
+      periodoMeses: number;
+      plenos: number;
+      mandatoHasta?: Date | null;
+    },
   ) {
     return db.eleccion.create({ data: { groupId, cargo, puestos, motivo, jornadaId, ...fechas } });
   }

@@ -18,6 +18,10 @@ export enum BoardActionType {
   change_rule = 'change_rule',
   /** Oculta una ficha de candidatura publicada. params: { candidaturaId, causa }. */
   ocultar_candidatura = 'ocultar_candidatura',
+  /** Reactiva a una persona suspendida. params: { solicitudId }. */
+  reactivate_user = 'reactivate_user',
+  /** Rechaza una solicitud de reactivación. params: { solicitudId }; el `reason` de la acción es el motivo que ve la persona. */
+  rechazar_reactivacion = 'rechazar_reactivacion',
 }
 
 export interface BoardSeatSummary {
@@ -36,6 +40,16 @@ export interface BoardActionSummary {
   status: 'pending' | 'approved' | 'rejected' | 'executed';
   proposedBy: string | null;
   approvals: { role: BoardRole; approve: boolean }[];
+  createdAt: string;
+}
+
+/** Pedido de reactivación pendiente, tal como lo ve la mesa (nombre visible, nunca el correo). */
+export interface ReactivacionPendiente {
+  id: string;
+  userId: string;
+  nombre: string;
+  motivoSuspension: string;
+  texto: string;
   createdAt: string;
 }
 

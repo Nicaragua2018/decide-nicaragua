@@ -1,6 +1,6 @@
 import { Body, Controller, Get, Param, ParseUUIDPipe, Post, Req, UseGuards } from '@nestjs/common';
 import type { Request } from 'express';
-import { BoardRole, type BoardActionSummary, type BoardSeatSummary, type JwtPayload } from '@decide/shared';
+import { BoardRole, type BoardActionSummary, type BoardSeatSummary, type JwtPayload, type ReactivacionPendiente } from '@decide/shared';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { extractIp } from '../common/utils/ip.util';
@@ -40,6 +40,13 @@ export class BoardController {
   @UseGuards(BoardGuard)
   async actions(): Promise<BoardActionSummary[]> {
     return this.board.listActions();
+  }
+
+  /** GET /api/board/reactivaciones — pedidos de reactivación pendientes (nombre visible, nunca el correo). */
+  @Get('reactivaciones')
+  @UseGuards(BoardGuard)
+  async reactivaciones(): Promise<ReactivacionPendiente[]> {
+    return this.board.listarReactivaciones();
   }
 
   @Post('actions')

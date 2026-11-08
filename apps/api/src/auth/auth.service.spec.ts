@@ -123,6 +123,7 @@ const groupsMock = {
 };
 
 let rulesMock: { getInt: ReturnType<typeof vi.fn> };
+let reactivacionMock: { firmarToken: ReturnType<typeof vi.fn> };
 
 // ─── Setup ────────────────────────────────────────────────────────────────────
 
@@ -165,6 +166,7 @@ describe('AuthService', () => {
     // Instanciación directa — sin NestJS DI, sin reflect-metadata en runtime
     rulesMock = { getInt: vi.fn().mockResolvedValue(5) };
     groupsMock.syncMemberships.mockResolvedValue(undefined);
+    reactivacionMock = { firmarToken: vi.fn().mockReturnValue('token.de.reactivacion') };
     service = new AuthService(
       prismaMock as unknown as PrismaService,
       redisMock as unknown as RedisService,
@@ -174,6 +176,7 @@ describe('AuthService', () => {
       configMock as unknown as ConfigService,
       groupsMock as never,
       rulesMock as never,
+      reactivacionMock as never,
     );
   });
 
@@ -446,6 +449,42 @@ describe('AuthService', () => {
       vi.mocked(bcrypt.compare).mockResolvedValue(true as never);
 
       await expect(service.login(dto, ip)).rejects.toThrow(ForbiddenException);
+    });
+
+    it('login de una cuenta suspendida da 403 con el token de reactivación y sin sesión', async () => {
+      prismaMock.user.findUnique.mockResolvedValue({ ...baseUser, status: AccountStatus.suspended });
+      vi.mocked(bcrypt.compare).mockResolvedValue(true as never);
+
+      const err = await service.login(dto, ip).catch((e: unknown) => e);
+
+      expect(err).toBeInstanceOf(ForbiddenException);
+      expect((err as ForbiddenException).getResponse()).toEqual({
+        codigo: 'cuenta_suspendida',
+        message: 'Tu cuenta está suspendida.',
+        reactivacionToken: 'token.de.reactivacion',
+      });
+      expect(reactivacionMock.firmarToken).toHaveBeenCalledWith(USER_ID);
+      expect(jwtMock.sign).not.toHaveBeenCalled();
+      expect(redisMock.set).not.toHaveBeenCalled();
+      expect(prismaMock.user.update).not.toHaveBeenCalled();
+    });
+
+    it('una cuenta suspendida con la contraseña incorrecta recibe el 401 de siempre (no se revela la suspensión)', async () => {
+      prismaMock.user.findUnique.mockResolvedValue({ ...baseUser, status: AccountStatus.suspended });
+      vi.mocked(bcrypt.compare).mockResolvedValue(false as never);
+
+      await expect(service.login(dto, ip)).rejects.toThrow(UnauthorizedException);
+      expect(reactivacionMock.firmarToken).not.toHaveBeenCalled();
+    });
+
+    it('los demás estados sin acceso siguen con el 403 de siempre', async () => {
+      prismaMock.user.findUnique.mockResolvedValue({ ...baseUser, status: AccountStatus.rejected });
+      vi.mocked(bcrypt.compare).mockResolvedValue(true as never);
+
+      const err = await service.login(dto, ip).catch((e: unknown) => e);
+      expect(err).toBeInstanceOf(ForbiddenException);
+      expect((err as Error).message).toBe('Account not active (status: rejected)');
+      expect(reactivacionMock.firmarToken).not.toHaveBeenCalled();
     });
 
     it('permite login a observer y external_collaborator', async () => {

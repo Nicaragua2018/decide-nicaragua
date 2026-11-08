@@ -1,11 +1,14 @@
 import { Injectable } from '@nestjs/common';
 import { createHash } from 'node:crypto';
+import { CARGO_ETIQUETA } from '@decide/shared';
 import type { AlDiaView, ItemAlDia } from '@decide/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { RedisService } from '../redis/redis.service';
 import { AsistenteService } from './asistente.service';
 import { conLimite } from './con-limite';
 import { ContextoPersonaService } from './contexto-persona.service';
+// Solo la función pura: el módulo de elecciones importa el del asistente (importarlo aquí haría un ciclo).
+import { filtroElectorado } from '../elecciones/convocatoria.service';
 
 const HORA_MS = 3_600_000;
 const DIA_MS = 24 * HORA_MS;
@@ -19,6 +22,8 @@ const CACHE_SEGUNDOS = 12 * 3600;
 const TIEMPO_MAXIMO_MS = 8000;
 /** Tiempo máximo de cada operación de Redis: un Redis caído no puede demorar la tarjeta. */
 const REDIS_MAXIMO_MS = 300;
+
+const FECHA_CORTA = new Intl.DateTimeFormat('es-NI', { timeZone: 'America/Managua', day: 'numeric', month: 'long' });
 
 export const VISTA_VACIA: AlDiaView = { mostrar: false, desde: null, items: [], resumen: null };
 
@@ -73,6 +78,8 @@ const ETIQUETA: Record<ItemAlDia['clase'], string> = {
   decision: 'Resultado de una decisión',
   informe: 'Informe de una comisión',
   umbral: 'Una inquietud llegó al apoyo necesario',
+  eleccion_candidaturas: 'Elecciones',
+  eleccion_votar: 'Elecciones',
 };
 
 const PALABRA_RESULTADO: Record<string, string> = {
@@ -123,7 +130,6 @@ export class AlDiaService {
 
   private async armarItems(profileId: string, desde: Date, ahora: Date): Promise<ItemAlDia[]> {
     const legibles = await this.contexto.gruposLegibles(profileId);
-    if (legibles.length === 0) return [];
     const ids = legibles.map((g) => g.id);
     const nombre = new Map(legibles.map((g) => [g.id, g.nombre]));
     const comunidad = (id: string) => nombre.get(id) ?? '';
@@ -172,6 +178,7 @@ export class AlDiaService {
     ]);
 
     const items: ItemInterno[] = [];
+    items.push(...(await this.itemsElecciones(profileId, enVentana, ahora)));
     for (const d of debates) {
       items.push({ clase: 'debate', titulo: d.title, comunidad: comunidad(d.groupId), ruta: `/proposals/${d.id}`, fecha: d.createdAt.toISOString() });
     }
@@ -231,6 +238,60 @@ export class AlDiaService {
       return b.fecha.localeCompare(a.fecha);
     });
     return items.slice(0, MAX_ITEMS).map(({ _cierra: _omitido, ...item }) => item);
+  }
+
+  /** Elecciones abiertas en la ventana (candidaturas) o con la votación abierta, solo si la persona está en su electorado. */
+  private async itemsElecciones(profileId: string, enVentana: { gte: Date; lte: Date }, ahora: Date): Promise<ItemInterno[]> {
+    const select = { id: true, groupId: true, cargo: true, candidaturasEndsAt: true, votacionEndsAt: true, group: { select: { name: true } } };
+    const [abiertas, votando] = await Promise.all([
+      this.prisma.eleccion.findMany({
+        where: { fase: 'candidaturas', createdAt: enVentana },
+        select,
+        orderBy: { createdAt: 'desc' },
+        take: MAX_ITEMS,
+      }),
+      this.prisma.eleccion.findMany({
+        where: { fase: 'votacion', votacionEndsAt: { gt: ahora } },
+        select,
+        orderBy: { votacionEndsAt: 'asc' },
+        take: MAX_ITEMS,
+      }),
+    ]);
+    if (abiertas.length === 0 && votando.length === 0) return [];
+
+    const enElectorado = async (e: { groupId: string; cargo: (typeof abiertas)[number]['cargo'] }) =>
+      (await this.prisma.profile.count({ where: { id: profileId, ...filtroElectorado({ groupId: e.groupId, cargo: e.cargo }) } })) > 0;
+
+    const items: ItemInterno[] = [];
+    for (const e of abiertas) {
+      if (!(await enElectorado(e))) continue;
+      items.push({
+        clase: 'eleccion_candidaturas',
+        titulo: `Se abrieron las candidaturas para ${CARGO_ETIQUETA[e.cargo]}${e.cargo === 'coordinador' ? ` · ${e.group.name}` : ''}`,
+        comunidad: e.group.name,
+        ruta: `/elecciones/${e.id}`,
+        fecha: e.candidaturasEndsAt.toISOString(),
+      });
+    }
+    if (votando.length > 0) {
+      const ya = await this.prisma.papeletaEleccion.findMany({
+        where: { profileId, eleccionId: { in: votando.map((e) => e.id) } },
+        select: { eleccionId: true },
+      });
+      const votadas = new Set(ya.map((p) => p.eleccionId));
+      for (const e of votando) {
+        if (votadas.has(e.id) || !(await enElectorado(e))) continue;
+        items.push({
+          clase: 'eleccion_votar',
+          titulo: `Vota antes del ${FECHA_CORTA.format(e.votacionEndsAt)}`,
+          comunidad: e.group.name,
+          ruta: `/elecciones/${e.id}`,
+          fecha: e.votacionEndsAt.toISOString(),
+          _cierra: e.votacionEndsAt.getTime(),
+        });
+      }
+    }
+    return items;
   }
 
   /** Resumen en caché por perfil y ventana; null si el asistente no responde. Redis lento o caído no lo impide. */

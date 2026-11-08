@@ -41,9 +41,10 @@ describe('RULE_DEFINITIONS', () => {
     expect([plazo.level, plazo.default, plazo.min, plazo.max, plazo.unit]).toEqual(['local', '14', 7, 60, 'dias']);
   });
 
-  it('las reglas de elecciones están conectadas y revocacion.fraccion no', () => {
+  it('todas las reglas están conectadas, también revocacion.fraccion (33)', () => {
     const sinConectar = RULE_DEFINITIONS.filter((d) => !d.conectada).map((d) => d.key);
-    expect(sinConectar).toEqual(['revocacion.fraccion']);
+    expect(sinConectar).toEqual([]);
+    expect(ruleDefinition('revocacion.fraccion')).toMatchObject({ conectada: true, default: '33' });
     expect(ruleDefinition('invitaciones.pendientes_max').conectada).toBe(true);
     expect(ruleDefinition('reglas.participacion_minima').conectada).toBe(true);
     expect(ruleDefinition('comision.forma').conectada).toBe(true);

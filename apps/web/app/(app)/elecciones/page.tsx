@@ -1,7 +1,8 @@
 import Link from 'next/link';
 import type { Metadata } from 'next';
-import type { EleccionResumen } from '@decide/shared';
+import type { EleccionResumen, MiCargoVista } from '@decide/shared';
 import { serverFetch } from '@/lib/api';
+import { MisCargos } from './MisCargos';
 import { LineaDeTiempo } from '@/components/elecciones/LineaDeTiempo';
 import { cuentaAtras, puestosTexto, tituloEleccion } from '@/components/elecciones/textos';
 
@@ -11,6 +12,7 @@ const MOTIVO: Record<EleccionResumen['motivo'], string> = {
   primera: 'Primera elección',
   renovacion: 'Renovación',
   reintento: 'Se repite: quedó un puesto sin elegir',
+  anticipada: 'Elección anticipada',
 };
 
 /** El único botón con la acción del momento. */
@@ -55,8 +57,9 @@ function Tarjeta({ e, ahora }: { e: EleccionResumen; ahora: number }) {
 }
 
 export default async function EleccionesPage() {
-  const res = await serverFetch('/api/elecciones');
+  const [res, cargosRes] = await Promise.all([serverFetch('/api/elecciones'), serverFetch('/api/elecciones/mis-cargos')]);
   const lista = res.ok ? ((await res.json()) as EleccionResumen[]) : null;
+  const misCargos = cargosRes.ok ? ((await cargosRes.json()) as MiCargoVista[]) : [];
   const ahora = Date.now();
 
   return (
@@ -80,8 +83,12 @@ export default async function EleccionesPage() {
         </div>
       )}
 
+      <MisCargos cargos={misCargos} />
+
       <p className="mt-4">
         <Link href="/representantes">Quiénes nos representan</Link>
+        {' · '}
+        <Link href="/elecciones/revocaciones">Pedir la revocación de un cargo</Link>
       </p>
     </div>
   );

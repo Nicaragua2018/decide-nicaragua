@@ -21,6 +21,26 @@ export interface AuditEventParams {
   metadata?: Record<string, unknown>;
 }
 
+const CLAVE_CORREO = /e-?mail/i;
+const PARECE_CORREO = /@.*\./;
+
+/**
+ * Los metadatos del registro son públicos para quien lo lee: se quitan las claves de correo y se
+ * tapa cualquier texto con forma de correo. Lo guardado no cambia; se filtra solo al leer.
+ */
+export function ocultarCorreos(v: unknown): unknown {
+  if (typeof v === 'string') return PARECE_CORREO.test(v) ? '[oculto]' : v;
+  if (Array.isArray(v)) return v.map(ocultarCorreos);
+  if (v !== null && typeof v === 'object') {
+    return Object.fromEntries(
+      Object.entries(v as Record<string, unknown>)
+        .filter(([k]) => !CLAVE_CORREO.test(k))
+        .map(([k, x]) => [k, ocultarCorreos(x)]),
+    );
+  }
+  return v;
+}
+
 @Injectable()
 export class AuditService {
   private readonly logger = new Logger(AuditService.name);
@@ -103,7 +123,7 @@ export class AuditService {
       action: e.action,
       resource: e.resource,
       actorDisplayName: e.actor?.profile?.displayName ?? null,
-      metadata: e.metadata as Record<string, unknown> | null,
+      metadata: ocultarCorreos(e.metadata) as Record<string, unknown> | null,
     }));
 
     return { events, total, page, limit };
@@ -140,7 +160,7 @@ export class AuditService {
       action: event.action,
       resource: event.resource,
       actorDisplayName: event.actor?.profile?.displayName ?? null,
-      metadata: event.metadata as Record<string, unknown> | null,
+      metadata: ocultarCorreos(event.metadata) as Record<string, unknown> | null,
     };
   }
 

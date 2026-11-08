@@ -1,6 +1,6 @@
 import 'reflect-metadata';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { BadRequestException, ForbiddenException, HttpException } from '@nestjs/common';
+import { BadRequestException, ConflictException, ForbiddenException, HttpException, Logger } from '@nestjs/common';
 import { validate } from 'class-validator';
 import { plainToInstance } from 'class-transformer';
 import { EleccionesService } from './elecciones.service';
@@ -71,8 +71,13 @@ function buildPrisma() {
       updateMany: vi.fn().mockResolvedValue({ count: 1 }),
     },
     boardAction: { updateMany: vi.fn().mockResolvedValue({ count: 0 }) },
-    cargo: { findMany: vi.fn().mockResolvedValue([]) },
-    boardSeat: { findMany: vi.fn().mockResolvedValue([]) },
+    cargo: {
+      findMany: vi.fn().mockResolvedValue([]),
+      findFirst: vi.fn().mockResolvedValue(null),
+      updateMany: vi.fn().mockResolvedValue({ count: 1 }),
+    },
+    boardSeat: { findMany: vi.fn().mockResolvedValue([]), deleteMany: vi.fn().mockResolvedValue({ count: 1 }) },
+    revocacion: { updateMany: vi.fn().mockResolvedValue({ count: 0 }) },
     papeletaEleccion: {
       findUnique: vi.fn().mockResolvedValue(null),
       findMany: vi.fn().mockResolvedValue([]),
@@ -80,6 +85,9 @@ function buildPrisma() {
       count: vi.fn().mockResolvedValue(0),
     },
     group: { findMany: vi.fn().mockResolvedValue([]) },
+    observacionPublica: { findMany: vi.fn().mockResolvedValue([]) },
+    profile: { findMany: vi.fn().mockResolvedValue([]) },
+    auditEvent: { findMany: vi.fn().mockResolvedValue([]) },
     $queryRaw: vi.fn().mockResolvedValue([{ id: E }]),
     $transaction: vi.fn(),
   };
@@ -88,16 +96,18 @@ function buildPrisma() {
 describe('EleccionesService', () => {
   let prisma: ReturnType<typeof buildPrisma>;
   let audit: { log: ReturnType<typeof vi.fn> };
-  let convocatoria: { enElectorado: ReturnType<typeof vi.fn> };
+  let convocatoria: { enElectorado: ReturnType<typeof vi.fn>; anticipada: ReturnType<typeof vi.fn> };
   let guardia: ReturnType<typeof guardiaMock>;
   let publicadores: ReturnType<typeof publicadoresMock>;
+  let revocacion: { resumenPorCargo: ReturnType<typeof vi.fn> };
+  let board: { registrarAlSuspender: ReturnType<typeof vi.fn> };
   let service: EleccionesService;
 
   beforeEach(() => {
     prisma = buildPrisma();
     prisma.$transaction.mockImplementation(async (fn: (tx: unknown) => unknown) => fn(prisma));
     audit = { log: vi.fn().mockResolvedValue(undefined) };
-    convocatoria = { enElectorado: vi.fn().mockResolvedValue(true) };
+    convocatoria = { enElectorado: vi.fn().mockResolvedValue(true), anticipada: vi.fn().mockResolvedValue('e-ant') };
     guardia = guardiaMock();
     service = new EleccionesService(
       prisma as never,
@@ -105,7 +115,19 @@ describe('EleccionesService', () => {
       convocatoria as never,
       guardia as never,
       (publicadores = publicadoresMock()) as never,
+      (revocacion = { resumenPorCargo: vi.fn().mockResolvedValue(new Map()) }) as never,
+      (board = { registrarAlSuspender: vi.fn() }) as never,
     );
+  });
+
+  it('al iniciar, un puesto que deja vacante una suspensión abre su elección anticipada', async () => {
+    service.onModuleInit();
+    expect(board.registrarAlSuspender).toHaveBeenCalledTimes(1);
+    const gancho = board.registrarAlSuspender.mock.calls[0]![0] as (p: unknown) => Promise<unknown>;
+    const hasta = new Date('2027-06-01T00:00:00Z');
+    await expect(gancho({ groupId: 'g-general', cargo: 'secretario', mandatoHasta: hasta })).resolves.toBe('e-ant');
+    expect(convocatoria.anticipada).toHaveBeenCalledWith({ groupId: 'g-general', cargo: 'secretario', mandatoHasta: hasta }, expect.any(Date));
+    expect(convocatoria.anticipada.mock.calls[0]).toHaveLength(2); // sin transacción: audita al momento
   });
 
   const ficha = { presentacion: 'Quiero servir a la colmena.', compromisos: ['Rendir cuentas cada mes'] };
@@ -456,6 +478,25 @@ describe('EleccionesService', () => {
     expect(where.OR[1].fase).toBe('contada');
   });
 
+  it('una observación publicada aparece en representantes con el nombre visible', async () => {
+    const t = new Date('2027-03-02T10:00:00Z');
+    const e = new Date('2027-03-01T09:00:00Z');
+    prisma.observacionPublica.findMany.mockResolvedValue([
+      { id: 'o1', autorProfileId: 'p3', auditEventId: 'ev1', texto: 'Esto no cuadra.', createdAt: t },
+      { id: 'o2', autorProfileId: 'p3', auditEventId: 'ev-borrado', texto: 'Otra.', createdAt: t },
+    ]);
+    prisma.profile.findMany.mockResolvedValue([{ id: 'p3', displayName: 'Eva Paz' }]);
+    prisma.auditEvent.findMany.mockResolvedValue([{ id: 'ev1', action: 'voto.emitido', createdAt: e }]);
+    const r = await service.representantes();
+    expect(prisma.observacionPublica.findMany.mock.calls[0]![0]).toMatchObject({ take: 20, orderBy: { createdAt: 'desc' } });
+    expect(r.observaciones).toEqual([
+      {
+        id: 'o1', autor: 'Eva Paz', iniciales: 'EP', texto: 'Esto no cuadra.',
+        evento: { action: 'voto.emitido', createdAt: e.toISOString() }, createdAt: t.toISOString(),
+      },
+    ]);
+  });
+
   it('representantes es público y no expone correos', async () => {
     const desde = new Date('2027-01-01T00:00:00Z');
     const hasta = new Date('2028-01-01T00:00:00Z');
@@ -465,9 +506,9 @@ describe('EleccionesService', () => {
       { role: 'secretario', source: 'eleccion', since: desde, profileId: 'p2', profile: prof('Luis Mora') },
     ]);
     prisma.cargo.findMany.mockResolvedValue([
-      { tipo: 'secretario', groupId: GEN, profileId: 'p2', desde, hasta, enFunciones: false, profile: prof('Luis Mora') },
-      { tipo: 'observador', groupId: GEN, profileId: 'p3', desde, hasta, enFunciones: false, profile: prof('Eva Paz') },
-      { tipo: 'coordinador', groupId: 'g-leon', profileId: 'p4', desde, hasta, enFunciones: true, profile: prof('Juan Gil') },
+      { id: 'c-sec', tipo: 'secretario', groupId: GEN, profileId: 'p2', desde, hasta, enFunciones: false, profile: prof('Luis Mora') },
+      { id: 'c-obs', tipo: 'observador', groupId: GEN, profileId: 'p3', desde, hasta, enFunciones: false, profile: prof('Eva Paz') },
+      { id: 'c-coo', tipo: 'coordinador', groupId: 'g-leon', profileId: 'p4', desde, hasta, enFunciones: true, profile: prof('Juan Gil') },
     ]);
     prisma.group.findMany.mockResolvedValue([
       { id: 'g-leon', name: 'León', activadaAt: desde },
@@ -477,17 +518,25 @@ describe('EleccionesService', () => {
     const r = await service.representantes();
 
     expect(r.mesa).toEqual([
-      { tipo: 'administrador', nombre: 'Ana Ruiz', iniciales: 'AR', desde: desde.toISOString(), hasta: null, enFunciones: true, fundador: true },
-      { tipo: 'secretario', nombre: 'Luis Mora', iniciales: 'LM', desde: desde.toISOString(), hasta: hasta.toISOString(), enFunciones: false, fundador: false },
+      { tipo: 'administrador', nombre: 'Ana Ruiz', iniciales: 'AR', desde: desde.toISOString(), hasta: null, enFunciones: true, fundador: true, cargoId: null, revocacion: null },
+      { tipo: 'secretario', nombre: 'Luis Mora', iniciales: 'LM', desde: desde.toISOString(), hasta: hasta.toISOString(), enFunciones: false, fundador: false, cargoId: 'c-sec', revocacion: null },
     ]);
-    expect(r.observadores).toEqual([{ nombre: 'Eva Paz', iniciales: 'EP', desde: desde.toISOString(), hasta: hasta.toISOString() }]);
+    expect(r.observadores).toEqual([{ nombre: 'Eva Paz', iniciales: 'EP', desde: desde.toISOString(), hasta: hasta.toISOString(), cargoId: 'c-obs', revocacion: null }]);
     expect(r.comunidades).toEqual([
       { id: 'g-leon', nombre: 'León', activa: true, eleccionAbierta: false, coordinadores: [
-        { nombre: 'Juan Gil', iniciales: 'JG', desde: desde.toISOString(), hasta: hasta.toISOString(), enFunciones: true },
+        { nombre: 'Juan Gil', iniciales: 'JG', desde: desde.toISOString(), hasta: hasta.toISOString(), enFunciones: true, cargoId: 'c-coo', revocacion: null },
       ] },
       { id: 'g-cr', nombre: 'Costa Rica', activa: false, eleccionAbierta: true, coordinadores: [] },
     ]);
+    expect(r.observaciones).toEqual([]);
     expect(JSON.stringify(r)).not.toContain('@');
+
+    // Con un pedido de revocación abierto, el cargo muestra cuánto apoyo lleva.
+    const resumen = { apoyos: 3, umbral: 4, venceAt: hasta.toISOString() };
+    revocacion.resumenPorCargo.mockResolvedValue(new Map([['c-obs', resumen]]));
+    const conPedido = await service.representantes();
+    expect(conPedido.observadores[0]!.revocacion).toEqual(resumen);
+    expect(conPedido.mesa[1]!.revocacion).toBeNull();
     // Sin guard: también para visitantes. El resto de elecciones pide sesión.
     expect(Reflect.getMetadata('__guards__', RepresentantesController)).toBeUndefined();
     expect(Reflect.getMetadata('__guards__', EleccionesController)).toHaveLength(1);
@@ -510,6 +559,83 @@ describe('EleccionesService', () => {
 
       expect(await validate(plainToInstance(PapeletaEleccionDto, { abstencion: false, orden: [] }))).toHaveLength(0);
       expect(await validate(plainToInstance(PapeletaEleccionDto, { abstencion: 'no', orden: ['x'] }))).toHaveLength(2);
+    });
+  });
+
+  describe('mis cargos y renuncia', () => {
+    const NOW = new Date('2027-01-20T12:00:00Z');
+    const HASTA = new Date(NOW.getTime() + 200 * DIA);
+    const cargoSec = { tipo: 'secretario', groupId: GEN, hasta: HASTA };
+
+    it('misCargos da la comunidad solo a coordinadores y puedeRenunciar según enFunciones', async () => {
+      prisma.cargo.findMany.mockResolvedValue([
+        { id: 'c1', tipo: 'secretario', desde: NOW, hasta: HASTA, enFunciones: false, group: { name: 'Nicaragua Decide' } },
+        { id: 'c2', tipo: 'coordinador', desde: NOW, hasta: HASTA, enFunciones: true, group: { name: 'Managua' } },
+      ]);
+      const r = await service.misCargos(YO);
+      expect(r[0]).toMatchObject({ id: 'c1', comunidad: null, puedeRenunciar: true });
+      expect(r[1]).toMatchObject({ id: 'c2', comunidad: 'Managua', enFunciones: true, puedeRenunciar: false });
+    });
+
+    it('renunciar termina el cargo, libera el asiento y abre la anticipada', async () => {
+      prisma.cargo.findFirst.mockResolvedValue(cargoSec);
+      await service.renunciar(YO, 'c1', NOW);
+      expect(prisma.cargo.updateMany).toHaveBeenCalledWith({
+        where: { id: 'c1', profileId: YO, terminadoAt: null },
+        data: { terminadoAt: NOW, finCausa: 'renuncia', enFunciones: false },
+      });
+      expect(prisma.boardSeat.deleteMany).toHaveBeenCalledWith({ where: { role: 'secretario', profileId: YO } });
+      expect(convocatoria.anticipada).toHaveBeenCalledWith({ groupId: GEN, cargo: 'secretario', mandatoHasta: HASTA }, NOW);
+      expect(audit.log).toHaveBeenCalledWith(
+        expect.objectContaining({ action: 'cargo.renuncia', metadata: { tipo: 'secretario', groupId: GEN } }),
+      );
+    });
+
+    it('renunciar cierra el pedido de revocación abierto del cargo, dentro de la transacción', async () => {
+      prisma.cargo.findFirst.mockResolvedValue(cargoSec);
+      await service.renunciar(YO, 'c1', NOW);
+      expect(prisma.revocacion.updateMany).toHaveBeenCalledWith({
+        where: { cargoId: 'c1', estado: 'abierta' },
+        data: { estado: 'vencida' },
+      });
+      expect(prisma.revocacion.updateMany.mock.invocationCallOrder[0]!).toBeLessThan(
+        convocatoria.anticipada.mock.invocationCallOrder[0]!,
+      );
+    });
+
+    it('si la anticipada falla tras la renuncia, la renuncia se confirma, se audita y solo se avisa en el log', async () => {
+      const warn = vi.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
+      prisma.cargo.findFirst.mockResolvedValue(cargoSec);
+      convocatoria.anticipada.mockRejectedValue(new Error('boom'));
+      await expect(service.renunciar(YO, 'c1', NOW)).resolves.toBeUndefined();
+      expect(audit.log).toHaveBeenCalledWith(expect.objectContaining({ action: 'cargo.renuncia' }));
+      expect(audit.log.mock.invocationCallOrder[0]!).toBeLessThan(convocatoria.anticipada.mock.invocationCallOrder[0]!);
+      expect(warn).toHaveBeenCalled();
+      warn.mockRestore();
+    });
+
+    it('renunciar un cargo de coordinador no toca la mesa', async () => {
+      prisma.cargo.findFirst.mockResolvedValue({ tipo: 'coordinador', groupId: 'g-com', hasta: HASTA });
+      await service.renunciar(YO, 'c1', NOW);
+      expect(prisma.boardSeat.deleteMany).not.toHaveBeenCalled();
+      expect(convocatoria.anticipada).toHaveBeenCalled();
+    });
+
+    it('renunciar dos veces da 409 y no abre otra', async () => {
+      prisma.cargo.findFirst.mockResolvedValue(cargoSec);
+      await service.renunciar(YO, 'c1', NOW);
+      convocatoria.anticipada.mockClear();
+      prisma.cargo.findFirst.mockResolvedValue(null);
+      await expect(service.renunciar(YO, 'c1', NOW)).rejects.toBeInstanceOf(ConflictException);
+      expect(convocatoria.anticipada).not.toHaveBeenCalled();
+    });
+
+    it('renunciar un cargo ajeno (updateMany cuenta 0) da 409', async () => {
+      prisma.cargo.findFirst.mockResolvedValue(cargoSec);
+      prisma.cargo.updateMany.mockResolvedValue({ count: 0 });
+      await expect(service.renunciar(YO, 'c1', NOW)).rejects.toThrow('Este cargo ya terminó.');
+      expect(prisma.boardSeat.deleteMany).not.toHaveBeenCalled();
+      expect(convocatoria.anticipada).not.toHaveBeenCalled();
     });
   });
 });

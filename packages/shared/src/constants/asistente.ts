@@ -11,7 +11,9 @@ export type TipoTexto =
   | 'informe'
   | 'motivo_regla'
   | 'subgrupo'
-  | 'candidatura';
+  | 'candidatura'
+  | 'revocacion'
+  | 'observacion';
 
 /** 0 = sin problema, 1 = aviso al autor, 2 = no se publica sin la mesa. */
 export type NivelRevision = 0 | 1 | 2;
@@ -61,6 +63,8 @@ export const TIPOS_TEXTO: readonly TipoTexto[] = [
   'motivo_regla',
   'subgrupo',
   'candidatura',
+  'revocacion',
+  'observacion',
 ];
 
 /**
@@ -90,7 +94,7 @@ export type RespuestaPanel =
 
 /** Una novedad de la tarjeta «Al día». */
 export interface ItemAlDia {
-  clase: 'debate' | 'votacion_abierta' | 'votacion_cierra' | 'decision' | 'informe' | 'umbral';
+  clase: 'debate' | 'votacion_abierta' | 'votacion_cierra' | 'decision' | 'informe' | 'umbral' | 'eleccion_candidaturas' | 'eleccion_votar';
   titulo: string;
   comunidad: string;
   ruta: string;

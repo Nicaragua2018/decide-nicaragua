@@ -76,7 +76,22 @@ La plataforma elige a quienes la representan, sin intervención humana en la con
 - [x] Coordinadores de comunidad con moderación en su comunidad (no en bifurcaciones)
 - [x] Páginas «Elecciones» y «Quiénes nos representan»; la guía del asistente las explica sin recomendar candidaturas
 
-**Sigue:** 3C-2: revocación, renuncia, vacantes, mesa incompleta, reactivación de cuentas, página de observadores, elecciones en «Desde tu última visita» y moderación posterior de fichas.
+**Sigue:** 3C-2 (hecho; ver abajo).
+
+---
+
+## Primeros 200 — Plan 3C-2 (cuidar los cargos): COMPLETO
+
+Los cargos se pueden dejar, pedir que se repitan o perder, sin que nadie quede sin mesa (ADR-029):
+
+- [x] Revocación: cualquier persona verificada pide repetir un cargo y los apoyos son secretos; la fracción sale de la regla `revocacion.fraccion`
+- [x] Renuncia a un cargo elegido (los fundadores no renuncian) y elección anticipada, salvo con 45 días o menos de mandato
+- [x] La suspensión quita también los asientos fundadores y abre anticipadas
+- [x] Mesa incompleta: 2 observadores provisionales firman solo las dos revisiones de 2 firmas
+- [x] Reactivación de cuentas: pase de 30 minutos, pedido a la mesa, 2 de 3 para reactivar o rechazar, estado previo restaurado
+- [x] Página «Observar»: auditoría, verificaciones, matrices y gastos, con observaciones públicas revisadas; sin correos en los metadatos
+
+**Sigue:** moderación posterior de fichas.
 
 ---
 

@@ -3,7 +3,7 @@
 import { cookies } from 'next/headers';
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
-import { COMPROMISOS_MAX, MODERACION_CAUSAS, type RevisionTexto, type TipoTexto } from '@decide/shared';
+import { COMPROMISOS_MAX, MODERACION_CAUSAS, type CasoSuspension, type RevisionTexto, type TipoTexto } from '@decide/shared';
 
 const API_URL = process.env.API_URL ?? 'http://localhost:4000';
 
@@ -375,7 +375,13 @@ export async function assignSeat(_prev: ActionResult | null, formData: FormData)
 
 export async function proposeBoardAction(_prev: ActionResult | null, formData: FormData): Promise<ActionResult> {
   const type = formData.get('type');
-  const params = type === 'change_origin' ? { birthDepartment: formData.get('birthDepartment') } : {};
+  const solicitudId = formData.get('solicitudId');
+  const params =
+    type === 'change_origin'
+      ? { birthDepartment: formData.get('birthDepartment') }
+      : type === 'reactivate_user' || type === 'rechazar_reactivacion'
+        ? { solicitudId }
+        : {};
   const res = await actionFetch('/api/board/actions', {
     method: 'POST',
     body: JSON.stringify({ type, targetUserId: formData.get('targetUserId'), reason: formData.get('reason'), params }),
@@ -990,5 +996,94 @@ export async function pedirOcultarCandidatura(
   if (!res.ok) return { error: await parseError(res) };
   revalidatePath('/admin/mesa');
   revalidatePath(`/elecciones/${eleccionId}`);
+  return { success: true };
+}
+
+// ─── Cuidar los cargos (3C-2) ─────────────────────────────────────────────────
+
+/** Pedir que un cargo se vote de nuevo. Pasa por la revisión previa del motivo. */
+export async function pedirRevocacion(cargoId: string, _prev: ActionResult | null, formData: FormData): Promise<ActionResult> {
+  if (!isUuid(cargoId)) return { error: 'Elige primero un cargo de la lista.' };
+  const res = await actionFetch(`/api/elecciones/cargos/${cargoId}/revocacion`, {
+    method: 'POST',
+    body: JSON.stringify({ motivo: String(formData.get('motivo') ?? ''), ...pedirRevision(formData) }),
+  });
+  const rev = await respuestaDeRevision(res);
+  if (rev) return rev;
+  if (!res.ok) return { error: await parseError(res) };
+  revalidatePath('/elecciones/revocaciones');
+  revalidatePath('/representantes');
+  return { success: true };
+}
+
+/** Sumar o quitar el apoyo propio a un pedido de revocación abierto. */
+export async function apoyarRevocacion(id: string, apoyar: boolean): Promise<ActionResult> {
+  if (!isUuid(id) || typeof apoyar !== 'boolean') return INVALID;
+  const res = await actionFetch(`/api/elecciones/revocaciones/${id}/apoyo`, { method: apoyar ? 'PUT' : 'DELETE' });
+  if (!res.ok) return { error: await parseError(res) };
+  revalidatePath('/elecciones/revocaciones');
+  revalidatePath('/representantes');
+  return { success: true };
+}
+
+/** Dejar un cargo propio. La API abre la elección que lo cubre. */
+export async function renunciarCargo(cargoId: string): Promise<ActionResult> {
+  if (!isUuid(cargoId)) return INVALID;
+  const res = await actionFetch(`/api/elecciones/cargos/${cargoId}/renuncia`, { method: 'POST' });
+  if (!res.ok) return { error: await parseError(res) };
+  revalidatePath('/elecciones');
+  revalidatePath('/representantes');
+  return { success: true };
+}
+
+// ─── Reactivación y observación (3C-2) ────────────────────────────────────────
+
+const SIN_PASE = 'Vuelve a entrar con tu contraseña para ver tu caso.';
+
+/**
+ * Llama a una ruta de reactivación reenviando la IP real del cliente: el límite de intentos cuenta
+ * por persona y no por la IP compartida del servidor web. Un 429 se muestra en español.
+ */
+async function reactivacionFetch(path: string, body: Record<string, string>): Promise<{ caso: CasoSuspension } | { error: string }> {
+  const { headers: nextHeaders } = await import('next/headers');
+  const headerStore = await nextHeaders();
+  const clientIp = headerStore.get('x-forwarded-for') ?? headerStore.get('x-real-ip') ?? '';
+  const res = await fetch(`${API_URL}${path}`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(clientIp ? { 'x-forwarded-for': clientIp } : {}),
+    },
+    body: JSON.stringify(body),
+  });
+  if (res.status === 429) return { error: 'Demasiados intentos. Espera unos minutos y vuelve a intentarlo.' };
+  if (!res.ok) return { error: await parseError(res) };
+  return { caso: (await res.json()) as CasoSuspension };
+}
+
+/** Ver el caso de la cuenta suspendida. Se llama una sola vez por carga de la página (tiene su propio límite de intentos). */
+export async function verCasoSuspension(token: string): Promise<{ caso: CasoSuspension } | { error: string }> {
+  if (typeof token !== 'string' || token.length === 0) return { error: SIN_PASE };
+  return reactivacionFetch('/api/auth/reactivacion/caso', { token });
+}
+
+/** Pedir la reactivación de la cuenta suspendida. Usa el pase de 30 minutos que dio el inicio de sesión. */
+export async function pedirReactivacion(token: string, texto: string): Promise<{ caso: CasoSuspension } | { error: string }> {
+  if (typeof token !== 'string' || token.length === 0) return { error: SIN_PASE };
+  return reactivacionFetch('/api/auth/reactivacion', { token, texto });
+}
+
+/** Dejar una observación pública sobre un hecho del registro. Pasa por la revisión previa. */
+export async function dejarObservacion(auditEventId: string, _prev: ActionResult | null, formData: FormData): Promise<ActionResult> {
+  if (!isUuid(auditEventId)) return INVALID;
+  const res = await actionFetch('/api/observar/observaciones', {
+    method: 'POST',
+    body: JSON.stringify({ auditEventId, texto: String(formData.get('texto') ?? ''), ...pedirRevision(formData) }),
+  });
+  const rev = await respuestaDeRevision(res);
+  if (rev) return rev;
+  if (!res.ok) return { error: await parseError(res) };
+  revalidatePath('/observar');
+  revalidatePath('/representantes');
   return { success: true };
 }

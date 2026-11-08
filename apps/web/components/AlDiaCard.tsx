@@ -13,6 +13,8 @@ const ETIQUETA: Record<ItemAlDia['clase'], string> = {
   decision: 'Decisión',
   informe: 'Informe de comisión',
   umbral: 'Inquietud que pide respuesta',
+  eleccion_candidaturas: 'Elecciones',
+  eleccion_votar: 'Elecciones',
 };
 
 export default function AlDiaCard({ resumen, items }: { resumen: string | null; items: ItemAlDia[] }) {

@@ -529,7 +529,8 @@ export class ForumsService {
    * si el vencimiento u otra persona la resolvió antes, responde 409 sin tocar el contenido.
    */
   async confirmar(profileId: string, moderationId: string, aprobar: boolean, ip: string): Promise<void> {
-    if (!(await this.esMesa(profileId))) {
+    // También un suplente provisional cuando la mesa está incompleta (no las apelaciones).
+    if (!(await this.board.puedeFirmarRevision(profileId))) {
       throw new ForbiddenException('Solo la mesa directiva confirma las solicitudes de moderación.');
     }
     const action = await this.prisma.moderationAction.findUnique({ where: { id: moderationId } });
@@ -602,9 +603,9 @@ export class ForumsService {
     this.auditarCanceladas(canceladas, actor, ip);
   }
 
-  /** Cola de solicitudes que esperan la segunda firma. Solo la mesa la ve, con el texto original. */
+  /** Cola de solicitudes que esperan la segunda firma. Solo la mesa (o un suplente) la ve, con el texto original. */
   async listPorConfirmar(profileId: string): Promise<ModeracionPorConfirmar[]> {
-    if (!(await this.esMesa(profileId))) {
+    if (!(await this.board.puedeFirmarRevision(profileId))) {
       throw new ForbiddenException('Solo la mesa directiva ve las solicitudes por confirmar.');
     }
     const actions = await this.prisma.moderationAction.findMany({

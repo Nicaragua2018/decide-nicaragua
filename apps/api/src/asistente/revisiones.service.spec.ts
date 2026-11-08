@@ -13,7 +13,7 @@ const FUTURO = new Date('2100-01-01T00:00:00Z');
 
 type Firma = { revisionId: string; profileId: string; aprobar: boolean };
 
-function build(opts: { cargos?: number } = {}) {
+function build(opts: { cargos?: number; suplentes?: string[] } = {}) {
   const firmas: Firma[] = [];
   const rev = {
     id: ID,
@@ -62,7 +62,12 @@ function build(opts: { cargos?: number } = {}) {
   };
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   prisma['$transaction'] = vi.fn(async (cb: any) => cb(prisma));
-  const board = { roleOf: vi.fn(async (id: string) => ([M1, M2, M3].includes(id) ? 'administrador' : null)) };
+  const roleOf = vi.fn(async (id: string) => ([M1, M2, M3].includes(id) ? 'administrador' : null));
+  const board = {
+    roleOf,
+    puedeFirmarRevision: vi.fn(async (id: string) => (await roleOf(id)) !== null || (opts.suplentes ?? []).includes(id)),
+    firmantesDisponibles: vi.fn(async () => (opts.cargos ?? 3) + (opts.suplentes ?? []).length),
+  };
   const publicadores = { publicar: vi.fn().mockResolvedValue({ id: 'nuevo' }) };
   const audit = { log: vi.fn().mockResolvedValue(undefined) };
   const svc = new RevisionesService(prisma as never, board as never, publicadores as never, audit as never);
@@ -174,6 +179,27 @@ describe('RevisionesService', () => {
     const solo = build({ cargos: 1 });
     expect((await solo.svc.listarPendientes(M1)).mesaSuficiente).toBe(false);
     expect((await t.svc.listarPendientes(M1)).mesaSuficiente).toBe(true);
+  });
+
+  it('revisiones: con 1 en la mesa y suplentes, la mesa es suficiente (firmantesDisponibles)', async () => {
+    const t1 = build({ cargos: 1, suplentes: ['p-sup1', 'p-sup2'] });
+    expect((await t1.svc.listarPendientes(M1)).mesaSuficiente).toBe(true);
+    expect(t1.board.firmantesDisponibles).toHaveBeenCalled();
+  });
+
+  it('revisiones: un suplente firma una revisión de texto (y lista las pendientes)', async () => {
+    const t1 = build({ cargos: 1, suplentes: ['p-sup1'] });
+    await expect(t1.svc.listarPendientes('p-sup1')).resolves.toMatchObject({ mesaSuficiente: true });
+    await t1.svc.firmar(M1, ID, true);
+    const v = await t1.svc.firmar('p-sup1', ID, true);
+    expect(t1.board.puedeFirmarRevision).toHaveBeenCalledWith('p-sup1');
+    expect(t1.publicadores.publicar).toHaveBeenCalledTimes(1);
+    expect(v.aprobaciones).toBe(2);
+  });
+
+  it('revisiones: un suplente no firma la revisión de su propio texto', async () => {
+    const t1 = build({ cargos: 1, suplentes: [AUTOR] });
+    await expect(t1.svc.firmar(AUTOR, ID, true)).rejects.toBeInstanceOf(ForbiddenException);
   });
 
   it('revisiones: la auditoría no lleva texto ni autor', async () => {
