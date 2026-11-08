@@ -193,7 +193,7 @@ describe('AsistenteScheduler', () => {
     const { AsistenteScheduler } = await import('./asistente.scheduler');
     const revisiones = { vencer: vi.fn().mockRejectedValue(new Error('db')) };
     const posterior = { procesar: vi.fn().mockResolvedValue(0) };
-    await new AsistenteScheduler(revisiones as never, posterior as never).run();
+    await new AsistenteScheduler(revisiones as never, posterior as never, { sembrar: vi.fn().mockResolvedValue(0) } as never).run();
     expect(posterior.procesar).toHaveBeenCalledTimes(1);
     expect(posterior.procesar.mock.calls[0]![0]).toBeInstanceOf(Date);
   });
@@ -202,7 +202,7 @@ describe('AsistenteScheduler', () => {
     const { AsistenteScheduler } = await import('./asistente.scheduler');
     const revisiones = { vencer: vi.fn().mockResolvedValue(0), purgar: vi.fn().mockResolvedValue(0) };
     const posterior = { procesar: vi.fn().mockResolvedValue(0) };
-    await new AsistenteScheduler(revisiones as never, posterior as never).run();
+    await new AsistenteScheduler(revisiones as never, posterior as never, { sembrar: vi.fn().mockResolvedValue(0) } as never).run();
     expect(revisiones.purgar).toHaveBeenCalledTimes(1);
     expect(revisiones.purgar.mock.calls[0]![0]).toBeInstanceOf(Date);
     expect(posterior.procesar).toHaveBeenCalledTimes(1);

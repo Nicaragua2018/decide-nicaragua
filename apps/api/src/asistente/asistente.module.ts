@@ -21,6 +21,7 @@ import { AlDiaService } from './al-dia.service';
 import { CrecerService } from './crecer.service';
 import { Publicadores } from './publicadores';
 import { RevisionPosteriorService } from './revision-posterior.service';
+import { SemillasService } from './semillas.service';
 
 @Module({
   imports: [AuditModule, EmailModule, BoardModule, ForumsModule, GroupsModule, RulesModule, VerificationModule],
@@ -51,6 +52,7 @@ import { RevisionPosteriorService } from './revision-posterior.service';
     PanelService,
     AlDiaService,
     CrecerService,
+    SemillasService,
     AsistenteScheduler,
   ],
   exports: [AsistenteService, ModeracionPreviaService, GuardiaService, Publicadores, ContextoPersonaService],
