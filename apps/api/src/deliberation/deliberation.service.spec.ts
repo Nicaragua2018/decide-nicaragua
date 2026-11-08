@@ -394,9 +394,14 @@ describe('DeliberationService', () => {
   describe('updateProposalStatus', () => {
     it('cambiar el estado de un tema sin autor responde 403', async () => {
       prisma.proposal.findUnique.mockResolvedValue({ ...mockProposal, authorProfileId: null, origen: 'asistente' });
+      // La persona es miembro: si se llegara a comparar con el autor nulo como «dueño», pasaría.
+      prisma.groupMembership.findUnique.mockResolvedValue(mockMembership);
       await expect(
         service.updateProposalStatus(PROPOSAL_ID, { status: ProposalStatus.archived }, PROFILE_ID, IP),
-      ).rejects.toBeInstanceOf(ForbiddenException);
+      ).rejects.toThrow('Only the author can change the proposal status');
+      expect(prisma.proposal.findUnique).toHaveBeenCalledTimes(1);
+      expect(prisma.groupMembership.findUnique).not.toHaveBeenCalled();
+      expect(prisma.proposal.update).not.toHaveBeenCalled();
     });
 
     it('el autor puede archivar su propuesta', async () => {

@@ -46,8 +46,8 @@ CREATE INDEX "sugerencias_asistente_groupId_tipo_idx" ON "sugerencias_asistente"
 CREATE UNIQUE INDEX "sugerencias_asistente_tipo_objetoId_key" ON "sugerencias_asistente"("tipo", "objetoId");
 
 -- AddForeignKey
-ALTER TABLE "proposals" ADD CONSTRAINT "proposals_authorProfileId_fkey" FOREIGN KEY ("authorProfileId") REFERENCES "profiles"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+ALTER TABLE "proposals" ADD CONSTRAINT "proposals_authorProfileId_fkey" FOREIGN KEY ("authorProfileId") REFERENCES "profiles"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "inquietudes" ADD CONSTRAINT "inquietudes_authorProfileId_fkey" FOREIGN KEY ("authorProfileId") REFERENCES "profiles"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+ALTER TABLE "inquietudes" ADD CONSTRAINT "inquietudes_authorProfileId_fkey" FOREIGN KEY ("authorProfileId") REFERENCES "profiles"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 

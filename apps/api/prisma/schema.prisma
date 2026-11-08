@@ -402,7 +402,7 @@ model Proposal {
   group   Group  @relation(fields: [groupId], references: [id], onDelete: Cascade)
 
   authorProfileId String?  @db.Uuid
-  author          Profile? @relation(fields: [authorProfileId], references: [id])
+  author          Profile? @relation(fields: [authorProfileId], references: [id], onDelete: Restrict)
   origen          Origen   @default(persona)
 
   title               String         @db.VarChar(200)
@@ -904,7 +904,7 @@ model Inquietud {
   groupId              String          @db.Uuid
   group                Group           @relation(fields: [groupId], references: [id], onDelete: Cascade)
   authorProfileId      String?         @db.Uuid
-  author               Profile?        @relation(fields: [authorProfileId], references: [id])
+  author               Profile?        @relation(fields: [authorProfileId], references: [id], onDelete: Restrict)
   origen               Origen          @default(persona)
   title                String          @db.VarChar(200)
   body                 String          @db.VarChar(2000)

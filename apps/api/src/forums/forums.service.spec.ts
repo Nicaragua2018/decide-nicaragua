@@ -712,7 +712,12 @@ describe('ForumsService', () => {
     it('la apelación de un contenido sin autor se rechaza', async () => {
       prisma.moderationAction.findUnique.mockResolvedValue({ id: 'ma1', target: 'tema', targetId: 't1', status: 'oculto' });
       prisma.proposal.findUnique.mockResolvedValue({ id: 't1', authorProfileId: null, groupId: 'g1' });
-      await expect(service.appeal(YO, 'ma1', 'No fue mi intención ofender', 'ip')).rejects.toThrow(ForbiddenException);
+      await expect(service.appeal(YO, 'ma1', 'No fue mi intención ofender', 'ip')).rejects.toThrow(
+        'Solo quien escribió el contenido puede apelar.',
+      );
+      // Se consultó el autor (nulo) y no se llegó a comprobar la membresía ni a registrar la apelación.
+      expect(prisma.proposal.findUnique).toHaveBeenCalledWith({ where: { id: 't1' } });
+      expect(prisma.moderationAction.update).not.toHaveBeenCalled();
     });
 
     it('el autor que ya no es miembro no puede apelar', async () => {
