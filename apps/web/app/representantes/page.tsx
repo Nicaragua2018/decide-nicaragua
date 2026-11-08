@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import type { Metadata } from 'next';
-import { CARGO_ETIQUETA, type RepresentantesVista } from '@decide/shared';
+import { CARGO_ETIQUETA, type RepresentantesVista, type RevocacionResumen } from '@decide/shared';
 import { Hexagono } from '@/components/elecciones/Hexagono';
 import { fechaLarga } from '@/components/elecciones/textos';
 
@@ -49,6 +49,28 @@ function Mandato({ desde, hasta, ahora }: { desde: string; hasta: string; ahora:
       <p className="el-nota">
         Desde el {fechaLarga(desde)} hasta el {fechaLarga(hasta)}
       </p>
+    </div>
+  );
+}
+
+function PedidoRevocacion({ r }: { r: RevocacionResumen | null }) {
+  if (!r) return null;
+  const pct = r.umbral > 0 ? Math.min(100, Math.round((r.apoyos / r.umbral) * 100)) : 0;
+  return (
+    <div className="el-mandato">
+      <p className="el-nota">
+        <strong>Pedido de revocación:</strong> {r.apoyos} de {r.umbral} apoyos · cierra el {fechaLarga(r.venceAt)}
+      </p>
+      <div
+        className="el-mandato-pista"
+        role="progressbar"
+        aria-valuemin={0}
+        aria-valuemax={r.umbral}
+        aria-valuenow={Math.min(r.apoyos, r.umbral)}
+        aria-label="Apoyos al pedido de revocación"
+      >
+        <span className="el-mandato-barra" style={{ width: `${pct}%`, background: '#F2B00A' }} />
+      </div>
     </div>
   );
 }
@@ -106,6 +128,7 @@ export default async function RepresentantesPage() {
                         ) : (
                           <p className="el-nota">Desde el {fechaLarga(m.desde)}. Sigue hasta que se elija este puesto.</p>
                         )}
+                        <PedidoRevocacion r={m.revocacion} />
                       </div>
                     </li>
                   ))}
@@ -125,6 +148,7 @@ export default async function RepresentantesPage() {
                       <Hexagono texto={o.iniciales} variante="claro" tamano={44} />
                       <span className="el-obs-nombre">{o.nombre}</span>
                       <span className="el-nota">hasta el {fechaLarga(o.hasta)}</span>
+                      <PedidoRevocacion r={o.revocacion} />
                     </li>
                   ))}
                 </ul>
@@ -147,6 +171,7 @@ export default async function RepresentantesPage() {
                               {p.nombre}
                               {p.enFunciones && <span className="el-insignia el-insignia-azul">En funciones</span>}
                               <span className="el-nota" style={{ display: 'block' }}>hasta el {fechaLarga(p.hasta)}</span>
+                              <PedidoRevocacion r={p.revocacion} />
                             </span>
                           </li>
                         ))}
@@ -169,10 +194,38 @@ export default async function RepresentantesPage() {
               <p className="el-nota mt-3">“Exilio y diáspora” la organiza la mesa.</p>
             </section>
 
+            <section className="el-bloque" aria-labelledby="observ-publicas-titulo">
+              <h2 id="observ-publicas-titulo" className="el-h2">Observaciones públicas</h2>
+              <p className="el-nota mb-3">Notas de personas de la comunidad sobre hechos del registro de la plataforma.</p>
+              {v.observaciones.length === 0 ? (
+                <p className="el-nota">Todavía no hay observaciones.</p>
+              ) : (
+                <ul className="el-comunidades">
+                  {v.observaciones.map((o) => (
+                    <li key={o.id} className="el-comunidad">
+                      <div className="el-mesa-persona">
+                        <Hexagono texto={o.iniciales} variante="claro" tamano={40} />
+                        <div className="el-mesa-datos">
+                          <p className="font-medium">{o.autor}</p>
+                          <p className="el-nota">
+                            {fechaLarga(o.createdAt)} · sobre el hecho «{o.evento.action}» del {fechaLarga(o.evento.createdAt)}
+                          </p>
+                        </div>
+                      </div>
+                      <p style={{ whiteSpace: 'pre-wrap' }}>{o.texto}</p>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </section>
+
             <aside className="el-aviso" aria-labelledby="revocar-titulo">
               <h2 id="revocar-titulo" className="el-h2">¿Y si alguien no cumple?</h2>
-              <p>
-                La comunidad podrá pedir que una persona deje su cargo antes de tiempo. <strong>Próximamente.</strong>
+              <p>La comunidad puede pedir que una persona deje su cargo antes de tiempo.</p>
+              <p className="mt-2">
+                <Link href="/elecciones/revocaciones" className="el-btn el-btn-secundario" style={{ minHeight: 44 }}>
+                  Pedir la revocación de un cargo
+                </Link>
               </p>
             </aside>
           </>

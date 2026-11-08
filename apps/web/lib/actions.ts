@@ -3,6 +3,7 @@
 import { cookies } from 'next/headers';
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
+import { fechaLarga } from '@/components/elecciones/textos';
 import { COMPROMISOS_MAX, MODERACION_CAUSAS, type RevisionTexto, type TipoTexto } from '@decide/shared';
 
 const API_URL = process.env.API_URL ?? 'http://localhost:4000';
@@ -990,5 +991,53 @@ export async function pedirOcultarCandidatura(
   if (!res.ok) return { error: await parseError(res) };
   revalidatePath('/admin/mesa');
   revalidatePath(`/elecciones/${eleccionId}`);
+  return { success: true };
+}
+
+// ─── Cuidar los cargos (3C-2) ─────────────────────────────────────────────────
+
+/** Pedir que un cargo se vote de nuevo. Pasa por la revisión previa del motivo. */
+export async function pedirRevocacion(cargoId: string, _prev: ActionResult | null, formData: FormData): Promise<ActionResult> {
+  if (!isUuid(cargoId)) return { error: 'Elige primero un cargo de la lista.' };
+  const res = await actionFetch(`/api/elecciones/cargos/${cargoId}/revocacion`, {
+    method: 'POST',
+    body: JSON.stringify({ motivo: String(formData.get('motivo') ?? ''), ...pedirRevision(formData) }),
+  });
+  const rev = await respuestaDeRevision(res);
+  if (rev) return rev;
+  if (!res.ok) {
+    let mensaje = await parseError(res);
+    if (res.status === 409) {
+      try {
+        const body = (await res.clone().json()) as { desde?: string };
+        if (body.desde) mensaje += ` Podrás volver a pedirlo desde el ${fechaLarga(body.desde)}.`;
+      } catch {
+        // sin cuerpo legible: queda el mensaje de la API
+      }
+    }
+    return { error: mensaje };
+  }
+  revalidatePath('/elecciones/revocaciones');
+  revalidatePath('/representantes');
+  return { success: true };
+}
+
+/** Sumar o quitar el apoyo propio a un pedido de revocación abierto. */
+export async function apoyarRevocacion(id: string, apoyar: boolean): Promise<ActionResult> {
+  if (!isUuid(id) || typeof apoyar !== 'boolean') return INVALID;
+  const res = await actionFetch(`/api/elecciones/revocaciones/${id}/apoyo`, { method: apoyar ? 'PUT' : 'DELETE' });
+  if (!res.ok) return { error: await parseError(res) };
+  revalidatePath('/elecciones/revocaciones');
+  revalidatePath('/representantes');
+  return { success: true };
+}
+
+/** Dejar un cargo propio. La API abre la elección que lo cubre. */
+export async function renunciarCargo(cargoId: string): Promise<ActionResult> {
+  if (!isUuid(cargoId)) return INVALID;
+  const res = await actionFetch(`/api/elecciones/cargos/${cargoId}/renuncia`, { method: 'POST' });
+  if (!res.ok) return { error: await parseError(res) };
+  revalidatePath('/elecciones');
+  revalidatePath('/representantes');
   return { success: true };
 }
