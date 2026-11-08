@@ -1,0 +1,12 @@
+import { Module } from '@nestjs/common';
+import { AuditModule } from '../audit/audit.module';
+import { RulesModule } from '../rules/rules.module';
+import { ConvocatoriaService } from './convocatoria.service';
+import { EleccionesScheduler } from './elecciones.scheduler';
+
+@Module({
+  imports: [RulesModule, AuditModule],
+  providers: [ConvocatoriaService, EleccionesScheduler],
+  exports: [ConvocatoriaService],
+})
+export class EleccionesModule {}

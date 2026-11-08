@@ -22,6 +22,7 @@ import { CambiosReglaModule } from './rules/cambios-regla.module';
 import { InquietudesModule } from './inquietudes/inquietudes.module';
 import { FrasesModule } from './frases/frases.module';
 import { DecisionesModule } from './decisiones/decisiones.module';
+import { EleccionesModule } from './elecciones/elecciones.module';
 import { GruposModule } from './grupos/grupos.module';
 import { AsistenteModule } from './asistente/asistente.module';
 
@@ -65,6 +66,7 @@ import { AsistenteModule } from './asistente/asistente.module';
     InquietudesModule,
     FrasesModule,
     DecisionesModule,
+    EleccionesModule,
     GruposModule,
     AsistenteModule,
   ],
