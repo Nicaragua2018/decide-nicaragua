@@ -72,7 +72,11 @@
       "la verdad es",
       "el gobierno debe",
       "la oposición debe",
-      "FSLN"
+      "FSLN",
+      "es culpable",
+      "tienen la culpa",
+      "la oposición miente",
+      "el gobierno miente"
     ]
   },
   {
@@ -90,7 +94,11 @@
       "tiene razón",
       "la verdad es",
       "el gobierno debe",
-      "la oposición debe"
+      "la oposición debe",
+      "es culpable",
+      "tienen la culpa",
+      "la oposición miente",
+      "el gobierno miente"
     ]
   },
   {
@@ -107,7 +115,11 @@
       "tiene razón",
       "la verdad es",
       "el gobierno debe",
-      "la oposición debe"
+      "la oposición debe",
+      "es culpable",
+      "tienen la culpa",
+      "la oposición miente",
+      "el gobierno miente"
     ]
   },
   {
@@ -124,7 +136,11 @@
       "tiene razón",
       "la verdad es",
       "el gobierno debe",
-      "la oposición debe"
+      "la oposición debe",
+      "es culpable",
+      "tienen la culpa",
+      "la oposición miente",
+      "el gobierno miente"
     ]
   },
   {
@@ -137,7 +153,11 @@
       "tiene razón",
       "la verdad es",
       "el gobierno debe",
-      "la oposición debe"
+      "la oposición debe",
+      "es culpable",
+      "tienen la culpa",
+      "la oposición miente",
+      "el gobierno miente"
     ]
   },
   {
@@ -154,7 +174,9 @@
     ],
     "prohibido": [
       "Juan Pérez",
-      "María Fuentes"
+      "María Fuentes",
+      "Fuentes",
+      "Pérez"
     ]
   },
   {
@@ -165,7 +187,9 @@
     "refsValidas": [],
     "prohibido": [
       "Juan Pérez",
-      "Ana Lagos"
+      "Ana Lagos",
+      "Lagos",
+      "Pérez"
     ]
   },
   {
@@ -179,7 +203,8 @@
       "f3"
     ],
     "prohibido": [
-      "Juan Pérez"
+      "Juan Pérez",
+      "Pérez"
     ]
   },
   {

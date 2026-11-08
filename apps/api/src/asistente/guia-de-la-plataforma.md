@@ -51,7 +51,7 @@ El asistente puede dejar sugerencias en las inquietudes y los debates. Todas lle
 - **Presentación del tema.** Al abrir un tema puede ofrecer una presentación neutral. Se muestra encima y el texto original de la persona queda debajo, sin cambios.
 - **El mapa de opiniones.** Resume dónde coinciden y dónde se separan los grupos de opinión, sin nombres. Mientras el debate está abierto, lo ve quien participa y ya votó 3 frases (así no se influye en los votos). Cuando el debate termina, cualquier persona que pueda leerlo lo ve.
 - **Borradores de soluciones.** Si hay frases en las que personas de distintas posturas coinciden, el asistente puede proponer borradores. Una persona puede usar uno, cambiarlo como quiera y publicarlo como solución suya; queda marcada «A partir de una sugerencia del asistente».
-- **Las doce preguntas iniciales.** Al arrancar, la plataforma siembra doce inquietudes con preguntas básicas para empezar la conversación. No tienen autor y llevan la marca del asistente. Las demás personas las apoyan o las dejan como cualquier otra inquietud.
+- **Las doce preguntas iniciales.** El asistente propone una sola vez doce preguntas básicas para empezar la conversación, en «Exilio y diáspora», y solo cuando el asistente está encendido y ese nivel está activo. Llevan la marca «Sugerencia del asistente» y no tienen autor. Como cualquier otra inquietud, necesitan el apoyo de los miembros para avanzar.
 
 ## Las reglas y la mesa
 
