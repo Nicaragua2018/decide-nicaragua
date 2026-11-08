@@ -724,6 +724,41 @@ El plan 3B-3 usa al asistente para ayudar a encontrar acuerdos: juntar inquietud
 
 ---
 
+## ADR-028: Elecciones, elegir (2026-11-07)
+**Fecha:** 2026-11-07
+**Estado:** Aceptado
+
+### Contexto
+El plan 3C-1 reemplaza a los fundadores por personas elegidas: administrador, coordinador general, secretario, observadores y coordinadores de comunidad. Carlos pidió que la complejidad esté automatizada, que el voto sea secreto y que la plataforma nunca se quede sin mesa. El diseño es el spec `2026-11-07-plan-3c-elecciones-design.md`; aquí se recoge lo que quedó en el código, incluidos los cambios que salieron de las revisiones.
+
+### Decisión
+- **Cargos y ámbitos.** Administrador, coordinador general y secretario (1 puesto cada uno) y observadores (`observadores.numero`, 7) se eligen entre toda la plataforma (cuentas `verified_citizen`); su período es `cargos.periodo_mesa_meses` (12). Los coordinadores son 2 por comunidad activa, los elige la gente verificada de esa comunidad y duran `cargos.periodo_coordinadores_meses` (6).
+- **Tabla `Cargo` sincronizada con `BoardSeat`.** `Cargo` (tipo, grupo, persona, elección, `desde`, `hasta`, `enFunciones`, `terminadoAt`) es el historial de quién ocupa qué. Al tomar posesión, quien gana un cargo de la mesa pasa también a `BoardSeat` (`source: 'eleccion'`, upsert por rol) en la misma transacción; los permisos de la mesa siguen leyendo `BoardSeat`. Los asientos fundadores no tienen fila `Cargo`: su estado «en funciones» se deduce de `BoardSeat` con `source: 'fundador'`. Costo: dos fuentes para la mesa hasta que todos los puestos sean elegidos.
+- **Índice parcial.** `elecciones_abierta_por_cargo` (único por `groupId` y `cargo` mientras la fase sea `candidaturas` o `votacion`) impide dos elecciones abiertas del mismo cargo y ámbito; la creación atrapa el P2002. Se escribió a mano en la migración (`20261114120000_elecciones_cargos`) y `migrate diff` debe seguir mostrándolo como única diferencia.
+- **Disparadores fijos, nunca una persona.** Un programador convoca: la primera jornada (mesa y observadores juntos, con `eleccion.minimo_primera` = 12 cuentas verificadas), la activación de una comunidad (`comunidad.minimo_activacion` = 7, para sus 2 coordinadores), la renovación 21 días antes de que venza el período y el reintento 30 días después de un puesto sin elegir. Plazos: `eleccion.plazo_candidaturas_dias` (7) y `eleccion.plazo_votacion_dias` (7). Con menos candidaturas vivas que puestos, el plazo de candidaturas se alarga 7 días una sola vez.
+- **Reglas fijadas en la convocatoria.** La participación mínima (`quorumPct`, de `votacion.quorum_porcentaje`) y el período (`periodoMeses`) se guardan en la elección al convocarla (migración `20261115120000_eleccion_reglas_fijas`); un cambio de regla rige desde la siguiente convocatoria. Se conectaron todas las reglas «sin conectar» menos `revocacion.fraccion`, que es de 3C-2.
+- **La renovación pide solo lo que vence.** Pide tantos puestos como cargos vigentes que vencen en la ventana de 21 días (mínimo 1), nunca más que los puestos libres, para no desfasar mandatos con exceso de personas. Costo: elecciones más pequeñas y frecuentes si los mandatos se desfasan.
+- **Candidatura = ficha moderada.** Una ficha tiene presentación (hasta 600 caracteres), hasta 3 compromisos (140 cada uno) y comunidades; sin fotos (iniciales en un hexágono) y con orden al azar estable por persona. Pasa por la revisión previa de ADR-025 con un tipo nuevo `candidatura` (un tipo más en la moderación). La persona puede retirarla y editarla mientras dure el plazo de candidaturas; al editar vuelve a la revisión.
+- **Un cargo a la vez.** Una candidatura viva en cualquier elección abierta bloquea presentarse a otra (más estricto que «misma jornada»; costo: no se puede probar suerte en dos elecciones solapadas). Quien tiene otro cargo vigente no se presenta a uno distinto. Las incompatibilidades se resuelven excluyendo al contar (cargo vigente distinto o asiento elegido de otro rol). Un asiento fundador es incompatible con ser coordinador: se bloquea al presentarse y se excluye al contar. En la mesa y en observadores, un fundador elegido a otro cargo libera su asiento fundador, y ese puesto queda vacante hasta el reintento (la mesa puede quedar con 2 asientos hasta 30 días).
+- **Ocultar una ficha: 2 de 3.** La mesa oculta una ficha con 2 de 3 firmas (`BoardAction` de tipo `ocultar_candidatura`, con causa cerrada); la persona ve la causa y puede editar su ficha mientras dure el plazo. Así un solo miembro de la mesa no puede ocultar rivales. Costo: ocultar tarda hasta que firme el segundo.
+- **Papeleta y quién queda elegido.** La papeleta es la de 3A-3: una abstención o un orden de las candidaturas que la persona acepta; quien queda fuera, queda rechazado; se cambia hasta el cierre. Queda elegido quien aparece en más de la mitad de las papeletas no abstenidas (`estaAprobada`), y el orden entre las aprobadas lo da Schulze recalculado solo entre ellas (sub-matriz), no el Schulze global; las matrices completas se guardan para auditoría. Costo: el orden puede diferir del Schulze global en casos raros. Las abstenciones cuentan para la participación mínima.
+- **Desempate con semilla.** Un empate exacto que no cabe entero en los puestos se resuelve con `selectMembers` del sorteo verificable y una semilla pública guardada en la elección.
+- **«En funciones» y nunca sin mesa.** Un puesto sin elegir o sin participación mínima deja a quien lo ocupaba «en funciones»: sigue en el cargo hasta que se cubra. Al tomar posesión se terminan, por cada persona electa, los cargos vigentes de ese tipo y ámbito: primero los «en funciones» y después los de `hasta` más próximo, tantos como electas (exactamente los que contó la renovación). Los cargos de observador terminan con la elección de su jornada.
+- **El voto es secreto.** Ninguna respuesta de la API dice quién votó qué. No se audita cada voto (como en decisiones): el total queda en `eleccion.contada`, porque una auditoría por voto con hora filtraría la participación exacta en vivo. Durante la votación solo se muestra la participación redondeada de 5 en 5; después del conteo, el resultado y las matrices son públicos con cifras exactas («11 de 21 papeletas»), sin redondeo.
+- **Coordinadores y moderación.** `ForumsService.canModerate` acepta a la mesa y a un coordinador vigente de la comunidad; en subgrupos y comisiones cuenta el coordinador de la comunidad de la que cuelgan. Las bifurcaciones no heredan coordinadores (están reservadas, 3A-4b): ahí modera solo la mesa. Las apelaciones y la segunda firma siguen siendo solo de la mesa.
+- **Papeleta de elecciones en la web.** Es un componente nuevo (tocar en orden, «Rechazo a todas», «Me abstengo») y no se generalizó el de decisiones, para no cambiar su comportamiento. Costo: dos componentes de papeleta. «Quiénes nos representan» (`/representantes`) es una página pública, también para visitantes; las elecciones (`/elecciones`) son para cuentas verificadas.
+- **El asistente no interviene.** Este plan no añade ninguna tarea de IA: el asistente no resume ni compara candidaturas ni recomienda a nadie; solo explica cómo funciona (guía de la plataforma).
+- **Variables de entorno:** ninguna nueva.
+
+### Consecuencias
+- Tres migraciones (`elecciones_cargos`, `eleccion_reglas_fijas`, `ocultar_candidatura`), la primera con el índice parcial hecho a mano.
+- Los fundadores no pueden ser coordinadores mientras ocupen la mesa fundadora; la mesa puede quedar con 2 asientos hasta 30 días si un fundador gana otro cargo.
+- La auditoría no muestra la hora de cada voto, solo el total contado.
+- Menores anotados: los cargos vencidos siguen vigentes «en funciones» hasta el relevo (es lo diseñado); el coordinador no necesita ser miembro del grupo para moderar; la web no se verificó en un navegador real.
+- Sigue 3C-2: revocación, renuncia, vacantes, mesa incompleta, reactivación de cuentas, página de observadores, elecciones en «Desde tu última visita» y moderación posterior de fichas.
+
+---
+
 ## Decisiones pendientes
 
 | ID | Pregunta | Prioridad |

@@ -55,6 +55,18 @@ El asistente puede dejar sugerencias en las inquietudes y los debates. Todas lle
 - **Comentario para comisiones.** Mientras una comisión busca voluntarios, el asistente puede decir qué capacidades serían útiles para su tarea, para que cada persona vea si quiere sumarse. No elige a nadie: los puestos se siguen eligiendo por sorteo.
 - **Las doce preguntas iniciales.** El asistente propone una sola vez doce preguntas básicas para empezar la conversación, en «Exilio y diáspora», y solo cuando el asistente está encendido y ese nivel está activo. Llevan la marca «Sugerencia del asistente» y no tienen autor. Como cualquier otra inquietud, necesitan el apoyo de los miembros para avanzar.
 
+## Las elecciones
+
+La plataforma elige por votación a quienes la representan: el administrador, el coordinador general, el secretario, los observadores y 2 coordinadores por cada comunidad activa. Nadie convoca una elección a mano: se abre sola en fechas fijas, por ejemplo cuando se reúne el mínimo de personas verificadas, cuando una comunidad se activa o poco antes de que termine un período. Las elecciones abiertas están en la página de elecciones [g11].
+
+- **Presentarse.** Durante el plazo de candidaturas (por defecto 7 días), cualquier persona elegible puede presentarse con una ficha: una presentación corta, hasta 3 compromisos y sus comunidades. Todas las fichas tienen el mismo formato, sin fotos, y pasan por la revisión previa. Se muestran en orden al azar. La persona puede retirar o corregir su ficha mientras dure el plazo. Nadie ocupa dos cargos a la vez ni se presenta a dos elecciones abiertas.
+- **Votar.** Durante la votación (por defecto 7 días), la persona toca las candidaturas en el orden en que las prefiere, y solo las que acepta. Las que deja sin tocar cuentan como rechazadas. También puede elegir «Rechazo a todas» o «Me abstengo». El voto es secreto y se puede cambiar hasta que cierra la votación. Durante la votación solo se ve la participación aproximada; después del conteo se publican los resultados con las cifras exactas, sin nombres de quienes votaron.
+- **Quién queda elegido.** Quien aparece en más de la mitad de las papeletas que no se abstuvieron, en el orden que sale del conteo, hasta llenar los puestos. Si hay un empate exacto, se resuelve con un sorteo verificable. Para que la elección valga, tiene que votar un mínimo de personas (por defecto 20 %, contando las abstenciones).
+- **«En funciones».** Si un puesto queda sin elegir, o la elección no reúne la participación mínima, quien lo ocupaba sigue en el cargo «en funciones» hasta que otra elección lo reemplace, para que la plataforma nunca se quede sin mesa. Un puesto sin elegir se vuelve a convocar a los 30 días.
+- **Quiénes nos representan.** La página [g12] muestra quién ocupa cada cargo, hasta cuándo y quién está «en funciones». Cualquier persona puede verla, tenga cuenta o no.
+
+El asistente no recomienda candidaturas, no compara fichas ni dice a quién votar: solo explica cómo funcionan las elecciones.
+
 ## Las reglas y la mesa
 
 Las reglas de la plataforma, como los plazos y los mínimos que cuentan en esta guía, no las fija nadie por su cuenta: se cambian votando. Cualquier miembro propone un cambio desde la página de reglas [g5], con el valor nuevo y un motivo. El cambio pasa por debate y votación como cualquier otra decisión, y para valer debe votar un mínimo de la comunidad (por defecto 30 %). Las reglas locales se aplican solas si la votación las aprueba. Las reglas de toda la plataforma se cambian en «Exilio y diáspora» y, además, necesitan que la mesa las confirme con 2 firmas. Algunas reglas todavía no tienen efecto y la página las marca así.

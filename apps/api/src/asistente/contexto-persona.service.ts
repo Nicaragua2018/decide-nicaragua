@@ -23,6 +23,8 @@ export const RUTAS_DE_LA_GUIA: Record<string, { texto: string; ruta: string }> =
   g8: { texto: 'Mis textos en revisión', ruta: '/me/revisiones' },
   g9: { texto: 'Foros', ruta: '/foros' },
   g10: { texto: 'Verificaciones', ruta: '/verificaciones' },
+  g11: { texto: 'Elecciones', ruta: '/elecciones' },
+  g12: { texto: 'Quiénes nos representan', ruta: '/representantes' },
 };
 
 export interface GrupoLegible {

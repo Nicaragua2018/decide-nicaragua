@@ -219,6 +219,14 @@ describe('guía de la plataforma', () => {
     }
   });
 
+  it('la guía explica las elecciones y enlaza a /elecciones y /representantes', () => {
+    expect(RUTAS_DE_LA_GUIA.g11!.ruta).toBe('/elecciones');
+    expect(RUTAS_DE_LA_GUIA.g12!.ruta).toBe('/representantes');
+    expect(GUIA_DE_LA_PLATAFORMA).toContain('## Las elecciones');
+    expect(GUIA_DE_LA_PLATAFORMA).toContain('«En funciones»');
+    expect(GUIA_DE_LA_PLATAFORMA).toContain('El asistente no recomienda candidaturas');
+  });
+
   it('la guía describe todas las tarjetas del asistente y la presentación solo para temas abiertos por la comunidad', () => {
     expect(GUIA_DE_LA_PLATAFORMA).toContain('**Aviso de umbral.**');
     expect(GUIA_DE_LA_PLATAFORMA).toContain('**Comentario para comisiones.**');
