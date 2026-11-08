@@ -22,6 +22,7 @@ import type {
   ResultadoEleccionVista,
 } from '@decide/shared';
 import { PrismaService } from '../prisma/prisma.service';
+import { conReintento } from '../common/utils/reintento.util';
 import { AuditService } from '../audit/audit.service';
 import { BoardService } from '../board/board.service';
 import { GuardiaService, type OpcionesPublicar } from '../asistente/guardia.service';
@@ -274,7 +275,12 @@ export class EleccionesService implements OnModuleInit {
       select: { tipo: true, groupId: true, hasta: true },
     });
     if (!cargo) throw new ConflictException(CARGO_TERMINADO);
-    await this.prisma.$transaction(async (tx) => {
+    // Mismo orden de bloqueo que apoyar un pedido (pedido → cargo): así no se interbloquean.
+    // Si aun así choca con otra transacción, se repite una vez.
+    await conReintento(() => this.prisma.$transaction(async (tx) => {
+      await tx.$queryRaw(
+        Prisma.sql`SELECT id FROM revocaciones WHERE "cargoId" = ANY(${[cargoId]}::uuid[]) AND estado = 'abierta' FOR UPDATE`,
+      );
       const r = await tx.cargo.updateMany({
         where: { id: cargoId, profileId, terminadoAt: null },
         data: { terminadoAt: now, finCausa: 'renuncia', enFunciones: false },
@@ -286,7 +292,7 @@ export class EleccionesService implements OnModuleInit {
       }
       // Un pedido de revocación de un cargo que ya terminó no tiene objeto: se cierra con el cargo.
       await tx.revocacion.updateMany({ where: { cargoId, estado: 'abierta' }, data: { estado: 'vencida' } });
-    });
+    }));
     void this.audit.log({
       action: 'cargo.renuncia',
       resource: `cargo:${cargoId}`,

@@ -24,6 +24,7 @@ import {
   type JwtPayload,
 } from '@decide/shared';
 import { PrismaService } from '../prisma/prisma.service';
+import { conReintento } from '../common/utils/reintento.util';
 import { AuditService } from '../audit/audit.service';
 import { GroupsService } from '../groups/groups.service';
 // Funciones puras: no importa RulesModule (cerraría un ciclo de módulos).
@@ -362,7 +363,8 @@ export class BoardService {
     reason: string,
   ): Promise<{ status: 'pending' | 'executed' | 'rejected'; despues: (() => Promise<void>)[] }> {
     try {
-      return await this.prisma.$transaction(async (tx) => {
+      // Si choca con otra transacción (interbloqueo), se repite una vez: todo lo de dentro se deshizo.
+      return await conReintento(() => this.prisma.$transaction(async (tx) => {
         await tx.$queryRaw(Prisma.sql`SELECT id FROM board_actions WHERE id = ${actionId}::uuid FOR UPDATE`);
         const a = await tx.boardAction.findUnique({ where: { id: actionId }, select: { status: true } });
         if (!a || (a.status as string) !== 'pending') throw new BadRequestException('Esta acción ya se resolvió.');
@@ -382,7 +384,7 @@ export class BoardService {
         });
         if (tomada.count === 0) throw new BadRequestException('Esta acción ya se resolvió.');
         return { status, despues: ejecutada ? despues : [] };
-      });
+      }));
     } catch (err) {
       // Índice único (acción, persona): el mismo voto llegó dos veces a la vez.
       if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
@@ -717,6 +719,11 @@ export class BoardService {
       select: { id: true, tipo: true, groupId: true, hasta: true },
     });
     if (cargos.length > 0) {
+      const ids = cargos.map((c) => c.id);
+      // Mismo orden de bloqueo que apoyar un pedido (pedido → cargo): así no se interbloquean.
+      await tx.$queryRaw(
+        Prisma.sql`SELECT id FROM revocaciones WHERE "cargoId" = ANY(${ids}::uuid[]) AND estado = 'abierta' FOR UPDATE`,
+      );
       await tx.cargo.updateMany({
         where: { id: { in: cargos.map((c) => c.id) }, terminadoAt: null },
         data: { terminadoAt: now, finCausa: 'suspension', enFunciones: false },

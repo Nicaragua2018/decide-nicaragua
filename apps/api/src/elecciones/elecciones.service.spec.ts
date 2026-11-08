@@ -3,6 +3,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { BadRequestException, ConflictException, ForbiddenException, HttpException, Logger } from '@nestjs/common';
 import { validate } from 'class-validator';
 import { plainToInstance } from 'class-transformer';
+import { Prisma } from '@prisma/client';
 import { EleccionesService } from './elecciones.service';
 import { EleccionesController, RepresentantesController } from './elecciones.controller';
 import { CandidaturaDto } from './dto/candidatura.dto';
@@ -601,6 +602,31 @@ describe('EleccionesService', () => {
       expect(prisma.revocacion.updateMany.mock.invocationCallOrder[0]!).toBeLessThan(
         convocatoria.anticipada.mock.invocationCallOrder[0]!,
       );
+    });
+
+    it('renunciar bloquea primero los pedidos abiertos del cargo y después toca el cargo (mismo orden que apoyar)', async () => {
+      prisma.cargo.findFirst.mockResolvedValue(cargoSec);
+      await service.renunciar(YO, 'c1', NOW);
+      const i = prisma.$queryRaw.mock.calls.findIndex((c) =>
+        (c[0] as { strings: string[] }).strings.join('?').includes('FROM revocaciones'),
+      );
+      expect(i).toBeGreaterThanOrEqual(0);
+      const sql = prisma.$queryRaw.mock.calls[i]![0] as { strings: string[]; values: unknown[] };
+      expect(sql.strings.join('?')).toMatch(/"cargoId" = ANY\(\?::uuid\[\]\) AND estado = 'abierta' FOR UPDATE/);
+      expect(sql.values).toEqual([['c1']]);
+      expect(prisma.$queryRaw.mock.invocationCallOrder[i]!).toBeLessThan(prisma.cargo.updateMany.mock.invocationCallOrder[0]!);
+    });
+
+    it('renunciar reintenta una vez si la transacción choca con otra (P2034)', async () => {
+      prisma.cargo.findFirst.mockResolvedValue(cargoSec);
+      const choque = new Prisma.PrismaClientKnownRequestError('deadlock', { code: 'P2034', clientVersion: '6' });
+      prisma.$transaction
+        .mockRejectedValueOnce(choque)
+        .mockImplementationOnce(async (fn: (tx: unknown) => unknown) => fn(prisma));
+      await expect(service.renunciar(YO, 'c1', NOW)).resolves.toBeUndefined();
+      expect(prisma.$transaction).toHaveBeenCalledTimes(2);
+      expect(prisma.cargo.updateMany).toHaveBeenCalledTimes(1);
+      expect(audit.log).toHaveBeenCalledWith(expect.objectContaining({ action: 'cargo.renuncia' }));
     });
 
     it('si la anticipada falla tras la renuncia, la renuncia se confirma, se audita y solo se avisa en el log', async () => {
