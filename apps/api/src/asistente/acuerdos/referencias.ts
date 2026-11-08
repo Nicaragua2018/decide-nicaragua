@@ -13,6 +13,6 @@ export function conReferencias(
   }
   return {
     ref: (id) => aRef.get(id) ?? '',
-    id: (ref) => (typeof ref === 'string' ? (aId.get(ref) ?? null) : null),
+    id: (ref) => (typeof ref === 'string' ? (aId.get(ref.trim().replace(/^\[+|\]+$/g, '').trim()) ?? null) : null),
   };
 }

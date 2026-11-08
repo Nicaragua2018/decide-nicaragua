@@ -73,6 +73,18 @@ describe('AcuerdosService: mapa de opiniones', () => {
     ]);
   });
 
+  it('acepta refs con corchetes y espacios', async () => {
+    asistente.pedir.mockResolvedValue({
+      ...salidaBuena,
+      grupos: [{ ...salidaBuena.grupos[0]!, refs: ['[f1]', ' f2 '] }],
+      puentes: { texto: 'Todos coinciden.', refs: ['[f3]'] },
+    });
+    await service.procesar(AHORA);
+    const c = guardadosMapa()[0]![3];
+    expect(c.grupos[0].citaIds).toEqual([FRASES[0]!.id, FRASES[1]!.id]);
+    expect(c.puentes.citaIds).toEqual([FRASES[2]!.id]);
+  });
+
   it('no genera con menos de 20 votos', async () => {
     prisma.fraseVoto.findMany.mockResolvedValue(votos(19));
     await service.procesar(AHORA);

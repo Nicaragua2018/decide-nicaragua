@@ -23,6 +23,9 @@ describe('referencias', () => {
     expect(r.ref('a')).toBe('i1');
     expect(r.id('i2')).toBe('b');
     expect(r.id('i9')).toBeNull();
+    expect(r.id('[i2]')).toBe('b');
+    expect(r.id(' i1 ')).toBe('a');
+    expect(r.id(' [ i1 ] ')).toBe('a');
   });
 });
 
