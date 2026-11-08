@@ -68,7 +68,9 @@ function buildPrisma() {
       findMany: vi.fn().mockResolvedValue([]),
       create: vi.fn().mockResolvedValue({ id: 'c-nueva' }),
       update: vi.fn().mockResolvedValue({ id: 'c-vieja' }),
+      updateMany: vi.fn().mockResolvedValue({ count: 1 }),
     },
+    boardAction: { updateMany: vi.fn().mockResolvedValue({ count: 0 }) },
     cargo: { findMany: vi.fn().mockResolvedValue([]) },
     boardSeat: { findMany: vi.fn().mockResolvedValue([]) },
     papeletaEleccion: {
@@ -220,13 +222,30 @@ describe('EleccionesService', () => {
         autorProfileId: YO,
         args: { via: 'editar', eleccionId: E, presentacion: 'Nueva presentación', compromisos: ['Uno'] },
       });
-      expect(prisma.candidatura.update).toHaveBeenCalledWith({
-        where: { id: 'c1' },
+      expect(prisma.candidatura.updateMany).toHaveBeenCalledWith({
+        where: { id: 'c1', retiradaAt: null },
         data: { presentacion: 'Nueva presentación', compromisos: ['Uno'], oculta: false, ocultaCausa: null },
       });
       // La mesa reproduce la edición aprobada por la misma vía.
       service.onModuleInit();
       expect(publicadores.registrar).toHaveBeenCalledWith('candidatura', expect.any(Function), 'editar');
+    });
+
+    it('editar cancela las propuestas pendientes de ocultar esa ficha', async () => {
+      prisma.boardAction.updateMany.mockResolvedValue({ count: 1 });
+      await service.editar(YO, E, ficha);
+      expect(prisma.boardAction.updateMany).toHaveBeenCalledWith({
+        where: { type: 'ocultar_candidatura', status: 'pending', params: { path: ['candidaturaId'], equals: 'c1' } },
+        data: { status: 'rejected', resolvedAt: expect.any(Date) },
+      });
+      expect(audit.log).toHaveBeenCalledWith({
+        action: 'candidatura.ocultacion_cancelada', resource: 'candidatura:c1', metadata: { eleccionId: E, acciones: 1 },
+      });
+    });
+
+    it('si se retiró a la vez, editar da 400', async () => {
+      prisma.candidatura.updateMany.mockResolvedValue({ count: 0 });
+      await expect(service.editar(YO, E, ficha)).rejects.toBeInstanceOf(BadRequestException);
     });
 
     it('editar fuera de candidaturas da 400', async () => {
@@ -236,7 +255,7 @@ describe('EleccionesService', () => {
       prisma.candidatura.findUnique.mockResolvedValue({ id: 'c1', oculta: false, retiradaAt: new Date() });
       await expect(service.editar(YO, E, ficha)).rejects.toBeInstanceOf(BadRequestException);
       expect(guardia.antesDePublicar).not.toHaveBeenCalled();
-      expect(prisma.candidatura.update).not.toHaveBeenCalled();
+      expect(prisma.candidatura.updateMany).not.toHaveBeenCalled();
     });
   });
 

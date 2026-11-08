@@ -389,14 +389,30 @@ export class EleccionesService implements OnModuleInit {
       args: { via: 'editar', eleccionId: e.id, presentacion, compromisos },
       ...opts,
     });
-    await this.prisma.$transaction(async (tx) => {
+    const canceladas = await this.prisma.$transaction(async (tx) => {
       await this.bloquearFase(tx, e.id, 'candidaturas', 'La ficha solo se cambia durante el plazo de candidaturas.');
-      await tx.candidatura.update({
-        where: { id: c.id },
+      // Si se retiró entre la lectura y aquí, no se edita.
+      const r = await tx.candidatura.updateMany({
+        where: { id: c.id, retiradaAt: null },
         data: { presentacion, compromisos, oculta: false, ocultaCausa: null },
       });
+      if (r.count === 0) throw new BadRequestException('No tienes una candidatura en esta elección.');
+      // Una propuesta pendiente de ocultarla juzgaba el texto anterior: se cancela. Si la mesa
+      // ve mal el nuevo, propone otra.
+      const a = await tx.boardAction.updateMany({
+        where: { type: 'ocultar_candidatura', status: 'pending', params: { path: ['candidaturaId'], equals: c.id } },
+        data: { status: 'rejected', resolvedAt: new Date() },
+      });
+      return a.count;
     });
     void this.audit.log({ action: 'candidatura.editada', resource: `candidatura:${c.id}`, metadata: { eleccionId: e.id } });
+    if (canceladas > 0) {
+      void this.audit.log({
+        action: 'candidatura.ocultacion_cancelada',
+        resource: `candidatura:${c.id}`,
+        metadata: { eleccionId: e.id, acciones: canceladas },
+      });
+    }
     return { id: c.id };
   }
 

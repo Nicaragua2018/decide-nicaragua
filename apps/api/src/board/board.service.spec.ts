@@ -517,7 +517,7 @@ describe('BoardService', () => {
       prisma.candidatura.findUnique.mockResolvedValue({ eleccionId: 'e1' });
       await service.voteAction(ADMIN, 'a1', true, 'ip');
       expect(prisma.candidatura.updateMany).toHaveBeenCalledWith({
-        where: { id: 'c1', retiradaAt: null, eleccion: { fase: { in: ['candidaturas', 'votacion'] } } },
+        where: { id: 'c1', oculta: false, retiradaAt: null, eleccion: { fase: { in: ['candidaturas', 'votacion'] } } },
         data: { oculta: true, ocultaCausa: 'datos_personales' },
       });
       expect(prisma.boardAction.update).toHaveBeenLastCalledWith(
@@ -526,6 +526,17 @@ describe('BoardService', () => {
       expect(audit.log).toHaveBeenCalledWith({
         action: 'candidatura.ocultada', resource: 'candidatura:c1', metadata: { eleccionId: 'e1', causa: 'datos_personales' },
       });
+    });
+
+    it('propuesta → la persona edita su ficha (la cancela) → la segunda firma ya no oculta', async () => {
+      prisma.boardSeat.findFirst.mockResolvedValue(asiento('administrador'));
+      // Editar dejó la acción en «rejected» (EleccionesService.editar).
+      prisma.boardAction.findUnique.mockResolvedValue({
+        ...accion, status: 'rejected', approvals: [{ profileId: 'p-sec', approve: true }],
+      });
+      await expect(service.voteAction(ADMIN, 'a1', true, 'ip')).rejects.toThrow(BadRequestException);
+      expect(prisma.candidatura.updateMany).not.toHaveBeenCalled();
+      expect(prisma.boardApproval.create).not.toHaveBeenCalled();
     });
 
     it('si la elección ya se contó al llegar la segunda firma, la acción queda rechazada', async () => {

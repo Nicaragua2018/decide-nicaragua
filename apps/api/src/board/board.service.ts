@@ -370,7 +370,8 @@ export class BoardService {
     const candidaturaId = String(params['candidaturaId']);
     const causa = params['causa'] as ModeracionCausaValue;
     const r = await this.prisma.candidatura.updateMany({
-      where: { id: candidaturaId, retiradaAt: null, eleccion: { fase: { in: [...ELECCION_ABIERTA] } } },
+      // `oculta: false`: una segunda acción aprobada no pisa la causa ni audita dos veces.
+      where: { id: candidaturaId, oculta: false, retiradaAt: null, eleccion: { fase: { in: [...ELECCION_ABIERTA] } } },
       data: { oculta: true, ocultaCausa: causa },
     });
     if (r.count === 0) return false;
