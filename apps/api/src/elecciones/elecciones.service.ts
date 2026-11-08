@@ -526,7 +526,7 @@ export class EleccionesService implements OnModuleInit {
       select: { id: true },
     });
     if (otra) return 'Ya te presentaste a otro cargo. Solo puedes presentarte a uno a la vez.';
-    const incompatibles = await conOtroCargo(db as Pick<PrismaService, 'cargo' | 'boardSeat'>, e, [profileId]);
+    const incompatibles = await conOtroCargo(db as Pick<PrismaService, 'cargo' | 'boardSeat'>, e, [profileId], new Date());
     if (incompatibles.has(profileId)) {
       return 'Ya ocupas otro cargo. Solo puedes presentarte a la renovación del tuyo.';
     }

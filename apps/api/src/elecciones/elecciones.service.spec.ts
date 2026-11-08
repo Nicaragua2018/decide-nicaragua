@@ -167,9 +167,24 @@ describe('EleccionesService', () => {
     expect(prisma.boardSeat.findMany.mock.calls.at(-1)![0].where).toEqual({ profileId: { in: [YO] } });
     expect(prisma.candidatura.create).not.toHaveBeenCalled();
 
+    // Observador con mandato por delante en una elección de vacantes de observadores: no.
+    prisma.boardSeat.findMany.mockResolvedValue([]);
+    prisma.cargo.findMany.mockResolvedValue([
+      { profileId: YO, tipo: 'observador', groupId: GEN, enFunciones: false, hasta: new Date(Date.now() + 300 * 86_400_000) },
+    ]);
+    await expect(service.presentarse(YO, E, ficha)).rejects.toBeInstanceOf(BadRequestException);
+    // Si su período termina dentro de la ventana (sale), sí puede presentarse.
+    prisma.cargo.findMany.mockResolvedValue([
+      { profileId: YO, tipo: 'observador', groupId: GEN, enFunciones: false, hasta: new Date(Date.now() + 10 * 86_400_000) },
+    ]);
+    await expect(service.presentarse(YO, E, ficha)).resolves.toEqual({ id: 'c-nueva' });
+    prisma.candidatura.create.mockClear();
+
     // Renovación del propio cargo: sí.
     prisma.eleccion.findUnique.mockResolvedValue(eleccion({ motivo: 'renovacion' }));
-    prisma.cargo.findMany.mockResolvedValue([{ profileId: YO, tipo: 'secretario', groupId: GEN }]);
+    prisma.cargo.findMany.mockResolvedValue([
+      { profileId: YO, tipo: 'secretario', groupId: GEN, enFunciones: false, hasta: new Date(Date.now() + 10 * 86_400_000) },
+    ]);
     prisma.boardSeat.findMany.mockResolvedValue([{ profileId: YO, role: 'secretario' }]);
     await expect(service.presentarse(YO, E, ficha)).resolves.toEqual({ id: 'c-nueva' });
     // En la mesa los asientos fundadores no cuentan: solo se leen los elegidos.

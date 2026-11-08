@@ -86,6 +86,9 @@ describe('ConvocatoriaService', () => {
       }
       expect(datos.find((d) => d['cargo'] === 'observador')!['puestos']).toBe(7);
       expect(datos.find((d) => d['cargo'] === 'secretario')!['puestos']).toBe(1);
+      // Los puestos plenos quedan fijados al convocar.
+      expect(datos.find((d) => d['cargo'] === 'observador')!['plenos']).toBe(7);
+      expect(datos.find((d) => d['cargo'] === 'secretario')!['plenos']).toBe(1);
       expect(audit.log).toHaveBeenCalledWith(
         expect.objectContaining({
           action: 'eleccion.convocada',
@@ -118,7 +121,7 @@ describe('ConvocatoriaService', () => {
       expect(prisma.group.updateMany).toHaveBeenCalledTimes(1);
       const [d] = creadas();
       expect(d).toMatchObject({ groupId: 'c1', cargo: 'coordinador', puestos: 2, motivo: 'primera', jornadaId: null });
-      expect(d).toMatchObject({ quorumPct: 20, periodoMeses: 6 });
+      expect(d).toMatchObject({ quorumPct: 20, periodoMeses: 6, plenos: 2 });
       expect(d!['candidaturasEndsAt']).toEqual(new Date(NOW.getTime() + 7 * DIA));
     });
 
@@ -202,8 +205,8 @@ describe('ConvocatoriaService', () => {
       ]);
       expect(await service.convocar(NOW)).toBe(2);
       const datos = creadas();
-      expect(datos.find((d) => d['cargo'] === 'observador')).toMatchObject({ puestos: 3, motivo: 'renovacion' });
-      expect(datos.find((d) => d['cargo'] === 'coordinador')).toMatchObject({ puestos: 1, groupId: 'c1' });
+      expect(datos.find((d) => d['cargo'] === 'observador')).toMatchObject({ puestos: 3, motivo: 'renovacion', plenos: 7 });
+      expect(datos.find((d) => d['cargo'] === 'coordinador')).toMatchObject({ puestos: 1, groupId: 'c1', plenos: 2 });
     });
 
     it('nunca convoca sin puestos: si los que siguen ya llenan el cargo, no hay elección', async () => {

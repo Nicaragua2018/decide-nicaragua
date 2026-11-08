@@ -320,16 +320,20 @@ export class ConvocatoriaService {
     return { candidaturasEndsAt, votacionEndsAt: new Date(candidaturasEndsAt.getTime() + votacionDias * DIA_MS) };
   }
 
-  /** Reglas que quedan fijadas en la elección al convocarla. */
-  private async reglasFijas(groupId: string, cargo: CargoTipoValue): Promise<{ quorumPct: number; periodoMeses: number }> {
-    const [quorumPct, periodoMeses] = await Promise.all([
+  /** Reglas que quedan fijadas en la elección al convocarla (también los puestos plenos del cargo). */
+  private async reglasFijas(
+    groupId: string,
+    cargo: CargoTipoValue,
+  ): Promise<{ quorumPct: number; periodoMeses: number; plenos: number }> {
+    const [quorumPct, periodoMeses, plenos] = await Promise.all([
       this.rules.getInt('votacion.quorum_porcentaje', groupId),
       this.rules.getInt(
         cargo === 'coordinador' ? 'cargos.periodo_coordinadores_meses' : 'cargos.periodo_mesa_meses',
         null,
       ),
+      plenosDe(this.rules, cargo),
     ]);
-    return { quorumPct, periodoMeses };
+    return { quorumPct, periodoMeses, plenos };
   }
 
   private crearUna(
@@ -339,7 +343,7 @@ export class ConvocatoriaService {
     puestos: number,
     motivo: EleccionMotivoValue,
     jornadaId: string | null,
-    fechas: { candidaturasEndsAt: Date; votacionEndsAt: Date; quorumPct: number; periodoMeses: number },
+    fechas: { candidaturasEndsAt: Date; votacionEndsAt: Date; quorumPct: number; periodoMeses: number; plenos: number },
   ) {
     return db.eleccion.create({ data: { groupId, cargo, puestos, motivo, jornadaId, ...fechas } });
   }

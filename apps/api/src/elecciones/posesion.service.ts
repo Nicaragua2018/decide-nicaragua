@@ -90,6 +90,7 @@ export class PosesionService {
         tx as unknown as Pick<PrismaService, 'cargo' | 'boardSeat'>,
         e,
         vivas.map((c) => c.profileId),
+        now,
       );
       const excluidas = vivas
         .filter((c) => c.oculta || c.profile.user.status !== 'verified_citizen' || incompatibles.has(c.profileId))
@@ -160,11 +161,13 @@ export class PosesionService {
    * Crea los cargos de las electas. Solo terminan cargos «salientes» (en funciones, o cuyo fin cae
    * en la ventana de renovación del conteo), nunca uno con mandato por delante, y como mucho tantos
    * como electas: primero los en funciones, luego los de fin más próximo. Si hay vacantes, las
-   * electas las ocupan antes de reemplazar a nadie (nunca se pasa de los puestos del cargo).
+   * electas las ocupan antes de reemplazar a nadie (nunca se pasa de los puestos plenos fijados
+   * al convocar). Una persona reelegida siempre deja su cargo anterior: nadie ocupa dos puestos
+   * del mismo cargo.
    */
   private async darPosesion(
     tx: Prisma.TransactionClient,
-    e: { id: string; groupId: string; cargo: CargoTipoValue; periodoMeses: number | null },
+    e: { id: string; groupId: string; cargo: CargoTipoValue; periodoMeses: number | null; plenos: number | null },
     perfiles: string[],
     now: Date,
   ): Promise<void> {
@@ -175,12 +178,21 @@ export class PosesionService {
     const vigentes = await tx.cargo.findMany({
       where: { groupId: e.groupId, tipo: e.cargo, terminadoAt: null },
       orderBy: [{ enFunciones: 'desc' }, { hasta: 'asc' }],
-      select: { id: true, enFunciones: true, hasta: true },
+      select: { id: true, profileId: true, enFunciones: true, hasta: true },
     });
-    const salientes = vigentes.filter((c) => c.enFunciones || c.hasta.getTime() <= limite);
-    const plenos = await plenosDe(this.rules, e.cargo);
-    const cuantos = Math.min(salientes.length, perfiles.length, Math.max(0, vigentes.length + perfiles.length - plenos));
-    const salen = salientes.slice(0, cuantos);
+    // Quien sale reelegido se reemplaza a sí mismo: su cargo viejo termina siempre.
+    const electas = new Set(perfiles);
+    const propios = vigentes.filter((c) => electas.has(c.profileId));
+    const resto = vigentes.filter((c) => !electas.has(c.profileId));
+    const salientes = resto.filter((c) => c.enFunciones || c.hasta.getTime() <= limite);
+    // Plenos fijados al convocar; solo si falta (elecciones antiguas) se lee la regla ahora.
+    const plenos = e.plenos ?? (await plenosDe(this.rules, e.cargo));
+    const cuantos = Math.min(
+      salientes.length,
+      Math.max(0, perfiles.length - propios.length),
+      Math.max(0, resto.length + perfiles.length - plenos),
+    );
+    const salen = [...propios, ...salientes.slice(0, cuantos)];
     if (salen.length > 0) {
       await tx.cargo.updateMany({ where: { id: { in: salen.map((c) => c.id) } }, data: termina });
     }

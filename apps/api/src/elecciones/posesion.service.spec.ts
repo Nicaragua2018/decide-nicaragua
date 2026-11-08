@@ -80,8 +80,8 @@ describe('PosesionService', () => {
   const salenCargos = (vigentes: unknown[], titulares: unknown[] = []) =>
     prisma.cargo.findMany.mockImplementation(async (a: { where: { tipo?: string } }) => (a.where.tipo ? vigentes : titulares));
   /** Un cargo vigente que termina dentro de `dias` días (negativo: ya venció). */
-  const vigente = (id: string, dias: number, enFunciones = false) => ({
-    id, enFunciones, hasta: new Date(NOW.getTime() + dias * DIA),
+  const vigente = (id: string, dias: number, enFunciones = false, profileId = `otra-${id}`) => ({
+    id, profileId, enFunciones, hasta: new Date(NOW.getTime() + dias * DIA),
   });
   const terminados = () =>
     prisma.cargo.updateMany.mock.calls
@@ -228,6 +228,59 @@ describe('PosesionService', () => {
     expect(prisma.cargo.create).toHaveBeenCalledTimes(1);
   });
 
+  it('N1: el único coordinador, en la ventana, reelegido en una elección de 2 puestos: un solo cargo suyo y 1 vacante', async () => {
+    preparar([{ id: 'c1', profileId: 'p1' }], voto(10, ['c1']), votantes(10));
+    prisma.eleccion.findUnique.mockResolvedValue(eleccion({ cargo: 'coordinador', groupId: 'g-com', puestos: 2, plenos: 2 }));
+    salenCargos([vigente('k1', 10, false, 'p1')]);
+    await service.contar('e1', NOW);
+    expect(guardado().data['electas']).toEqual(['c1']);
+    // Su cargo viejo termina siempre: lo reemplaza el nuevo.
+    expect(terminados()).toEqual(['k1']);
+    expect(prisma.cargo.create).toHaveBeenCalledTimes(1);
+    expect(prisma.cargo.create.mock.calls[0]![0].data.profileId).toBe('p1');
+    // 1 vigente − 1 terminado + 1 nuevo = 1 cargo (de p1) y 1 vacante.
+    expect(1 - terminados().length + prisma.cargo.create.mock.calls.length).toBe(1);
+  });
+
+  it('N1: reelegida junto a otra electa, su cargo viejo termina y el tope se aplica al resto', async () => {
+    // 7 observadores: p1 sale (reelegida), o2 sale y no se presentó, 5 siguen; 2 puestos.
+    preparar([{ id: 'c1', profileId: 'p1' }, { id: 'c2', profileId: 'p2' }], voto(10, ['c1', 'c2']), votantes(10));
+    prisma.eleccion.findUnique.mockResolvedValue(eleccion({ cargo: 'observador', puestos: 2, plenos: 7 }));
+    salenCargos([
+      vigente('o1', 5, false, 'p1'), vigente('o2', 8),
+      ...['o3', 'o4', 'o5', 'o6', 'o7'].map((id) => vigente(id, 300)),
+    ]);
+    await service.contar('e1', NOW);
+    expect(terminados().sort()).toEqual(['o1', 'o2']);
+    expect(prisma.cargo.create).toHaveBeenCalledTimes(2);
+  });
+
+  it('N1: al contar, un observador con mandato por delante no queda elegido en una elección de vacantes', async () => {
+    preparar([{ id: 'c1', profileId: 'p1' }, { id: 'c2', profileId: 'p2' }], voto(10, ['c1', 'c2']), votantes(10));
+    prisma.eleccion.findUnique.mockResolvedValue(eleccion({ cargo: 'observador', puestos: 2, plenos: 7 }));
+    salenCargos(
+      ['o1', 'o2', 'o3', 'o4', 'o5'].map((id) => vigente(id, 300)),
+      [{ profileId: 'p1', tipo: 'observador', groupId: GEN, enFunciones: false, hasta: new Date(NOW.getTime() + 300 * DIA) }],
+    );
+    await service.contar('e1', NOW);
+    expect(guardado().data['electas']).toEqual(['c2']);
+  });
+
+  it('M1: los puestos plenos son los fijados al convocar; cambiar observadores.numero durante la elección no cambia quién termina', async () => {
+    rules.getInt.mockImplementation(async (k: string) => (k === 'observadores.numero' ? 9 : REGLAS[k]));
+    const cinco = ['c1', 'c2', 'c3', 'c4', 'c5'];
+    preparar(cinco.map((id, i) => ({ id, profileId: `p${i + 1}` })), voto(10, cinco), votantes(10));
+    prisma.eleccion.findUnique.mockResolvedValue(eleccion({ cargo: 'observador', puestos: 5, plenos: 7, periodoMeses: 12 }));
+    salenCargos([
+      ...['o1', 'o2', 'o3', 'o4', 'o5'].map((id) => vigente(id, 5)),
+      vigente('o6', 300), vigente('o7', 300),
+    ]);
+    await service.contar('e1', NOW);
+    // Con plenos 9 (la regla nueva) solo terminarían 3; con los 7 fijados terminan los 5 salientes.
+    expect(terminados()).toEqual(['o1', 'o2', 'o3', 'o4', 'o5']);
+    expect(rules.getInt).not.toHaveBeenCalledWith('observadores.numero', null);
+  });
+
   it('cuenta con la elección bloqueada: lee las fichas (ocultas o retiradas) después del bloqueo', async () => {
     preparar([{ id: 'c1', profileId: 'p1' }], voto(10, ['c1']), votantes(10));
     await service.contar('e1', NOW);
@@ -257,7 +310,10 @@ describe('PosesionService', () => {
 
   it('repetir el mismo cargo (reelección) no excluye', async () => {
     preparar([{ id: 'c1', profileId: 'p1' }], voto(10, ['c1']), votantes(10));
-    salenCargos([vigente('old', 10)], [{ profileId: 'p1', tipo: 'secretario', groupId: GEN }]);
+    salenCargos(
+      [vigente('old', 10, false, 'p1')],
+      [{ profileId: 'p1', tipo: 'secretario', groupId: GEN, enFunciones: false, hasta: new Date(NOW.getTime() + 10 * DIA) }],
+    );
     prisma.boardSeat.findMany.mockResolvedValue([{ profileId: 'p1', role: 'secretario' }]);
     await service.contar('e1', NOW);
     expect(guardado().data['electas']).toEqual(['c1']);
