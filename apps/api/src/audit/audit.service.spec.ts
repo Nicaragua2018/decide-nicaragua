@@ -204,6 +204,25 @@ describe('AuditService', () => {
     });
   });
 
+  describe('correos en los metadatos', () => {
+    const invitado = { ...mockEvent, action: 'user.invited', metadata: { invitedEmail: 'a@b.org', groupId: 'g1' } };
+    const fallido = { ...mockEvent, id: 'e3', action: 'user.login_failed', metadata: { email: 'x@y.com', n: { otro: 'z@w.net', ok: 'texto' } } };
+
+    it('getEvents no devuelve ningún correo', async () => {
+      prisma.auditEvent.findMany.mockResolvedValue([invitado, fallido]);
+      prisma.auditEvent.count.mockResolvedValue(2);
+      const r = await service.getEvents({});
+      expect(JSON.stringify(r.events)).not.toContain('@');
+      expect(r.events[0]!.metadata).toEqual({ groupId: 'g1' });
+      expect(r.events[1]!.metadata).toEqual({ n: { otro: '[oculto]', ok: 'texto' } });
+    });
+
+    it('getEventById tampoco', async () => {
+      prisma.auditEvent.findUnique.mockResolvedValue(invitado);
+      expect(JSON.stringify(await service.getEventById(EVENT_ID))).not.toContain('@');
+    });
+  });
+
   // ─── getEventById ─────────────────────────────────────────────────────────
 
   describe('getEventById', () => {

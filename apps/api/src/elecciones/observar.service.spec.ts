@@ -3,6 +3,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { ForbiddenException, NotFoundException, type ExecutionContext } from '@nestjs/common';
 import { plainToInstance } from 'class-transformer';
 import { validate } from 'class-validator';
+import { AuditService } from '../audit/audit.service';
 import { ObservarService } from './observar.service';
 import { ObservadorGuard } from './observador.guard';
 import { ObservacionDto } from './dto/observacion.dto';
@@ -82,6 +83,15 @@ describe('ObservarService', () => {
     const dto = { action: 'voto.', page: 2 };
     await expect(service.eventos(dto as never)).resolves.toEqual({ events: [], total: 0, page: 1, limit: 50 });
     expect(audit.getEvents).toHaveBeenCalledWith(dto);
+  });
+
+  it('los eventos que ve un observador no traen correos', async () => {
+    const pr = { auditEvent: { findMany: vi.fn().mockResolvedValue([
+      { id: 'e', createdAt: NOW, action: 'user.invited', resource: 'user:1', metadata: { invitedEmail: 'a@b.org' }, actor: null },
+    ]), count: vi.fn().mockResolvedValue(1) } };
+    const real = new AuditService(pr as never, {} as never);
+    const s = new ObservarService(prisma as never, real, guardia as never, publicadores as never);
+    expect(JSON.stringify(await s.eventos({}))).not.toContain('@');
   });
 
   it('las estadísticas de verificación cuentan por quien confirma, con el nombre visible', async () => {
