@@ -37,6 +37,8 @@ const ELECCION_ABIERTA = ['candidaturas', 'votacion'] as const;
 
 /** Suplentes provisionales que puede haber cuando la mesa no llega a dos miembros verificados. */
 const MAX_SUPLENTES = 2;
+/** Los cargos de la mesa (los mismos que convoca la primera jornada). */
+const CARGOS_MESA = ['administrador', 'coordinador_general', 'secretario'] as const;
 
 /** Puesto que queda vacante al suspender a su titular (lo recibe la elección anticipada). */
 export interface VacantePorSuspension {
@@ -690,7 +692,8 @@ export class BoardService {
    * (para una reactivación), quita las membresías (los guards de participación las miran), termina
    * todos sus cargos vigentes y borra sus asientos de la mesa. Tras confirmar, cada puesto vacante
    * va a los ganchos `alSuspender` (la elección anticipada); un asiento fundador sin cargo, con
-   * `mandatoHasta: null`. Si un gancho falla no se deshace la suspensión: la convocatoria de cada
+   * `mandatoHasta: null`, pero solo si ya hubo alguna elección de mesa (si no, la cubre la primera
+   * jornada). Cierra también los pedidos de revocación abiertos de esos cargos. Si un gancho falla no se deshace la suspensión: la convocatoria de cada
    * hora cubre después la vacante.
    */
   private async suspender(
@@ -718,6 +721,11 @@ export class BoardService {
         where: { id: { in: cargos.map((c) => c.id) }, terminadoAt: null },
         data: { terminadoAt: now, finCausa: 'suspension', enFunciones: false },
       });
+      // Un pedido de revocación de un cargo que ya terminó no tiene objeto: se cierra con el cargo.
+      await tx.revocacion.updateMany({
+        where: { cargoId: { in: cargos.map((c) => c.id) }, estado: 'abierta' },
+        data: { estado: 'vencida' },
+      });
     }
     const asientos = await tx.boardSeat.findMany({ where: { profile: { userId: targetUserId } }, select: { role: true } });
     await tx.boardSeat.deleteMany({ where: { profile: { userId: targetUserId } } });
@@ -728,7 +736,11 @@ export class BoardService {
       mandatoHasta: c.hasta,
     }));
     const fundadores = asientos.filter((a) => !cargos.some((c) => (c.tipo as string) === (a.role as string)));
-    if (fundadores.length > 0) {
+    // Antes de la primera jornada (nunca hubo una elección de mesa) no se abre anticipada para un
+    // asiento fundador: bloquearía la primera jornada, que ya cubre el puesto vacante.
+    const huboEleccionMesa =
+      fundadores.length > 0 && (await tx.eleccion.count({ where: { cargo: { in: [...CARGOS_MESA] } } })) > 0;
+    if (huboEleccionMesa) {
       const general = await tx.group.findUnique({ where: { slug: GENERAL_GROUP_SLUG }, select: { id: true } });
       if (general) {
         for (const a of fundadores) vacantes.push({ groupId: general.id, cargo: a.role as CargoTipoValue, mandatoHasta: null });

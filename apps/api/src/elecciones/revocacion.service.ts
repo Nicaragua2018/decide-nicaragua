@@ -212,7 +212,7 @@ export class RevocacionService implements OnModuleInit {
   /** Los pedidos abiertos de los cargos en cuyo electorado está la persona. */
   async listar(profileId: string, now: Date): Promise<RevocacionVista[]> {
     const filas = (await this.prisma.revocacion.findMany({
-      where: { estado: 'abierta', venceAt: { gt: now } },
+      where: { estado: 'abierta', venceAt: { gt: now }, cargo: { terminadoAt: null } },
       orderBy: { venceAt: 'asc' },
       select: SELECT_REVOCACION,
     })) as RevocacionFila[];
@@ -228,7 +228,7 @@ export class RevocacionService implements OnModuleInit {
   async resumenPorCargo(): Promise<Map<string, RevocacionResumen>> {
     const now = new Date();
     const filas = (await this.prisma.revocacion.findMany({
-      where: { estado: 'abierta', venceAt: { gt: now } },
+      where: { estado: 'abierta', venceAt: { gt: now }, cargo: { terminadoAt: null } },
       select: SELECT_REVOCACION,
     })) as RevocacionFila[];
     const m = new Map<string, RevocacionResumen>();
@@ -277,7 +277,9 @@ export class RevocacionService implements OnModuleInit {
     if (!r) throw new NotFoundException(NO_ENCONTRADA);
     if (!(await this.enElectorado(profileId, ambitoDe(r.cargo)))) throw new ForbiddenException(NO_ELECTORADO);
     if (r.cargo.profileId === profileId) throw new ForbiddenException(PROPIA);
-    if (r.estado !== 'abierta' || r.venceAt.getTime() <= now.getTime()) throw new ConflictException(CERRADO);
+    if (r.estado !== 'abierta' || r.venceAt.getTime() <= now.getTime() || r.cargo.terminadoAt !== null) {
+      throw new ConflictException(CERRADO);
+    }
     return r;
   }
 
@@ -291,7 +293,8 @@ export class RevocacionService implements OnModuleInit {
 
   /**
    * Con el pedido bloqueado: si los apoyos válidos llegan al umbral, lo marca logrado y deja el
-   * cargo en funciones. Devuelve cuántos apoyos contó, o null si aún no llega.
+   * cargo en funciones. Devuelve cuántos apoyos contó, o null si aún no llega (o si el cargo ya
+   * terminó: entonces el pedido se cierra como vencido).
    */
   private async siLlega(
     tx: Prisma.TransactionClient,
@@ -302,8 +305,13 @@ export class RevocacionService implements OnModuleInit {
   ): Promise<number | null> {
     const apoyos = await this.apoyosValidos(tx, id, ambitoDe(cargo));
     if (apoyos < umbral) return null;
+    const c = await tx.cargo.updateMany({ where: { id: cargo.id, terminadoAt: null }, data: { enFunciones: true } });
+    // El cargo terminó (renuncia, suspensión) después de leerlo: el pedido ya no tiene objeto.
+    if (c.count !== 1) {
+      await tx.revocacion.update({ where: { id }, data: { estado: 'vencida' } });
+      return null;
+    }
     await tx.revocacion.update({ where: { id }, data: { estado: 'lograda', logradaAt: now } });
-    await tx.cargo.updateMany({ where: { id: cargo.id, terminadoAt: null }, data: { enFunciones: true } });
     return apoyos;
   }
 

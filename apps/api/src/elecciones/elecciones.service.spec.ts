@@ -1,6 +1,6 @@
 import 'reflect-metadata';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { BadRequestException, ConflictException, ForbiddenException, HttpException } from '@nestjs/common';
+import { BadRequestException, ConflictException, ForbiddenException, HttpException, Logger } from '@nestjs/common';
 import { validate } from 'class-validator';
 import { plainToInstance } from 'class-transformer';
 import { EleccionesService } from './elecciones.service';
@@ -77,6 +77,7 @@ function buildPrisma() {
       updateMany: vi.fn().mockResolvedValue({ count: 1 }),
     },
     boardSeat: { findMany: vi.fn().mockResolvedValue([]), deleteMany: vi.fn().mockResolvedValue({ count: 1 }) },
+    revocacion: { updateMany: vi.fn().mockResolvedValue({ count: 0 }) },
     papeletaEleccion: {
       findUnique: vi.fn().mockResolvedValue(null),
       findMany: vi.fn().mockResolvedValue([]),
@@ -588,6 +589,29 @@ describe('EleccionesService', () => {
       expect(audit.log).toHaveBeenCalledWith(
         expect.objectContaining({ action: 'cargo.renuncia', metadata: { tipo: 'secretario', groupId: GEN } }),
       );
+    });
+
+    it('renunciar cierra el pedido de revocación abierto del cargo, dentro de la transacción', async () => {
+      prisma.cargo.findFirst.mockResolvedValue(cargoSec);
+      await service.renunciar(YO, 'c1', NOW);
+      expect(prisma.revocacion.updateMany).toHaveBeenCalledWith({
+        where: { cargoId: 'c1', estado: 'abierta' },
+        data: { estado: 'vencida' },
+      });
+      expect(prisma.revocacion.updateMany.mock.invocationCallOrder[0]!).toBeLessThan(
+        convocatoria.anticipada.mock.invocationCallOrder[0]!,
+      );
+    });
+
+    it('si la anticipada falla tras la renuncia, la renuncia se confirma, se audita y solo se avisa en el log', async () => {
+      const warn = vi.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
+      prisma.cargo.findFirst.mockResolvedValue(cargoSec);
+      convocatoria.anticipada.mockRejectedValue(new Error('boom'));
+      await expect(service.renunciar(YO, 'c1', NOW)).resolves.toBeUndefined();
+      expect(audit.log).toHaveBeenCalledWith(expect.objectContaining({ action: 'cargo.renuncia' }));
+      expect(audit.log.mock.invocationCallOrder[0]!).toBeLessThan(convocatoria.anticipada.mock.invocationCallOrder[0]!);
+      expect(warn).toHaveBeenCalled();
+      warn.mockRestore();
     });
 
     it('renunciar un cargo de coordinador no toca la mesa', async () => {

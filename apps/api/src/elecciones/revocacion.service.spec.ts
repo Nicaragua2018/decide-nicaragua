@@ -185,6 +185,37 @@ describe('RevocacionService', () => {
     await expect(service.apoyar(YO, REV, NOW)).rejects.toBeInstanceOf(ConflictException);
   });
 
+  it('apoyar un pedido cuyo cargo ya terminó (renuncia o suspensión) da 409 y no abre anticipada', async () => {
+    apoyan(['p2', 'p3', 'p4', YO]);
+    prisma.revocacion.findUnique.mockResolvedValue(revocacion({ cargo: cargo({ terminadoAt: new Date(NOW.getTime() - DIA) }) }));
+    await expect(service.apoyar(YO, REV, NOW)).rejects.toBeInstanceOf(ConflictException);
+    await expect(service.quitarApoyo(YO, REV, NOW)).rejects.toBeInstanceOf(ConflictException);
+    expect(prisma.revocacionApoyo.createMany).not.toHaveBeenCalled();
+    expect(prisma.revocacion.update).not.toHaveBeenCalled();
+    expect(convocatoria.anticipada).not.toHaveBeenCalled();
+  });
+
+  it('si el cargo terminó entre la lectura y el bloqueo, el pedido no queda lograda ni abre anticipada', async () => {
+    apoyan(['p2', 'p3', 'p4', YO]);
+    prisma.cargo.updateMany.mockResolvedValue({ count: 0 });
+    await service.apoyar(YO, REV, NOW);
+    expect(prisma.revocacion.update).not.toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ estado: 'lograda' }) }),
+    );
+    expect(convocatoria.anticipada).not.toHaveBeenCalled();
+    expect(audit.log).not.toHaveBeenCalledWith(expect.objectContaining({ action: 'revocacion.lograda' }));
+  });
+
+  it('listar y resumenPorCargo esconden los pedidos de cargos ya terminados', async () => {
+    prisma.revocacion.findMany.mockResolvedValue([]);
+    await service.listar(YO, NOW);
+    await service.resumenPorCargo();
+    expect(prisma.revocacion.findMany).toHaveBeenCalledTimes(2);
+    for (const call of prisma.revocacion.findMany.mock.calls) {
+      expect(call[0].where).toMatchObject({ estado: 'abierta', cargo: { terminadoAt: null } });
+    }
+  });
+
   it('apoyar bloquea el pedido y guarda el apoyo una sola vez', async () => {
     apoyan(['p-solicitante', 'p2']);
     await service.apoyar(YO, REV, NOW);

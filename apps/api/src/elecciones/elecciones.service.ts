@@ -4,6 +4,7 @@ import {
   ConflictException,
   ForbiddenException,
   Injectable,
+  Logger,
   NotFoundException,
   type OnModuleInit,
 } from '@nestjs/common';
@@ -146,6 +147,8 @@ function claveDeOrden(eleccionId: string, profileId: string, candidaturaId: stri
  */
 @Injectable()
 export class EleccionesService implements OnModuleInit {
+  private readonly logger = new Logger(EleccionesService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
@@ -281,13 +284,21 @@ export class EleccionesService implements OnModuleInit {
         const role = cargo.tipo as 'administrador' | 'coordinador_general' | 'secretario';
         await tx.boardSeat.deleteMany({ where: { role, profileId } });
       }
+      // Un pedido de revocación de un cargo que ya terminó no tiene objeto: se cierra con el cargo.
+      await tx.revocacion.updateMany({ where: { cargoId, estado: 'abierta' }, data: { estado: 'vencida' } });
     });
-    await this.convocatoria.anticipada({ groupId: cargo.groupId, cargo: cargo.tipo, mandatoHasta: cargo.hasta }, now);
     void this.audit.log({
       action: 'cargo.renuncia',
       resource: `cargo:${cargoId}`,
       metadata: { tipo: cargo.tipo, groupId: cargo.groupId },
     });
+    // La renuncia ya está confirmada: si la anticipada falla, la convocatoria de cada hora cubre la vacante.
+    try {
+      await this.convocatoria.anticipada({ groupId: cargo.groupId, cargo: cargo.tipo, mandatoHasta: cargo.hasta }, now);
+    } catch (err) {
+      const nombre = err instanceof Error ? err.name : 'Error';
+      this.logger.warn(`No se abrió la elección anticipada tras una renuncia (${cargo.tipo}): ${nombre}`);
+    }
   }
 
   /** «Quiénes nos representan»: pública. Solo el nombre visible, nunca el correo. */

@@ -13,7 +13,8 @@ function buildPrisma() {
     },
     cargo: { findMany: vi.fn().mockResolvedValue([]), updateMany: vi.fn().mockResolvedValue({ count: 0 }) },
     group: { findUnique: vi.fn().mockResolvedValue({ id: 'g-general' }) },
-    eleccion: { findMany: vi.fn().mockResolvedValue([]) },
+    eleccion: { findMany: vi.fn().mockResolvedValue([]), count: vi.fn().mockResolvedValue(0) },
+    revocacion: { updateMany: vi.fn().mockResolvedValue({ count: 0 }) },
     profile: { findUnique: vi.fn(), update: vi.fn(), findMany: vi.fn().mockResolvedValue([]) },
     user: { findUnique: vi.fn(), update: vi.fn(), updateMany: vi.fn().mockResolvedValue({ count: 1 }) },
     solicitudReactivacion: {
@@ -731,9 +732,42 @@ describe('BoardService', () => {
       expect(alSuspender.mock.invocationCallOrder[0]!).toBeGreaterThan(prisma.boardAction.updateMany.mock.invocationCallOrder[0]!);
     });
 
-    it('un asiento fundador sin cargo abre la anticipada sin mandato (null) en el grupo general', async () => {
+    it('suspender cierra los pedidos de revocación abiertos de sus cargos, dentro de la transacción', async () => {
       const alSuspender = vi.fn().mockResolvedValue('e-1');
       service.registrarAlSuspender(alSuspender);
+      prisma.cargo.findMany.mockResolvedValue([{ id: 'c1', tipo: 'secretario', groupId: 'g-general', hasta: HASTA }]);
+      prisma.boardSeat.findMany.mockResolvedValue([{ role: 'secretario' }]);
+
+      await service.voteAction(ADMIN, 'a1', true, 'ip');
+
+      expect(prisma.revocacion.updateMany).toHaveBeenCalledWith({
+        where: { cargoId: { in: ['c1'] }, estado: 'abierta' },
+        data: { estado: 'vencida' },
+      });
+      expect(prisma.revocacion.updateMany.mock.invocationCallOrder[0]!).toBeLessThan(alSuspender.mock.invocationCallOrder[0]!);
+    });
+
+    it('suspender a un fundador antes de la primera jornada no abre anticipada: la primera jornada cubre el puesto', async () => {
+      const alSuspender = vi.fn().mockResolvedValue('e-1');
+      service.registrarAlSuspender(alSuspender);
+      prisma.cargo.findMany.mockResolvedValue([]);
+      prisma.boardSeat.findMany.mockResolvedValue([{ role: 'coordinador_general' }]);
+      prisma.eleccion.count.mockResolvedValue(0);
+
+      await service.voteAction(ADMIN, 'a1', true, 'ip');
+
+      expect(prisma.eleccion.count).toHaveBeenCalledWith({
+        where: { cargo: { in: ['administrador', 'coordinador_general', 'secretario'] } },
+      });
+      expect(alSuspender).not.toHaveBeenCalled();
+      expect(prisma.boardSeat.deleteMany).toHaveBeenCalledWith({ where: { profile: { userId: 'u-t' } } });
+      expect(resuelta()).toMatchObject({ data: { status: 'executed' } });
+    });
+
+    it('un asiento fundador sin cargo, tras alguna elección de mesa, abre la anticipada sin mandato (null) en el grupo general', async () => {
+      const alSuspender = vi.fn().mockResolvedValue('e-1');
+      service.registrarAlSuspender(alSuspender);
+      prisma.eleccion.count.mockResolvedValue(1);
       prisma.cargo.findMany.mockResolvedValue([]);
       prisma.boardSeat.findMany.mockResolvedValue([{ role: 'coordinador_general' }]);
       prisma.group.findUnique.mockResolvedValue({ id: 'g-general' });
