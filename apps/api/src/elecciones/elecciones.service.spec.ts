@@ -96,6 +96,7 @@ describe('EleccionesService', () => {
   let guardia: ReturnType<typeof guardiaMock>;
   let publicadores: ReturnType<typeof publicadoresMock>;
   let revocacion: { resumenPorCargo: ReturnType<typeof vi.fn> };
+  let board: { registrarAlSuspender: ReturnType<typeof vi.fn> };
   let service: EleccionesService;
 
   beforeEach(() => {
@@ -111,7 +112,18 @@ describe('EleccionesService', () => {
       guardia as never,
       (publicadores = publicadoresMock()) as never,
       (revocacion = { resumenPorCargo: vi.fn().mockResolvedValue(new Map()) }) as never,
+      (board = { registrarAlSuspender: vi.fn() }) as never,
     );
+  });
+
+  it('al iniciar, un puesto que deja vacante una suspensión abre su elección anticipada', async () => {
+    service.onModuleInit();
+    expect(board.registrarAlSuspender).toHaveBeenCalledTimes(1);
+    const gancho = board.registrarAlSuspender.mock.calls[0]![0] as (p: unknown) => Promise<unknown>;
+    const hasta = new Date('2027-06-01T00:00:00Z');
+    await expect(gancho({ groupId: 'g-general', cargo: 'secretario', mandatoHasta: hasta })).resolves.toBe('e-ant');
+    expect(convocatoria.anticipada).toHaveBeenCalledWith({ groupId: 'g-general', cargo: 'secretario', mandatoHasta: hasta }, expect.any(Date));
+    expect(convocatoria.anticipada.mock.calls[0]).toHaveLength(2); // sin transacción: audita al momento
   });
 
   const ficha = { presentacion: 'Quiero servir a la colmena.', compromisos: ['Rendir cuentas cada mes'] };

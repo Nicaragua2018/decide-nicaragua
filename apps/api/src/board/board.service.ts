@@ -3,12 +3,14 @@ import {
   ConflictException,
   ForbiddenException,
   Injectable,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import {
   BOARD_ROLES,
   BoardActionType,
+  GENERAL_GROUP_SLUG,
   MODERACION_CAUSAS,
   NICARAGUA_DEPARTMENTS,
   type ModeracionCausaValue,
@@ -16,6 +18,7 @@ import {
   type BoardActionSummary,
   type BoardRole,
   type BoardSeatSummary,
+  type CargoTipoValue,
   type JwtPayload,
 } from '@decide/shared';
 import { PrismaService } from '../prisma/prisma.service';
@@ -30,6 +33,17 @@ const VOTOS_PARA_RESOLVER = 2;
 /** Una ficha solo se oculta mientras la elección está abierta (después ya está contada). */
 const ELECCION_ABIERTA = ['candidaturas', 'votacion'] as const;
 
+/** Suplentes provisionales que puede haber cuando la mesa no llega a dos miembros verificados. */
+const MAX_SUPLENTES = 2;
+
+/** Puesto que queda vacante al suspender a su titular (lo recibe la elección anticipada). */
+export interface VacantePorSuspension {
+  groupId: string;
+  cargo: CargoTipoValue;
+  /** Fin del mandato que faltaba; null para un asiento fundador sin cargo. */
+  mandatoHasta: Date | null;
+}
+
 interface ResultadoCambioRegla {
   status: 'executed' | 'rejected';
   cambio: { id: string; key: string } | null;
@@ -37,6 +51,10 @@ interface ResultadoCambioRegla {
 
 @Injectable()
 export class BoardService {
+  private readonly logger = new Logger(BoardService.name);
+  /** Ganchos de «al suspender» (los registra EleccionesModule: así este módulo no importa elecciones). */
+  private readonly alSuspender: ((p: VacantePorSuspension) => Promise<unknown>)[] = [];
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
@@ -56,6 +74,88 @@ export class BoardService {
     });
     if (!seat || (seat.profile.user.status as string) !== 'verified_citizen') return null;
     return seat.role as BoardRole;
+  }
+
+  /** Registra lo que se hace con cada puesto que deja vacante una suspensión (la elección anticipada). */
+  registrarAlSuspender(fn: (p: VacantePorSuspension) => Promise<unknown>): void {
+    this.alSuspender.push(fn);
+  }
+
+  /**
+   * Mesa incompleta: si hay menos de 2 miembros de la mesa con cuenta verificada, hasta 2
+   * observadores vigentes y verificados (que no ocupen un asiento) firman las revisiones de texto y
+   * las moderaciones. Van primero los mejor colocados en el orden final de su elección; desempate
+   * por antigüedad en el cargo y por id. Con la mesa completa no hay suplentes.
+   */
+  async suplentesProvisionales(now: Date = new Date()): Promise<string[]> {
+    return (await this.firmantes(now)).suplentes;
+  }
+
+  /** Quien firma revisiones de texto y moderaciones: la mesa o un suplente provisional. Nunca una acción de la mesa. */
+  async puedeFirmarRevision(profileId: string, now: Date = new Date()): Promise<boolean> {
+    if ((await this.roleOf(profileId)) !== null) return true;
+    return (await this.suplentesProvisionales(now)).includes(profileId);
+  }
+
+  /** Miembros verificados de la mesa más los suplentes provisionales. */
+  async firmantesDisponibles(now: Date = new Date()): Promise<number> {
+    const f = await this.firmantes(now);
+    return f.mesa + f.suplentes.length;
+  }
+
+  private async firmantes(now: Date): Promise<{ mesa: number; suplentes: string[] }> {
+    const asientos = await this.prisma.boardSeat.findMany({
+      select: { profileId: true, profile: { select: { user: { select: { status: true } } } } },
+    });
+    const mesa = asientos.filter((a) => (a.profile.user.status as string) === 'verified_citizen').length;
+    if (mesa >= VOTOS_PARA_RESOLVER) return { mesa, suplentes: [] };
+
+    const conAsiento = new Set(asientos.map((a) => a.profileId));
+    const observadores = (
+      await this.prisma.cargo.findMany({
+        where: {
+          tipo: 'observador',
+          terminadoAt: null,
+          desde: { lte: now },
+          profile: { user: { status: 'verified_citizen' } },
+        },
+        select: { id: true, profileId: true, eleccionId: true, desde: true, profile: { select: { user: { select: { status: true } } } } },
+      })
+    ).filter((c) => (c.profile.user.status as string) === 'verified_citizen' && !conAsiento.has(c.profileId));
+    if (observadores.length === 0) return { mesa, suplentes: [] };
+
+    const conEleccion = observadores.filter((c): c is typeof c & { eleccionId: string } => c.eleccionId !== null);
+    const [candidaturas, elecciones] = conEleccion.length
+      ? await Promise.all([
+          this.prisma.candidatura.findMany({
+            where: { OR: conEleccion.map((c) => ({ eleccionId: c.eleccionId, profileId: c.profileId })) },
+            select: { id: true, eleccionId: true, profileId: true },
+          }),
+          this.prisma.eleccion.findMany({
+            where: { id: { in: [...new Set(conEleccion.map((c) => c.eleccionId))] } },
+            select: { id: true, ordenFinal: true },
+          }),
+        ])
+      : [[], []];
+    const posicion = (c: (typeof observadores)[number]): number => {
+      const k = candidaturas.find((x) => x.eleccionId === c.eleccionId && x.profileId === c.profileId);
+      const i = k ? (elecciones.find((e) => e.id === c.eleccionId)?.ordenFinal.indexOf(k.id) ?? -1) : -1;
+      return i < 0 ? Number.POSITIVE_INFINITY : i;
+    };
+    const ordenados = observadores
+      .map((c) => ({ c, pos: posicion(c) }))
+      .sort(
+        (a, b) =>
+          a.pos - b.pos ||
+          a.c.desde.getTime() - b.c.desde.getTime() ||
+          (a.c.id < b.c.id ? -1 : a.c.id > b.c.id ? 1 : 0),
+      );
+    const suplentes: string[] = [];
+    for (const { c } of ordenados) {
+      if (!suplentes.includes(c.profileId)) suplentes.push(c.profileId);
+      if (suplentes.length === MAX_SUPLENTES) break;
+    }
+    return { mesa, suplentes };
   }
 
   async isAdministrator(profileId: string): Promise<boolean> {
@@ -263,7 +363,8 @@ export class BoardService {
         const despues: (() => Promise<void>)[] = [];
         if (aFavor < VOTOS_PARA_RESOLVER && enContra < VOTOS_PARA_RESOLVER) return { status: 'pending' as const, despues };
 
-        const ejecutada = aFavor >= VOTOS_PARA_RESOLVER && (await this.execute(tx, type, targetUserId, params, despues));
+        const ejecutada =
+          aFavor >= VOTOS_PARA_RESOLVER && (await this.execute(tx, actionId, type, targetUserId, params, despues));
         const status = ejecutada ? ('executed' as const) : ('rejected' as const);
         const tomada = await tx.boardAction.updateMany({
           where: { id: actionId, status: 'pending' },
@@ -451,11 +552,78 @@ export class BoardService {
   }
 
   /**
+   * Suspende la cuenta dentro de la transacción de la firma. Guarda en la acción el estado previo
+   * (para una reactivación), quita las membresías (los guards de participación las miran), termina
+   * todos sus cargos vigentes y borra sus asientos de la mesa. Tras confirmar, cada puesto vacante
+   * va a los ganchos `alSuspender` (la elección anticipada); un asiento fundador sin cargo, con
+   * `mandatoHasta: null`. Si un gancho falla no se deshace la suspensión: la convocatoria de cada
+   * hora cubre después la vacante.
+   */
+  private async suspender(
+    tx: Prisma.TransactionClient,
+    actionId: string,
+    targetUserId: string,
+    params: Record<string, unknown>,
+    despues: (() => Promise<void>)[],
+  ): Promise<boolean> {
+    const now = new Date();
+    const previo = await tx.user.findUnique({ where: { id: targetUserId }, select: { status: true } });
+    await tx.user.update({ where: { id: targetUserId }, data: { status: 'suspended' } });
+    await tx.groupMembership.deleteMany({ where: { profile: { userId: targetUserId } } });
+    await tx.boardAction.update({
+      where: { id: actionId },
+      data: { params: { ...params, estadoPrevio: (previo?.status as string | undefined) ?? null } as Prisma.InputJsonValue },
+    });
+
+    const cargos = await tx.cargo.findMany({
+      where: { profile: { userId: targetUserId }, terminadoAt: null },
+      select: { id: true, tipo: true, groupId: true, hasta: true },
+    });
+    if (cargos.length > 0) {
+      await tx.cargo.updateMany({
+        where: { id: { in: cargos.map((c) => c.id) }, terminadoAt: null },
+        data: { terminadoAt: now, finCausa: 'suspension', enFunciones: false },
+      });
+    }
+    const asientos = await tx.boardSeat.findMany({ where: { profile: { userId: targetUserId } }, select: { role: true } });
+    await tx.boardSeat.deleteMany({ where: { profile: { userId: targetUserId } } });
+
+    const vacantes: VacantePorSuspension[] = cargos.map((c) => ({
+      groupId: c.groupId,
+      cargo: c.tipo as CargoTipoValue,
+      mandatoHasta: c.hasta,
+    }));
+    const fundadores = asientos.filter((a) => !cargos.some((c) => (c.tipo as string) === (a.role as string)));
+    if (fundadores.length > 0) {
+      const general = await tx.group.findUnique({ where: { slug: GENERAL_GROUP_SLUG }, select: { id: true } });
+      if (general) {
+        for (const a of fundadores) vacantes.push({ groupId: general.id, cargo: a.role as CargoTipoValue, mandatoHasta: null });
+      }
+    }
+    if (vacantes.length > 0) despues.push(() => this.avisarVacantes(vacantes));
+    return true;
+  }
+
+  private async avisarVacantes(vacantes: VacantePorSuspension[]): Promise<void> {
+    for (const v of vacantes) {
+      for (const fn of this.alSuspender) {
+        try {
+          await fn(v);
+        } catch (err) {
+          const nombre = err instanceof Error ? err.name : 'Error';
+          this.logger.warn(`No se abrió la elección anticipada de un puesto vacante por suspensión (${v.cargo}): ${nombre}`);
+        }
+      }
+    }
+  }
+
+  /**
    * Aplica la acción aprobada dentro de la transacción de la firma. Devuelve false si ya no se
    * puede aplicar (queda rechazada). Lo que no cabe en la transacción va a `despues`.
    */
   private async execute(
     tx: Prisma.TransactionClient,
+    actionId: string,
     type: BoardActionType,
     targetUserId: string | null,
     params: Record<string, unknown>,
@@ -464,12 +632,7 @@ export class BoardService {
     if (type === BoardActionType.ocultar_candidatura) return this.ocultarCandidatura(tx, params, despues);
     // change_rule se resuelve aparte (votarCambioRegla); las demás acciones exigen persona objetivo.
     if (targetUserId === null) throw new BadRequestException('La acción no tiene persona objetivo');
-    if (type === BoardActionType.suspend_user) {
-      // Los guards de participación miran la membresía: suspender también la quita.
-      await tx.user.update({ where: { id: targetUserId }, data: { status: 'suspended' } });
-      await tx.groupMembership.deleteMany({ where: { profile: { userId: targetUserId } } });
-      return true;
-    }
+    if (type === BoardActionType.suspend_user) return this.suspender(tx, actionId, targetUserId, params, despues);
     const birthDepartment = params['birthDepartment'] as string;
     const profile = await tx.profile.update({
       where: { userId: targetUserId },

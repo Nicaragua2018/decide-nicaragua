@@ -22,6 +22,7 @@ import type {
 } from '@decide/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
+import { BoardService } from '../board/board.service';
 import { GuardiaService, type OpcionesPublicar } from '../asistente/guardia.service';
 import { Publicadores } from '../asistente/publicadores';
 import { round5 } from '../frases/agregado';
@@ -152,10 +153,16 @@ export class EleccionesService implements OnModuleInit {
     private readonly guardia: GuardiaService,
     private readonly publicadores: Publicadores,
     private readonly revocacion: RevocacionService,
+    private readonly board: BoardService,
   ) {}
 
-  /** La revisión de la mesa publica una candidatura aprobada con la misma llamada. */
+  /**
+   * La revisión de la mesa publica una candidatura aprobada con la misma llamada. Y cada puesto que
+   * deja vacante una suspensión abre su elección anticipada (tras confirmar la suspensión, sin
+   * transacción: audita al momento). El gancho evita que la mesa importe las elecciones.
+   */
   onModuleInit(): void {
+    this.board.registrarAlSuspender((p) => this.convocatoria.anticipada(p, new Date()));
     this.publicadores.registrar('candidatura', (autor, args, opts) => {
       const a = args as { eleccionId: string; presentacion: string; compromisos: string[] };
       return this.presentarse(autor, a.eleccionId, { presentacion: a.presentacion, compromisos: a.compromisos }, opts);

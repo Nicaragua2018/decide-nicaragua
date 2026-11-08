@@ -42,7 +42,7 @@ const YO = 'p-yo';
 describe('ForumsService', () => {
   let prisma: ReturnType<typeof buildPrisma>;
   let audit: { log: ReturnType<typeof vi.fn> };
-  let board: { roleOf: ReturnType<typeof vi.fn> };
+  let board: { roleOf: ReturnType<typeof vi.fn>; puedeFirmarRevision: ReturnType<typeof vi.fn> };
   let rules: { getInt: ReturnType<typeof vi.fn> };
   let service: ForumsService;
 
@@ -50,7 +50,9 @@ describe('ForumsService', () => {
     prisma = buildPrisma();
     prisma.$transaction.mockImplementation((fn: (tx: unknown) => unknown) => fn(prisma));
     audit = { log: vi.fn().mockResolvedValue(undefined) };
-    board = { roleOf: vi.fn().mockResolvedValue(null) };
+    const roleOf = vi.fn().mockResolvedValue(null);
+    // Por defecto firma revisiones quien tiene cargo en la mesa (sin suplentes).
+    board = { roleOf, puedeFirmarRevision: vi.fn(async (p: string) => (await roleOf(p)) !== null) };
     rules = { getInt: vi.fn().mockResolvedValue(7) };
     service = new ForumsService(prisma as never, audit as never, board as never, rules as never, new GroupAccessService(prisma as never));
     prisma.solucion.count.mockResolvedValue(1);
@@ -1356,6 +1358,30 @@ describe('ForumsService', () => {
       await expect(service.confirmar(YO, 'ma1', true, 'ip')).rejects.toThrow(ForbiddenException);
       expect(prisma.moderationAction.updateMany).not.toHaveBeenCalled();
       expect(prisma.$transaction).not.toHaveBeenCalled();
+    });
+
+    it('un suplente confirma una moderación pero no resuelve apelaciones', async () => {
+      board.roleOf.mockResolvedValue(null);
+      board.puedeFirmarRevision.mockResolvedValue(true);
+      prisma.moderationAction.findUnique.mockResolvedValue(accion());
+      prisma.solucion.update.mockResolvedValue({});
+      await service.confirmar(YO, 'ma1', true, 'ip');
+      expect(board.puedeFirmarRevision).toHaveBeenCalledWith(YO);
+      expect(prisma.moderationAction.updateMany).toHaveBeenCalledWith(
+        expect.objectContaining({ data: { status: 'oculto', confirmadorProfileId: YO } }),
+      );
+      prisma.moderationAction.findMany.mockResolvedValue([]);
+      await expect(service.listPorConfirmar(YO)).resolves.toEqual([]);
+      prisma.moderationAction.findUnique.mockResolvedValue(accion({ status: 'apelado' }));
+      await expect(service.resolveAppeal(YO, 'ma1', true, 'ip')).rejects.toThrow(ForbiddenException);
+      await expect(service.listAppeals(YO)).rejects.toThrow(ForbiddenException);
+    });
+
+    it('un suplente tampoco confirma su propia solicitud', async () => {
+      board.roleOf.mockResolvedValue(null);
+      board.puedeFirmarRevision.mockResolvedValue(true);
+      prisma.moderationAction.findUnique.mockResolvedValue(accion({ moderatorProfileId: YO }));
+      await expect(service.confirmar(YO, 'ma1', true, 'ip')).rejects.toThrow('No puedes confirmar tu propia solicitud.');
     });
 
     it('confirmar una pendiente oculta el contenido y pasa a oculto, en una transacción', async () => {
