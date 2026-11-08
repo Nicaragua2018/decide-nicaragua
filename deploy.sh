@@ -8,6 +8,13 @@
 #   bash deploy.sh --env-file env.production --seed-admin
 #   bash deploy.sh --no-build
 #
+# Traefik:
+#   TRAEFIK_MODO=propio      (por defecto) levanta su propio Traefik en 80/443.
+#   TRAEFIK_MODO=compartido  usa un Traefik que ya corre en el VPS (por ejemplo el
+#                            de OpenCivic Solutions). Ese Traefik debe leer etiquetas
+#                            de Docker y tener las entradas web/websecure y el
+#                            resolvedor de certificados "letsencrypt".
+#
 # Requirements:
 #   - Docker and Docker Compose installed on the VPS
 #   - Ports 80 and 443 open
@@ -80,7 +87,11 @@ if [ ! -f "$ENV_FILE" ]; then
 fi
 
 compose() {
-  docker compose --env-file "$ENV_FILE" "$@"
+  if [ "${TRAEFIK_MODO_VALUE:-propio}" = "propio" ]; then
+    docker compose --env-file "$ENV_FILE" --profile traefik-propio "$@"
+  else
+    docker compose --env-file "$ENV_FILE" "$@"
+  fi
 }
 
 # Read KEY=value without sourcing the file. This avoids shell-expanding secrets
@@ -127,8 +138,15 @@ required_vars=(
   APP_URL API_URL COOKIE_DOMAIN
   RESEND_API_KEY EMAIL_FROM IP_HASH_SALT
   POSTGRES_PASSWORD INTERNAL_API_KEY
-  TRAEFIK_ACME_EMAIL TRAEFIK_DASHBOARD_PASSWORD
 )
+
+TRAEFIK_MODO_VALUE="$(get_env_var TRAEFIK_MODO)"
+TRAEFIK_MODO_VALUE="${TRAEFIK_MODO_VALUE:-propio}"
+case "$TRAEFIK_MODO_VALUE" in
+  propio) required_vars+=(TRAEFIK_ACME_EMAIL TRAEFIK_DASHBOARD_PASSWORD) ;;
+  compartido) echo "==> Traefik: compartido (se usa el Traefik que ya corre en el VPS)" ;;
+  *) echo "ERROR: TRAEFIK_MODO must be 'propio' or 'compartido'"; exit 1 ;;
+esac
 
 for var in "${required_vars[@]}"; do
   require_env "$var"
@@ -194,8 +212,10 @@ if [ ! -d "$MIGRATIONS_DIR" ] || [ -z "$(ls -A "$MIGRATIONS_DIR" 2>/dev/null)" ]
   exit 1
 fi
 
-echo "==> Preparing Traefik directories..."
-mkdir -p infra/traefik/dynamic
+if [ "$TRAEFIK_MODO_VALUE" = "propio" ]; then
+  echo "==> Preparing Traefik directories..."
+  mkdir -p infra/traefik/dynamic
+fi
 
 if [ "$NO_BUILD" = false ]; then
   echo "==> Building Docker images..."
@@ -238,7 +258,9 @@ echo ""
 echo "==> Deployment successful"
 echo "    Web:     https://${APP_DOMAIN_VALUE}"
 echo "    API:     https://api.${APP_DOMAIN_VALUE}/api/health"
-echo "    Traefik: https://traefik.${APP_DOMAIN_VALUE}"
+if [ "$TRAEFIK_MODO_VALUE" = "propio" ]; then
+  echo "    Traefik: https://traefik.${APP_DOMAIN_VALUE}"
+fi
 echo ""
 echo "Logs:"
 echo "  docker compose --env-file ${ENV_FILE} logs -f [api|web|postgres|redis|traefik]"

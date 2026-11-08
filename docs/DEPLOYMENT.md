@@ -144,6 +144,16 @@ El asistente está apagado por defecto (ADR-025). Para encenderlo:
 
    Para apagarlo, volver a `false` y reiniciar igual.
 
+## 7. VPS compartido con OpenCivic Solutions (Traefik compartido)
+
+En el VPS `srv2047035` (`179.236.66.237`) ya corre el Traefik de OpenCivic Solutions (`/docker/traefik`, red del host, puertas 80 y 443). Nicaragua Decide **no levanta su propio Traefik** ahí: usa ese.
+
+- En `.env` de `/docker/decide-nicaragua` añade `TRAEFIK_MODO=compartido`. Así `deploy.sh` no pide `TRAEFIK_ACME_EMAIL` ni `TRAEFIK_DASHBOARD_PASSWORD` y no arranca el servicio `traefik` (queda en el perfil `traefik-propio`).
+- Los routers, servicios y el middleware de cabeceras llevan el prefijo `decide-` y se definen por etiquetas de Docker, para no chocar con `opencivicsolutions.org`.
+- Base de datos, Redis y la red `decide_network` son propios de Nicaragua Decide.
+- DNS: los registros `A` de `@` y `api` de `nicaraguadecide.org` deben apuntar a `179.236.66.237` (el `www` es un CNAME). El certificado lo emite el Traefik compartido con su resolvedor `letsencrypt`.
+- Si quedó un Traefik propio de un intento anterior: `docker rm -f traefik`.
+
 ## Notas finales
 
 - El archivo `env.production` contiene secretos y no debe compartirse públicamente.
