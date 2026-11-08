@@ -91,7 +91,7 @@ Los cargos se pueden dejar, pedir que se repitan o perder, sin que nadie quede s
 - [x] Reactivación de cuentas: pase de 30 minutos, pedido a la mesa, 2 de 3 para reactivar o rechazar, estado previo restaurado
 - [x] Página «Observar»: auditoría, verificaciones, matrices y gastos, con observaciones públicas revisadas; sin correos en los metadatos
 
-**Sigue:** elecciones en «Desde tu última visita» y moderación posterior de fichas.
+**Sigue:** moderación posterior de fichas.
 
 ---
 

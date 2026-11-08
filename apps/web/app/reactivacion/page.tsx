@@ -8,6 +8,14 @@ import { pedirReactivacion, verCasoSuspension } from '@/lib/actions';
 const TEXTO_MIN = 10;
 const SIN_PASE = 'Vuelve a entrar con tu contraseña para ver tu caso.';
 
+function olvidarPase() {
+  try {
+    sessionStorage.removeItem('reactivacionToken');
+  } catch {
+    // sin almacenamiento: no hay nada que borrar
+  }
+}
+
 function fecha(iso: string): string {
   return new Date(iso).toLocaleDateString('es-NI', { day: 'numeric', month: 'long', year: 'numeric' });
 }
@@ -39,7 +47,10 @@ export default function ReactivacionPage() {
     }
     setToken(t);
     void verCasoSuspension(t).then((r) => {
-      if ('error' in r) setAviso(r.error);
+      if ('error' in r) {
+        olvidarPase();
+        setAviso(r.error);
+      }
       else setCaso(r.caso);
       setCargando(false);
     });
@@ -56,6 +67,8 @@ export default function ReactivacionPage() {
       setError(r.error);
       return;
     }
+    olvidarPase();
+    setToken(null);
     setCaso(r.caso);
     setTexto('');
   }

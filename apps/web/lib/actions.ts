@@ -1038,23 +1038,39 @@ export async function renunciarCargo(cargoId: string): Promise<ActionResult> {
 
 // ─── Reactivación y observación (3C-2) ────────────────────────────────────────
 
-/** Ver el caso de la cuenta suspendida. Se llama una sola vez por carga de la página (comparte el límite del inicio de sesión). */
-export async function verCasoSuspension(token: string): Promise<{ caso: CasoSuspension } | { error: string }> {
-  if (typeof token !== 'string' || token.length === 0) return { error: 'Vuelve a entrar con tu contraseña para ver tu caso.' };
-  const res = await actionFetch('/api/auth/reactivacion/caso', { method: 'POST', body: JSON.stringify({ token }) });
+const SIN_PASE = 'Vuelve a entrar con tu contraseña para ver tu caso.';
+
+/**
+ * Llama a una ruta de reactivación reenviando la IP real del cliente: el límite de intentos cuenta
+ * por persona y no por la IP compartida del servidor web. Un 429 se muestra en español.
+ */
+async function reactivacionFetch(path: string, body: Record<string, string>): Promise<{ caso: CasoSuspension } | { error: string }> {
+  const { headers: nextHeaders } = await import('next/headers');
+  const headerStore = await nextHeaders();
+  const clientIp = headerStore.get('x-forwarded-for') ?? headerStore.get('x-real-ip') ?? '';
+  const res = await fetch(`${API_URL}${path}`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(clientIp ? { 'x-forwarded-for': clientIp } : {}),
+    },
+    body: JSON.stringify(body),
+  });
+  if (res.status === 429) return { error: 'Demasiados intentos. Espera unos minutos y vuelve a intentarlo.' };
   if (!res.ok) return { error: await parseError(res) };
   return { caso: (await res.json()) as CasoSuspension };
 }
 
+/** Ver el caso de la cuenta suspendida. Se llama una sola vez por carga de la página (tiene su propio límite de intentos). */
+export async function verCasoSuspension(token: string): Promise<{ caso: CasoSuspension } | { error: string }> {
+  if (typeof token !== 'string' || token.length === 0) return { error: SIN_PASE };
+  return reactivacionFetch('/api/auth/reactivacion/caso', { token });
+}
+
 /** Pedir la reactivación de la cuenta suspendida. Usa el pase de 30 minutos que dio el inicio de sesión. */
 export async function pedirReactivacion(token: string, texto: string): Promise<{ caso: CasoSuspension } | { error: string }> {
-  if (typeof token !== 'string' || token.length === 0) return { error: 'Vuelve a entrar con tu contraseña para ver tu caso.' };
-  const res = await actionFetch('/api/auth/reactivacion', {
-    method: 'POST',
-    body: JSON.stringify({ token, texto }),
-  });
-  if (!res.ok) return { error: await parseError(res) };
-  return { caso: (await res.json()) as CasoSuspension };
+  if (typeof token !== 'string' || token.length === 0) return { error: SIN_PASE };
+  return reactivacionFetch('/api/auth/reactivacion', { token, texto });
 }
 
 /** Dejar una observación pública sobre un hecho del registro. Pasa por la revisión previa. */

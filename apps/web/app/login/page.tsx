@@ -28,6 +28,11 @@ function LoginForm() {
       });
 
       if (res.ok) {
+        try {
+          sessionStorage.removeItem('reactivacionToken');
+        } catch {
+          // sin almacenamiento: no hay nada que borrar
+        }
         router.push(nextPath);
         router.refresh();
       } else {
