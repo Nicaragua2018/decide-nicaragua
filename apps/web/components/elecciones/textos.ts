@@ -32,11 +32,11 @@ const EVENTO_ETIQUETA: Record<string, string> = {
   'eleccion.contada': 'Se contó una elección',
   'cargo.posesion': 'Alguien tomó un cargo',
   'cargo.renuncia': 'Alguien renunció a un cargo',
-  // La oculta la mesa (dos firmas) o la revisión posterior del asistente: el texto vale para ambas.
-  'candidatura.ocultada': 'Se ocultó una candidatura por moderación',
+  // Siempre con dos firmas de la mesa: por su propia propuesta o por una solicitud del asistente.
+  'candidatura.ocultada': 'Se ocultó una candidatura',
   'revocacion.abierta': 'Se pidió una revocación',
-  'revocacion.retirada_por_moderacion': 'Se cerró un pedido de revocación por moderación',
-  'observacion.retirada': 'Se retiró una observación por moderación',
+  'revocacion.retirada_por_moderacion': 'La mesa retiró un pedido de revocación',
+  'observacion.ocultada': 'Se ocultó una observación',
   'revocacion.lograda': 'Una revocación reunió los apoyos',
   'board.action_executed': 'La mesa ejecutó una acción',
   'reactivacion.aprobada': 'La mesa reactivó una cuenta',

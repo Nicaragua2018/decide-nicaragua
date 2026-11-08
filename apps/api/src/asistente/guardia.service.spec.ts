@@ -19,7 +19,7 @@ function buildPrisma() {
     profile: { findUnique: vi.fn().mockResolvedValue({ userId: 'u1' }) },
     frase: { create: vi.fn().mockResolvedValue({ id: 'f1' }) },
     textoEnRevision: { create: vi.fn().mockResolvedValue({ id: 'rev1' }), findMany: vi.fn().mockResolvedValue([]) },
-    colaRevisionPosterior: { upsert: vi.fn().mockResolvedValue({}) },
+    colaRevisionPosterior: { upsert: vi.fn().mockResolvedValue({}), deleteMany: vi.fn().mockResolvedValue({ count: 0 }) },
   };
 }
 
@@ -166,6 +166,14 @@ describe('GuardiaService (con frases.create)', () => {
     prisma.groupMembership.findUnique.mockResolvedValue(null);
     await expect(frases.create(YO, T, ODIO, 'ip')).rejects.toThrow();
     expect(moderacion.revisar).not.toHaveBeenCalled();
+  });
+
+  it('despuesDePublicar: con el texto ya revisado, quita de la cola una fila vieja del mismo contenido', async () => {
+    await guardia.despuesDePublicar('candidatura', 'k1', true);
+    expect(prisma.colaRevisionPosterior.deleteMany).toHaveBeenCalledWith({ where: { target: 'candidatura', targetId: 'k1' } });
+    expect(prisma.colaRevisionPosterior.upsert).not.toHaveBeenCalled();
+    prisma.colaRevisionPosterior.deleteMany.mockRejectedValue(new Error('db'));
+    await expect(guardia.despuesDePublicar('candidatura', 'k1', true)).resolves.toBeUndefined();
   });
 
   it('despuesDePublicar: si la cola falla no rompe la publicación', async () => {

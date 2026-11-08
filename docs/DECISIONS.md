@@ -755,7 +755,7 @@ El plan 3C-1 reemplaza a los fundadores por personas elegidas: administrador, co
 - Los fundadores no pueden ser coordinadores ni observadores mientras ocupen la mesa fundadora; si un fundador gana otro rol de la mesa, la mesa queda con 2 asientos (1 si solo había 2 fundadores) hasta la convocatoria de los 30 días.
 - La auditoría no muestra la hora de cada voto, solo el total contado.
 - Menores anotados: los cargos vencidos siguen vigentes «en funciones» hasta el relevo (es lo diseñado); el coordinador no necesita ser miembro del grupo para moderar; la web no se verificó en un navegador real.
-- 3C-2 (hecho; ver ADR-029): revocación, renuncia, vacantes, mesa incompleta, reactivación de cuentas y página de observadores. Sigue: moderación posterior de fichas.
+- 3C-2 (hecho; ver ADR-029): revocación, renuncia, vacantes, mesa incompleta, reactivación de cuentas y página de observadores. La moderación posterior de fichas, pedidos y observaciones quedó en ADR-029 (la decide la mesa con 2 firmas).
 
 ---
 
@@ -778,6 +778,11 @@ El plan 3C-2 completa a 3C-1: cómo se deja, se pide dejar o se pierde un cargo,
 - **Los correos no salen en ninguna vista de metadatos de la auditoría.** `/audit` y `/observar` filtran el correo de los metadatos de todos los eventos, no solo de los nuevos: los observadores y el público ven nombres visibles, nunca correos.
 - **`revocacion.fraccion` queda conectada.** Es la regla de la colmena que ADR-028 dejó sin conectar: el umbral de apoyos de una revocación sale de ella.
 - **La página Observar es solo lectura.** Auditoría, verificaciones, matrices y gastos; la API responde 403 («Esta sección es solo para los observadores.») a cualquier otra persona. Las observaciones públicas pasan por la revisión previa (tipo `observacion`) y se publican con el nombre de quien observa.
+- **Revisión posterior de fichas, pedidos de revocación y observaciones: decide la mesa** (decisión de Carlos, 2026-11-08). Si el asistente no revisó a tiempo una ficha de candidatura, el motivo de un pedido de revocación o una observación pública, la revisión posterior solo abre una solicitud de moderación. La solicitud queda siempre pendiente, nunca provisional, aunque la causa sea urgente, y el contenido sigue visible. La mesa la confirma con 2 firmas humanas (la primera ocupa el lugar de quien la pidió; pueden firmar los suplentes) en «Ocultaciones por confirmar». Así se mantiene que el asistente nunca oculta solo. Al confirmarse, no se borra nada:
+  - la ficha se oculta, pero solo si su texto es el que se revisó y la elección sigue abierta. Editarla cancela la solicitud pendiente.
+  - la observación se oculta (`oculta`, `ocultaCausa`).
+  - el pedido queda `retirada` y su motivo deja de mostrarse. Un pedido retirado no cuenta para la espera de 60 días de quien lo pidió.
+  - un pedido ya vencido no se revisa.
 - **Variables de entorno:** ninguna nueva.
 
 ### Consecuencias

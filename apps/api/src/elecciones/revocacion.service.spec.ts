@@ -162,6 +162,8 @@ describe('RevocacionService', () => {
     expect(body.desde).toBe(new Date(NOW.getTime() + 40 * DIA).toISOString());
     expect(prisma.revocacion.findFirst.mock.calls[0]![0].where).toMatchObject({
       solicitanteProfileId: YO, cargoId: CARGO, createdAt: { gt: new Date(NOW.getTime() - 60 * DIA) },
+      // Un pedido retirado por la mesa (moderación) no cuenta para la espera.
+      estado: { not: 'retirada' },
     });
     expect(guardia.antesDePublicar).not.toHaveBeenCalled();
   });

@@ -5,6 +5,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
+import { createHash } from 'node:crypto';
 import { Prisma } from '@prisma/client';
 import {
   ASISTENTE_NOMBRE,
@@ -33,6 +34,41 @@ const DIA_MS = 86_400_000;
 const HIDDEN_VOTE_TITLE = 'Votación de un tema oculto';
 
 type ModTarget = 'tema' | 'respuesta' | 'inquietud' | 'frase' | 'solucion' | 'informe';
+
+/**
+ * Contenido de las elecciones (3C) que solo llega aquí como solicitud del asistente (revisión
+ * posterior). El foro no lo oculta a mano ni lo conoce: cada tipo lo registra su módulo con
+ * `registrarModeracion` (así forums no importa elecciones). La mesa lo resuelve con 2 firmas.
+ */
+export type ObjetivoEleccion = 'candidatura' | 'revocacion' | 'observacion';
+
+export interface ModeracionDeEleccion {
+  /** El texto como lo revisa el asistente (`textoParaRevisar`), o null si ya no existe. */
+  texto(id: string): Promise<string | null>;
+  /** true si ya no hay nada que moderar (oculto, retirado, cerrado); null si no existe. */
+  estaOculto(id: string): Promise<boolean | null>;
+  /** Qué es, para la mesa: «Ficha de candidatura · Secretaría · Nicaragua». */
+  contexto(id: string): Promise<string | null>;
+  /**
+   * Con la segunda firma, dentro de la transacción: oculta si el texto sigue siendo el revisado
+   * (`huella`) y aún aplica. Devuelve la auditoría que se escribe tras confirmar, o null si ya no aplica.
+   */
+  ocultar(tx: Prisma.TransactionClient, id: string, causa: ModeracionCausaValue, huella: string | null): Promise<(() => void) | null>;
+}
+
+type Objetivo = ModTarget | ObjetivoEleccion;
+
+const esDeEleccion = (t: Objetivo): t is ObjetivoEleccion =>
+  t === 'candidatura' || t === 'revocacion' || t === 'observacion';
+
+/** sha256 del texto revisado: se guarda en la solicitud en lugar del texto. */
+export const huellaDe = (texto: string): string => createHash('sha256').update(texto, 'utf8').digest('hex');
+
+/** Tipos de una solicitud ya registrada: los del foro y los de las elecciones. */
+function checkObjetivo(target: string): Objetivo {
+  if (target === 'candidatura' || target === 'revocacion' || target === 'observacion') return target;
+  return checkTarget(target);
+}
 
 /** Cada tipo de contenido tiene su propia rama: ninguno cae en otro por descarte. */
 function checkTarget(target: string): ModTarget {
@@ -94,6 +130,9 @@ const esUrgente = (causa: string): boolean => MODERACION_CAUSAS.some((c) => c.va
 
 @Injectable()
 export class ForumsService {
+  /** Moderación de los tipos de las elecciones (los registra EleccionesModule). */
+  private readonly deEleccion = new Map<ObjetivoEleccion, ModeracionDeEleccion>();
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
@@ -101,6 +140,11 @@ export class ForumsService {
     private readonly rules: RulesService,
     private readonly access: GroupAccessService,
   ) {}
+
+  /** Registra cómo se modera un tipo de las elecciones (ver `ModeracionDeEleccion`). */
+  registrarModeracion(target: ObjetivoEleccion, m: ModeracionDeEleccion): void {
+    this.deEleccion.set(target, m);
+  }
 
   // ─── Permisos ─────────────────────────────────────────────────────────────
 
@@ -462,10 +506,12 @@ export class ForumsService {
    * solicitud abierta.
    */
   async solicitarPorAsistente(
-    target: ModTarget,
+    target: Objetivo,
     targetId: string,
     causa: ModeracionCausaValue,
+    textoRevisado?: string,
   ): Promise<{ id: string; estado: EstadoSolicitud } | null> {
+    if (esDeEleccion(target)) return this.solicitarDeEleccion(target, targetId, causa, textoRevisado ?? null);
     if ((await this.estaOculto(target, targetId)) !== false) return null;
     const abierta = await this.prisma.moderationAction.findFirst({
       where: { target, targetId, status: { in: [...ABIERTAS] } },
@@ -524,6 +570,51 @@ export class ForumsService {
   }
 
   /**
+   * Solicitud del asistente sobre una ficha, un pedido de revocación o una observación (3C).
+   * Siempre «pendiente», aun con causa urgente: el contenido sigue visible hasta que la mesa
+   * confirme con 2 firmas (ADR-029). Si el texto cambió desde la revisión, no se abre.
+   */
+  private async solicitarDeEleccion(
+    target: ObjetivoEleccion,
+    targetId: string,
+    causa: ModeracionCausaValue,
+    textoRevisado: string | null,
+  ): Promise<{ id: string; estado: EstadoSolicitud } | null> {
+    const m = this.deEleccion.get(target);
+    if (!m) return null;
+    if ((await m.estaOculto(targetId)) !== false) return null;
+    const actual = await m.texto(targetId);
+    if (actual === null || (textoRevisado !== null && actual !== textoRevisado)) return null;
+    const abierta = await this.prisma.moderationAction.findFirst({
+      where: { target, targetId, status: { in: [...ABIERTAS] } },
+      select: { id: true },
+    });
+    if (abierta) return null;
+    let id: string;
+    try {
+      const created = await this.prisma.moderationAction.create({
+        data: {
+          target,
+          targetId,
+          causa,
+          reason: '',
+          moderatorProfileId: null,
+          origen: 'asistente',
+          status: 'pendiente',
+          venceAt: new Date(Date.now() + PLAZO_PENDIENTE_MS),
+          huella: huellaDe(actual),
+        },
+      });
+      id = created.id;
+    } catch (err) {
+      if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') return null;
+      throw err;
+    }
+    this.auditarSolicitudDelAsistente(`${target}:${targetId}`, id, causa, 'pendiente');
+    return { id, estado: 'pendiente' };
+  }
+
+  /**
    * Segunda firma de la mesa sobre una solicitud pendiente o provisional. La da otra persona
    * de la mesa, nunca quien la pidió. Todo cambio pasa por un updateMany condicionado al estado:
    * si el vencimiento u otra persona la resolvió antes, responde 409 sin tocar el contenido.
@@ -548,9 +639,10 @@ export class ForumsService {
     // Pasado el plazo nadie firma ni rechaza: el vencimiento la cierra (aunque aún no haya corrido).
     const vencida = (al: Date): boolean => action.venceAt === null || action.venceAt.getTime() <= al.getTime();
     if (vencida(now)) throw new ConflictException(YA_VENCIO);
-    const target = checkTarget(action.target);
+    const target = checkObjetivo(action.target);
     const canceladas: string[] = [];
-    const resultado = await this.prisma.$transaction(async (tx): Promise<'primera_firma' | 'resuelta'> => {
+    let auditarEfecto: (() => void) | null = null;
+    const resultado = await this.prisma.$transaction(async (tx): Promise<'primera_firma' | 'resuelta' | 'sin_efecto'> => {
       if (aprobar && delAsistente && action.moderatorProfileId === null && (await this.requiereQuorumTx(tx, target, action.targetId))) {
         // Donde una persona de la mesa necesitaría la segunda firma, el asistente no cuenta como una:
         // la primera aprobación queda como firma y la solicitud sigue abierta.
@@ -568,6 +660,16 @@ export class ForumsService {
           : { status: 'rechazado', confirmadorProfileId: profileId, resolvedAt: now },
       });
       if (r.count === 0) throw new ConflictException(vencida(new Date()) ? YA_VENCIO : YA_RESUELTA);
+      if (esDeEleccion(target)) {
+        // Fichas, pedidos y observaciones: nunca provisionales; el efecto lo aplica su módulo.
+        if (!aprobar) return 'resuelta';
+        const m = this.deEleccion.get(target);
+        auditarEfecto = m && action.causa ? await m.ocultar(tx, action.targetId, action.causa, action.huella ?? null) : null;
+        if (auditarEfecto) return 'resuelta';
+        // Ya no aplica (texto editado, elección contada, pedido cerrado): se cierra sin efecto.
+        await tx.moderationAction.update({ where: { id: moderationId }, data: { status: 'rechazado', resolvedAt: now } });
+        return 'sin_efecto';
+      }
       if (aprobar && previo === 'pendiente') {
         // Las de personas son soluciones y temas (sin vinculada); las del asistente pueden ser de
         // cualquier tipo: una inquietud arrastra a su debate como en hide(), con el mismo origen.
@@ -592,6 +694,16 @@ export class ForumsService {
       void this.audit.log({ ...actor, action: 'moderation.first_signature', resource: `moderation:${moderationId}`, ip, metadata: {} });
       return;
     }
+    if (resultado === 'sin_efecto') {
+      void this.audit.log({
+        ...actor,
+        action: 'moderation.sin_efecto',
+        resource: `${target}:${action.targetId}`,
+        ip,
+        metadata: { moderationId, causa: action.causa },
+      });
+      return;
+    }
     // Ya resuelta, la auditoría dice qué contenido fue (nunca el texto).
     void this.audit.log({
       ...actor,
@@ -601,6 +713,7 @@ export class ForumsService {
       metadata: { moderationId, causa: action.causa },
     });
     this.auditarCanceladas(canceladas, actor, ip);
+    (auditarEfecto as (() => void) | null)?.();
   }
 
   /** Cola de solicitudes que esperan la segunda firma. Solo la mesa (o un suplente) la ve, con el texto original. */
@@ -617,19 +730,20 @@ export class ForumsService {
       const estado = a.status as string;
       // Toda solicitud abierta nace con causa; una fila sin ella no se puede mostrar bien.
       if ((estado !== 'pendiente' && estado !== 'provisional') || !a.causa) continue;
-      const target = checkTarget(a.target);
+      const target = checkObjetivo(a.target);
+      const m = esDeEleccion(target) ? this.deEleccion.get(target) : undefined;
       result.push({
         id: a.id,
         target,
         targetId: a.targetId,
         causa: a.causa as ModeracionCausaValue,
         detalle: a.reason === LINKED_TOPIC_REASON ? '' : a.reason,
-        originalText: await this.textOf(target, a.targetId),
+        originalText: esDeEleccion(target) ? ((await m?.texto(a.targetId)) ?? '') : await this.textOf(target, a.targetId),
         estado,
         venceAt: (a.venceAt ?? a.createdAt).toISOString(),
         createdAt: a.createdAt.toISOString(),
         esMia: a.moderatorProfileId === profileId,
-        contexto: await this.contextoDe(target, a.targetId, a.reason),
+        contexto: esDeEleccion(target) ? ((await m?.contexto(a.targetId)) ?? null) : await this.contextoDe(target, a.targetId, a.reason),
         solicitadaPorAsistente: (a.origen as string | undefined) === 'asistente',
       });
     }
@@ -651,14 +765,15 @@ export class ForumsService {
     for (const a of vencidas) {
       const previo = a.status as string;
       if (previo !== 'pendiente' && previo !== 'provisional') continue;
-      const target = checkTarget(a.target);
+      const target = checkObjetivo(a.target);
       const hecho = await this.prisma.$transaction(async (tx) => {
         const r = await tx.moderationAction.updateMany({
           where: { id: a.id, status: previo },
           data: { status: 'rechazado', resolvedAt: now },
         });
         if (r.count === 0) return false;
-        if (previo === 'provisional') {
+        // Las de las elecciones nunca son provisionales: no hay nada que volver a mostrar.
+        if (previo === 'provisional' && !esDeEleccion(target)) {
           await this.aplicarRestauracion(tx, target, a.targetId);
           if (target === 'tema') await this.extenderPlazosTx(tx, a.targetId, a.createdAt, now);
         }
@@ -679,6 +794,11 @@ export class ForumsService {
     const action = await this.prisma.moderationAction.findUnique({ where: { id: moderationId } });
     if (!action) throw new NotFoundException('Moderación no encontrada');
     rejectLinkedTopicAction(action);
+    if (esDeEleccion(checkObjetivo(action.target))) {
+      throw new BadRequestException(
+        'Esta moderación no se apela: ya la confirmaron dos personas de la mesa. Una ficha se puede corregir mientras dure el plazo de candidaturas.',
+      );
+    }
     const contenido = await this.authorOf(checkTarget(action.target), action.targetId);
     if (!contenido || contenido.authorProfileId === null || contenido.authorProfileId !== profileId) {
       throw new ForbiddenException('Solo quien escribió el contenido puede apelar.');
@@ -756,7 +876,9 @@ export class ForumsService {
    * Soluciones y propuestas formales necesitan la segunda firma; el resto, una sola persona.
    * El tema se bloquea antes de leer su tipo: una formalización simultánea espera a esta decisión.
    */
-  private async requiereQuorumTx(tx: Tx, target: ModTarget, targetId: string): Promise<boolean> {
+  private async requiereQuorumTx(tx: Tx, target: Objetivo, targetId: string): Promise<boolean> {
+    // Fichas, pedidos y observaciones: siempre 2 firmas humanas (ADR-029).
+    if (esDeEleccion(target)) return true;
     if (target === 'solucion') return true;
     // Los informes de comisión, como frases y respuestas, se ocultan con una sola firma.
     if (target === 'informe') return false;

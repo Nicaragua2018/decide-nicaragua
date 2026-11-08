@@ -54,7 +54,7 @@ type RevocacionFila = {
   id: string;
   cargoId: string;
   motivo: string;
-  estado: 'abierta' | 'lograda' | 'vencida';
+  estado: 'abierta' | 'lograda' | 'vencida' | 'retirada';
   umbral: number;
   venceAt: Date;
   cargo: CargoFila;
@@ -116,7 +116,13 @@ export class RevocacionService implements OnModuleInit {
     if (!(await this.enElectorado(profileId, ambito))) throw new ForbiddenException(NO_ELECTORADO);
     if (cargo.profileId === profileId) throw new ForbiddenException(PROPIA);
     const anterior = await this.prisma.revocacion.findFirst({
-      where: { solicitanteProfileId: profileId, cargoId, createdAt: { gt: new Date(now.getTime() - REVOCACION_ESPERA_DIAS * DIA_MS) } },
+      where: {
+        solicitanteProfileId: profileId,
+        cargoId,
+        createdAt: { gt: new Date(now.getTime() - REVOCACION_ESPERA_DIAS * DIA_MS) },
+        // Un pedido que la mesa retiró por moderación no cuenta para la espera (ADR-029).
+        estado: { not: 'retirada' },
+      },
       orderBy: { createdAt: 'desc' },
       select: { createdAt: true },
     });

@@ -53,7 +53,8 @@ export interface ModerationAppeal {
 /** Solicitud de moderación que espera la segunda firma de la mesa. Solo la ve la mesa. */
 export interface ModeracionPorConfirmar {
   id: string;
-  target: 'tema' | 'respuesta' | 'inquietud' | 'frase' | 'solucion' | 'informe';
+  /** Las tres últimas (fichas, pedidos de revocación, observaciones) solo las pide el asistente. */
+  target: 'tema' | 'respuesta' | 'inquietud' | 'frase' | 'solucion' | 'informe' | 'candidatura' | 'revocacion' | 'observacion';
   targetId: string;
   causa: ModeracionCausaValue;
   /** Detalle opcional de quien la pidió ('' si no escribió nada). */
@@ -65,7 +66,7 @@ export interface ModeracionPorConfirmar {
   createdAt: string;
   /** La pidió quien consulta: no puede confirmarla. */
   esMia: boolean;
-  /** Contexto para la mesa: «Propuesta formal», «Debate vinculado a una inquietud oculta» o null. */
+  /** Contexto para la mesa: «Propuesta formal», «Debate vinculado a una inquietud oculta», qué ficha o pedido es, o null. */
   contexto: string | null;
   /** La abrió el asistente (revisión posterior): no hay quien la pidió y cualquier persona de la mesa firma. */
   solicitadaPorAsistente: boolean;

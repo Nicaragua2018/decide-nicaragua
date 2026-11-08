@@ -332,6 +332,8 @@ export class EleccionesService implements OnModuleInit {
       }),
       this.revocacion.resumenPorCargo(),
       this.prisma.observacionPublica.findMany({
+        // Una observación oculta por la mesa (2 firmas) no se muestra; no se borra.
+        where: { oculta: false },
         orderBy: { createdAt: 'desc' },
         take: 20,
         select: { id: true, autorProfileId: true, auditEventId: true, texto: true, createdAt: true },
@@ -516,7 +518,12 @@ export class EleccionesService implements OnModuleInit {
         where: { type: 'ocultar_candidatura', status: 'pending', params: { path: ['candidaturaId'], equals: c.id } },
         data: { status: 'rejected', resolvedAt: new Date() },
       });
-      return a.count;
+      // Igual con la solicitud del asistente (revisión posterior) que espera las firmas de la mesa.
+      const m = await tx.moderationAction.updateMany({
+        where: { target: 'candidatura', targetId: c.id, status: { in: ['pendiente', 'provisional'] } },
+        data: { status: 'rechazado', resolvedAt: new Date() },
+      });
+      return a.count + m.count;
     });
     void this.audit.log({ action: 'candidatura.editada', resource: `candidatura:${c.id}`, metadata: { eleccionId: e.id } });
     await this.guardia.despuesDePublicar('candidatura', c.id, revisado);

@@ -72,6 +72,7 @@ function buildPrisma() {
       updateMany: vi.fn().mockResolvedValue({ count: 1 }),
     },
     boardAction: { updateMany: vi.fn().mockResolvedValue({ count: 0 }) },
+    moderationAction: { updateMany: vi.fn().mockResolvedValue({ count: 0 }) },
     cargo: {
       findMany: vi.fn().mockResolvedValue([]),
       findFirst: vi.fn().mockResolvedValue(null),
@@ -297,6 +298,21 @@ describe('EleccionesService', () => {
       );
     });
 
+    it('editar cancela la solicitud de moderación pendiente del asistente sobre esa ficha', async () => {
+      prisma.moderationAction.updateMany.mockResolvedValue({ count: 1 });
+      await service.editar(YO, E, ficha);
+      expect(prisma.moderationAction.updateMany).toHaveBeenCalledWith({
+        where: { target: 'candidatura', targetId: 'c1', status: { in: ['pendiente', 'provisional'] } },
+        data: { status: 'rechazado', resolvedAt: expect.any(Date) },
+      });
+      expect(prisma.moderationAction.updateMany.mock.invocationCallOrder[0]!).toBeGreaterThan(
+        prisma.candidatura.updateMany.mock.invocationCallOrder[0]!,
+      );
+      expect(audit.log).toHaveBeenCalledWith({
+        action: 'candidatura.ocultacion_cancelada', resource: 'candidatura:c1', metadata: { eleccionId: E, acciones: 1 },
+      });
+    });
+
     it('editar cancela las propuestas pendientes de ocultar esa ficha', async () => {
       prisma.boardAction.updateMany.mockResolvedValue({ count: 1 });
       await service.editar(YO, E, ficha);
@@ -510,7 +526,10 @@ describe('EleccionesService', () => {
     prisma.profile.findMany.mockResolvedValue([{ id: 'p3', displayName: 'Eva Paz' }]);
     prisma.auditEvent.findMany.mockResolvedValue([{ id: 'ev1', action: 'voto.emitido', createdAt: e }]);
     const r = await service.representantes();
-    expect(prisma.observacionPublica.findMany.mock.calls[0]![0]).toMatchObject({ take: 20, orderBy: { createdAt: 'desc' } });
+    expect(prisma.observacionPublica.findMany.mock.calls[0]![0]).toMatchObject({
+      // Una observación oculta por la mesa no se muestra (no se borra).
+      where: { oculta: false }, take: 20, orderBy: { createdAt: 'desc' },
+    });
     expect(r.observaciones).toEqual([
       {
         id: 'o1', autor: 'Eva Paz', iniciales: 'EP', texto: 'Esto no cuadra.',
