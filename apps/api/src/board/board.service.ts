@@ -134,6 +134,7 @@ export class BoardService {
     let targetUserId: string;
     let params = dto.params;
     if (dto.type === BoardActionType.ocultar_candidatura) {
+      await this.sinConflicto(actor.profileId!);
       const o = await this.validarOcultar(dto.params);
       targetUserId = o.targetUserId;
       params = { candidaturaId: o.candidaturaId, causa: o.causa };
@@ -210,32 +211,87 @@ export class BoardService {
       return;
     }
 
-    await this.prisma.boardApproval.create({
-      data: { actionId, profileId: actor.profileId!, role, approve },
-    });
+    if ((action.type as string) === BoardActionType.ocultar_candidatura) await this.sinConflicto(actor.profileId!);
 
-    const votos = [...action.approvals.map((a) => a.approve), approve];
-    const aFavor = votos.filter(Boolean).length;
-    const enContra = votos.length - aFavor;
-
-    const ejecutada =
-      aFavor >= VOTOS_PARA_RESOLVER &&
-      (await this.execute(action.type as unknown as BoardActionType, action.targetUserId, action.params as Record<string, unknown>));
-    if (ejecutada) {
-      await this.prisma.boardAction.update({
-        where: { id: actionId },
-        data: { status: 'executed', resolvedAt: new Date() },
-      });
+    const r = await this.votarYResolver(
+      actionId,
+      actor.profileId!,
+      role,
+      approve,
+      action.type as unknown as BoardActionType,
+      action.targetUserId,
+      action.params as Record<string, unknown>,
+    );
+    // Lo que va fuera de la transacción, solo si se confirmó: comunidades del nuevo origen y auditoría.
+    for (const tarea of r.despues) await tarea();
+    if (r.status === 'executed') {
       void this.audit.log({ actorId: actor.sub, action: 'board.action_executed', resource: `board_action:${actionId}`, ip, metadata: { type: action.type } });
-    } else if (enContra >= VOTOS_PARA_RESOLVER || aFavor >= VOTOS_PARA_RESOLVER) {
+    } else if (r.status === 'rejected') {
       // Dos rechazos, o aprobada cuando ya no se podía aplicar (p. ej. la elección ya se contó).
-      await this.prisma.boardAction.update({
-        where: { id: actionId },
-        data: { status: 'rejected', resolvedAt: new Date() },
-      });
       void this.audit.log({ actorId: actor.sub, action: 'board.action_rejected', resource: `board_action:${actionId}`, ip, metadata: { type: action.type } });
     } else {
       void this.audit.log({ actorId: actor.sub, action: 'board.action_voted', resource: `board_action:${actionId}`, ip, metadata: { approve } });
+    }
+  }
+
+  /**
+   * Firma de una acción (que no sea change_rule) en una sola transacción con la fila de la acción
+   * bloqueada (como `votarCambioRegla`): se vuelve a comprobar que sigue pendiente, se registra la
+   * firma, se cuentan los votos desde la base y, con 2 a favor, se aplica; con 2 en contra (o si ya
+   * no se puede aplicar) queda rechazada. Dos firmas finales a la vez no ejecutan dos veces: la
+   * segunda espera y ve la acción resuelta. Una edición de la ficha que canceló la propuesta justo
+   * antes también se ve aquí.
+   */
+  private async votarYResolver(
+    actionId: string,
+    profileId: string,
+    role: BoardRole,
+    approve: boolean,
+    type: BoardActionType,
+    targetUserId: string | null,
+    params: Record<string, unknown>,
+  ): Promise<{ status: 'pending' | 'executed' | 'rejected'; despues: (() => Promise<void>)[] }> {
+    try {
+      return await this.prisma.$transaction(async (tx) => {
+        await tx.$queryRaw(Prisma.sql`SELECT id FROM board_actions WHERE id = ${actionId}::uuid FOR UPDATE`);
+        const a = await tx.boardAction.findUnique({ where: { id: actionId }, select: { status: true } });
+        if (!a || (a.status as string) !== 'pending') throw new BadRequestException('Esta acción ya se resolvió.');
+        await tx.boardApproval.create({ data: { actionId, profileId, role, approve } });
+        const votos = await tx.boardApproval.findMany({ where: { actionId }, select: { approve: true } });
+        const aFavor = votos.filter((v) => v.approve).length;
+        const enContra = votos.length - aFavor;
+        const despues: (() => Promise<void>)[] = [];
+        if (aFavor < VOTOS_PARA_RESOLVER && enContra < VOTOS_PARA_RESOLVER) return { status: 'pending' as const, despues };
+
+        const ejecutada = aFavor >= VOTOS_PARA_RESOLVER && (await this.execute(tx, type, targetUserId, params, despues));
+        const status = ejecutada ? ('executed' as const) : ('rejected' as const);
+        const tomada = await tx.boardAction.updateMany({
+          where: { id: actionId, status: 'pending' },
+          data: { status, resolvedAt: new Date() },
+        });
+        if (tomada.count === 0) throw new BadRequestException('Esta acción ya se resolvió.');
+        return { status, despues: ejecutada ? despues : [] };
+      });
+    } catch (err) {
+      // Índice único (acción, persona): el mismo voto llegó dos veces a la vez.
+      if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
+        throw new ConflictException('Ya votaste esta acción.');
+      }
+      throw err;
+    }
+  }
+
+  /**
+   * Conflicto de interés: quien tiene una candidatura viva en una elección abierta no propone ni
+   * firma ocultar fichas. Si eso deja a la mesa sin dos firmantes, la ficha no se oculta (la
+   * revisión previa sigue actuando).
+   */
+  private async sinConflicto(profileId: string): Promise<void> {
+    const propias = await this.prisma.candidatura.count({
+      where: { profileId, retiradaAt: null, eleccion: { fase: { in: [...ELECCION_ABIERTA] } } },
+    });
+    if (propias > 0) {
+      throw new ForbiddenException('Te presentaste a una elección abierta: no puedes proponer ni firmar que se oculte una ficha.');
     }
   }
 
@@ -364,48 +420,67 @@ export class BoardService {
 
   /**
    * Oculta la ficha si la elección sigue abierta. Devuelve false si ya no se puede (contada o
-   * retirada): la acción queda rechazada. La auditoría no lleva el texto.
+   * retirada): la acción queda rechazada. La elección se toma en FOR SHARE: si el conteo (FOR
+   * UPDATE) va a la vez, o esto termina antes y el conteo ve la ficha oculta, o el conteo termina
+   * antes y aquí ya no se oculta. La auditoría no lleva el texto y se escribe tras confirmar.
    */
-  private async ocultarCandidatura(params: Record<string, unknown>): Promise<boolean> {
+  private async ocultarCandidatura(
+    tx: Prisma.TransactionClient,
+    params: Record<string, unknown>,
+    despues: (() => Promise<void>)[],
+  ): Promise<boolean> {
     const candidaturaId = String(params['candidaturaId']);
     const causa = params['causa'] as ModeracionCausaValue;
-    const r = await this.prisma.candidatura.updateMany({
+    const c = await tx.candidatura.findUnique({ where: { id: candidaturaId }, select: { eleccionId: true } });
+    if (!c) return false;
+    await tx.$queryRaw(Prisma.sql`SELECT id FROM elecciones WHERE id = ${c.eleccionId}::uuid FOR SHARE`);
+    const r = await tx.candidatura.updateMany({
       // `oculta: false`: una segunda acción aprobada no pisa la causa ni audita dos veces.
       where: { id: candidaturaId, oculta: false, retiradaAt: null, eleccion: { fase: { in: [...ELECCION_ABIERTA] } } },
       data: { oculta: true, ocultaCausa: causa },
     });
     if (r.count === 0) return false;
-    const c = await this.prisma.candidatura.findUnique({ where: { id: candidaturaId }, select: { eleccionId: true } });
-    void this.audit.log({
-      action: 'candidatura.ocultada',
-      resource: `candidatura:${candidaturaId}`,
-      metadata: { eleccionId: c?.eleccionId ?? null, causa },
+    despues.push(async () => {
+      void this.audit.log({
+        action: 'candidatura.ocultada',
+        resource: `candidatura:${candidaturaId}`,
+        metadata: { eleccionId: c.eleccionId, causa },
+      });
     });
     return true;
   }
 
-  /** Aplica la acción aprobada. Devuelve false si ya no se puede aplicar (queda rechazada). */
-  private async execute(type: BoardActionType, targetUserId: string | null, params: Record<string, unknown>): Promise<boolean> {
-    if (type === BoardActionType.ocultar_candidatura) return this.ocultarCandidatura(params);
+  /**
+   * Aplica la acción aprobada dentro de la transacción de la firma. Devuelve false si ya no se
+   * puede aplicar (queda rechazada). Lo que no cabe en la transacción va a `despues`.
+   */
+  private async execute(
+    tx: Prisma.TransactionClient,
+    type: BoardActionType,
+    targetUserId: string | null,
+    params: Record<string, unknown>,
+    despues: (() => Promise<void>)[],
+  ): Promise<boolean> {
+    if (type === BoardActionType.ocultar_candidatura) return this.ocultarCandidatura(tx, params, despues);
     // change_rule se resuelve aparte (votarCambioRegla); las demás acciones exigen persona objetivo.
     if (targetUserId === null) throw new BadRequestException('La acción no tiene persona objetivo');
     if (type === BoardActionType.suspend_user) {
       // Los guards de participación miran la membresía: suspender también la quita.
-      await this.prisma.$transaction(async (tx) => {
-        await tx.user.update({ where: { id: targetUserId }, data: { status: 'suspended' } });
-        await tx.groupMembership.deleteMany({ where: { profile: { userId: targetUserId } } });
-      });
+      await tx.user.update({ where: { id: targetUserId }, data: { status: 'suspended' } });
+      await tx.groupMembership.deleteMany({ where: { profile: { userId: targetUserId } } });
       return true;
     }
     const birthDepartment = params['birthDepartment'] as string;
-    const profile = await this.prisma.profile.update({
+    const profile = await tx.profile.update({
       where: { userId: targetUserId },
       data: { birthDepartment },
     });
     // Membresías solo al verificarse: a un no verificado se le corrige el origen sin unirlo a comunidades.
-    const user = await this.prisma.user.findUnique({ where: { id: targetUserId }, select: { status: true } });
+    const user = await tx.user.findUnique({ where: { id: targetUserId }, select: { status: true } });
     if ((user?.status as string | undefined) === 'verified_citizen') {
-      await this.groups.syncMemberships(targetUserId, birthDepartment, profile.currentCountry, profile.currentRegion);
+      despues.push(() =>
+        this.groups.syncMemberships(targetUserId, birthDepartment, profile.currentCountry, profile.currentRegion),
+      );
     }
     return true;
   }

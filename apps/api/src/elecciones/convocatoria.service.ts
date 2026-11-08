@@ -8,9 +8,9 @@ import { AuditService } from '../audit/audit.service';
 import { RulesService } from '../rules/rules.service';
 
 const DIA_MS = 86_400_000;
-/** La renovación se convoca con esta antelación sobre el fin del período. */
+/** Un cargo «sale» (se renueva) cuando su período termina dentro de esta ventana. */
 export const RENOVACION_ANTES_DIAS = 21;
-/** Tras una elección con puestos sin elegir, se vuelve a convocar pasado este tiempo. */
+/** Con puestos vacantes (o en funciones) y nadie más que salga, se vuelve a convocar pasado este tiempo desde la última elección contada. */
 export const REINTENTO_DESPUES_DIAS = 30;
 /** Prórroga única del plazo de candidaturas cuando hay pocas. */
 export const PRORROGA_DIAS = 7;
@@ -28,6 +28,12 @@ type Ambito = { groupId: string; cargo: CargoTipoValue };
 export function filtroElectorado(eleccion: Ambito): Prisma.ProfileWhereInput {
   const user = { status: 'verified_citizen' as const };
   return eleccion.cargo === 'coordinador' ? { user, memberships: { some: { groupId: eleccion.groupId } } } : { user };
+}
+
+/** Puestos plenos de un cargo en su ámbito: 1 en cada rol de la mesa, la regla en observadores, 2 coordinadores. */
+export async function plenosDe(rules: Pick<RulesService, 'getInt'>, cargo: CargoTipoValue): Promise<number> {
+  if (cargo === 'observador') return rules.getInt('observadores.numero', null);
+  return cargo === 'coordinador' ? PUESTOS_COORDINADORES : 1;
 }
 
 const esDuplicado = (err: unknown): boolean =>
@@ -51,8 +57,7 @@ export class ConvocatoriaService {
     });
     if (general) n += await this.primeraJornada(general.id, now);
     n += await this.activarComunidades(now);
-    n += await this.reintentos(now);
-    n += await this.renovaciones(general?.id ?? null, now);
+    n += await this.convocatorias(general?.id ?? null, now);
     return n;
   }
 
@@ -90,7 +95,7 @@ export class ConvocatoriaService {
         });
         if (r.count > 0) {
           n += 1;
-          await this.dejarEnFunciones({ groupId: e.groupId, cargo: e.cargo, puestos: e.puestos }, now);
+          await this.dejarEnFunciones({ groupId: e.groupId, cargo: e.cargo, convocadaAt: e.createdAt });
           void this.audit.log({
             action: 'eleccion.cerrada_sin_candidaturas',
             resource: `eleccion:${e.id}`,
@@ -120,28 +125,22 @@ export class ConvocatoriaService {
   }
 
   /**
-   * Los cargos vigentes de ese tipo y ámbito que vencen quedan «en funciones» hasta que haya
-   * quien los reemplace. `puestos` es cuántos puestos quedaron sin cubrir.
+   * Tras contar (o cerrar sin candidaturas) una elección, los cargos de ese tipo y ámbito que ya
+   * salían al convocarla (fin dentro de la ventana de renovación) y no fueron reemplazados quedan
+   * «en funciones» hasta que haya quien los reemplace. Nunca marca un cargo con mandato por delante.
    */
   async dejarEnFunciones(
-    eleccion: Ambito & { puestos: number },
-    now: Date,
+    eleccion: Ambito & { convocadaAt: Date },
     db: Pick<Prisma.TransactionClient, 'cargo'> = this.prisma,
   ): Promise<void> {
-    const vencen = await db.cargo.findMany({
+    await db.cargo.updateMany({
       where: {
         groupId: eleccion.groupId,
         tipo: eleccion.cargo,
         terminadoAt: null,
-        hasta: { lte: new Date(now.getTime() + RENOVACION_ANTES_DIAS * DIA_MS) },
+        enFunciones: false,
+        hasta: { lte: new Date(eleccion.convocadaAt.getTime() + RENOVACION_ANTES_DIAS * DIA_MS) },
       },
-      orderBy: { hasta: 'asc' },
-      take: Math.max(eleccion.puestos, 0),
-      select: { id: true },
-    });
-    if (vencen.length === 0) return;
-    await db.cargo.updateMany({
-      where: { id: { in: vencen.map((c) => c.id) } },
       data: { enFunciones: true },
     });
   }
@@ -150,7 +149,7 @@ export class ConvocatoriaService {
 
   private async primeraJornada(generalId: string, now: Date): Promise<number> {
     // Solo si nunca hubo una elección de mesa (en cualquier fase): los puestos sin cubrir
-    // de esa primera jornada los retoma el reintento a los 30 días.
+    // de esa primera jornada los retoma la convocatoria a los 30 días.
     const hubo = await this.prisma.eleccion.count({ where: { cargo: { in: MESA } } });
     if (hubo > 0) return 0;
     const minimo = await this.rules.getInt('eleccion.minimo_primera', null);
@@ -159,11 +158,10 @@ export class ConvocatoriaService {
     const observadores = await this.rules.getInt('observadores.numero', null);
     return this.crearJornada(
       [
-        ...MESA.map((cargo) => ({ cargo, puestos: 1 })),
-        { cargo: 'observador' as const, puestos: observadores },
+        ...MESA.map((cargo) => ({ cargo, puestos: 1, motivo: 'primera' as const })),
+        { cargo: 'observador' as const, puestos: observadores, motivo: 'primera' as const },
       ],
       generalId,
-      'primera',
       now,
     );
   }
@@ -209,84 +207,78 @@ export class ConvocatoriaService {
     }
   }
 
-  private async reintentos(now: Date): Promise<number> {
-    const limite = new Date(now.getTime() - REINTENTO_DESPUES_DIAS * DIA_MS);
-    const contadas = await this.prisma.eleccion.findMany({
-      where: { fase: 'contada', contadaAt: { lte: limite } },
-    });
-    let n = 0;
-    for (const e of contadas) {
-      const faltan = e.puestos - e.electas.length;
-      if (faltan <= 0) continue;
-      const hayOtra = await this.prisma.eleccion.findFirst({
-        where: {
-          groupId: e.groupId,
-          cargo: e.cargo,
-          id: { not: e.id },
-          OR: [{ fase: { in: [...ABIERTA] } }, { createdAt: { gt: e.createdAt } }],
-        },
-        select: { id: true },
-      });
-      if (hayOtra) continue;
-      n += await this.crearJornada([{ cargo: e.cargo, puestos: faltan }], e.groupId, 'reintento', now, false);
-    }
-    return n;
-  }
+  /**
+   * Una sola convocatoria por cargo y ámbito, que cubre a la vez a quien sale y las vacantes.
+   * - Sale un cargo en funciones o cuyo período termina dentro de {@link RENOVACION_ANTES_DIAS} días;
+   *   siguen los demás. Puestos = plenos − los que siguen; sin puestos nunca se convoca.
+   * - Se convoca si alguien entra en la ventana (aún no en funciones: su renovación no se ofreció),
+   *   o si pasaron {@link REINTENTO_DESPUES_DIAS} días desde la última elección contada de ese cargo y
+   *   ámbito (o nunca se contó ninguna). Así un reintento fallido nunca retrasa una renovación.
+   * - Motivo «renovacion» si alguien sale; si solo hay vacantes, «reintento».
+   * La mesa y los observadores que tocan en la misma ronda van en una jornada.
+   */
+  private async convocatorias(generalId: string | null, now: Date): Promise<number> {
+    const ventana = now.getTime() + RENOVACION_ANTES_DIAS * DIA_MS;
+    const espera = now.getTime() - REINTENTO_DESPUES_DIAS * DIA_MS;
+    const [vigentes, contadas, abiertas] = await Promise.all([
+      this.prisma.cargo.findMany({
+        where: { terminadoAt: null },
+        select: { tipo: true, groupId: true, hasta: true, enFunciones: true },
+      }),
+      this.prisma.eleccion.groupBy({
+        by: ['groupId', 'cargo'],
+        where: { fase: 'contada' },
+        _max: { contadaAt: true },
+      }),
+      this.prisma.eleccion.findMany({ where: { fase: { in: [...ABIERTA] } }, select: { groupId: true, cargo: true } }),
+    ]);
 
-  private async renovaciones(generalId: string | null, now: Date): Promise<number> {
-    const hasta = new Date(now.getTime() + RENOVACION_ANTES_DIAS * DIA_MS);
-    const vigentes = await this.prisma.cargo.findMany({
-      where: { terminadoAt: null },
-      select: { tipo: true, groupId: true, hasta: true },
-    });
-    // Por cargo y ámbito: cuántos vencen dentro de la ventana y cuántos siguen sin vencer.
-    const claves = new Map<string, Ambito & { vencen: number; siguen: number }>();
+    type Clave = Ambito & { siguen: number; salen: number; nuevos: number; ultima: Date | null };
+    const claves = new Map<string, Clave>();
+    const clave = (groupId: string, cargo: CargoTipoValue): Clave => {
+      const k = `${groupId}:${cargo}`;
+      let a = claves.get(k);
+      if (!a) {
+        a = { groupId, cargo, siguen: 0, salen: 0, nuevos: 0, ultima: null };
+        claves.set(k, a);
+      }
+      return a;
+    };
     for (const c of vigentes) {
-      const k = `${c.groupId}:${c.tipo}`;
-      const a = claves.get(k) ?? { groupId: c.groupId, cargo: c.tipo, vencen: 0, siguen: 0 };
-      if (c.hasta.getTime() <= hasta.getTime()) a.vencen += 1;
-      else a.siguen += 1;
-      claves.set(k, a);
+      const a = clave(c.groupId, c.tipo);
+      if (c.enFunciones || c.hasta.getTime() <= ventana) {
+        a.salen += 1;
+        if (!c.enFunciones) a.nuevos += 1;
+      } else {
+        a.siguen += 1;
+      }
     }
+    for (const c of contadas) clave(c.groupId, c.cargo).ultima = c._max.contadaAt ?? null;
+    const abierta = new Set(abiertas.map((e) => `${e.groupId}:${e.cargo}`));
 
-    const recien = new Date(now.getTime() - REINTENTO_DESPUES_DIAS * DIA_MS);
-    const pendientes: (Ambito & { puestos: number })[] = [];
-    for (const a of claves.values()) {
-      if (a.vencen === 0) continue;
-      // Abierta, o contada hace poco (si quedaron puestos, el reintento se ocupa).
-      const hay = await this.prisma.eleccion.findFirst({
-        where: {
-          groupId: a.groupId,
-          cargo: a.cargo,
-          OR: [{ fase: { in: [...ABIERTA] } }, { fase: 'contada', contadaAt: { gt: recien } }],
-        },
-        select: { id: true },
-      });
-      if (hay) continue;
-      // Tantos puestos como cargos vencen (al menos 1), sin pasar de los puestos libres del cargo.
-      const plenos =
-        a.cargo === 'observador'
-          ? await this.rules.getInt('observadores.numero', null)
-          : a.cargo === 'coordinador'
-            ? PUESTOS_COORDINADORES
-            : 1;
-      const libres = Math.max(plenos - a.siguen, 1);
-      pendientes.push({ groupId: a.groupId, cargo: a.cargo, puestos: Math.min(Math.max(a.vencen, 1), libres) });
+    const pendientes: { groupId: string; cargo: CargoTipoValue; puestos: number; motivo: EleccionMotivoValue }[] = [];
+    for (const [k, a] of claves) {
+      if (abierta.has(k)) continue;
+      const puestos = (await plenosDe(this.rules, a.cargo)) - a.siguen;
+      if (puestos <= 0) continue;
+      const toca = a.nuevos > 0 || a.ultima === null || a.ultima.getTime() <= espera;
+      if (!toca) continue;
+      pendientes.push({ groupId: a.groupId, cargo: a.cargo, puestos, motivo: a.salen > 0 ? 'renovacion' : 'reintento' });
     }
 
     let n = 0;
-    const enMesa = pendientes.filter((a) => a.groupId === generalId && a.cargo !== 'coordinador');
-    if (generalId && enMesa.length > 0) {
+    const enMesa = (a: { groupId: string; cargo: CargoTipoValue }) => a.groupId === generalId && a.cargo !== 'coordinador';
+    const jornada = pendientes.filter(enMesa);
+    if (generalId && jornada.length > 0) {
       n += await this.crearJornada(
-        enMesa.map((a) => ({ cargo: a.cargo, puestos: a.puestos })),
+        jornada.map(({ cargo, puestos, motivo }) => ({ cargo, puestos, motivo })),
         generalId,
-        'renovacion',
         now,
       );
     }
     for (const a of pendientes) {
-      if (a.groupId === generalId && a.cargo !== 'coordinador') continue;
-      n += await this.crearJornada([{ cargo: a.cargo, puestos: a.puestos }], a.groupId, 'renovacion', now, false);
+      if (enMesa(a)) continue;
+      n += await this.crearJornada([{ cargo: a.cargo, puestos: a.puestos, motivo: a.motivo }], a.groupId, now, false);
     }
     return n;
   }
@@ -298,16 +290,15 @@ export class ConvocatoriaService {
    * (ya hay una abierta de ese cargo y ámbito) se salta sin romper la ronda.
    */
   private async crearJornada(
-    cargos: { cargo: CargoTipoValue; puestos: number }[],
+    cargos: { cargo: CargoTipoValue; puestos: number; motivo: EleccionMotivoValue }[],
     groupId: string,
-    motivo: EleccionMotivoValue,
     now: Date,
     conJornada = true,
   ): Promise<number> {
     const fechas = await this.fechas(now);
     const jornadaId = conJornada && cargos.length > 1 ? randomUUID() : null;
     let n = 0;
-    for (const { cargo, puestos } of cargos) {
+    for (const { cargo, puestos, motivo } of cargos) {
       try {
         const fijas = await this.reglasFijas(groupId, cargo);
         const e = await this.crearUna(this.prisma, groupId, cargo, puestos, motivo, jornadaId, { ...fechas, ...fijas });

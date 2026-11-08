@@ -69,7 +69,7 @@ El asistente acompaña a cada persona sin decidir por ella (ADR-026):
 La plataforma elige a quienes la representan, sin intervención humana en la convocatoria (ADR-028):
 
 - [x] Cargos con historial (`Cargo`) sincronizado con los asientos de la mesa; «en funciones» para que nunca falte quien ocupe el puesto
-- [x] Convocatoria automática: primera jornada, activación de una comunidad, renovación 21 días antes y reintento a los 30 días
+- [x] Convocatoria automática: primera jornada, activación de una comunidad y una sola convocatoria por cargo (renovación 21 días antes, vacantes a los 30 días)
 - [x] Fichas de candidatura iguales para todas, con revisión previa y ocultar con 2 de 3 de la mesa
 - [x] Papeleta secreta y cambiable hasta el cierre; conteo con Schulze entre las aprobadas y desempate con semilla pública
 - [x] Un cargo a la vez e incompatibilidades (fundadores incluidos)

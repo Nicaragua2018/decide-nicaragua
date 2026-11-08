@@ -160,6 +160,13 @@ describe('EleccionesService', () => {
     expect(prisma.boardSeat.findMany.mock.calls.at(-1)![0].where).toEqual({ profileId: { in: [YO] } });
     expect(prisma.candidatura.create).not.toHaveBeenCalled();
 
+    // Fundador que quiere observar: también bloquea (solo puede ir a un cargo de la mesa).
+    prisma.eleccion.findUnique.mockResolvedValue(eleccion({ cargo: 'observador', puestos: 7 }));
+    prisma.boardSeat.findMany.mockResolvedValue([{ profileId: YO, role: 'secretario' }]);
+    await expect(service.presentarse(YO, E, ficha)).rejects.toBeInstanceOf(BadRequestException);
+    expect(prisma.boardSeat.findMany.mock.calls.at(-1)![0].where).toEqual({ profileId: { in: [YO] } });
+    expect(prisma.candidatura.create).not.toHaveBeenCalled();
+
     // Renovación del propio cargo: sí.
     prisma.eleccion.findUnique.mockResolvedValue(eleccion({ motivo: 'renovacion' }));
     prisma.cargo.findMany.mockResolvedValue([{ profileId: YO, tipo: 'secretario', groupId: GEN }]);

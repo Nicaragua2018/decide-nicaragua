@@ -5,7 +5,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { RulesService } from '../rules/rules.service';
 import { generateSeed } from '../sortition/sortition-algorithm';
-import { ConvocatoriaService } from './convocatoria.service';
+import { ConvocatoriaService, RENOVACION_ANTES_DIAS, plenosDe } from './convocatoria.service';
 import { contarEleccion } from './conteo';
 import { MESA, conOtroCargo } from './incompatibilidad';
 
@@ -21,6 +21,7 @@ export function sumarMeses(fecha: Date, meses: number): Date {
 }
 
 const json = (v: unknown): Prisma.InputJsonValue => v as Prisma.InputJsonValue;
+const DIA_MS = 86_400_000;
 
 /** Cuenta las elecciones cuya votación terminó y da el cargo a quien salió elegido. */
 @Injectable()
@@ -51,54 +52,67 @@ export class PosesionService {
     return n;
   }
 
-  /** Cuenta una elección y da posesión. Idempotente: solo una llamada la cuenta. */
+  /**
+   * Cuenta una elección y da posesión. Idempotente: solo una llamada la cuenta. Todo ocurre con la
+   * elección bloqueada (FOR UPDATE): una ficha que la mesa oculta a la vez (con la elección en
+   * FOR SHARE) queda oculta antes de leerse aquí, o ya no se oculta porque la elección está contada.
+   */
   async contar(eleccionId: string, now: Date): Promise<boolean> {
     const e = await this.prisma.eleccion.findUnique({ where: { id: eleccionId } });
     if (!e || e.fase !== 'votacion') return false;
 
     const electorado = await this.convocatoria.electorado({ groupId: e.groupId, cargo: e.cargo });
-    const candidaturas = await this.prisma.candidatura.findMany({
-      where: { eleccionId: e.id },
-      orderBy: { createdAt: 'asc' },
-      select: {
-        id: true,
-        profileId: true,
-        oculta: true,
-        retiradaAt: true,
-        profile: { select: { user: { select: { status: true } } } },
-      },
-    });
-    const vivas = candidaturas.filter((c) => c.retiradaAt === null);
-    const candidatas = vivas.map((c) => c.id);
-    const enLista = new Set(candidatas);
-    const incompatibles = await conOtroCargo(this.prisma, e, vivas.map((c) => c.profileId));
-    const excluidas = vivas
-      .filter((c) => c.oculta || c.profile.user.status !== 'verified_citizen' || incompatibles.has(c.profileId))
-      .map((c) => c.id);
-
-    const papeletas = await this.prisma.papeletaEleccion.findMany({
-      where: { eleccionId: e.id, profileId: { in: electorado } },
-      select: { abstencion: true, orden: true },
-    });
     // La regla queda fijada al convocar; solo si falta (elecciones antiguas) se lee ahora.
     const quorumPct = e.quorumPct ?? (await this.rules.getInt('votacion.quorum_porcentaje', e.groupId));
     const semilla = generateSeed();
 
-    const r = contarEleccion({
-      candidatas,
-      puestos: e.puestos,
-      papeletas: papeletas.map((p) => ({ abstencion: p.abstencion, orden: p.orden.filter((id) => enLista.has(id)) })),
-      miembros: electorado.length,
-      quorumPct,
-      excluidas,
-      semilla,
-    });
-
-    const perfilDe = new Map(vivas.map((c) => [c.id, c.profileId]));
-    const elegidas = r.electas.map((id) => perfilDe.get(id)!);
-    const vacantes = Math.max(e.puestos - r.electas.length, 0);
-
     const hecho = await this.prisma.$transaction(async (tx) => {
+      const viva = await tx.$queryRaw<{ id: string }[]>(
+        Prisma.sql`SELECT id FROM elecciones WHERE id = ${e.id}::uuid AND fase = 'votacion' FOR UPDATE`,
+      );
+      if (viva.length === 0) return null;
+
+      const candidaturas = await tx.candidatura.findMany({
+        where: { eleccionId: e.id },
+        orderBy: { createdAt: 'asc' },
+        select: {
+          id: true,
+          profileId: true,
+          oculta: true,
+          retiradaAt: true,
+          profile: { select: { user: { select: { status: true } } } },
+        },
+      });
+      const vivas = candidaturas.filter((c) => c.retiradaAt === null);
+      const candidatas = vivas.map((c) => c.id);
+      const enLista = new Set(candidatas);
+      const incompatibles = await conOtroCargo(
+        tx as unknown as Pick<PrismaService, 'cargo' | 'boardSeat'>,
+        e,
+        vivas.map((c) => c.profileId),
+      );
+      const excluidas = vivas
+        .filter((c) => c.oculta || c.profile.user.status !== 'verified_citizen' || incompatibles.has(c.profileId))
+        .map((c) => c.id);
+
+      const papeletas = await tx.papeletaEleccion.findMany({
+        where: { eleccionId: e.id, profileId: { in: electorado } },
+        select: { abstencion: true, orden: true },
+      });
+
+      const r = contarEleccion({
+        candidatas,
+        puestos: e.puestos,
+        papeletas: papeletas.map((p) => ({ abstencion: p.abstencion, orden: p.orden.filter((id) => enLista.has(id)) })),
+        miembros: electorado.length,
+        quorumPct,
+        excluidas,
+        semilla,
+      });
+
+      const perfilDe = new Map(vivas.map((c) => [c.id, c.profileId]));
+      const elegidas = r.electas.map((id) => perfilDe.get(id)!);
+
       const guarda = await tx.eleccion.updateMany({
         where: { id: e.id, fase: 'votacion' },
         data: {
@@ -117,12 +131,15 @@ export class PosesionService {
           abstenciones: r.abstenciones,
         },
       });
-      if (guarda.count === 0) return false;
+      if (guarda.count === 0) return null;
       await this.darPosesion(tx, e, elegidas, now);
-      await this.convocatoria.dejarEnFunciones({ groupId: e.groupId, cargo: e.cargo, puestos: vacantes }, now, tx);
-      return true;
+      // Quien salía y no fue reemplazado sigue «en funciones» hasta la siguiente convocatoria.
+      await this.convocatoria.dejarEnFunciones({ groupId: e.groupId, cargo: e.cargo, convocadaAt: e.createdAt }, tx);
+      return { r, elegidas };
     });
     if (!hecho) return false;
+    const { r, elegidas } = hecho;
+    const vacantes = Math.max(e.puestos - r.electas.length, 0);
 
     void this.audit.log({
       action: 'eleccion.contada',
@@ -139,6 +156,12 @@ export class PosesionService {
     return true;
   }
 
+  /**
+   * Crea los cargos de las electas. Solo terminan cargos «salientes» (en funciones, o cuyo fin cae
+   * en la ventana de renovación del conteo), nunca uno con mandato por delante, y como mucho tantos
+   * como electas: primero los en funciones, luego los de fin más próximo. Si hay vacantes, las
+   * electas las ocupan antes de reemplazar a nadie (nunca se pasa de los puestos del cargo).
+   */
   private async darPosesion(
     tx: Prisma.TransactionClient,
     e: { id: string; groupId: string; cargo: CargoTipoValue; periodoMeses: number | null },
@@ -148,13 +171,16 @@ export class PosesionService {
     if (perfiles.length === 0) return;
     const termina = { terminadoAt: now, enFunciones: false };
 
-    // Salen tantos cargos como personas electas: primero los «en funciones», luego los que vencen antes.
-    const salen = await tx.cargo.findMany({
+    const limite = now.getTime() + RENOVACION_ANTES_DIAS * DIA_MS;
+    const vigentes = await tx.cargo.findMany({
       where: { groupId: e.groupId, tipo: e.cargo, terminadoAt: null },
       orderBy: [{ enFunciones: 'desc' }, { hasta: 'asc' }],
-      take: perfiles.length,
-      select: { id: true },
+      select: { id: true, enFunciones: true, hasta: true },
     });
+    const salientes = vigentes.filter((c) => c.enFunciones || c.hasta.getTime() <= limite);
+    const plenos = await plenosDe(this.rules, e.cargo);
+    const cuantos = Math.min(salientes.length, perfiles.length, Math.max(0, vigentes.length + perfiles.length - plenos));
+    const salen = salientes.slice(0, cuantos);
     if (salen.length > 0) {
       await tx.cargo.updateMany({ where: { id: { in: salen.map((c) => c.id) } }, data: termina });
     }
@@ -170,16 +196,11 @@ export class PosesionService {
       await tx.cargo.create({
         data: { tipo: e.cargo, groupId: e.groupId, profileId, eleccionId: e.id, desde: now, hasta },
       });
-      // Un asiento fundador que no es este cargo se libera: queda vacante y el reintento lo cubre.
-      await tx.boardSeat.deleteMany({
-        where: {
-          profileId,
-          source: 'fundador',
-          ...(MESA.includes(e.cargo) ? { NOT: { role: e.cargo as 'administrador' | 'coordinador_general' | 'secretario' } } : {}),
-        },
-      });
       if (MESA.includes(e.cargo)) {
         const role = e.cargo as 'administrador' | 'coordinador_general' | 'secretario';
+        // Un fundador elegido para otro rol de la mesa libera su asiento fundador: queda vacante
+        // y la siguiente convocatoria lo cubre. (Fuera de la mesa un fundador no puede ser elegido.)
+        await tx.boardSeat.deleteMany({ where: { profileId, source: 'fundador', NOT: { role } } });
         await tx.boardSeat.upsert({
           where: { role },
           update: { profileId, source: 'eleccion', since: now },

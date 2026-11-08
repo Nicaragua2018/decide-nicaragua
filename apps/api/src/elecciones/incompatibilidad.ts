@@ -9,8 +9,9 @@ export const MESA: readonly CargoTipoValue[] = ['administrador', 'coordinador_ge
  * - un cargo vigente de otro tipo o ámbito (repetir el mismo cargo no es incompatible);
  * - un asiento de la mesa elegido por votación para otro rol (cualquiera, si esta elección no
  *   es de la mesa);
- * - los asientos fundadores no cuentan, salvo en elecciones de coordinadores: ahí excluyen (la
- *   comunidad puede contar antes que la mesa y liberar el asiento la dejaría corta).
+ * - los asientos fundadores solo dejan presentarse a un cargo de la mesa (y ahí se liberan al
+ *   ganar otro rol); en coordinadores y observadores excluyen: liberar el asiento podría dejar la
+ *   mesa con menos de 2 personas.
  */
 export async function conOtroCargo(
   prisma: Pick<PrismaService, 'cargo' | 'boardSeat'>,
@@ -24,7 +25,7 @@ export async function conOtroCargo(
       select: { profileId: true, tipo: true, groupId: true },
     }),
     prisma.boardSeat.findMany({
-      where: { profileId: { in: perfiles }, ...(e.cargo === 'coordinador' ? {} : { source: 'eleccion' as const }) },
+      where: { profileId: { in: perfiles }, ...(MESA.includes(e.cargo) ? { source: 'eleccion' as const } : {}) },
       select: { profileId: true, role: true },
     }),
   ]);

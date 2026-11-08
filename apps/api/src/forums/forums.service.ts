@@ -107,7 +107,7 @@ export class ForumsService {
   /**
    * Quién puede crear foros y moderar en un grupo: la mesa directiva (titular verificado) o
    * un coordinador vigente de la comunidad. En un grupo de trabajo cuenta también el coordinador
-   * de la comunidad de la que cuelga (subgrupos y comisiones), pero no en las bifurcaciones, que están reservadas a su ámbito y las modera solo la mesa. Las apelaciones y la segunda firma siguen siendo solo de la mesa.
+   * de la comunidad de la que cuelga (subgrupos y comisiones), pero no en las bifurcaciones, que están reservadas a su ámbito y las modera solo la mesa (también la pausa, que se decide en la comunidad madre: ver `BifurcacionesService.puedePausarEn`). Las apelaciones y la segunda firma siguen siendo solo de la mesa.
    */
   async canModerate(profileId: string, groupId: string): Promise<boolean> {
     if ((await this.board.roleOf(profileId)) !== null) return true;
