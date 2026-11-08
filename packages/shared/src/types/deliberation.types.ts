@@ -25,6 +25,7 @@ export interface ProposalSummary {
   title: string;
   status: ProposalStatus;
   authorDisplayName: string | null;
+  origen: 'persona' | 'asistente';
   signalCounts: SignalCounts;
   commentCount: number;
   createdAt: string;
@@ -47,7 +48,7 @@ export interface CommentItem {
 
 export interface ProposalDetail extends ProposalSummary {
   body: string;
-  authorProfileId: string;
+  authorProfileId: string | null;
   isAuthor: boolean;
   comments: CommentItem[];
   /** Señal del usuario autenticado, o null si no ha señalado */

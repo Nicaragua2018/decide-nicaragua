@@ -401,8 +401,9 @@ model Proposal {
   groupId String @db.Uuid
   group   Group  @relation(fields: [groupId], references: [id], onDelete: Cascade)
 
-  authorProfileId String  @db.Uuid
-  author          Profile @relation(fields: [authorProfileId], references: [id])
+  authorProfileId String?  @db.Uuid
+  author          Profile? @relation(fields: [authorProfileId], references: [id])
+  origen          Origen   @default(persona)
 
   title               String         @db.VarChar(200)
   body                String
@@ -902,9 +903,10 @@ model Inquietud {
   id                   String          @id @default(uuid()) @db.Uuid
   groupId              String          @db.Uuid
   group                Group           @relation(fields: [groupId], references: [id], onDelete: Cascade)
-  authorProfileId      String          @db.Uuid
-  author               Profile         @relation(fields: [authorProfileId], references: [id])
-  title                String          @db.VarChar(140)
+  authorProfileId      String?         @db.Uuid
+  author               Profile?        @relation(fields: [authorProfileId], references: [id])
+  origen               Origen          @default(persona)
+  title                String          @db.VarChar(200)
   body                 String          @db.VarChar(2000)
   status               InquietudStatus @default(abierta)
   hidden               Boolean         @default(false)
@@ -1173,4 +1175,38 @@ model ColaRevisionPosterior {
 
   @@unique([target, targetId])
   @@map("cola_revision_posterior")
+}
+
+enum SugerenciaTipo {
+  agrupar
+  umbral
+  presentacion
+  mapa
+  borradores
+  comision
+}
+
+/// Sugerencia del asistente sobre un objeto (inquietud, tema...) de una comunidad.
+model SugerenciaAsistente {
+  id        String         @id @default(uuid()) @db.Uuid
+  tipo      SugerenciaTipo
+  objetoId  String         @db.Uuid
+  groupId   String         @db.Uuid
+  contenido Json
+  base      Json
+  final     Boolean        @default(false)
+  createdAt DateTime       @default(now()) @db.Timestamptz
+  updatedAt DateTime       @updatedAt @db.Timestamptz
+
+  @@unique([tipo, objetoId])
+  @@index([groupId, tipo])
+  @@map("sugerencias_asistente")
+}
+
+/// Marcas para que una tarea del asistente se haga una sola vez.
+model MarcaAsistente {
+  clave     String   @id
+  createdAt DateTime @default(now()) @db.Timestamptz
+
+  @@map("marcas_asistente")
 }

@@ -291,6 +291,22 @@ describe('DeliberationService', () => {
       expect(result.signalCounts).toEqual({ support: 1, neutral: 0, object: 0 });
     });
 
+    it('un tema sin autor se muestra con «Asistente» y nadie es su autor', async () => {
+      prisma.proposal.findUnique.mockResolvedValue({
+        ...fullProposal,
+        authorProfileId: null,
+        author: null,
+        origen: 'asistente',
+      });
+      prisma.groupMembership.findUnique.mockResolvedValue(mockMembership);
+
+      const result = await service.getProposalById(PROPOSAL_ID, PROFILE_ID);
+
+      expect(result.authorDisplayName).toBe('Asistente');
+      expect(result.isAuthor).toBe(false);
+      expect(result.origen).toBe('asistente');
+    });
+
     it('devuelve userSignal null cuando el usuario no ha señalado', async () => {
       prisma.proposal.findUnique.mockResolvedValue({
         ...fullProposal,
@@ -376,6 +392,13 @@ describe('DeliberationService', () => {
   // ─── updateProposalStatus ─────────────────────────────────────────────────
 
   describe('updateProposalStatus', () => {
+    it('cambiar el estado de un tema sin autor responde 403', async () => {
+      prisma.proposal.findUnique.mockResolvedValue({ ...mockProposal, authorProfileId: null, origen: 'asistente' });
+      await expect(
+        service.updateProposalStatus(PROPOSAL_ID, { status: ProposalStatus.archived }, PROFILE_ID, IP),
+      ).rejects.toBeInstanceOf(ForbiddenException);
+    });
+
     it('el autor puede archivar su propuesta', async () => {
       prisma.proposal.findUnique.mockResolvedValue(mockProposal);
       prisma.groupMembership.findUnique.mockResolvedValue(mockMembership);
@@ -1039,6 +1062,7 @@ describe('DeliberationService', () => {
           forumId: 'f-def',
           kind: 'tema',
           authorProfileId: 'p1',
+          origen: 'persona',
           title: 'T',
           body: 'B',
           status: 'open',

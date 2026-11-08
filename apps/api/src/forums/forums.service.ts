@@ -7,6 +7,7 @@ import {
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import {
+  ASISTENTE_NOMBRE,
   MODERACION_CAUSAS,
   type ForumDetail,
   type ForumSummary,
@@ -213,7 +214,8 @@ export class ForumsService {
           status: t.status as unknown as ProposalSummary['status'],
           kind: t.kind as unknown as ProposalSummary['kind'],
           hidden: t.hidden,
-          authorDisplayName: anonimos.has(t.id) ? NOMBRE_INICIATIVA : t.author.displayName,
+          authorDisplayName: anonimos.has(t.id) ? NOMBRE_INICIATIVA : (t.author?.displayName ?? ASISTENTE_NOMBRE),
+          origen: t.origen,
           signalCounts: counts,
           commentCount: t._count.comments,
           createdAt: t.createdAt.toISOString(),
@@ -252,7 +254,7 @@ export class ForumsService {
     const topic = await this.prisma.proposal.findUnique({ where: { id: topicId } });
     if (!topic) throw new NotFoundException('Tema no encontrado');
     if (topic.hidden) throw new BadRequestException('Este tema está oculto por moderación.');
-    const esAutor = topic.authorProfileId === profileId;
+    const esAutor = topic.authorProfileId !== null && topic.authorProfileId === profileId;
     if (!(await this.canModerate(profileId, topic.groupId))) {
       if (!esAutor) throw new ForbiddenException('Solo quien abrió el tema o la moderación pueden hacer esto.');
       // Como autor (no como moderador) hay que seguir siendo miembro: una persona suspendida pierde sus membresías.
@@ -275,7 +277,8 @@ export class ForumsService {
       if (r.count === 0) throw new ConflictException('Este tema ya es una propuesta formal.');
       // Si nadie propuso soluciones, el propio tema pasa a ser la primera.
       const visibles = await tx.solucion.count({ where: { proposalId: topicId, hidden: false, mergedIntoId: null } });
-      if (visibles === 0) {
+      // Un tema del asistente no tiene autor al que atribuir la solución: no se siembra.
+      if (visibles === 0 && topic.authorProfileId !== null) {
         // Hereda el título del tema: puede tener menos de 10 caracteres (el mínimo del DTO solo rige las propuestas manuales).
         const title = topic.title.slice(0, 140);
         await tx.solucion.create({
@@ -655,7 +658,7 @@ export class ForumsService {
     if (!action) throw new NotFoundException('Moderación no encontrada');
     rejectLinkedTopicAction(action);
     const contenido = await this.authorOf(checkTarget(action.target), action.targetId);
-    if (!contenido || contenido.authorProfileId !== profileId) {
+    if (!contenido || contenido.authorProfileId === null || contenido.authorProfileId !== profileId) {
       throw new ForbiddenException('Solo quien escribió el contenido puede apelar.');
     }
     // Apelar es defenderse de la moderación, no participar: vale aunque el grupo de trabajo ya no esté activo.
@@ -1146,7 +1149,7 @@ export class ForumsService {
   private async authorOf(
     target: ModTarget,
     id: string,
-  ): Promise<{ authorProfileId: string; groupId: string } | null> {
+  ): Promise<{ authorProfileId: string | null; groupId: string } | null> {
     if (target === 'tema') {
       const t = await this.prisma.proposal.findUnique({ where: { id } });
       return t ? { authorProfileId: t.authorProfileId, groupId: t.groupId } : null;

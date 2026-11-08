@@ -709,6 +709,12 @@ describe('ForumsService', () => {
       await expect(service.appeal(YO, 'ma1', 'No fue mi intención ofender', 'ip')).rejects.toThrow(ConflictException);
     });
 
+    it('la apelación de un contenido sin autor se rechaza', async () => {
+      prisma.moderationAction.findUnique.mockResolvedValue({ id: 'ma1', target: 'tema', targetId: 't1', status: 'oculto' });
+      prisma.proposal.findUnique.mockResolvedValue({ id: 't1', authorProfileId: null, groupId: 'g1' });
+      await expect(service.appeal(YO, 'ma1', 'No fue mi intención ofender', 'ip')).rejects.toThrow(ForbiddenException);
+    });
+
     it('el autor que ya no es miembro no puede apelar', async () => {
       prisma.groupMembership.findUnique.mockResolvedValue(null);
       prisma.moderationAction.findUnique.mockResolvedValue({ id: 'ma1', target: 'respuesta', targetId: 'c1', status: 'oculto' });
