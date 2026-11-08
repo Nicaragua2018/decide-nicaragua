@@ -32,15 +32,19 @@ export function CandidaturaForm({
     setCompromisos((c) => c.map((x, j) => (j === i ? v : x)));
   }
 
-  /** La sugerencia llega como «presentación, línea en blanco, compromisos»: se reparte si cuadra. */
+  /**
+   * La sugerencia llega como «presentación, línea en blanco, compromisos». La presentación puede
+   * tener párrafos; los compromisos son de una sola línea: son los últimos trozos, uno por campo lleno.
+   */
   function usarSugerencia(texto: string) {
     const partes = texto.split(/\r?\n\s*\r?\n/).map((p) => p.trim()).filter((p) => p.length > 0);
     const llenos = compromisos.filter((c) => c.trim().length > 0).length;
-    if (partes.length === 1 + llenos && llenos > 0) {
-      setPresentacion((partes[0] ?? '').slice(0, PRESENTACION_MAX));
-      setCompromisos(partes.slice(1).map((p) => p.slice(0, COMPROMISO_MAX)));
+    if (llenos > 0 && partes.length >= 1 + llenos) {
+      const corte = partes.length - llenos;
+      setPresentacion(partes.slice(0, corte).join('\n\n').slice(0, PRESENTACION_MAX));
+      setCompromisos(partes.slice(corte).map((p) => p.slice(0, COMPROMISO_MAX)));
     } else {
-      setPresentacion(texto.slice(0, PRESENTACION_MAX));
+      setPresentacion(texto.trim().slice(0, PRESENTACION_MAX));
     }
   }
 

@@ -12,6 +12,17 @@ function listaNombres(nombres: string[]): string {
   return `${nombres.slice(0, -1).join(', ')} y ${nombres[nombres.length - 1]}`;
 }
 
+/**
+ * El porcentaje solo para mostrar, con un decimal y redondeado hacia el lado correcto de la mitad:
+ * nunca dice «50 %» si no es exactamente la mitad, para no contradecir la línea punteada.
+ */
+export function pctTexto(aparece: number, validas: number): string {
+  if (validas <= 0) return '0 %';
+  const exacto = (100 * aparece) / validas;
+  const d = 2 * aparece > validas ? Math.ceil(exacto * 10) / 10 : 2 * aparece < validas ? Math.floor(exacto * 10) / 10 : 50;
+  return `${d.toLocaleString('es-NI', { maximumFractionDigits: 1 })} %`;
+}
+
 /** «Cómo se decidió» en 3 frases, armadas con las cifras reales del conteo. */
 export function frasesDelResultado(r: ResultadoEleccionVista): string[] {
   const votaron = r.papeletasTotal;
@@ -86,7 +97,7 @@ export function ResultadoEleccion({ resultado: r, eleccionId }: { resultado: Res
   const nombre = new Map(r.filas.map((f) => [f.candidaturaId, f.nombre]));
   for (const e of r.electas) nombre.set(e.candidaturaId, e.nombre);
   const nombreDe = (id: string) => nombre.get(id) ?? SIN_NOMBRE;
-  const filas = [...r.filas].sort((a, b) => b.aprobacionesPct - a.aprobacionesPct);
+  const filas = [...r.filas].sort((a, b) => b.aparece - a.aparece);
   const datos = `data:application/json;charset=utf-8,${encodeURIComponent(JSON.stringify(r, null, 2))}`;
 
   return (
@@ -133,16 +144,21 @@ export function ResultadoEleccion({ resultado: r, eleccionId }: { resultado: Res
                 <span className="el-barra-pista">
                   <span
                     className={`el-barra${f.electa ? ' el-barra-electa' : ''}`}
-                    style={{ width: `${Math.min(Math.max(f.aprobacionesPct, 0), 100)}%` }}
+                    style={{ width: `${f.validas > 0 ? Math.min(Math.max((100 * f.aparece) / f.validas, 0), 100) : 0}%` }}
                   />
                   <span className="el-barra-mitad" aria-hidden="true" />
                 </span>
-                <span className="el-barra-pct">{f.aprobacionesPct} %</span>
+                <span className="el-barra-pct">
+                  {f.aparece} de {plural(f.validas, 'papeleta', 'papeletas')} ({pctTexto(f.aparece, f.validas)})
+                  <span className="el-barra-mitad-texto">
+                    {2 * f.aparece > f.validas ? 'más de la mitad' : 'la mitad o menos'}
+                  </span>
+                </span>
               </li>
             ))}
           </ul>
           <p className="el-nota">La línea punteada marca la mitad: quien no la cruza no puede quedar elegido.</p>
-          <p className="el-nota">Porcentaje de las papeletas sin abstención, redondeado de 5 en 5.</p>
+          <p className="el-nota">Se cuentan las papeletas sin abstención.</p>
         </section>
       )}
 

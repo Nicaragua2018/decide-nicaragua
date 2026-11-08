@@ -606,7 +606,8 @@ export class EleccionesService implements OnModuleInit {
         .map(({ id, i }) => ({
           candidaturaId: id,
           nombre: nombre(id),
-          aprobacionesPct: validas > 0 ? round5((100 * (e.aprobaciones[i] ?? 0)) / validas) : 0,
+          aparece: e.aprobaciones[i] ?? 0,
+          validas,
           electa: electas.has(id),
         })),
       duelos,

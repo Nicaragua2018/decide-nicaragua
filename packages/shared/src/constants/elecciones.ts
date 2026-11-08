@@ -33,7 +33,11 @@ export type ResultadoEleccionVista = {
   papeletasTotal: number;
   abstenciones: number;
   miembros: number;
-  filas: { candidaturaId: string; nombre: string; aprobacionesPct: number; electa: boolean }[];
+  /**
+   * Cifras exactas tras el conteo (las matrices ya son públicas): `aparece` es en cuántas papeletas
+   * sin abstención aparece la persona; `validas`, cuántas papeletas no se abstuvieron.
+   */
+  filas: { candidaturaId: string; nombre: string; aparece: number; validas: number; electa: boolean }[];
   /** `gana` y `pierde` son ids de candidatura (los nombres están en `filas`). */
   duelos: { gana: string; pierde: string; aFavor: number; enContra: number }[];
   candidatasOrden: string[];

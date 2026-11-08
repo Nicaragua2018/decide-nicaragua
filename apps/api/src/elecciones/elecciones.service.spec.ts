@@ -375,7 +375,8 @@ describe('EleccionesService', () => {
     const r = d.resultado!;
     expect(r.electas.map((x) => [x.candidaturaId, x.lugar])).toEqual([['c1', 1], ['c2', 2]]);
     expect(r.vacantes).toBe(0);
-    expect(r.filas.map((f) => f.aprobacionesPct)).toEqual([90, 65, 25]);
+    // Cifras exactas: 7, 5 y 2 de las 8 papeletas sin abstención.
+    expect(r.filas.map((f) => [f.aparece, f.validas])).toEqual([[7, 8], [5, 8], [2, 8]]);
     expect(r.duelos).toEqual([
       { gana: 'c1', pierde: 'c2', aFavor: 6, enContra: 2 },
       { gana: 'c2', pierde: 'c3', aFavor: 5, enContra: 3 },

@@ -37,6 +37,7 @@ export function PapeletaEleccion({
   const [pending, startTransition] = useTransition();
 
   function alternar(id: string) {
+    setError(null);
     setOrden((o) => (o.includes(id) ? o.filter((x) => x !== id) : [...o, id]));
   }
 
@@ -50,6 +51,10 @@ export function PapeletaEleccion({
   }
 
   const guardado = textoGuardado(guardada, fichas);
+  // Lo que hay tocado ahora frente a lo último que se guardó (solo para avisar, nunca se envía solo).
+  const ordenGuardado = guardada && !guardada.abstencion ? guardada.orden.filter((id) => visibles.has(id)) : [];
+  const sinEnviar =
+    guardada === null || guardada.abstencion ? orden.length > 0 : orden.join(',') !== ordenGuardado.join(',');
 
   return (
     <section className="el-papeleta" aria-labelledby="papeleta-titulo">
@@ -84,7 +89,19 @@ export function PapeletaEleccion({
       )}
 
       <div className="el-papeleta-acciones">
-        <button type="button" className="el-btn el-btn-primario" disabled={pending} onClick={() => enviar(false, orden)}>
+        <button
+          type="button"
+          className="el-btn el-btn-primario"
+          disabled={pending}
+          onClick={() => {
+            // Sin nadie tocado no se envía: rechazar a todas se hace con su propio botón.
+            if (orden.length === 0) {
+              setError('Elige al menos a una persona, o usa «Rechazo a todas» o «Me abstengo».');
+              return;
+            }
+            enviar(false, orden);
+          }}
+        >
           Enviar mi voto
         </button>
         <button
@@ -109,6 +126,7 @@ export function PapeletaEleccion({
         >
           Me abstengo
         </button>
+        {sinEnviar && <span className="el-sin-enviar">Cambios sin enviar</span>}
       </div>
 
       <div aria-live="polite">

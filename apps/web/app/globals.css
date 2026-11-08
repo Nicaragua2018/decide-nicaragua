@@ -1486,6 +1486,7 @@ tr:hover td { background: #F9FAFB; }
 .el-ficha-boton:hover:not(:disabled) { border-color: var(--el-azul); }
 .el-ficha-boton:focus-visible { outline: 3px solid var(--el-azul); outline-offset: 2px; }
 .el-ficha-marcada { border-color: var(--el-oro); background: var(--el-oro-palido); }
+.el-sin-enviar { font-size: 0.85rem; font-weight: 700; color: var(--el-tinta); background: var(--el-oro-palido); border-radius: 999px; padding: 0.1rem 0.6rem; }
 .el-ficha-estado { display: block; margin-top: 0.75rem; font-size: 0.8rem; font-weight: 700; color: var(--el-azul); }
 .el-ficha-marcada .el-ficha-estado { color: var(--el-tinta); }
 .el-papeleta { margin-top: 1.25rem; background: var(--el-crema); border: 1px solid #E8DFC6; border-radius: 12px; padding: 1.25rem 1.5rem; }
@@ -1509,13 +1510,15 @@ tr:hover td { background: #F9FAFB; }
   display: inline-flex; align-items: center; justify-content: center; font-weight: 700; font-size: 0.85rem;
 }
 .el-barras { list-style: none; display: flex; flex-direction: column; gap: 0.6rem; margin-bottom: 0.75rem; }
-.el-barra-fila { display: grid; grid-template-columns: minmax(120px, 1fr) 2fr 3.5rem; gap: 0.75rem; align-items: center; }
+.el-barra-fila { display: grid; grid-template-columns: minmax(120px, 1fr) 2fr minmax(9rem, auto); gap: 0.75rem; align-items: center; }
 .el-barra-nombre { font-size: 0.9rem; font-weight: 600; }
-.el-barra-pista { position: relative; height: 18px; background: var(--el-azul-palido); border-radius: 4px; }
+/* Pista blanca con borde: la barra azul (6.9:1) y la dorada con contorno de tinta pasan de 3:1. */
+.el-barra-pista { position: relative; height: 18px; background: #fff; border: 1px solid var(--el-tinta-suave); border-radius: 4px; }
 .el-barra { position: absolute; left: 0; top: 0; bottom: 0; background: var(--el-azul); border-radius: 4px; }
-.el-barra-electa { background: var(--el-oro); }
+.el-barra-electa { background: var(--el-oro); box-shadow: inset 0 0 0 2px var(--el-tinta); }
 .el-barra-mitad { position: absolute; left: 50%; top: -4px; bottom: -4px; border-left: 2px dashed var(--el-tinta); }
 .el-barra-pct { font-size: 0.85rem; font-weight: 700; text-align: right; }
+.el-barra-mitad-texto { display: block; font-size: 0.75rem; font-weight: 500; color: var(--el-tinta-suave); }
 .el-duelos { list-style: none; display: flex; flex-direction: column; gap: 0.4rem; margin-top: 0.5rem; }
 .el-flecha { color: var(--el-azul); font-weight: 700; }
 .el-verificar { margin-top: 1.25rem; background: #fff; border: 1px solid #E8DFC6; border-radius: 12px; padding: 1rem 1.5rem; }
@@ -1550,6 +1553,6 @@ tr:hover td { background: #F9FAFB; }
   .el-tarjeta, .el-bloque, .el-papeleta, .el-panal { padding: 1rem; }
   .el-cuenta { font-size: 1.3rem; }
   .el-paso-detalle { display: none; }
-  .el-barra-fila { grid-template-columns: 1fr 3rem; }
+  .el-barra-fila { grid-template-columns: 1fr auto; }
   .el-barra-pista { grid-column: 1 / -1; grid-row: 2; }
 }
