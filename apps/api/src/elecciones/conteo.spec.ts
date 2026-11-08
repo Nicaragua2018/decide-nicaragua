@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { selectMembers } from '../sortition/sortition-algorithm';
 import { contarEleccion, ordenSchulze } from './conteo';
 
 const pap = (...orden: string[]) => ({ abstencion: false, orden });
@@ -134,5 +135,63 @@ describe('contarEleccion', () => {
     expect(r.electas).toEqual(['A']);
     expect(r.electas.length).toBeLessThan(3);
     expect(r.ordenFinal).toHaveLength(3);
+  });
+
+  it('una excluida no influye en el orden entre las aprobadas (empate real, hay desempate)', () => {
+    const entrada = {
+      ...base,
+      candidatas: ['A', 'C', 'D'],
+      puestos: 1,
+      papeletas: [pap('D', 'C'), pap('A', 'C', 'D'), pap('C', 'A', 'D'), pap('D'), pap('A')],
+      excluidas: ['A'],
+    };
+    const r = contarEleccion({ ...entrada, semilla: 'x' });
+    expect(r.desempateUsado).toBe(true);
+    expect(r.electas).toEqual(selectMembers(['C', 'D'], 1, 'x'));
+    expect(r.ordenFinal.at(-1)).toBe('A');
+  });
+
+  it('con la misma semilla se elige siempre a la misma', () => {
+    const entrada = {
+      candidatas: ['A', 'B', 'C'],
+      puestos: 2,
+      papeletas: [pap('A', 'B', 'C'), pap('A', 'B', 'C'), pap('A', 'C', 'B'), pap('A', 'C', 'B')],
+      miembros: 10,
+      quorumPct: 20,
+    };
+    expect(contarEleccion({ ...entrada, semilla: 'x' }).electas).toEqual(['A', 'B']);
+    expect(contarEleccion({ ...entrada, semilla: 'z' }).electas).toEqual(['A', 'C']);
+  });
+
+  it('las abstenciones son las que alcanzan la participación', () => {
+    const r = contarEleccion({
+      candidatas: ['A'],
+      puestos: 1,
+      papeletas: [pap('A'), abst(), abst()],
+      miembros: 10,
+      quorumPct: 30,
+      semilla: 's',
+    });
+    expect(r.sinQuorum).toBe(false);
+    expect(r.electas).toEqual(['A']);
+    const sin = contarEleccion({
+      candidatas: ['A'],
+      puestos: 1,
+      papeletas: [pap('A'), abst()],
+      miembros: 10,
+      quorumPct: 30,
+      semilla: 's',
+    });
+    expect(sin.sinQuorum).toBe(true);
+  });
+
+  it('exactamente la mitad no basta', () => {
+    const r = contarEleccion({
+      ...base,
+      candidatas: ['A', 'B'],
+      puestos: 1,
+      papeletas: [pap('A'), pap('B')],
+    });
+    expect(r.electas).toEqual([]);
   });
 });

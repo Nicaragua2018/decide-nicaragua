@@ -14,12 +14,11 @@
  */
 
 import { selectMembers, sortPool } from '../sortition/sortition-algorithm';
-import { estaAprobada, hayQuorum, type PapeletaInput } from '../decisiones/decision-tally';
+import { aBallot, estaAprobada, hayQuorum, type PapeletaInput } from '../decisiones/decision-tally';
 import {
   computeStrongestPaths,
   buildPairwiseMatrix,
   findWinnerIndices,
-  type BallotInput,
 } from '../voting/schulze';
 
 export interface ConteoInput {
@@ -71,10 +70,6 @@ export function ordenSchulze(schulzeMatrix: number[][], candidatas: string[]): s
   return niveles;
 }
 
-function aBallot(orden: string[]): BallotInput {
-  return orden.map((candidateId, i) => ({ candidateId, rank: i + 1 }));
-}
-
 export function contarEleccion(input: ConteoInput): ConteoEleccion {
   const { candidatas, puestos, papeletas, miembros, quorumPct, semilla } = input;
   const excluidas = new Set(input.excluidas ?? []);
@@ -91,7 +86,7 @@ export function contarEleccion(input: ConteoInput): ConteoEleccion {
     candidatas,
   );
   const schulzeMatrix = computeStrongestPaths(pairwiseMatrix, candidatas.length);
-  const niveles = ordenSchulze(schulzeMatrix, candidatas);
+  const nivelesTodas = ordenSchulze(schulzeMatrix, candidatas);
 
   const aprobadas = new Set(
     candidatas.filter((c, i) => !excluidas.has(c) && estaAprobada(aprobaciones[i] ?? 0, validas)),
@@ -106,22 +101,29 @@ export function contarEleccion(input: ConteoInput): ConteoEleccion {
     schulzeMatrix,
   };
 
-  const porSchulze = niveles.flatMap((n) => sortPool(n));
+  const porSchulze = nivelesTodas.flatMap((n) => sortPool(n));
   if (!hayQuorum(papeletasTotal, miembros, quorumPct)) {
     return { ...base, sinQuorum: true, electas: [], ordenFinal: porSchulze, desempateUsado: false };
   }
 
+  // El orden entre quienes logran la mayoría se calcula solo entre ellas:
+  // las excluidas o no aprobadas no influyen.
+  const aprobadasLista = candidatas.filter((c) => aprobadas.has(c));
+  const pairwiseAprobadas = buildPairwiseMatrix(
+    validasList.map((p) => aBallot(p.orden)),
+    aprobadasLista,
+  );
+  const niveles = ordenSchulze(
+    computeStrongestPaths(pairwiseAprobadas, aprobadasLista.length),
+    aprobadasLista,
+  );
+
   const electas: string[] = [];
   const ordenAprobadas: string[] = [];
-  const noAprobadas: string[] = [];
   let desempateUsado = false;
 
   for (const nivel of niveles) {
-    const ids = sortPool(nivel);
-    const delNivel = ids.filter((c) => aprobadas.has(c));
-    noAprobadas.push(...ids.filter((c) => !aprobadas.has(c)));
-    if (delNivel.length === 0) continue;
-
+    const delNivel = sortPool(nivel);
     const faltan = Math.max(0, puestos - electas.length);
     if (faltan === 0) {
       ordenAprobadas.push(...delNivel);
@@ -135,6 +137,7 @@ export function contarEleccion(input: ConteoInput): ConteoEleccion {
       ordenAprobadas.push(...elegidas, ...delNivel.filter((c) => !elegidas.includes(c)));
     }
   }
+  const noAprobadas = nivelesTodas.flatMap((n) => sortPool(n).filter((c) => !aprobadas.has(c)));
 
   return {
     ...base,
