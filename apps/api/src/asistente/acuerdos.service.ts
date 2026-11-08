@@ -1,5 +1,8 @@
 import { Injectable, Logger } from '@nestjs/common';
+import type { FraseVotoValue } from '@decide/shared';
 import { PrismaService } from '../prisma/prisma.service';
+import { agregadoPublico, currentMembers } from '../frases/agregado';
+import { analyzeOpinions, seedFromId, type VoteRow } from '../frases/opinion-groups';
 import { AsistenteService, type PedidoAsistente } from './asistente.service';
 import { SugerenciasService } from './sugerencias.service';
 import { nombreDeError } from './errores';
@@ -21,9 +24,13 @@ import {
   TAREA_PRESENTACION,
 } from './acuerdos/presentacion';
 
+import { contenidoMapa, ESQUEMA_MAPA, esSalidaMapa, materialMapa, MIN_VOTOS_MAPA, TAREA_MAPA } from './acuerdos/mapa';
+
 export const MAX_PEDIDOS_POR_RONDA = 20;
 const NULOS_SEGUIDOS_PARA_PARAR = 2;
 const REFRESCO_AGRUPAR_MS = 20 * 3_600_000;
+const REFRESCO_MAPA_MS = 24 * 3_600_000;
+const VALOR: Record<FraseVotoValue, -1 | 0 | 1> = { de_acuerdo: 1, en_desacuerdo: -1, paso: 0 };
 const ABIERTAS = ['abierta', 'en_plazo'] as const;
 
 /** Cuenta de una ronda: tope de pedidos y parada tras dos nulos seguidos. La comparten todos los pasos. */
@@ -58,7 +65,7 @@ type Paso = (ronda: Ronda) => Promise<void>;
 export class AcuerdosService {
   private readonly logger = new Logger(AcuerdosService.name);
   /** Los generadores de la ronda, en orden. Los demás pasos (mapa, borradores, comisión) se añaden aquí. */
-  private readonly pasos: Paso[] = [(r) => this.agrupar(r), (r) => this.umbral(r), (r) => this.presentacion(r)];
+  private readonly pasos: Paso[] = [(r) => this.agrupar(r), (r) => this.umbral(r), (r) => this.presentacion(r), (r) => this.mapa(r)];
 
   constructor(
     private readonly prisma: PrismaService,
@@ -182,6 +189,62 @@ export class AcuerdosService {
         t.groupId,
         { presentacion: salida.presentacion.trim() },
         { at: ronda.now.toISOString(), inquietudes: inquietudes.length },
+      );
+      ronda.guardadas++;
+    });
+  }
+
+  private async mapa(ronda: Ronda): Promise<void> {
+    const temas = await this.prisma.proposal.findMany({
+      where: { hidden: false },
+      select: { id: true, groupId: true, status: true, deliberationEndsAt: true, decision: { select: { id: true } } },
+      orderBy: { createdAt: 'asc' },
+    });
+    await this.cadaUno(temas, ronda, async (t) => {
+      const terminado =
+        (t.deliberationEndsAt !== null && t.deliberationEndsAt.getTime() < ronda.now.getTime()) ||
+        t.decision !== null ||
+        t.status !== 'open';
+      const previa = await this.sugerencias.existe('mapa', t.id);
+      if (previa?.final) return;
+      if (!terminado && previa && ronda.now.getTime() - previa.updatedAt.getTime() <= REFRESCO_MAPA_MS) return;
+
+      // Mismos votos que el análisis público: de miembros actuales y sobre frases visibles.
+      const [frases, votos] = await Promise.all([
+        this.prisma.frase.findMany({ where: { proposalId: t.id, hidden: false }, select: { id: true, text: true }, orderBy: { createdAt: 'asc' } }),
+        this.prisma.fraseVoto.findMany({
+          where: { frase: { proposalId: t.id, hidden: false }, ...currentMembers(t.groupId) },
+          select: { profileId: true, fraseId: true, value: true },
+        }),
+      ]);
+      const visibles = new Set(frases.map((f) => f.id));
+      const rows: VoteRow[] = votos
+        .filter((v) => visibles.has(v.fraseId))
+        .map((v) => ({ profileId: v.profileId, fraseId: v.fraseId, value: VALOR[v.value as FraseVotoValue] }));
+      if (rows.length < MIN_VOTOS_MAPA) return;
+      if (!terminado && previa?.base?.opiniones === rows.length) return;
+
+      const agregado = agregadoPublico(analyzeOpinions(rows, seedFromId(t.id)), new Map(frases.map((f) => [f.id, f.text])));
+      const material = materialMapa(agregado);
+      if (!material) return;
+      const salida = await ronda.pedir({
+        modelo: 'capaz',
+        prioridad: 'nocturna',
+        tarea: TAREA_MAPA,
+        material: material.material,
+        herramienta: { nombre: 'mapear_opiniones', esquema: ESQUEMA_MAPA },
+        validar: esSalidaMapa,
+      });
+      if (!salida) return;
+      const contenido = contenidoMapa(salida, material.letras, material.refs);
+      if (!contenido) return;
+      await this.sugerencias.guardar(
+        'mapa',
+        t.id,
+        t.groupId,
+        contenido,
+        { at: ronda.now.toISOString(), frases: frases.length, opiniones: rows.length },
+        terminado,
       );
       ronda.guardadas++;
     });
