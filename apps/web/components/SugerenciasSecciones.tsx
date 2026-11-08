@@ -1,7 +1,6 @@
 import { leerSugerencia } from '@/lib/api';
 import { SugerenciaAsistente } from '@/components/SugerenciaAsistente';
 import { BorradoresSolucion } from '@/app/(app)/proposals/[id]/BorradoresSolucion';
-import { NuevaSolucionForm } from '@/app/(app)/proposals/[id]/NuevaSolucionForm';
 
 /* Cada sección carga su sugerencia aparte (dentro de Suspense) y, sin sugerencia, no muestra nada. */
 
@@ -63,11 +62,9 @@ export async function ComisionSeccion({ grupoId }: { grupoId: string }) {
   );
 }
 
-/** Formulario de nueva solución; si hay borradores del asistente, los ofrece arriba. */
-export async function NuevaSolucionConBorradores({ proposalId }: { proposalId: string }) {
+/** Tarjeta de borradores del asistente; sin borradores, no muestra nada. */
+export async function BorradoresSeccion({ proposalId }: { proposalId: string }) {
   const s = await leerSugerencia('borradores', proposalId);
-  if (s?.tipo !== 'borradores' || s.contenido.borradores.length === 0) {
-    return <NuevaSolucionForm proposalId={proposalId} />;
-  }
-  return <BorradoresSolucion proposalId={proposalId} borradores={s.contenido.borradores} base={s.base} />;
+  if (s?.tipo !== 'borradores' || s.contenido.borradores.length === 0) return null;
+  return <BorradoresSolucion borradores={s.contenido.borradores} base={s.base} />;
 }

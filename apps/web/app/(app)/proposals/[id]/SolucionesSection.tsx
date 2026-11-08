@@ -1,11 +1,11 @@
 import { Suspense } from 'react';
 import type { DecisionTemaResponse } from '@decide/shared';
-import { NuevaSolucionConBorradores } from '@/components/SugerenciasSecciones';
+import { BorradoresSeccion } from '@/components/SugerenciasSecciones';
 import { ModerarForm } from '@/components/ModerarForm';
 import { LlevarALaComunidad } from '../../grupos/[id]/LlevarALaComunidad';
 import { JuntarSolucion } from './JuntarSolucion';
 import { ObjecionPanel, ProponerModo } from './ModoPanel';
-import { NuevaSolucionForm } from './NuevaSolucionForm';
+import { NuevaSolucionForm, SolucionProvider } from './NuevaSolucionForm';
 import { Papeleta } from './Papeleta';
 import { ResultadoDecision } from './ResultadoDecision';
 
@@ -88,9 +88,12 @@ export function SolucionesSection({
             <p className="text-sm text-muted mb-3">Las soluciones quedan fijas el {fecha(data.debateEndsAt)}</p>
           )}
           {data.puedeProponer && !soloLectura && (
-            <Suspense fallback={<NuevaSolucionForm proposalId={proposalId} />}>
-              <NuevaSolucionConBorradores proposalId={proposalId} />
-            </Suspense>
+            <SolucionProvider>
+              <Suspense fallback={null}>
+                <BorradoresSeccion proposalId={proposalId} />
+              </Suspense>
+              <NuevaSolucionForm proposalId={proposalId} />
+            </SolucionProvider>
           )}
         </>
       )}

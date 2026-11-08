@@ -44,6 +44,8 @@ export function JuntarEnDebate({ ids, title, body }: { ids: string[]; title: str
       type="button"
       className="btn btn-primary btn-sm mt-2"
       onClick={() => {
+        const escrito = r.title.trim() !== '' || r.body.trim() !== '';
+        if (escrito && (r.title !== title || r.body !== body) && !window.confirm('¿Reemplazar lo que escribiste con el borrador?')) return;
         r.setMarcadas(ids);
         r.setTitle(title.slice(0, 200));
         r.setBody(body.slice(0, 10000));
