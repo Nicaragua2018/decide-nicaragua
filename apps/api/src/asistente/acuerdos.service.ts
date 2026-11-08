@@ -24,6 +24,14 @@ import {
   TAREA_PRESENTACION,
 } from './acuerdos/presentacion';
 
+import {
+  contenidoBorradores,
+  ESQUEMA_BORRADORES,
+  esSalidaBorradores,
+  materialBorradores,
+  TAREA_BORRADORES,
+} from './acuerdos/borradores';
+import { ESQUEMA_COMISION, esSalidaComision, materialComision, TAREA_COMISION } from './acuerdos/comision';
 import { contenidoMapa, ESQUEMA_MAPA, esSalidaMapa, materialMapa, MIN_VOTOS_MAPA, TAREA_MAPA } from './acuerdos/mapa';
 
 export const MAX_PEDIDOS_POR_RONDA = 20;
@@ -64,8 +72,8 @@ type Paso = (ronda: Ronda) => Promise<void>;
 @Injectable()
 export class AcuerdosService {
   private readonly logger = new Logger(AcuerdosService.name);
-  /** Los generadores de la ronda, en orden. Los demás pasos (mapa, borradores, comisión) se añaden aquí. */
-  private readonly pasos: Paso[] = [(r) => this.agrupar(r), (r) => this.umbral(r), (r) => this.presentacion(r), (r) => this.mapa(r)];
+  /** Los generadores de la ronda, en orden.  */
+  private readonly pasos: Paso[] = [(r) => this.agrupar(r), (r) => this.umbral(r), (r) => this.presentacion(r), (r) => this.mapa(r), (r) => this.borradores(r), (r) => this.comision(r)];
 
   constructor(
     private readonly prisma: PrismaService,
@@ -209,22 +217,10 @@ export class AcuerdosService {
       if (previa?.final) return;
       if (!terminado && previa && ronda.now.getTime() - previa.updatedAt.getTime() <= REFRESCO_MAPA_MS) return;
 
-      // Mismos votos que el análisis público: de miembros actuales y sobre frases visibles.
-      const [frases, votos] = await Promise.all([
-        this.prisma.frase.findMany({ where: { proposalId: t.id, hidden: false }, select: { id: true, text: true }, orderBy: { createdAt: 'asc' } }),
-        this.prisma.fraseVoto.findMany({
-          where: { frase: { proposalId: t.id, hidden: false }, ...currentMembers(t.groupId) },
-          select: { profileId: true, fraseId: true, value: true },
-        }),
-      ]);
-      const visibles = new Set(frases.map((f) => f.id));
-      const rows: VoteRow[] = votos
-        .filter((v) => visibles.has(v.fraseId))
-        .map((v) => ({ profileId: v.profileId, fraseId: v.fraseId, value: VALOR[v.value as FraseVotoValue] }));
-      if (rows.length < MIN_VOTOS_MAPA) return;
-      if (!terminado && previa?.base?.opiniones === rows.length) return;
-
-      const agregado = agregadoPublico(analyzeOpinions(rows, seedFromId(t.id)), new Map(frases.map((f) => [f.id, f.text])));
+      const datos = await this.votosDelTema(t);
+      if (datos.rows.length < MIN_VOTOS_MAPA) return;
+      if (!terminado && previa?.base?.opiniones === datos.rows.length) return;
+      const { frases, rows, agregado } = datos;
       const material = materialMapa(agregado);
       if (!material) return;
       const salida = await ronda.pedir({
@@ -245,6 +241,82 @@ export class AcuerdosService {
         contenido,
         { at: ronda.now.toISOString(), frases: frases.length, opiniones: rows.length },
         terminado,
+      );
+      ronda.guardadas++;
+    });
+  }
+
+  /** Mismos votos que el análisis público: de miembros actuales y sobre frases visibles. */
+  private async votosDelTema(t: { id: string; groupId: string }) {
+    const [frases, votos] = await Promise.all([
+      this.prisma.frase.findMany({ where: { proposalId: t.id, hidden: false }, select: { id: true, text: true }, orderBy: { createdAt: 'asc' } }),
+      this.prisma.fraseVoto.findMany({
+        where: { frase: { proposalId: t.id, hidden: false }, ...currentMembers(t.groupId) },
+        select: { profileId: true, fraseId: true, value: true },
+      }),
+    ]);
+    const visibles = new Set(frases.map((f) => f.id));
+    const rows: VoteRow[] = votos
+      .filter((v) => visibles.has(v.fraseId))
+      .map((v) => ({ profileId: v.profileId, fraseId: v.fraseId, value: VALOR[v.value as FraseVotoValue] }));
+    const agregado = agregadoPublico(analyzeOpinions(rows, seedFromId(t.id)), new Map(frases.map((f) => [f.id, f.text])));
+    return { frases, rows, agregado };
+  }
+
+  private async borradores(ronda: Ronda): Promise<void> {
+    const temas = await this.prisma.proposal.findMany({
+      where: { kind: 'propuesta', status: 'open', hidden: false, decision: null, cambioRegla: null },
+      select: { id: true, groupId: true, title: true, body: true },
+      orderBy: { createdAt: 'asc' },
+    });
+    await this.cadaUno(temas, ronda, async (t) => {
+      if (await this.sugerencias.existe('borradores', t.id)) return;
+      const { rows, agregado } = await this.votosDelTema(t);
+      const material = materialBorradores(t, agregado);
+      if (!material) return;
+      const salida = await ronda.pedir({
+        modelo: 'capaz',
+        prioridad: 'nocturna',
+        tarea: TAREA_BORRADORES,
+        material: material.material,
+        herramienta: { nombre: 'proponer_soluciones', esquema: ESQUEMA_BORRADORES },
+        validar: esSalidaBorradores,
+      });
+      if (!salida) return;
+      const contenido = contenidoBorradores(salida, material.refs);
+      if (!contenido) return;
+      await this.sugerencias.guardar('borradores', t.id, t.groupId, contenido, {
+        at: ronda.now.toISOString(),
+        frases: material.frases,
+        opiniones: rows.length,
+      });
+      ronda.guardadas++;
+    });
+  }
+
+  private async comision(ronda: Ronda): Promise<void> {
+    const grupos = await this.prisma.group.findMany({
+      where: { trabajoTipo: 'comision', trabajoEstado: 'convocando' },
+      select: { id: true, proposito: true, tarea: true },
+      orderBy: { createdAt: 'asc' },
+    });
+    await this.cadaUno(grupos, ronda, async (g) => {
+      if (await this.sugerencias.existe('comision', g.id)) return;
+      const salida = await ronda.pedir({
+        modelo: 'rapido',
+        prioridad: 'nocturna',
+        tarea: TAREA_COMISION,
+        material: materialComision(g).material,
+        herramienta: { nombre: 'comentar_comision', esquema: ESQUEMA_COMISION },
+        validar: esSalidaComision,
+      });
+      if (!salida) return;
+      await this.sugerencias.guardar(
+        'comision',
+        g.id,
+        g.id,
+        { capacidades: salida.capacidades.map((c) => c.trim()), comentario: salida.comentario.trim() },
+        { at: ronda.now.toISOString() },
       );
       ronda.guardadas++;
     });
