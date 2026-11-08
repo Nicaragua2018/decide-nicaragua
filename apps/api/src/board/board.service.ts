@@ -8,14 +8,17 @@ import {
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import {
+  AccountStatus,
   BOARD_ROLES,
   BoardActionType,
+  LOGIN_STATUSES,
   GENERAL_GROUP_SLUG,
   MODERACION_CAUSAS,
   NICARAGUA_DEPARTMENTS,
   type ModeracionCausaValue,
   RULE_DEFINITIONS,
   type BoardActionSummary,
+  type ReactivacionPendiente,
   type BoardRole,
   type BoardSeatSummary,
   type CargoTipoValue,
@@ -243,6 +246,10 @@ export class BoardService {
       const target = await this.prisma.user.findUnique({ where: { id: dto.targetUserId } });
       if (!target) throw new NotFoundException('Persona no encontrada');
       targetUserId = dto.targetUserId;
+      if (dto.type === BoardActionType.reactivate_user || dto.type === BoardActionType.rechazar_reactivacion) {
+        if ((target.status as string) !== 'suspended') throw new BadRequestException('Esa cuenta ya no está suspendida.');
+        params = { solicitudId: await this.validarSolicitud(dto.params, targetUserId) };
+      }
     }
 
     if (dto.type === BoardActionType.change_origin) {
@@ -321,6 +328,7 @@ export class BoardService {
       action.type as unknown as BoardActionType,
       action.targetUserId,
       action.params as Record<string, unknown>,
+      action.reason,
     );
     // Lo que va fuera de la transacción, solo si se confirmó: comunidades del nuevo origen y auditoría.
     for (const tarea of r.despues) await tarea();
@@ -350,6 +358,7 @@ export class BoardService {
     type: BoardActionType,
     targetUserId: string | null,
     params: Record<string, unknown>,
+    reason: string,
   ): Promise<{ status: 'pending' | 'executed' | 'rejected'; despues: (() => Promise<void>)[] }> {
     try {
       return await this.prisma.$transaction(async (tx) => {
@@ -364,7 +373,7 @@ export class BoardService {
         if (aFavor < VOTOS_PARA_RESOLVER && enContra < VOTOS_PARA_RESOLVER) return { status: 'pending' as const, despues };
 
         const ejecutada =
-          aFavor >= VOTOS_PARA_RESOLVER && (await this.execute(tx, actionId, type, targetUserId, params, despues));
+          aFavor >= VOTOS_PARA_RESOLVER && (await this.execute(tx, actionId, type, targetUserId, params, reason, despues));
         const status = ejecutada ? ('executed' as const) : ('rejected' as const);
         const tomada = await tx.boardAction.updateMany({
           where: { id: actionId, status: 'pending' },
@@ -498,6 +507,130 @@ export class BoardService {
     return { status, cambio: { id: cambio.id, key: cambio.key } };
   }
 
+  /** La solicitud de reactivación de la propuesta: existe, sigue pendiente y es de esa persona. */
+  private async validarSolicitud(params: Record<string, unknown>, targetUserId: string): Promise<string> {
+    const solicitudId = params['solicitudId'];
+    if (typeof solicitudId !== 'string') throw new BadRequestException('Indica la solicitud de reactivación.');
+    const s = await this.prisma.solicitudReactivacion.findUnique({
+      where: { id: solicitudId },
+      select: { userId: true, estado: true },
+    });
+    if (!s) throw new NotFoundException('Solicitud no encontrada');
+    if (s.userId !== targetUserId) throw new BadRequestException('Esa solicitud es de otra persona.');
+    if ((s.estado as string) !== 'pendiente') throw new BadRequestException('Esa solicitud ya se resolvió.');
+    return solicitudId;
+  }
+
+  /** Pedidos de reactivación pendientes, para la mesa: nombre visible (nunca el correo) y motivo de la suspensión. */
+  async listarReactivaciones(): Promise<ReactivacionPendiente[]> {
+    const pendientes = await this.prisma.solicitudReactivacion.findMany({
+      where: { estado: 'pendiente' },
+      orderBy: { createdAt: 'asc' },
+      select: { id: true, userId: true, texto: true, createdAt: true },
+    });
+    if (pendientes.length === 0) return [];
+    const userIds = [...new Set(pendientes.map((p) => p.userId))];
+    const [perfiles, suspensiones] = await Promise.all([
+      this.prisma.profile.findMany({ where: { userId: { in: userIds } }, select: { userId: true, displayName: true } }),
+      this.prisma.boardAction.findMany({
+        where: { type: 'suspend_user', status: 'executed', targetUserId: { in: userIds } },
+        orderBy: { resolvedAt: 'desc' },
+        select: { targetUserId: true, reason: true },
+      }),
+    ]);
+    return pendientes.map((p) => ({
+      id: p.id,
+      userId: p.userId,
+      nombre: perfiles.find((x) => x.userId === p.userId)?.displayName ?? 'Sin nombre',
+      // La más reciente primero (orderBy): el motivo de la suspensión vigente.
+      motivoSuspension: suspensiones.find((x) => x.targetUserId === p.userId)?.reason ?? 'La mesa no dejó un motivo.',
+      texto: p.texto,
+      createdAt: p.createdAt.toISOString(),
+    }));
+  }
+
+  /**
+   * Reactiva la cuenta dentro de la transacción de la firma. Se bloquean la cuenta y la solicitud
+   * (una suspensión o la otra resolución de la misma solicitud, a la vez, esperan). La cuenta vuelve
+   * al estado previo a la última suspensión (`params.estadoPrevio`; si falta o no es un estado con
+   * acceso, `pending_verification`). No recupera cargos ni asientos. Si la solicitud ya no está
+   * pendiente o la cuenta ya no está suspendida, devuelve false sin tocar nada.
+   */
+  private async reactivar(
+    tx: Prisma.TransactionClient,
+    targetUserId: string,
+    params: Record<string, unknown>,
+    despues: (() => Promise<void>)[],
+  ): Promise<boolean> {
+    const solicitudId = String(params['solicitudId']);
+    await tx.$queryRaw(Prisma.sql`SELECT id FROM users WHERE id = ${targetUserId}::uuid FOR UPDATE`);
+    await tx.$queryRaw(Prisma.sql`SELECT id FROM solicitudes_reactivacion WHERE id = ${solicitudId}::uuid FOR UPDATE`);
+    const solicitud = await tx.solicitudReactivacion.findFirst({
+      where: { id: solicitudId, userId: targetUserId, estado: 'pendiente' },
+      select: { id: true },
+    });
+    if (!solicitud) return false;
+
+    const suspension = await tx.boardAction.findFirst({
+      where: { type: 'suspend_user', targetUserId, status: 'executed' },
+      orderBy: { resolvedAt: 'desc' },
+      select: { params: true },
+    });
+    const previo = (suspension?.params as Record<string, unknown> | null | undefined)?.['estadoPrevio'];
+    const estado =
+      typeof previo === 'string' && (LOGIN_STATUSES as string[]).includes(previo)
+        ? previo
+        : AccountStatus.pending_verification;
+
+    const r = await tx.user.updateMany({
+      where: { id: targetUserId, status: 'suspended' },
+      data: { status: estado as never },
+    });
+    if (r.count === 0) return false;
+    const cerrada = await tx.solicitudReactivacion.updateMany({
+      where: { id: solicitudId, userId: targetUserId, estado: 'pendiente' },
+      data: { estado: 'aprobada', resueltaAt: new Date() },
+    });
+    // Imposible con los bloqueos; si pasara, se deshace la reactivación entera.
+    if (cerrada.count === 0) throw new ConflictException('La solicitud ya se resolvió.');
+
+    if (estado === (AccountStatus.verified_citizen as string)) {
+      const perfil = await tx.profile.findUnique({
+        where: { userId: targetUserId },
+        select: { birthDepartment: true, currentCountry: true, currentRegion: true },
+      });
+      if (perfil) {
+        despues.push(() =>
+          this.groups.syncMemberships(targetUserId, perfil.birthDepartment, perfil.currentCountry, perfil.currentRegion),
+        );
+      }
+    }
+    despues.push(async () => {
+      void this.audit.log({ action: 'reactivacion.aprobada', resource: `user:${targetUserId}`, metadata: { solicitudId } });
+    });
+    return true;
+  }
+
+  /** Rechaza la solicitud con el `reason` de la acción, que la persona verá. False si ya no está pendiente. */
+  private async rechazarReactivacion(
+    tx: Prisma.TransactionClient,
+    targetUserId: string,
+    params: Record<string, unknown>,
+    reason: string,
+    despues: (() => Promise<void>)[],
+  ): Promise<boolean> {
+    const solicitudId = String(params['solicitudId']);
+    const r = await tx.solicitudReactivacion.updateMany({
+      where: { id: solicitudId, userId: targetUserId, estado: 'pendiente' },
+      data: { estado: 'rechazada', motivoRechazo: reason, resueltaAt: new Date() },
+    });
+    if (r.count === 0) return false;
+    despues.push(async () => {
+      void this.audit.log({ action: 'reactivacion.rechazada', resource: `user:${targetUserId}`, metadata: { solicitudId } });
+    });
+    return true;
+  }
+
   /** Valida una propuesta de ocultar una ficha: causa de la lista cerrada y elección abierta. */
   private async validarOcultar(
     params: Record<string, unknown>,
@@ -627,12 +760,17 @@ export class BoardService {
     type: BoardActionType,
     targetUserId: string | null,
     params: Record<string, unknown>,
+    reason: string,
     despues: (() => Promise<void>)[],
   ): Promise<boolean> {
     if (type === BoardActionType.ocultar_candidatura) return this.ocultarCandidatura(tx, params, despues);
     // change_rule se resuelve aparte (votarCambioRegla); las demás acciones exigen persona objetivo.
     if (targetUserId === null) throw new BadRequestException('La acción no tiene persona objetivo');
     if (type === BoardActionType.suspend_user) return this.suspender(tx, actionId, targetUserId, params, despues);
+    if (type === BoardActionType.reactivate_user) return this.reactivar(tx, targetUserId, params, despues);
+    if (type === BoardActionType.rechazar_reactivacion) {
+      return this.rechazarReactivacion(tx, targetUserId, params, reason, despues);
+    }
     const birthDepartment = params['birthDepartment'] as string;
     const profile = await tx.profile.update({
       where: { userId: targetUserId },

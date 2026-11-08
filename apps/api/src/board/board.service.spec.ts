@@ -1,6 +1,6 @@
 import 'reflect-metadata';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { BadRequestException, ConflictException, ForbiddenException, Logger } from '@nestjs/common';
+import { BadRequestException, ConflictException, ForbiddenException, Logger, NotFoundException } from '@nestjs/common';
 import { BoardService } from './board.service';
 
 function buildPrisma() {
@@ -14,10 +14,14 @@ function buildPrisma() {
     cargo: { findMany: vi.fn().mockResolvedValue([]), updateMany: vi.fn().mockResolvedValue({ count: 0 }) },
     group: { findUnique: vi.fn().mockResolvedValue({ id: 'g-general' }) },
     eleccion: { findMany: vi.fn().mockResolvedValue([]) },
-    profile: { findUnique: vi.fn(), update: vi.fn() },
-    user: { findUnique: vi.fn(), update: vi.fn() },
+    profile: { findUnique: vi.fn(), update: vi.fn(), findMany: vi.fn().mockResolvedValue([]) },
+    user: { findUnique: vi.fn(), update: vi.fn(), updateMany: vi.fn().mockResolvedValue({ count: 1 }) },
+    solicitudReactivacion: {
+      findUnique: vi.fn(), findFirst: vi.fn(), findMany: vi.fn().mockResolvedValue([]),
+      updateMany: vi.fn().mockResolvedValue({ count: 1 }),
+    },
     groupMembership: { deleteMany: vi.fn() },
-    boardAction: { create: vi.fn(), findUnique: vi.fn(), findMany: vi.fn(), update: vi.fn(), updateMany: vi.fn() },
+    boardAction: { create: vi.fn(), findUnique: vi.fn(), findFirst: vi.fn().mockResolvedValue(null), findMany: vi.fn(), update: vi.fn(), updateMany: vi.fn() },
     boardApproval: { create: vi.fn(), findMany: vi.fn() },
     cambioRegla: { findFirst: vi.fn(), updateMany: vi.fn() },
     ruleValue: { findFirst: vi.fn(), create: vi.fn(), update: vi.fn() },
@@ -863,6 +867,156 @@ describe('BoardService', () => {
         service.proposeAction(SUPLENTE, { type: 'suspend_user' as never, targetUserId: 'u-t', reason: 'spam', params: {} }, 'ip'),
       ).rejects.toThrow(ForbiddenException);
       await expect(service.voteAction(SUPLENTE, 'a1', true, 'ip')).rejects.toThrow(ForbiddenException);
+    });
+  });
+  describe('reactivación (3C-2)', () => {
+    const pendiente = { id: 's1', userId: 'u-t', estado: 'pendiente' };
+
+    describe('proposeAction()', () => {
+      beforeEach(() => {
+        prisma.boardSeat.findFirst.mockResolvedValue(asiento('secretario'));
+        prisma.user.findUnique.mockResolvedValue({ id: 'u-t', status: 'suspended' });
+        prisma.solicitudReactivacion.findUnique.mockResolvedValue(pendiente);
+        prisma.boardAction.create.mockResolvedValue({ id: 'a9' });
+      });
+      const proponer = (type: string, params: Record<string, unknown>, targetUserId = 'u-t') =>
+        service.proposeAction(SECRE, { type: type as never, targetUserId, reason: 'Revisamos el caso', params }, 'ip');
+
+      it('reactivar exige una solicitud pendiente de esa persona', async () => {
+        await expect(proponer('reactivate_user', {})).rejects.toThrow(BadRequestException);
+        prisma.solicitudReactivacion.findUnique.mockResolvedValue(null);
+        await expect(proponer('reactivate_user', { solicitudId: 's1' })).rejects.toThrow(NotFoundException);
+        prisma.solicitudReactivacion.findUnique.mockResolvedValue({ ...pendiente, estado: 'rechazada' });
+        await expect(proponer('rechazar_reactivacion', { solicitudId: 's1' })).rejects.toThrow(BadRequestException);
+        prisma.solicitudReactivacion.findUnique.mockResolvedValue({ ...pendiente, userId: 'u-otra' });
+        await expect(proponer('reactivate_user', { solicitudId: 's1' })).rejects.toThrow(BadRequestException);
+        expect(prisma.boardAction.create).not.toHaveBeenCalled();
+      });
+
+      it('reactivar exige que la cuenta siga suspendida', async () => {
+        prisma.user.findUnique.mockResolvedValue({ id: 'u-t', status: 'verified_citizen' });
+        await expect(proponer('reactivate_user', { solicitudId: 's1' })).rejects.toThrow(BadRequestException);
+      });
+
+      it('con una solicitud válida crea la acción solo con el solicitudId', async () => {
+        await proponer('rechazar_reactivacion', { solicitudId: 's1', otro: 'x' });
+        expect(prisma.boardAction.create).toHaveBeenCalledWith(
+          expect.objectContaining({
+            data: expect.objectContaining({ type: 'rechazar_reactivacion', targetUserId: 'u-t', params: { solicitudId: 's1' }, reason: 'Revisamos el caso' }),
+          }),
+        );
+      });
+    });
+
+    describe('execute (con 2 firmas)', () => {
+      const accion = (type: string) => ({
+        id: 'a9', type, targetUserId: 'u-t', params: { solicitudId: 's1' }, reason: 'Todavía no vemos un cambio.',
+        status: 'pending', approvals: [{ profileId: 'p-sec', approve: true }],
+      });
+      beforeEach(() => {
+        prisma.boardSeat.findFirst.mockResolvedValue(asiento('administrador'));
+        prisma.boardApproval.create.mockResolvedValue({});
+        prisma.boardAction.updateMany.mockResolvedValue({ count: 1 });
+        prisma.user.findUnique.mockResolvedValue({ status: 'suspended' });
+        prisma.solicitudReactivacion.findFirst.mockResolvedValue(pendiente);
+        prisma.profile.findUnique.mockResolvedValue({ birthDepartment: 'Leon', currentCountry: 'CR', currentRegion: null });
+        votos(true, true);
+      });
+
+      it('reactivar devuelve el estado previo y resincroniza las comunidades, sin cargos', async () => {
+        prisma.boardAction.findUnique.mockResolvedValue(accion('reactivate_user'));
+        prisma.boardAction.findFirst.mockResolvedValue({ params: { estadoPrevio: 'verified_citizen' } });
+
+        await service.voteAction(ADMIN, 'a9', true, 'ip');
+
+        expect(prisma.boardAction.findFirst).toHaveBeenCalledWith(
+          expect.objectContaining({ where: { type: 'suspend_user', targetUserId: 'u-t', status: 'executed' } }),
+        );
+        expect(prisma.user.updateMany).toHaveBeenCalledWith({ where: { id: 'u-t', status: 'suspended' }, data: { status: 'verified_citizen' } });
+        expect(prisma.solicitudReactivacion.updateMany).toHaveBeenCalledWith({
+          where: { id: 's1', userId: 'u-t', estado: 'pendiente' },
+          data: { estado: 'aprobada', resueltaAt: expect.any(Date) },
+        });
+        expect(groups.syncMemberships).toHaveBeenCalledWith('u-t', 'Leon', 'CR', null);
+        // Tras confirmar la acción, no dentro de la transacción.
+        expect(groups.syncMemberships.mock.invocationCallOrder[0]!).toBeGreaterThan(prisma.boardAction.updateMany.mock.invocationCallOrder[0]!);
+        // No recupera cargos ni asientos.
+        expect(prisma.boardSeat.create).not.toHaveBeenCalled();
+        expect(prisma.cargo.updateMany).not.toHaveBeenCalled();
+        expect(resuelta()).toMatchObject({ data: { status: 'executed' } });
+        expect(audit.log).toHaveBeenCalledWith({ action: 'reactivacion.aprobada', resource: 'user:u-t', metadata: { solicitudId: 's1' } });
+      });
+
+      it('sin estado previo, reactiva a pending_verification', async () => {
+        prisma.boardAction.findUnique.mockResolvedValue(accion('reactivate_user'));
+        prisma.boardAction.findFirst.mockResolvedValue({ params: {} });
+
+        await service.voteAction(ADMIN, 'a9', true, 'ip');
+
+        expect(prisma.user.updateMany).toHaveBeenCalledWith({ where: { id: 'u-t', status: 'suspended' }, data: { status: 'pending_verification' } });
+        expect(groups.syncMemberships).not.toHaveBeenCalled();
+      });
+
+      it('un estado previo raro (p. ej. suspended) también vuelve a pending_verification', async () => {
+        prisma.boardAction.findUnique.mockResolvedValue(accion('reactivate_user'));
+        prisma.boardAction.findFirst.mockResolvedValue({ params: { estadoPrevio: 'suspended' } });
+
+        await service.voteAction(ADMIN, 'a9', true, 'ip');
+
+        expect(prisma.user.updateMany).toHaveBeenCalledWith({ where: { id: 'u-t', status: 'suspended' }, data: { status: 'pending_verification' } });
+      });
+
+      it('si la cuenta ya no está suspendida, la acción queda rechazada sin tocar la solicitud', async () => {
+        prisma.boardAction.findUnique.mockResolvedValue(accion('reactivate_user'));
+        prisma.user.updateMany.mockResolvedValue({ count: 0 });
+
+        await service.voteAction(ADMIN, 'a9', true, 'ip');
+
+        expect(prisma.solicitudReactivacion.updateMany).not.toHaveBeenCalled();
+        expect(groups.syncMemberships).not.toHaveBeenCalled();
+        expect(resuelta()).toMatchObject({ data: { status: 'rejected' } });
+      });
+
+      it('si la solicitud ya no está pendiente, no reactiva', async () => {
+        prisma.boardAction.findUnique.mockResolvedValue(accion('reactivate_user'));
+        prisma.solicitudReactivacion.findFirst.mockResolvedValue(null);
+
+        await service.voteAction(ADMIN, 'a9', true, 'ip');
+
+        expect(prisma.user.updateMany).not.toHaveBeenCalled();
+        expect(resuelta()).toMatchObject({ data: { status: 'rejected' } });
+      });
+
+      it('rechazar guarda el motivo que ve la persona', async () => {
+        prisma.boardAction.findUnique.mockResolvedValue(accion('rechazar_reactivacion'));
+
+        await service.voteAction(ADMIN, 'a9', true, 'ip');
+
+        expect(prisma.solicitudReactivacion.updateMany).toHaveBeenCalledWith({
+          where: { id: 's1', userId: 'u-t', estado: 'pendiente' },
+          data: { estado: 'rechazada', motivoRechazo: 'Todavía no vemos un cambio.', resueltaAt: expect.any(Date) },
+        });
+        expect(prisma.user.updateMany).not.toHaveBeenCalled();
+        expect(resuelta()).toMatchObject({ data: { status: 'executed' } });
+        expect(audit.log).toHaveBeenCalledWith({ action: 'reactivacion.rechazada', resource: 'user:u-t', metadata: { solicitudId: 's1' } });
+      });
+    });
+
+    describe('listarReactivaciones()', () => {
+      it('devuelve las pendientes con el nombre visible y el motivo, nunca el correo', async () => {
+        const createdAt = new Date('2026-11-12T00:00:00Z');
+        prisma.solicitudReactivacion.findMany.mockResolvedValue([{ id: 's1', userId: 'u-t', texto: 'Pido revisión', createdAt }]);
+        prisma.profile.findMany.mockResolvedValue([{ userId: 'u-t', displayName: 'Ana' }]);
+        prisma.boardAction.findMany.mockResolvedValue([{ targetUserId: 'u-t', reason: 'Spam repetido' }]);
+
+        const r = await service.listarReactivaciones();
+
+        expect(prisma.solicitudReactivacion.findMany).toHaveBeenCalledWith(expect.objectContaining({ where: { estado: 'pendiente' } }));
+        expect(r).toEqual([
+          { id: 's1', userId: 'u-t', nombre: 'Ana', motivoSuspension: 'Spam repetido', texto: 'Pido revisión', createdAt: createdAt.toISOString() },
+        ]);
+        expect(JSON.stringify(r)).not.toContain('@');
+      });
     });
   });
 });

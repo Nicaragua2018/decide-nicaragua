@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { PassportStrategy } from '@nestjs/passport';
 import { Strategy, ExtractJwt } from 'passport-jwt';
 import { ConfigService } from '@nestjs/config';
@@ -23,8 +23,14 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     });
   }
 
-  /** El payload validado se adjunta al request como req.user */
+  /**
+   * El payload validado se adjunta al request como req.user. Un token con `proposito` (p. ej. el
+   * de reactivación, firmado con el mismo secreto) nunca vale como sesión.
+   */
   validate(payload: JwtPayload): JwtPayload {
+    if ((payload as JwtPayload & { proposito?: unknown }).proposito !== undefined) {
+      throw new UnauthorizedException('Sesión no válida');
+    }
     return payload;
   }
 }
