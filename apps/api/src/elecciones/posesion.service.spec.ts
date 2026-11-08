@@ -38,6 +38,7 @@ function buildPrisma() {
       updateMany: vi.fn().mockResolvedValue({ count: 1 }),
       create: vi.fn().mockResolvedValue({}),
     },
+    revocacion: { findMany: vi.fn().mockResolvedValue([]) },
     boardSeat: {
       upsert: vi.fn().mockResolvedValue({}),
       findMany: vi.fn().mockResolvedValue([]),
@@ -131,6 +132,43 @@ describe('PosesionService', () => {
     expect(prisma.cargo.create.mock.calls[0]![0].data.profileId).toBe('p3');
   });
 
+  it('el cargo que sale por un pedido de revocación logrado termina con causa «revocacion»; el resto, «mandato»', async () => {
+    preparar([{ id: 'c1', profileId: 'p1' }, { id: 'c2', profileId: 'p2' }], voto(10, ['c1', 'c2']), votantes(10));
+    prisma.eleccion.findUnique.mockResolvedValue(eleccion({ puestos: 2 }));
+    salenCargos([vigente('old1', 10, true), vigente('old2', 10)]);
+    prisma.revocacion.findMany.mockResolvedValue([{ cargoId: 'old1' }]);
+
+    expect(await service.contar('e1', NOW)).toBe(true);
+
+    expect(prisma.revocacion.findMany).toHaveBeenCalledWith({
+      where: { cargoId: { in: ['old1', 'old2'] }, estado: 'lograda' },
+      select: { cargoId: true },
+    });
+    expect(prisma.cargo.updateMany).toHaveBeenCalledWith({
+      where: { id: { in: ['old1'] } },
+      data: { terminadoAt: NOW, finCausa: 'revocacion', enFunciones: false },
+    });
+    expect(prisma.cargo.updateMany).toHaveBeenCalledWith({
+      where: { id: { in: ['old2'] } },
+      data: { terminadoAt: NOW, finCausa: 'mandato', enFunciones: false },
+    });
+    expect(terminados().sort()).toEqual(['old1', 'old2']);
+  });
+
+  it('si todos los que salen fueron revocados, no hay terminación por «mandato»', async () => {
+    preparar([{ id: 'c1', profileId: 'p1' }], voto(10, ['c1']), votantes(10));
+    salenCargos([vigente('old1', 10, true)]);
+    prisma.revocacion.findMany.mockResolvedValue([{ cargoId: 'old1' }]);
+
+    await service.contar('e1', NOW);
+
+    const causas = prisma.cargo.updateMany.mock.calls
+      .map((c) => (c[0] as { data: Record<string, unknown> }).data)
+      .filter((d) => d['terminadoAt'])
+      .map((d) => d['finCausa']);
+    expect(causas).toEqual(['revocacion']);
+  });
+
   it('da posesión: termina el cargo anterior, crea el nuevo y actualiza el asiento de la mesa', async () => {
     preparar([{ id: 'c1', profileId: 'p1' }], voto(10, ['c1']), votantes(10));
     salenCargos([vigente('old1', 10)]);
@@ -143,7 +181,7 @@ describe('PosesionService', () => {
     expect(busca.orderBy).toEqual([{ enFunciones: 'desc' }, { hasta: 'asc' }]);
     expect(prisma.cargo.updateMany).toHaveBeenCalledWith({
       where: { id: { in: ['old1'] } },
-      data: { terminadoAt: NOW, enFunciones: false },
+      data: { terminadoAt: NOW, finCausa: 'mandato', enFunciones: false },
     });
     expect(prisma.cargo.create).toHaveBeenCalledWith({
       data: { tipo: 'secretario', groupId: GEN, profileId: 'p1', eleccionId: 'e1', desde: NOW, hasta: sumarMeses(NOW, 12) },
