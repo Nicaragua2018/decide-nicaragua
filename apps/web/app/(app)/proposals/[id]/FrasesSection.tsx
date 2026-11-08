@@ -1,4 +1,6 @@
+import { Suspense } from 'react';
 import { serverFetch } from '@/lib/api';
+import { MapaAsistenteSeccion } from '@/components/SugerenciasSecciones';
 import type {
   FraseItem,
   FraseParaVotar,
@@ -158,6 +160,9 @@ export async function FrasesSection({
       )}
 
       <MapaOpiniones analysis={mapa} />
+      <Suspense fallback={null}>
+        <MapaAsistenteSeccion proposalId={proposalId} />
+      </Suspense>
     </div>
   );
 }

@@ -8,7 +8,7 @@ import {
   type OnModuleInit,
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
-import { textoParaRevisar } from '@decide/shared';
+import { ASISTENTE_NOMBRE, textoParaRevisar } from '@decide/shared';
 import type { InquietudDetail, InquietudStatusValue, InquietudSummary } from '@decide/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { rechazarGrupoDeTrabajo } from '../groups/group-access.service';
@@ -28,7 +28,8 @@ const HIDDEN_TITLE = 'Inquietud oculta por moderación';
 interface InquietudRow {
   id: string;
   groupId: string;
-  authorProfileId: string;
+  authorProfileId: string | null;
+  origen?: 'persona' | 'asistente';
   title: string;
   body: string;
   status: string;
@@ -38,7 +39,7 @@ interface InquietudRow {
   respondedAt: Date | null;
   proposalId: string | null;
   createdAt: Date;
-  author: { displayName: string };
+  author: { displayName: string } | null;
   origenSolucionId?: string | null;
 }
 
@@ -129,7 +130,8 @@ export class InquietudesService implements OnModuleInit {
       deadlineAt: row.deadlineAt ? row.deadlineAt.toISOString() : null,
       // Oculta, ni siquiera el enlace al debate: ese tema puede repetir su texto.
       proposalId: row.hidden ? null : row.proposalId,
-      authorDisplayName: anonima ? NOMBRE_INICIATIVA : row.author.displayName,
+      authorDisplayName: anonima ? NOMBRE_INICIATIVA : (row.author?.displayName ?? ASISTENTE_NOMBRE),
+      origen: row.origen ?? 'persona',
       createdAt: row.createdAt.toISOString(),
     };
   }
@@ -203,7 +205,7 @@ export class InquietudesService implements OnModuleInit {
     await this.evaluateThreshold(id);
     const row = (await read()) ?? first;
     const base = await this.summary(row, profileId, await this.threshold(row.groupId));
-    const isAuthor = row.authorProfileId === profileId;
+    const isAuthor = row.authorProfileId !== null && row.authorProfileId === profileId;
 
     let hiddenReason: string | null = null;
     let moderationId: string | null = null;
@@ -428,7 +430,7 @@ export class InquietudesService implements OnModuleInit {
   async processDeadlines(now: Date): Promise<number> {
     const due = await this.prisma.inquietud.findMany({
       where: { status: 'en_plazo', hidden: false, deadlineAt: { lte: now } },
-      select: { id: true, groupId: true, authorProfileId: true, title: true, body: true },
+      select: { id: true, groupId: true, authorProfileId: true, origen: true, title: true, body: true },
     });
     let opened = 0;
     for (const i of due) {
@@ -443,6 +445,7 @@ export class InquietudesService implements OnModuleInit {
           const topic = await this.deliberation.createTopicInDefaultForum(tx, {
             groupId: i.groupId,
             authorProfileId: i.authorProfileId,
+            origen: i.origen,
             title: i.title,
             body: i.body,
             abiertoPorComunidad: true,

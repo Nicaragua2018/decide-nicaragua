@@ -3,6 +3,7 @@ import type { Metadata } from 'next';
 import { serverFetch } from '@/lib/api';
 import { Suspense } from 'react';
 import CrecerSeccion from '@/components/CrecerSeccion';
+import { MarcaAsistente } from '@/components/SugerenciaAsistente';
 import type {
   GroupDetail,
   ProposalListResponse,
@@ -197,6 +198,7 @@ function ProposalsTab({
               <p className="card-title">{p.title}</p>
               <p className="card-meta">
                 {p.authorDisplayName} · {new Date(p.createdAt).toLocaleDateString('es-NI')} · {p.commentCount} comentarios
+                {p.origen === 'asistente' && <> <MarcaAsistente /></>}
               </p>
               <div className="signal-bar mt-1">
                 <span className="signal-count signal-support" title="Apoyo">✓ {p.signalCounts.support}</span>

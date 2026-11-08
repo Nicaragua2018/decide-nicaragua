@@ -317,6 +317,17 @@ describe('InquietudesService', () => {
       expect(JSON.stringify(lista)).not.toContain('apoyos');
     });
 
+    it('una inquietud sin autor se lista con origen asistente y nombre «Asistente»', async () => {
+      prisma.inquietud.findMany.mockResolvedValue([
+        fila({ id: 'a', authorProfileId: null, author: null, origen: 'asistente' }),
+      ]);
+      prisma.inquietudApoyo.count.mockResolvedValue(0);
+      prisma.inquietudApoyo.findUnique.mockResolvedValue(null);
+      const lista = await service.list(YO, G);
+      expect(lista[0]?.origen).toBe('asistente');
+      expect(lista[0]?.authorDisplayName).toBe('Asistente');
+    });
+
     it('el detalle no contiene ids de quienes apoyaron y canOrganize es falso por ahora', async () => {
       prisma.inquietud.findUnique.mockResolvedValue(fila({ apoyos: [{ profileId: OTRO }] }));
       prisma.inquietudApoyo.count.mockResolvedValue(2);
@@ -593,6 +604,18 @@ describe('InquietudesService', () => {
           action: 'inquietud.opened_by_community',
           metadata: { inquietudId: 'i1', proposalId: 'tema1' },
         }),
+      );
+    });
+
+    it('processDeadlines abre una inquietud sin autor como tema sin autor', async () => {
+      prisma.inquietud.findMany.mockResolvedValue([
+        { id: 'i1', groupId: G, authorProfileId: null, origen: 'asistente', title: 'Pregunta', body: 'Texto' },
+      ]);
+      tx.inquietud.updateMany.mockResolvedValue({ count: 1 });
+      expect(await service.processDeadlines(new Date())).toBe(1);
+      expect(deliberation.createTopicInDefaultForum).toHaveBeenCalledWith(
+        tx,
+        expect.objectContaining({ authorProfileId: null, origen: 'asistente' }),
       );
     });
 

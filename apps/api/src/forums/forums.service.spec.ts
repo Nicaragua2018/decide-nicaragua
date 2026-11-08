@@ -449,6 +449,15 @@ describe('ForumsService', () => {
       expect(data.description).toHaveLength(2000);
     });
 
+    it('un tema sin autor (del asistente) pasa a propuesta sin sembrar la primera solución', async () => {
+      prisma.proposal.findUnique.mockResolvedValue({ id: 't1', groupId: 'g1', authorProfileId: null, origen: 'asistente', status: 'open', kind: 'tema', hidden: false, title: 'Pregunta semilla', body: 'Cuerpo' });
+      board.roleOf.mockResolvedValue('administrador');
+      prisma.solucion.count.mockResolvedValue(0);
+      await service.formalize(YO, 't1', 'ip');
+      expect(prisma.proposal.updateMany.mock.calls[0]![0].data.kind).toBe('propuesta');
+      expect(prisma.solucion.create).not.toHaveBeenCalled();
+    });
+
     it('si el cuerpo está vacío la descripción usa el título; si ya hay una solución no siembra', async () => {
       prisma.proposal.findUnique.mockResolvedValue({ id: 't1', groupId: 'g1', authorProfileId: YO, status: 'open', kind: 'tema', hidden: false, title: 'Un título', body: '' });
       prisma.proposal.update.mockResolvedValue({});
@@ -707,6 +716,17 @@ describe('ForumsService', () => {
       prisma.moderationAction.findUnique.mockResolvedValue({ id: 'ma1', target: 'respuesta', targetId: 'c1', status: 'apelado' });
       prisma.proposalComment.findUnique.mockResolvedValue({ id: 'c1', authorProfileId: YO, proposal: { groupId: 'g1' } });
       await expect(service.appeal(YO, 'ma1', 'No fue mi intención ofender', 'ip')).rejects.toThrow(ConflictException);
+    });
+
+    it('la apelación de un contenido sin autor se rechaza', async () => {
+      prisma.moderationAction.findUnique.mockResolvedValue({ id: 'ma1', target: 'tema', targetId: 't1', status: 'oculto' });
+      prisma.proposal.findUnique.mockResolvedValue({ id: 't1', authorProfileId: null, groupId: 'g1' });
+      await expect(service.appeal(YO, 'ma1', 'No fue mi intención ofender', 'ip')).rejects.toThrow(
+        'Solo quien escribió el contenido puede apelar.',
+      );
+      // Se consultó el autor (nulo) y no se llegó a comprobar la membresía ni a registrar la apelación.
+      expect(prisma.proposal.findUnique).toHaveBeenCalledWith({ where: { id: 't1' } });
+      expect(prisma.moderationAction.update).not.toHaveBeenCalled();
     });
 
     it('el autor que ya no es miembro no puede apelar', async () => {

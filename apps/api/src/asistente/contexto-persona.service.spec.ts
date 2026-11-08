@@ -218,4 +218,11 @@ describe('guía de la plataforma', () => {
       expect(RUTAS_DE_LA_GUIA[m[1]!]).toBeDefined();
     }
   });
+
+  it('la guía describe todas las tarjetas del asistente y la presentación solo para temas abiertos por la comunidad', () => {
+    expect(GUIA_DE_LA_PLATAFORMA).toContain('**Aviso de umbral.**');
+    expect(GUIA_DE_LA_PLATAFORMA).toContain('**Comentario para comisiones.**');
+    expect(GUIA_DE_LA_PLATAFORMA).not.toContain('Al abrir un tema puede ofrecer una presentación');
+    expect(GUIA_DE_LA_PLATAFORMA).toContain('la comunidad misma abrió el debate');
+  });
 });

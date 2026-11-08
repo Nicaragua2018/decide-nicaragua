@@ -268,7 +268,7 @@ describe('textoSinAsistente', () => {
 
 describe('AsistenteController crecer', () => {
   const crecer = { ver: vi.fn(), cerrar: vi.fn() };
-  const controller = new AsistenteController({} as never, {} as never, {} as never, {} as never, crecer as never);
+  const controller = new AsistenteController({} as never, {} as never, {} as never, {} as never, crecer as never, {} as never);
 
   beforeEach(() => vi.clearAllMocks());
 

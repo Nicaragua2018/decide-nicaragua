@@ -17,6 +17,7 @@ export interface InquietudSummary {
   deadlineAt: string | null;
   proposalId: string | null;
   authorDisplayName: string;
+  origen: 'persona' | 'asistente';
   createdAt: string;
 }
 

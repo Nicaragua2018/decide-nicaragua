@@ -1,7 +1,8 @@
 import Link from 'next/link';
 import type { Metadata } from 'next';
-import { serverFetch } from '@/lib/api';
+import { leerSugerencia, serverFetch } from '@/lib/api';
 import SignalForm from '@/components/SignalForm';
+import { MarcaAsistente, SugerenciaAsistente } from '@/components/SugerenciaAsistente';
 import { CommentsSection } from './CommentsSection';
 import { TopicActions } from './TopicActions';
 import { AppealForm } from './AppealForm';
@@ -96,6 +97,10 @@ export default async function ProposalPage({
     }
   }
 
+  // La presentación del asistente va arriba; el texto original queda debajo.
+  const sug = proposal.hidden ? null : await leerSugerencia('presentacion', id);
+  const presentacion = sug?.tipo === 'presentacion' ? sug : null;
+
   // Quien lee desde un grupo de trabajo sin ser miembro no participa.
   const soloLectura = proposal.soloLectura || decisionTema?.soloLectura === true;
 
@@ -138,6 +143,7 @@ export default async function ProposalPage({
           {proposal.authorDisplayName} · {new Date(proposal.createdAt).toLocaleDateString('es-NI')}
           {' · '}{proposal.commentCount} comentario{proposal.commentCount !== 1 ? 's' : ''}
         </p>
+        {proposal.origen === 'asistente' && <p className="mt-1"><MarcaAsistente /></p>}
       </div>
 
       {soloLectura && (
@@ -170,8 +176,15 @@ export default async function ProposalPage({
         </div>
       )}
 
+      {presentacion && (
+        <SugerenciaAsistente titulo="Presentación del tema" base={presentacion.base}>
+          <p style={{ whiteSpace: 'pre-wrap', lineHeight: 1.75 }}>{presentacion.contenido.presentacion}</p>
+        </SugerenciaAsistente>
+      )}
+
       {/* Cuerpo de la propuesta */}
       <div className="card mb-4">
+        {presentacion && <p className="card-title">La inquietud original</p>}
         {proposal.hidden ? (
           <>
             <p className="alert alert-warning">

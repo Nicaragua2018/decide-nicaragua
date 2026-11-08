@@ -15,26 +15,12 @@ import { GroupAccessService } from '../groups/group-access.service';
 import { motivoVisible } from '../forums/moderacion-motivo';
 import { GuardiaService, type OpcionesPublicar } from '../asistente/guardia.service';
 import { Publicadores } from '../asistente/publicadores';
-import { analyzeOpinions, isDivisiva, isPuente, seedFromId, type VoteRow } from './opinion-groups';
+import { analyzeOpinions, seedFromId, type VoteRow } from './opinion-groups';
+import { agregadoPublico, currentMembers, MIN_GRUPO, pct, round5 } from './agregado';
 
 const VALOR: Record<FraseVotoValue, -1 | 0 | 1> = { de_acuerdo: 1, en_desacuerdo: -1, paso: 0 };
-const MIN_GRUPO = 3;
 /** Por debajo de 5 votos una frase no muestra porcentajes. */
 const MIN_RESULTADO = 5;
-
-/** Múltiplo de 5 más cercano. */
-function round5(n: number): number {
-  return Math.round(n / 5) * 5;
-}
-
-/** Solo cuentan los votos de quienes siguen siendo miembros del grupo (la suspensión quita la membresía). */
-function currentMembers(groupId: string) {
-  return { profile: { memberships: { some: { groupId } } } };
-}
-
-function pct(parte: number, total: number): number {
-  return total > 0 ? round5((100 * parte) / total) : 0;
-}
 
 interface TemaRow {
   id: string;
@@ -276,22 +262,25 @@ export class FrasesService implements OnModuleInit {
     const result = analyzeOpinions(rows, seedFromId(proposalId));
     if (result.participants < needed) return { available: false, participants: result.participants, needed };
 
-    // Un grupo de menos de 3 personas ni se muestra ni cuenta para puentes o divisivas.
-    const visibles = new Set(result.grupos.filter((g) => g.size >= MIN_GRUPO).map((g) => g.id));
-    const analizadas = result.frases.map((f) => ({ ...f, porGrupo: f.porGrupo.filter((g) => visibles.has(g.grupo)) }));
+    const texto = new Map(frases.map((f) => [f.id, f.text]));
+    // Un grupo de menos de 3 personas ni se muestra ni cuenta para puentes o divisivas (ver agregado.ts).
+    const agregado = agregadoPublico(result, texto);
+    const crudas = new Map(result.frases.map((f) => [f.fraseId, f.porGrupo]));
     // Quien solo lee no votó: no ve puentes ni divisivas, ni cuántos puentes le faltan.
     const votadasPorMi = new Set(
       tema.participa ? votos.filter((v) => v.profileId === profileId).map((v) => v.fraseId) : [],
     );
-    const texto = new Map(frases.map((f) => [f.id, f.text]));
-
-    const aAnalisis = (f: (typeof analizadas)[number]): FraseAnalisis => ({
+    const aAnalisis = (f: (typeof agregado.frases)[number]): FraseAnalisis => ({
       fraseId: f.fraseId,
-      text: texto.get(f.fraseId) ?? '',
-      acuerdoPorGrupo: f.porGrupo.map((g) => ({ grupo: g.grupo, acuerdoPct: pct(g.deAcuerdo, g.total) })),
+      text: f.texto,
+      // El porcentaje de la respuesta pública no cambia: sale del recuento, aunque haya pocos votantes.
+      acuerdoPorGrupo: f.acuerdoPorGrupo.map((g) => {
+        const c = crudas.get(f.fraseId)!.find((x) => x.grupo === g.grupo)!;
+        return { grupo: g.grupo, acuerdoPct: pct(c.deAcuerdo, c.total) };
+      }),
     });
 
-    const puentesTodos = analizadas.filter((f) => isPuente(f));
+    const puentesTodos = agregado.frases.filter((f) => f.puente);
     const puentes = puentesTodos.filter((f) => votadasPorMi.has(f.fraseId)).map(aAnalisis);
     // Si quien consulta tiene pocas frases sin votar, el número de puentes pendientes
     // delataría demasiado: solo se informa con 3 o más sin votar, y nunca cuando
@@ -300,14 +289,12 @@ export class FrasesService implements OnModuleInit {
     const pendientesPuente = puentesTodos.filter((f) => !votadasPorMi.has(f.fraseId)).length;
     const puentesSinVer =
       tema.participa && sinVotar >= MIN_GRUPO && pendientesPuente < sinVotar ? pendientesPuente : 0;
-    const divisivas = analizadas.filter((f) => isDivisiva(f) && votadasPorMi.has(f.fraseId)).map(aAnalisis);
+    const divisivas = agregado.frases.filter((f) => f.divisiva && votadasPorMi.has(f.fraseId)).map(aAnalisis);
 
     return {
       available: true,
-      participants: round5(result.participants),
-      grupos: result.grupos
-        .filter((g) => visibles.has(g.id))
-        .map((g) => ({ id: g.id, size: Math.max(5, round5(g.size)) })),
+      participants: agregado.participantes,
+      grupos: agregado.grupos.map((g) => ({ id: g.id, size: g.tamano })),
       puentes,
       divisivas,
       puentesSinVer,

@@ -44,7 +44,7 @@ El asistente de IA cuida la conversación sin decidir qué opiniones valen (ADR-
 - [x] Web: aviso amable, bloqueo del nivel 2 y textos en revisión
 - [x] Examen del asistente (pendiente de correrlo en el servidor con la clave)
 
-**Sigue:** 3B-3 Acuerdos (agrupar inquietudes, mapas de opiniones, borradores y las once preguntas iniciales).
+**Sigue:** 3B-2 y 3B-3 (hechos; ver más abajo).
 
 ---
 
@@ -60,7 +60,23 @@ El asistente acompaña a cada persona sin decidir por ella (ADR-026):
 - [x] Con el asistente apagado no hay tarjetas ni panel
 - [x] Examen del panel (23 casos; pendiente de correrlo en el servidor con la clave)
 
-**Sigue:** 3B-3 Acuerdos.
+**Sigue:** 3B-3 Acuerdos (hecho; ver más abajo).
+
+---
+
+## Primeros 200 — Plan 3B-3 (asistente: acuerdos): COMPLETO
+
+El asistente ayuda a encontrar acuerdos sin decidir nada (ADR-027):
+
+- [x] Sugerencias marcadas «Sugerencia del asistente», en una tabla única, con acceso comprobado al leer
+- [x] Agrupar inquietudes parecidas, aviso de umbral y presentación neutral del tema (sin reemplazar el texto del autor)
+- [x] Mapa de opiniones: con el debate abierto solo lo ve quien votó 3 frases o más; al terminar, cualquiera
+- [x] Borradores de soluciones desde las frases puente, que la persona puede adoptar y editar
+- [x] Comentario para comisiones y las doce preguntas iniciales (sin autor, con marca)
+- [x] Ronda horaria con tope de 20 pedidos y prioridad nocturna
+- [x] Examen de acuerdos (17 casos; pendiente de correrlo en el servidor con la clave)
+
+**Sigue:** 3C.
 
 ---
 

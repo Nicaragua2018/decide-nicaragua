@@ -3,6 +3,7 @@ import { serverFetch } from '@/lib/api';
 import { ProposalStatus } from '@decide/shared';
 import type { ForumDetail, SignalCounts } from '@decide/shared';
 import { NewTopicForm } from './NewTopicForm';
+import { MarcaAsistente } from '@/components/SugerenciaAsistente';
 
 const STATUS_LABEL: Record<ProposalStatus, string> = {
   [ProposalStatus.draft]:    'Borrador',
@@ -58,6 +59,7 @@ export default async function ForoPage({ params }: { params: Promise<{ id: strin
                 <div className="flex justify-between items-center">
                   <Link href={`/proposals/${t.id}`} className="card-title">{t.title}</Link>
                   <div className="flex gap-2">
+                    {t.origen === 'asistente' && <MarcaAsistente />}
                     {t.kind === 'propuesta' && <span className="badge badge-open">Propuesta formal</span>}
                     <span className={`badge badge-${t.status}`}>{STATUS_LABEL[t.status]}</span>
                   </div>

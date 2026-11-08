@@ -133,3 +133,59 @@ export const FACILIDADES: readonly string[] = [
   'comisiones',
   'apoyo mutuo en papeles, trabajo y seguridad',
 ];
+
+/** Nombre con que se muestra al asistente cuando es autor de un texto. */
+export const ASISTENTE_NOMBRE = 'Asistente';
+
+export type SugerenciaTipo = 'agrupar' | 'umbral' | 'presentacion' | 'mapa' | 'borradores' | 'comision';
+
+/** Con qué estaba el mundo cuando se hizo la sugerencia. */
+export interface BaseSugerencia {
+  at: string;
+  inquietudes?: number;
+  frases?: number;
+  opiniones?: number;
+}
+
+export interface AgruparVista {
+  grupos: { titulo: string; descripcion: string; inquietudes: { id: string; title: string }[] }[];
+}
+
+export interface UmbralVista {
+  resumen: string;
+  borradorRespuesta: string;
+}
+
+export interface PresentacionVista {
+  presentacion: string;
+}
+
+export interface MapaVista {
+  resumen: string;
+  grupos: { nombre: string; tamano: number; piensa: string; citas: string[] }[];
+  puentes: { texto: string; citas: string[] };
+}
+
+export interface BorradoresVista {
+  borradores: { indice: number; titulo: string; descripcion: string; adoptado: boolean }[];
+}
+
+export interface ComisionVista {
+  capacidades: string[];
+  comentario: string;
+}
+
+export type SugerenciaVista = {
+  tipo: SugerenciaTipo;
+  base: BaseSugerencia;
+  final: boolean;
+  actualizadaAt: string;
+  proposalId?: string;
+} & (
+  | { tipo: 'agrupar'; contenido: AgruparVista }
+  | { tipo: 'umbral'; contenido: UmbralVista }
+  | { tipo: 'presentacion'; contenido: PresentacionVista }
+  | { tipo: 'mapa'; contenido: MapaVista }
+  | { tipo: 'borradores'; contenido: BorradoresVista }
+  | { tipo: 'comision'; contenido: ComisionVista }
+);

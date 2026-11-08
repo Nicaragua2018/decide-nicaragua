@@ -1,7 +1,15 @@
-import { Transform } from 'class-transformer';
-import { IsBoolean, IsOptional, IsString, MaxLength, MinLength } from 'class-validator';
+import { Transform, Type } from 'class-transformer';
+import { IsBoolean, IsInt, IsOptional, IsString, Max, MaxLength, Min, MinLength, ValidateNested } from 'class-validator';
 
 const recortar = ({ value }: { value: unknown }): unknown => (typeof value === 'string' ? value.trim() : value);
+
+/** Borrador del asistente que la persona adopta como suyo (posición en la lista del tema). */
+export class BorradorAdoptadoDto {
+  @IsInt({ message: 'Indica qué borrador adoptas.' })
+  @Min(0, { message: 'Indica qué borrador adoptas.' })
+  @Max(2, { message: 'Indica qué borrador adoptas.' })
+  indice!: number;
+}
 
 export class CreateSolucionDto {
   /** Se recorta antes de validar: los espacios de relleno no cuentan para el largo. */
@@ -21,4 +29,10 @@ export class CreateSolucionDto {
   @IsOptional()
   @IsBoolean({ message: 'Indica si pides la revisión de la mesa con sí o no.' })
   pedirRevision?: boolean;
+
+  /** Si adopta un borrador del asistente: la solución nace con origen «asistente» y el borrador queda adoptado. */
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => BorradorAdoptadoDto)
+  borrador?: BorradorAdoptadoDto;
 }

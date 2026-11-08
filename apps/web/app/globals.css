@@ -1391,3 +1391,10 @@ tr:hover td { background: #F9FAFB; }
 .al-dia-etiqueta { font-size: 0.75rem; color: var(--text-muted); }
 .crecer-listas { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1rem; margin: 0.75rem 0; }
 .crecer-lista { margin: 0.25rem 0 0 1.25rem; font-size: 0.875rem; }
+
+/* ─── Sugerencias del asistente ─── */
+.sugerencia-asistente { border-left: 4px solid var(--primary, #2563eb); background: var(--bg-white); }
+.sugerencia-asistente-etiqueta { font-size: 0.75rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-muted); margin-bottom: 0.25rem; }
+.sugerencia-asistente blockquote { margin: 0.25rem 0 0.25rem 0.5rem; padding-left: 0.75rem; border-left: 2px solid var(--border); font-size: 0.9rem; color: var(--text-muted); }
+.sugerencia-asistente-grupo { margin-top: 0.75rem; }
+.badge-asistente { background: transparent; border: 1px dashed var(--text-muted); color: var(--text-muted); font-size: 0.7rem; }

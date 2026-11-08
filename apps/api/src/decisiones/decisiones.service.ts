@@ -34,6 +34,7 @@ import {
 import { PrismaService } from '../prisma/prisma.service';
 import { GuardiaService, type OpcionesPublicar } from '../asistente/guardia.service';
 import { Publicadores } from '../asistente/publicadores';
+import { SugerenciasService } from '../asistente/sugerencias.service';
 import { AuditService } from '../audit/audit.service';
 import { ForumsService } from '../forums/forums.service';
 import { RulesService } from '../rules/rules.service';
@@ -156,13 +157,15 @@ export class DecisionesService implements OnModuleInit {
     private readonly access: GroupAccessService,
     private readonly guardia: GuardiaService,
     private readonly publicadores: Publicadores,
+    private readonly sugerencias: SugerenciasService,
   ) {}
 
   /** La revisión de la mesa publica una solución aprobada con la misma llamada (sin ip). */
   onModuleInit(): void {
     this.publicadores.registrar('solucion', (autor, args, opts) => {
-      const a = args as { proposalId: string; title: string; description: string };
-      return this.createSolucion(autor, a.proposalId, { title: a.title, description: a.description }, '', opts);
+      const a = args as { proposalId: string; title: string; description: string; borrador?: { indice: number } };
+      // Si venía de un borrador del asistente, la aprobación también lo marca adoptado.
+      return this.createSolucion(autor, a.proposalId, { title: a.title, description: a.description, ...(a.borrador ? { borrador: a.borrador } : {}) }, '', opts);
     });
   }
 
@@ -198,7 +201,7 @@ export class DecisionesService implements OnModuleInit {
   async createSolucion(
     profileId: string,
     proposalId: string,
-    dto: { title: string; description: string },
+    dto: { title: string; description: string; borrador?: { indice: number } },
     ip: string,
     opts: OpcionesPublicar = {},
   ): Promise<{ id: string }> {
@@ -210,18 +213,26 @@ export class DecisionesService implements OnModuleInit {
       tipo: 'solucion',
       texto: textoParaRevisar(dto.title, dto.description),
       autorProfileId: profileId,
-      args: { proposalId, title: dto.title, description: dto.description },
+      args: { proposalId, title: dto.title, description: dto.description, ...(dto.borrador ? { borrador: { indice: dto.borrador.indice } } : {}) },
       ...opts,
     });
     const created = await this.prisma.$transaction(async (tx) => {
       await bloquearDebate(tx, proposalId);
+      if (dto.borrador && !(await this.sugerencias.marcarBorradorAdoptado(tx, proposalId, dto.borrador.indice))) {
+        // Tras la revisión de la mesa este mensaje queda como motivo del texto no publicable.
+        throw new BadRequestException(
+          opts.sinModeracion
+            ? 'Ese borrador ya lo usó otra persona. Puedes publicar tu texto como una solución propia.'
+            : 'Ese borrador ya no está disponible.',
+        );
+      }
       return tx.solucion.create({
         data: {
           proposalId,
           authorProfileId: profileId,
           title: dto.title.trim(),
           description: dto.description.trim(),
-          origen: 'persona',
+          origen: dto.borrador ? 'asistente' : 'persona',
         },
       });
     });
@@ -231,7 +242,7 @@ export class DecisionesService implements OnModuleInit {
       ...(await this.access.rastro(tema.groupId, profileId, ip)).quien,
       action: 'solucion.created',
       resource: `solucion:${created.id}`,
-      metadata: { proposalId },
+      metadata: { proposalId, ...(dto.borrador ? { desdeBorrador: true } : {}) },
     });
     return { id: created.id };
   }

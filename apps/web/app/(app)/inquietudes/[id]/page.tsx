@@ -1,3 +1,4 @@
+import { Suspense } from 'react';
 import Link from 'next/link';
 import type { Metadata } from 'next';
 import { serverFetch } from '@/lib/api';
@@ -5,6 +6,8 @@ import type { InquietudDetail } from '@decide/shared';
 import { AppealForm } from '../../proposals/[id]/AppealForm';
 import { SupportButton } from '../SupportButton';
 import { INQUIETUD_STATUS_BADGE, INQUIETUD_STATUS_LABEL, formatDate } from '../status';
+import { MarcaAsistente } from '@/components/SugerenciaAsistente';
+import { UmbralSeccion } from '@/components/SugerenciasSecciones';
 import { OrganizerActions } from './OrganizerActions';
 
 export const metadata: Metadata = { title: 'Inquietud — Decide Nicaragua' };
@@ -31,6 +34,7 @@ export default async function InquietudPage({ params }: { params: Promise<{ id: 
         <p className="card-meta">
           {q.authorDisplayName} · {formatDate(q.createdAt)}
         </p>
+        {q.origen === 'asistente' && <p className="mt-1"><MarcaAsistente /></p>}
       </div>
 
       <div className="card mb-4">
@@ -69,6 +73,12 @@ export default async function InquietudPage({ params }: { params: Promise<{ id: 
         <p className="mb-4">
           <Link href={`/proposals/${q.proposalId}`} className="btn btn-primary btn-sm">Ver el debate</Link>
         </p>
+      )}
+
+      {q.canOrganize && !q.hidden && (
+        <Suspense fallback={null}>
+          <UmbralSeccion inquietudId={q.id} />
+        </Suspense>
       )}
 
       {q.canOrganize && !q.hidden && (

@@ -71,6 +71,7 @@ describe('DecisionesService', () => {
   let rules: { getInt: ReturnType<typeof vi.fn> };
   let service: DecisionesService;
   let guardia: ReturnType<typeof guardiaMock>;
+  let sugerencias: { marcarBorradorAdoptado: ReturnType<typeof vi.fn> };
 
   beforeEach(() => {
     prisma = buildPrisma();
@@ -85,6 +86,7 @@ describe('DecisionesService', () => {
     prisma.decision.findUnique.mockResolvedValue(null);
     prisma.$transaction.mockImplementation((fn: (tx: unknown) => unknown) => fn(prisma));
     guardia = guardiaMock();
+    sugerencias = { marcarBorradorAdoptado: vi.fn().mockResolvedValue(true) };
     service = new DecisionesService(
       prisma as never,
       audit as never,
@@ -93,6 +95,7 @@ describe('DecisionesService', () => {
       new GroupAccessService(prisma as never),
       guardia as never,
       publicadoresMock() as never,
+      sugerencias as never,
     );
   });
 
@@ -139,6 +142,68 @@ describe('DecisionesService', () => {
       });
       expect(guardia.antesDePublicar.mock.invocationCallOrder[0]).toBeLessThan(prisma.$transaction.mock.invocationCallOrder[0] ?? 0);
       expect(guardia.despuesDePublicar).toHaveBeenCalledWith('solucion', 's1', false);
+    });
+
+    describe('adoptar un borrador del asistente', () => {
+      const conBorrador = { ...dto, borrador: { indice: 1 } };
+
+      it('adoptar un borrador crea la solución con origen asistente y lo marca adoptado', async () => {
+        prisma.solucion.create.mockResolvedValue({ id: 's1' });
+        expect(await service.createSolucion(YO, T, conBorrador, 'ip')).toEqual({ id: 's1' });
+        expect(sugerencias.marcarBorradorAdoptado).toHaveBeenCalledWith(prisma, T, 1);
+        expect(prisma.solucion.create).toHaveBeenCalledWith({
+          data: { proposalId: T, authorProfileId: YO, title: dto.title, description: dto.description, origen: 'asistente' },
+        });
+        expect(audit.log).toHaveBeenCalledWith(
+          expect.objectContaining({ action: 'solucion.created', metadata: { proposalId: T, desdeBorrador: true } }),
+        );
+      });
+      it('adoptar dos veces el mismo borrador responde 400', async () => {
+        prisma.solucion.create.mockResolvedValue({ id: 's1' });
+        sugerencias.marcarBorradorAdoptado.mockResolvedValueOnce(true).mockResolvedValueOnce(false);
+        await service.createSolucion(YO, T, conBorrador, 'ip');
+        await expect(service.createSolucion(YO, T, conBorrador, 'ip')).rejects.toThrow(BadRequestException);
+        expect(prisma.solucion.create).toHaveBeenCalledTimes(1);
+      });
+      it('adoptar un índice que no existe responde 400 y no crea nada', async () => {
+        sugerencias.marcarBorradorAdoptado.mockResolvedValue(false);
+        await expect(service.createSolucion(YO, T, { ...dto, borrador: { indice: 2 } }, 'ip')).rejects.toThrow(BadRequestException);
+        expect(prisma.solucion.create).not.toHaveBeenCalled();
+        expect(guardia.despuesDePublicar).not.toHaveBeenCalled();
+      });
+      it('al publicar tras la mesa, si otra persona ya usó el borrador, el motivo invita a publicarlo como solución propia', async () => {
+        sugerencias.marcarBorradorAdoptado.mockResolvedValue(false);
+        await expect(service.createSolucion(YO, T, conBorrador, '', { sinModeracion: true })).rejects.toThrow(
+          new BadRequestException('Ese borrador ya lo usó otra persona. Puedes publicar tu texto como una solución propia.'),
+        );
+        expect(prisma.solucion.create).not.toHaveBeenCalled();
+      });
+      it('adoptar pasa por la revisión previa y guarda el borrador en los args', async () => {
+        prisma.solucion.create.mockResolvedValue({ id: 's1' });
+        await service.createSolucion(YO, T, conBorrador, 'ip');
+        expect(guardia.antesDePublicar).toHaveBeenCalledWith({
+          tipo: 'solucion',
+          texto: `${dto.title}
+
+${dto.description}`,
+          autorProfileId: YO,
+          args: { proposalId: T, title: dto.title, description: dto.description, borrador: { indice: 1 } },
+        });
+        expect(guardia.antesDePublicar.mock.invocationCallOrder[0]).toBeLessThan(prisma.$transaction.mock.invocationCallOrder[0] ?? 0);
+      });
+      it('sin borrador no toca las sugerencias', async () => {
+        prisma.solucion.create.mockResolvedValue({ id: 's1' });
+        await service.createSolucion(YO, T, dto, 'ip');
+        expect(sugerencias.marcarBorradorAdoptado).not.toHaveBeenCalled();
+      });
+      it('el DTO acepta un índice entero de 0 a 2', async () => {
+        const mk = (borrador: unknown) => plainToInstance(CreateSolucionDto, { title: dto.title, description: 'Algo', borrador });
+        expect(await validate(mk({ indice: 0 }))).toHaveLength(0);
+        expect(await validate(mk({ indice: 2 }))).toHaveLength(0);
+        expect(await validate(mk({ indice: 3 }))).toHaveLength(1);
+        expect(await validate(mk({ indice: -1 }))).toHaveLength(1);
+        expect(await validate(mk({ indice: 1.5 }))).toHaveLength(1);
+      });
     });
 
     it('crea la solución como persona y audita sin texto', async () => {

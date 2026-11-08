@@ -7,7 +7,7 @@ import {
   type OnModuleInit,
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
-import { ProposalStatus, SignalType, textoParaRevisar } from '@decide/shared';
+import { ASISTENTE_NOMBRE, ProposalStatus, SignalType, textoParaRevisar } from '@decide/shared';
 import type {
   ProposalSummary,
   ProposalDetail,
@@ -129,7 +129,12 @@ export class DeliberationService implements OnModuleInit {
    */
   async createTopicInDefaultForum(
     tx: Prisma.TransactionClient,
-    input: { groupId: string; authorProfileId: string; title: string; body: string; abiertoPorComunidad: boolean },
+    input: { groupId: string; authorProfileId: string | null;
+      origen?: 'persona' | 'asistente';
+      title: string;
+      body: string;
+      abiertoPorComunidad: boolean;
+    },
   ): Promise<{ id: string }> {
     const forum = await tx.forum.findFirst({ where: { groupId: input.groupId, isDefault: true } });
     if (!forum) throw new Error('El foro por defecto no existe; falta llamar a ensureDefaultForum.');
@@ -139,6 +144,7 @@ export class DeliberationService implements OnModuleInit {
         forumId: forum.id,
         kind: 'tema',
         authorProfileId: input.authorProfileId,
+        origen: input.origen ?? (input.authorProfileId ? 'persona' : 'asistente'),
         title: input.title,
         body: input.body,
         status: 'open',
@@ -169,7 +175,8 @@ export class DeliberationService implements OnModuleInit {
         groupId: p.groupId,
         title: p.hidden ? HIDDEN_TOPIC_TITLE : p.title,
         status: p.status as unknown as ProposalStatus,
-        authorDisplayName: anonimos.has(p.id) ? NOMBRE_INICIATIVA : p.author.displayName,
+        authorDisplayName: anonimos.has(p.id) ? NOMBRE_INICIATIVA : (p.author?.displayName ?? ASISTENTE_NOMBRE),
+        origen: p.origen,
         signalCounts: computeSignalCounts(p.signals.map((s) => s.signal as string)),
         commentCount: p._count.comments,
         createdAt: p.createdAt.toISOString(),
@@ -234,7 +241,7 @@ export class DeliberationService implements OnModuleInit {
           }))?.status ?? null) as ProposalDetail['electionStatus'])
         : null;
 
-    const isAuthor = participa && proposal.authorProfileId === profileId;
+    const isAuthor = participa && proposal.authorProfileId !== null && proposal.authorProfileId === profileId;
     // Tema llegado desde una bifurcación: ni el nombre ni el id de quien lo llevó (salvo a sí mismo).
     const anonimo = (await temasDeIniciativa(this.prisma, [proposal])).has(proposal.id);
     const detail: ProposalDetail = {
@@ -243,7 +250,8 @@ export class DeliberationService implements OnModuleInit {
       title: proposal.title,
       body: proposal.body,
       status: proposal.status as unknown as ProposalStatus,
-      authorDisplayName: anonimo ? NOMBRE_INICIATIVA : proposal.author.displayName,
+      authorDisplayName: anonimo ? NOMBRE_INICIATIVA : (proposal.author?.displayName ?? ASISTENTE_NOMBRE),
+      origen: proposal.origen,
       authorProfileId: anonimo && !isAuthor ? '' : proposal.authorProfileId,
       isAuthor,
       signalCounts: computeSignalCounts(proposal.signals.map((s) => s.signal as string)),
@@ -283,7 +291,7 @@ export class DeliberationService implements OnModuleInit {
       throw new NotFoundException('Proposal not found');
     }
 
-    if (proposal.authorProfileId !== profileId) {
+    if (proposal.authorProfileId === null || proposal.authorProfileId !== profileId) {
       throw new ForbiddenException('Only the author can change the proposal status');
     }
 
@@ -474,7 +482,7 @@ export class DeliberationService implements OnModuleInit {
   private async hiddenInfo(
     target: 'tema' | 'respuesta',
     targetId: string,
-    authorProfileId: string,
+    authorProfileId: string | null,
     viewerProfileId: string | null,
   ): Promise<{ reason: string | null; moderationId: string | null }> {
     const action = await this.prisma.moderationAction.findFirst({
@@ -486,6 +494,7 @@ export class DeliberationService implements OnModuleInit {
     const canAppeal =
       action !== null &&
       action.reason !== LINKED_TOPIC_REASON &&
+      authorProfileId !== null &&
       authorProfileId === viewerProfileId &&
       (action.status as string) === 'oculto';
     return { reason: motivoVisible(action), moderationId: canAppeal ? action.id : null };
