@@ -751,7 +751,7 @@ El plan 3C-1 reemplaza a los fundadores por personas elegidas: administrador, co
 - **Variables de entorno:** ninguna nueva.
 
 ### Consecuencias
-- Tres migraciones (`elecciones_cargos`, `eleccion_reglas_fijas`, `ocultar_candidatura`), la primera con el índice parcial hecho a mano.
+- Cuatro migraciones (`elecciones_cargos`, `eleccion_reglas_fijas`, `ocultar_candidatura`, `eleccion_plenos`), la primera con el índice parcial hecho a mano.
 - Los fundadores no pueden ser coordinadores ni observadores mientras ocupen la mesa fundadora; si un fundador gana otro rol de la mesa, la mesa queda con 2 asientos (1 si solo había 2 fundadores) hasta la convocatoria de los 30 días.
 - La auditoría no muestra la hora de cada voto, solo el total contado.
 - Menores anotados: los cargos vencidos siguen vigentes «en funciones» hasta el relevo (es lo diseñado); el coordinador no necesita ser miembro del grupo para moderar; la web no se verificó en un navegador real.
