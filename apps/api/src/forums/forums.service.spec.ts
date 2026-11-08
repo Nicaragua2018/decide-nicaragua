@@ -16,6 +16,7 @@ function buildPrisma() {
   return {
     groupMembership: { findUnique: vi.fn(), findMany: vi.fn() },
     group: { findUnique: vi.fn() },
+    cargo: { findFirst: vi.fn().mockResolvedValue(null) },
     forum: { findFirst: vi.fn(), findUnique: vi.fn(), findMany: vi.fn(), create: vi.fn() },
     proposal: { findUnique: vi.fn(), findMany: vi.fn(), update: vi.fn(), updateMany: vi.fn() },
     proposalComment: { findUnique: vi.fn(), update: vi.fn() },
@@ -67,6 +68,58 @@ describe('ForumsService', () => {
       expect(await service.canModerate(YO, 'g1')).toBe(true);
       board.roleOf.mockResolvedValueOnce(null);
       expect(await service.canModerate(YO, 'g1')).toBe(false);
+    });
+
+    describe('coordinadores', () => {
+      it('un coordinador modera y organiza su comunidad', async () => {
+        prisma.group.findUnique.mockResolvedValue({ type: 'territorial_origin', parentGroupId: null });
+        prisma.cargo.findFirst.mockResolvedValue({ id: 'c1' });
+        expect(await service.canModerate(YO, 'g1')).toBe(true);
+        expect(await service.canOrganize(YO, 'g1')).toBe(true);
+        expect(prisma.cargo.findFirst).toHaveBeenCalledWith({
+          where: {
+            profileId: YO,
+            tipo: 'coordinador',
+            terminadoAt: null,
+            groupId: { in: ['g1'] },
+            profile: { user: { status: 'verified_citizen' } },
+          },
+          select: { id: true },
+        });
+      });
+
+      it('no modera otra comunidad', async () => {
+        prisma.group.findUnique.mockResolvedValue({ type: 'territorial_origin', parentGroupId: null });
+        prisma.cargo.findFirst.mockResolvedValue(null);
+        expect(await service.canModerate(YO, 'g2')).toBe(false);
+        expect(await service.canOrganize(YO, 'g2')).toBe(false);
+      });
+
+      it('modera los grupos de trabajo de su comunidad', async () => {
+        prisma.group.findUnique.mockResolvedValue({ type: 'trabajo', parentGroupId: 'com-1' });
+        prisma.cargo.findFirst.mockResolvedValue({ id: 'c1' });
+        expect(await service.canModerate(YO, 'gt')).toBe(true);
+        expect(prisma.cargo.findFirst).toHaveBeenCalledWith(
+          expect.objectContaining({ where: expect.objectContaining({ groupId: { in: ['gt', 'com-1'] } }) }),
+        );
+      });
+
+      it('un coordinador terminado o suspendido no modera', async () => {
+        // La consulta exige cargo vigente y titular verificado: sin coincidencia, no hay permiso.
+        prisma.group.findUnique.mockResolvedValue({ type: 'territorial_origin', parentGroupId: null });
+        prisma.cargo.findFirst.mockResolvedValue(null);
+        expect(await service.canModerate(YO, 'g1')).toBe(false);
+        const where = prisma.cargo.findFirst.mock.calls[0]![0].where;
+        expect(where.terminadoAt).toBeNull();
+        expect(where.profile).toEqual({ user: { status: 'verified_citizen' } });
+      });
+
+      it('esMesa sigue siendo falso para un coordinador', async () => {
+        prisma.group.findUnique.mockResolvedValue({ type: 'territorial_origin', parentGroupId: null });
+        prisma.cargo.findFirst.mockResolvedValue({ id: 'c1' });
+        expect(await service.esMesa(YO)).toBe(false);
+        expect(prisma.cargo.findFirst).not.toHaveBeenCalled();
+      });
     });
   });
 
