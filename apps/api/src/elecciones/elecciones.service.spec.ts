@@ -245,6 +245,18 @@ describe('EleccionesService', () => {
     expect(prisma.candidatura.update.mock.calls[0]![0].data).toMatchObject({ retiradaAt: null });
   });
 
+  it('una ficha publicada sin revisión del asistente entra en la cola de la revisión posterior', async () => {
+    guardia.antesDePublicar.mockResolvedValue({ revisado: false });
+    await service.presentarse(YO, E, ficha);
+    expect(guardia.despuesDePublicar).toHaveBeenCalledWith('candidatura', 'c-nueva', false);
+    expect(guardia.despuesDePublicar.mock.invocationCallOrder[0]!).toBeGreaterThan(
+      prisma.candidatura.create.mock.invocationCallOrder[0]!,
+    );
+    guardia.antesDePublicar.mockResolvedValue({ revisado: true });
+    await service.presentarse(YO, E, ficha);
+    expect(guardia.despuesDePublicar).toHaveBeenLastCalledWith('candidatura', 'c-nueva', true);
+  });
+
   it('la segunda comprobación, con la persona bloqueada, cierra la carrera entre dos presentaciones', async () => {
     // Fuera de la transacción no había otra; dentro, la otra petición ya la creó.
     prisma.candidatura.findFirst.mockResolvedValueOnce(null).mockResolvedValueOnce({ id: 'c-otra' });
@@ -274,6 +286,15 @@ describe('EleccionesService', () => {
       // La mesa reproduce la edición aprobada por la misma vía.
       service.onModuleInit();
       expect(publicadores.registrar).toHaveBeenCalledWith('candidatura', expect.any(Function), 'editar');
+    });
+
+    it('una edición sin revisión del asistente vuelve a la cola de la revisión posterior', async () => {
+      guardia.antesDePublicar.mockResolvedValue({ revisado: false });
+      await service.editar(YO, E, { presentacion: 'Nueva presentación', compromisos: [] });
+      expect(guardia.despuesDePublicar).toHaveBeenCalledWith('candidatura', 'c1', false);
+      expect(guardia.despuesDePublicar.mock.invocationCallOrder[0]!).toBeGreaterThan(
+        prisma.candidatura.updateMany.mock.invocationCallOrder[0]!,
+      );
     });
 
     it('editar cancela las propuestas pendientes de ocultar esa ficha', async () => {

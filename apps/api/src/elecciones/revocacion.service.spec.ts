@@ -117,6 +117,15 @@ describe('RevocacionService', () => {
     expect(publicadores.registrar).toHaveBeenCalledWith('revocacion', expect.any(Function));
   });
 
+  it('un pedido publicado sin revisión del asistente entra en la cola de la revisión posterior', async () => {
+    guardia.antesDePublicar.mockResolvedValue({ revisado: false });
+    await service.pedir(YO, CARGO, MOTIVO, NOW);
+    expect(guardia.despuesDePublicar).toHaveBeenCalledWith('revocacion', REV, false);
+    expect(guardia.despuesDePublicar.mock.invocationCallOrder[0]!).toBeGreaterThan(
+      prisma.revocacion.create.mock.invocationCallOrder[0]!,
+    );
+  });
+
   it('el publicador aprobado repite las comprobaciones y falla si ya no se cumplen', async () => {
     service.onModuleInit();
     const fn = publicadores.registrar.mock.calls[0]![1] as (a: string, args: unknown, o: unknown) => Promise<unknown>;

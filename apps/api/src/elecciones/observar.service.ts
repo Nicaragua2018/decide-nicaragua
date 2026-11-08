@@ -228,7 +228,7 @@ export class ObservarService implements OnModuleInit {
   ): Promise<{ id: string }> {
     const texto = dto.texto.trim();
     await this.comprobar(profileId, dto.auditEventId);
-    await this.guardia.antesDePublicar({
+    const { revisado } = await this.guardia.antesDePublicar({
       tipo: 'observacion',
       texto,
       autorProfileId: profileId,
@@ -246,6 +246,8 @@ export class ObservarService implements OnModuleInit {
       resource: `observacion:${id}`,
       metadata: { auditEventId: dto.auditEventId },
     });
+    // Sin revisión del asistente, la revisa después (nivel 3); si es de nivel 2, se borra.
+    await this.guardia.despuesDePublicar('observacion', id, revisado);
     return { id };
   }
 

@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
-import type { ModerationTarget } from '@prisma/client';
-import { textoParaRevisar, type TipoTexto } from '@decide/shared';
+import { Prisma, type ModerationTarget } from '@prisma/client';
+import { textoParaRevisar, type ModeracionCausaValue, type TipoTexto } from '@decide/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { ForumsService } from '../forums/forums.service';
@@ -19,7 +19,18 @@ const TIPO_DE: Record<ModerationTarget, TipoTexto> = {
   frase: 'frase',
   solucion: 'solucion',
   informe: 'informe',
+  candidatura: 'candidatura',
+  revocacion: 'revocacion',
+  observacion: 'observacion',
 };
+
+/** Una ficha solo se oculta mientras su elección está abierta (después ya está contada). */
+const ELECCION_ABIERTA = ['candidaturas', 'votacion'] as const;
+
+/** Lo de las elecciones no tiene moderación de la mesa con solicitudes: se retira directamente. */
+type DeEleccion = 'candidatura' | 'revocacion' | 'observacion';
+const esDeEleccion = (t: ModerationTarget): t is DeEleccion =>
+  t === 'candidatura' || t === 'revocacion' || t === 'observacion';
 
 type Contenido = { texto: string; hidden: boolean };
 
@@ -27,6 +38,11 @@ type Contenido = { texto: string; hidden: boolean };
  * Nivel 3: revisa después lo que se publicó sin revisión previa (el asistente no respondió a
  * tiempo). Si es nivel 2, abre una solicitud de moderación que resuelve la mesa; nunca oculta
  * por su cuenta, salvo la ocultación provisional de una causa urgente (como hoy en 3A-3b).
+ *
+ * Fichas de candidatura, pedidos de revocación y observaciones públicas (3C) no tienen solicitudes
+ * de moderación: con nivel 2 se hace lo que habría hecho la revisión previa, que no los habría
+ * dejado publicar. La ficha se oculta (quien se presenta la corrige al editarla, y eso la vuelve a
+ * mostrar), el pedido se cierra y la observación se borra.
  */
 @Injectable()
 export class RevisionPosteriorService {
@@ -88,8 +104,12 @@ export class RevisionPosteriorService {
 
     const revision = normalizarRevision(salida);
     if (revision.nivel === 2 && revision.causa) {
-      // Si ya hay una solicitud abierta, devuelve null: la mesa ya lo está viendo.
-      await this.forums.solicitarPorAsistente(fila.target, fila.targetId, revision.causa);
+      if (esDeEleccion(fila.target)) {
+        await this.retirar(fila.target, fila.targetId, revision.causa);
+      } else {
+        // Si ya hay una solicitud abierta, devuelve null: la mesa ya lo está viendo.
+        await this.forums.solicitarPorAsistente(fila.target, fila.targetId, revision.causa);
+      }
     }
     await this.sacar(fila.id);
     return true;
@@ -109,6 +129,46 @@ export class RevisionPosteriorService {
       metadata: { intentos },
     });
     return true;
+  }
+
+  /** Retira lo de las elecciones marcado de nivel 2. Cada cambio va condicionado: si ya cambió, no audita. */
+  private async retirar(target: DeEleccion, id: string, causa: ModeracionCausaValue): Promise<void> {
+    const origen = 'revision_posterior';
+    if (target === 'candidatura') {
+      const c = await this.prisma.candidatura.findUnique({ where: { id }, select: { eleccionId: true } });
+      if (!c) return;
+      // Como la ocultación de la mesa: la elección en FOR SHARE, para no cruzarse con el conteo.
+      const r = await this.prisma.$transaction(async (tx) => {
+        await tx.$queryRaw(Prisma.sql`SELECT id FROM elecciones WHERE id = ${c.eleccionId}::uuid FOR SHARE`);
+        return tx.candidatura.updateMany({
+          where: { id, oculta: false, retiradaAt: null, eleccion: { fase: { in: [...ELECCION_ABIERTA] } } },
+          data: { oculta: true, ocultaCausa: causa },
+        });
+      });
+      if (r.count === 0) return;
+      void this.audit.log({
+        action: 'candidatura.ocultada',
+        resource: `candidatura:${id}`,
+        metadata: { eleccionId: c.eleccionId, causa, origen },
+      });
+      return;
+    }
+    if (target === 'revocacion') {
+      // Si se logró antes (el apoyo bloquea el pedido), ya no está abierto y no se toca.
+      const r = await this.prisma.revocacion.updateMany({ where: { id, estado: 'abierta' }, data: { estado: 'vencida' } });
+      if (r.count === 0) return;
+      void this.audit.log({ action: 'revocacion.retirada_por_moderacion', resource: `revocacion:${id}`, metadata: { causa, origen } });
+      return;
+    }
+    const o = await this.prisma.observacionPublica.findUnique({ where: { id }, select: { auditEventId: true } });
+    if (!o) return;
+    const r = await this.prisma.observacionPublica.deleteMany({ where: { id } });
+    if (r.count === 0) return;
+    void this.audit.log({
+      action: 'observacion.retirada',
+      resource: `observacion:${id}`,
+      metadata: { auditEventId: o.auditEventId, causa, origen },
+    });
   }
 
   private async sacar(id: string): Promise<void> {
@@ -136,6 +196,24 @@ export class RevisionPosteriorService {
     if (target === 'solucion') {
       const s = await this.prisma.solucion.findUnique({ where: { id }, select: { title: true, description: true, hidden: true } });
       return s ? { texto: textoParaRevisar(s.title, s.description), hidden: s.hidden } : null;
+    }
+    if (target === 'candidatura') {
+      const c = await this.prisma.candidatura.findUnique({
+        where: { id },
+        select: { presentacion: true, compromisos: true, oculta: true, retiradaAt: true, eleccion: { select: { fase: true } } },
+      });
+      if (!c) return null;
+      // Retirada o ya contada: ya no se muestra como ficha que se vota, no hay nada que ocultar.
+      const cerrada = c.retiradaAt !== null || !(ELECCION_ABIERTA as readonly string[]).includes(c.eleccion.fase as string);
+      return { texto: textoParaRevisar(c.presentacion, ...c.compromisos), hidden: c.oculta || cerrada };
+    }
+    if (target === 'revocacion') {
+      const r = await this.prisma.revocacion.findUnique({ where: { id }, select: { motivo: true, estado: true } });
+      return r ? { texto: r.motivo, hidden: (r.estado as string) !== 'abierta' } : null;
+    }
+    if (target === 'observacion') {
+      const o = await this.prisma.observacionPublica.findUnique({ where: { id }, select: { texto: true } });
+      return o ? { texto: o.texto, hidden: false } : null;
     }
     if (target === 'informe') {
       const i = await this.prisma.comisionInforme.findUnique({ where: { id }, select: { texto: true, hidden: true } });

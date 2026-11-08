@@ -75,6 +75,7 @@ enum ProposalKind {
   propuesta // propuesta formal: plazo de deliberación y luego votación
 }
 
+/// Las tres últimas solo entran en la cola de la revisión posterior (no en ModerationAction).
 enum ModerationTarget {
   tema
   respuesta
@@ -82,6 +83,9 @@ enum ModerationTarget {
   frase
   solucion
   informe
+  candidatura
+  revocacion
+  observacion
 }
 
 enum Origen {

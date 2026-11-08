@@ -439,8 +439,8 @@ export class EleccionesService implements OnModuleInit {
     const presentacion = ficha.presentacion.trim();
     const compromisos = ficha.compromisos.map((c) => c.trim()).filter((c) => c.length > 0);
     // Se revisa antes de publicar; después, la mesa puede ocultarla con dos firmas
-    // (acción ocultar_candidatura en BoardService).
-    await this.guardia.antesDePublicar({
+    // (acción ocultar_candidatura en BoardService). Sin revisión del asistente, va a la cola posterior.
+    const { revisado } = await this.guardia.antesDePublicar({
       tipo: 'candidatura',
       texto: textoParaRevisar(presentacion, ...compromisos),
       autorProfileId: profileId,
@@ -473,6 +473,7 @@ export class EleccionesService implements OnModuleInit {
       throw err;
     }
     void this.audit.log({ action: 'candidatura.presentada', resource: `candidatura:${id}`, metadata: { eleccionId: e.id } });
+    await this.guardia.despuesDePublicar('candidatura', id, revisado);
     return { id };
   }
 
@@ -494,7 +495,7 @@ export class EleccionesService implements OnModuleInit {
 
     const presentacion = ficha.presentacion.trim();
     const compromisos = ficha.compromisos.map((x) => x.trim()).filter((x) => x.length > 0);
-    await this.guardia.antesDePublicar({
+    const { revisado } = await this.guardia.antesDePublicar({
       tipo: 'candidatura',
       texto: textoParaRevisar(presentacion, ...compromisos),
       autorProfileId: profileId,
@@ -518,6 +519,7 @@ export class EleccionesService implements OnModuleInit {
       return a.count;
     });
     void this.audit.log({ action: 'candidatura.editada', resource: `candidatura:${c.id}`, metadata: { eleccionId: e.id } });
+    await this.guardia.despuesDePublicar('candidatura', c.id, revisado);
     if (canceladas > 0) {
       void this.audit.log({
         action: 'candidatura.ocultacion_cancelada',
