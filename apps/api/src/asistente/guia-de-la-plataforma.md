@@ -43,6 +43,16 @@ Un grupo de trabajo es un grupo más pequeño dentro de una comunidad.
 
 Los grupos de trabajo se ven en la página de grupos [g4]. Quien no es miembro de un subgrupo o una comisión puede leer lo que pasa dentro, pero solo participan sus miembros. Las bifurcaciones solo las leen sus miembros.
 
+## Las sugerencias del asistente
+
+El asistente puede dejar sugerencias en las inquietudes y los debates. Todas llevan la marca «Sugerencia del asistente» y dicen en qué se basan, por ejemplo «Basado en 12 frases y 3 opiniones». Son solo ayudas: el asistente no vota, no apoya y no abre debates; la persona decide si las usa.
+
+- **Inquietudes parecidas.** El asistente puede sugerir que varias inquietudes de una comunidad se parecen, para que quien organiza las junte en un solo tema. No las junta por su cuenta.
+- **Presentación del tema.** Al abrir un tema puede ofrecer una presentación neutral. Se muestra encima y el texto original de la persona queda debajo, sin cambios.
+- **El mapa de opiniones.** Resume dónde coinciden y dónde se separan los grupos de opinión, sin nombres. Mientras el debate está abierto, lo ve quien participa y ya votó 3 frases (así no se influye en los votos). Cuando el debate termina, cualquier persona que pueda leerlo lo ve.
+- **Borradores de soluciones.** Si hay frases en las que personas de distintas posturas coinciden, el asistente puede proponer borradores. Una persona puede usar uno, cambiarlo como quiera y publicarlo como solución suya; queda marcada «A partir de una sugerencia del asistente».
+- **Las doce preguntas iniciales.** Al arrancar, la plataforma siembra doce inquietudes con preguntas básicas para empezar la conversación. No tienen autor y llevan la marca del asistente. Las demás personas las apoyan o las dejan como cualquier otra inquietud.
+
 ## Las reglas y la mesa
 
 Las reglas de la plataforma, como los plazos y los mínimos que cuentan en esta guía, no las fija nadie por su cuenta: se cambian votando. Cualquier miembro propone un cambio desde la página de reglas [g5], con el valor nuevo y un motivo. El cambio pasa por debate y votación como cualquier otra decisión, y para valer debe votar un mínimo de la comunidad (por defecto 30 %). Las reglas locales se aplican solas si la votación las aprueba. Las reglas de toda la plataforma se cambian en «Exilio y diáspora» y, además, necesitan que la mesa las confirme con 2 firmas. Algunas reglas todavía no tienen efecto y la página las marca así.
@@ -71,6 +81,7 @@ El asistente es una ayuda de inteligencia artificial. Hace estas cosas:
 - Dice en qué punto está la persona: su verificación, sus comunidades, sus invitaciones y los plazos que tiene cerca.
 - Busca entre lo que la persona puede leer, y señala qué debates, inquietudes y decisiones se parecen a lo que pregunta.
 - Orienta con amabilidad cuando un texto puede mejorar.
+- Sugiere (con la marca «Sugerencia del asistente») inquietudes parecidas, presentaciones, mapas de opiniones y borradores de soluciones.
 
 El asistente no hace estas cosas:
 

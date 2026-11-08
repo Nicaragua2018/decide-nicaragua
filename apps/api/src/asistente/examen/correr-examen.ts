@@ -10,8 +10,9 @@
  * - Usa el ModeracionPreviaService real (y por tanto la puerta única, el tope de gasto y
  *   la limpieza del texto). El gasto de la corrida se suma al del mes.
  * - No usa la caché de Redis: cada corrida pregunta al modelo de nuevo.
- * - Corre dos partes: la moderación previa y el panel de preguntas (PanelService real, con material inventado).
- * - Termina con código 1 si falla cualquier caso de cualquiera de las dos.
+ * - Corre tres partes: la moderación previa, el panel de preguntas (PanelService real, con material inventado)
+ *   y las tareas de acuerdos (agrupar, mapa, borradores y presentación, con AsistenteService.pedir real).
+ * - Termina con código 1 si falla cualquier caso de cualquiera de las tres.
  */
 import 'reflect-metadata';
 import { existsSync } from 'node:fs';
@@ -25,7 +26,30 @@ import type { RedisService } from '../../redis/redis.service';
 import { AsistenteService } from '../asistente.service';
 import { ModeracionPreviaService } from '../moderacion-previa.service';
 import { PanelService } from '../panel.service';
-import { CATEGORIAS, CATEGORIAS_PANEL, cargarCasos, cargarCasosPanel, evaluarCaso, evaluarCasoPanel } from './evaluar';
+import { ESQUEMA_AGRUPAR, TAREA_AGRUPAR, esSalidaAgrupar } from '../acuerdos/agrupar';
+import { ESQUEMA_BORRADORES, TAREA_BORRADORES, esSalidaBorradores } from '../acuerdos/borradores';
+import { ESQUEMA_MAPA, TAREA_MAPA, esSalidaMapa } from '../acuerdos/mapa';
+import { ESQUEMA_PRESENTACION, TAREA_PRESENTACION, esSalidaPresentacion } from '../acuerdos/presentacion';
+import {
+  CATEGORIAS,
+  CATEGORIAS_ACUERDOS,
+  CATEGORIAS_PANEL,
+  cargarCasos,
+  cargarCasosAcuerdos,
+  cargarCasosPanel,
+  evaluarCaso,
+  evaluarCasoAcuerdos,
+  evaluarCasoPanel,
+  type TareaAcuerdos,
+} from './evaluar';
+
+/** Las tareas reales de acuerdos: las mismas instrucciones, esquemas y validaciones que usa la plataforma. */
+const TAREAS_ACUERDOS: Record<TareaAcuerdos, { herramienta: string; tarea: string; esquema: Record<string, unknown>; validar: (x: unknown) => boolean }> = {
+  agrupar: { herramienta: 'agrupar_inquietudes', tarea: TAREA_AGRUPAR, esquema: ESQUEMA_AGRUPAR, validar: esSalidaAgrupar },
+  mapa: { herramienta: 'mapear_opiniones', tarea: TAREA_MAPA, esquema: ESQUEMA_MAPA, validar: esSalidaMapa },
+  borradores: { herramienta: 'proponer_soluciones', tarea: TAREA_BORRADORES, esquema: ESQUEMA_BORRADORES, validar: esSalidaBorradores },
+  presentacion: { herramienta: 'presentar_asunto', tarea: TAREA_PRESENTACION, esquema: ESQUEMA_PRESENTACION, validar: esSalidaPresentacion },
+};
 
 /** Mismo orden que ConfigModule: .env.local primero; lo que ya está en el entorno gana. */
 function cargarEntorno(): void {
@@ -130,11 +154,44 @@ async function main(): Promise<number> {
     const totalPanel = casosPanel.length;
     console.log(`  TOTAL: ${totalPanel - fallosPanel.length} / ${totalPanel}`);
 
-    const todosLosFallos = [...fallos, ...fallosPanel];
+    // Acuerdos: la misma puerta única, con el modelo capaz y la prioridad nocturna de la plataforma.
+    const casosAcuerdos = cargarCasosAcuerdos();
+    const aprobadosAcuerdos = new Map<string, number>();
+    const totalesAcuerdos = new Map<string, number>();
+    const fallosAcuerdos: string[] = [];
+    let sinRespuestaAcuerdos = 0;
+
+    for (const caso of casosAcuerdos) {
+      const t = TAREAS_ACUERDOS[caso.tarea];
+      const salida = await asistente.pedir<unknown>({
+        modelo: 'capaz',
+        prioridad: 'nocturna',
+        tarea: t.tarea,
+        material: caso.material,
+        herramienta: { nombre: t.herramienta, esquema: t.esquema },
+        validar: t.validar as (x: unknown) => x is unknown,
+      });
+      const r = evaluarCasoAcuerdos(caso, salida);
+      totalesAcuerdos.set(caso.categoria, (totalesAcuerdos.get(caso.categoria) ?? 0) + 1);
+      if (r.ok) {
+        aprobadosAcuerdos.set(caso.categoria, (aprobadosAcuerdos.get(caso.categoria) ?? 0) + 1);
+      } else {
+        if (salida === null) sinRespuestaAcuerdos++;
+        fallosAcuerdos.push(`- ${caso.id} (${caso.categoria}): ${r.motivo}`);
+      }
+    }
+
+    console.log('\nExamen del asistente (acuerdos): aprobados / total por categoría');
+    for (const categoria of CATEGORIAS_ACUERDOS) {
+      console.log(`  ${categoria}: ${aprobadosAcuerdos.get(categoria) ?? 0} / ${totalesAcuerdos.get(categoria) ?? 0}`);
+    }
+    console.log(`  TOTAL: ${casosAcuerdos.length - fallosAcuerdos.length} / ${casosAcuerdos.length}`);
+
+    const todosLosFallos = [...fallos, ...fallosPanel, ...fallosAcuerdos];
     if (todosLosFallos.length > 0) {
       console.log('\nFallos:');
       for (const f of todosLosFallos) console.log(f);
-      const sinRespuestaTotal = sinRespuesta + sinRespuestaPanel;
+      const sinRespuestaTotal = sinRespuesta + sinRespuestaPanel + sinRespuestaAcuerdos;
       if (sinRespuestaTotal > 0) {
         console.log(
           `\n${sinRespuestaTotal} caso(s) sin respuesta: revisá la conexión, la base de datos (gasto del mes) y el tope de gasto.`,

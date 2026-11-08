@@ -697,6 +697,33 @@ El plan 3B-2 pone al asistente al lado de cada persona: un panel de preguntas, �
 
 ---
 
+## ADR-027: Asistente de IA, acuerdos (2026-11-07)
+**Fecha:** 2026-11-07
+**Estado:** Aceptado
+
+### Contexto
+El plan 3B-3 usa al asistente para ayudar a encontrar acuerdos: juntar inquietudes parecidas, describir el mapa de opiniones, proponer borradores de soluciones y sembrar las preguntas iniciales. Carlos pidió que el asistente nunca decida, que todo lo suyo vaya marcado y que la complejidad esté automatizada. Todo pasa por la puerta única de ADR-025.
+
+### Decisión
+- **Una sola tabla de sugerencias, resuelta al leer.** Las sugerencias del asistente (grupos de inquietudes, aviso de umbral, presentación, mapa, borradores y comentario de comisión) viven en una tabla única, con el tipo, el objeto, el grupo de acceso, el contenido y la base (`base = { at, inquietudes?, frases?, opiniones? }`). El acceso se decide por el objeto al leer, nunca por la fila: el endpoint vuelve a comprobarlo con `GroupAccessService` o `ForumsService.canOrganize`. Los ids de contenido viajan como referencias cortas (`i1`, `f1`…) que el servidor traduce de vuelta; las referencias inventadas se descartan.
+- **Siempre marcado, nunca decide.** Todo texto suyo lleva «Sugerencia del asistente» y las inquietudes y temas suyos tienen `origen: 'asistente'`. Solo sugiere; la persona da el clic. Un tema sin autor que pasa a propuesta no siembra «el tema como primera solución» (`Solucion.authorProfileId` sigue siendo obligatorio; `Proposal.authorProfileId` es opcional para no crear un usuario falso): los miembros y los borradores aportan las soluciones, y sin ninguna el debate termina `sin_soluciones` como cualquier otro.
+- **Presentación neutral encima del original.** La presentación del asistente no reemplaza el texto del autor: se muestra arriba y el original queda debajo. No se altera contenido de miembros.
+- **Visibilidad del mapa.** Con el debate abierto, el mapa solo lo ve quien participa y votó al menos 3 frases (para no anclar votos, regla de 3A-2); al terminar, lo puede ver cualquier lector. Se genera con 20 votos de miembros actuales como mínimo y con las cifras de 3A: grupos de 3 o más personas, tamaños redondeados de 5 en 5 con mínimo 5 y porcentajes por frase solo con 5 o más votantes.
+- **Borradores adoptables.** Los borradores se basan en frases puente y solo se generan si hay al menos una. La persona puede adoptar uno y editarlo antes de publicarlo; la solución nace con origen `asistente` y la web la marca «A partir de una sugerencia del asistente» (no «Sugerencia del asistente», porque la persona pudo reescribirla). Auditoría sin texto: `solucion.created` con `metadata.desdeBorrador: true` y `asistente.sugerencia_guardada` con tipo y objeto.
+- **Las doce preguntas iniciales, sin autor y con marca.** Una semilla siembra doce inquietudes (no once como decía el diseño: Carlos añadió la 12.ª al revisar el artículo publicado), sin autor y con `origen: 'asistente'`. Se auditan como `asistente.semillas_sembradas`. Si una semilla está mal, el costo es borrarla.
+- **Título de 200 caracteres para las semillas.** El título de `Inquietud` pasa a `VarChar(200)` porque una de las preguntas iniciales mide unos 190 caracteres; el DTO para personas sigue en 140. Inconsistencia menor aceptada.
+- **Ronda horaria con tope de 20 pedidos y prioridad nocturna.** «Cada noche» es una ronda que corre cada hora y deja pasar un mínimo de 20 horas (agrupar) y 24 horas (mapa) entre generaciones, con un máximo de 20 pedidos por ronda. Todas las tareas usan prioridad `nocturna`: con el asistente apagado o sin margen de gasto, `pedir()` devuelve null y no se guarda nada. Modelo `rapido` para el aviso de umbral y el comentario de comisión; `capaz` para agrupar, presentación, mapa y borradores. Agrupar mira como máximo las 80 inquietudes más nuevas de la comunidad.
+- **Cifras y acceso.** El número de apoyos de una inquietud se envía sin redondear al aviso de umbral (ya es público). Las marcas puente/divide de grupos con 3 o 4 votantes viajan sin porcentajes. El análisis público sigue mostrando porcentajes de grupos con menos de 5 votantes (comportamiento de 3A-2); se revisa en 3C. «Tema visible» es `hidden: false`.
+- **El examen de acuerdos** (`casos-acuerdos.json`, 17 casos inventados): inyección en el material, neutralidad (críticas al gobierno, a la oposición y a ambos), nombres metidos en el material (un nombre falso que no puede salir), referencias inventadas y pocas frases puente (los borradores no inventan acuerdos). `evaluarCasoAcuerdos` revisa que cada referencia exista y que no aparezca nada prohibido. `correr-examen.ts` corre las tres partes (moderación, panel y acuerdos, con `AsistenteService.pedir` real, modelo capaz y prioridad nocturna) y termina con código 1 si falla un solo caso.
+- **Variables de entorno:** ninguna nueva.
+
+### Consecuencias
+- **Límite conocido: el examen de acuerdos requiere la clave de Carlos y se corre a mano en el servidor**, igual que los de 3B-1 y 3B-2. Las pruebas automáticas solo comprueban que los casos estén bien formados y que el evaluador funcione. Hasta aprobarlo, el asistente sigue apagado.
+- Un debate sin frases puente no recibe borradores; las inquietudes viejas fuera de las 80 más nuevas no entran en las sugerencias de grupos; la hora de las rondas no es fija.
+- Sigue 3C.
+
+---
+
 ## Decisiones pendientes
 
 | ID | Pregunta | Prioridad |
