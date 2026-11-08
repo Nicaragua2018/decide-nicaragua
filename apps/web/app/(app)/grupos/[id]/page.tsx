@@ -1,8 +1,10 @@
+import { Suspense } from 'react';
 import Link from 'next/link';
 import type { Metadata } from 'next';
 import { serverFetch } from '@/lib/api';
 import { MODERACION_CAUSAS } from '@decide/shared';
 import type { BifurcacionView, ComisionView, GrupoTrabajoDetail } from '@decide/shared';
+import { ComisionSeccion } from '@/components/SugerenciasSecciones';
 import { ModerarForm } from '@/components/ModerarForm';
 import { estadoGrupo, lineaGrupo } from '../GrupoCard';
 import { EntrarSalir } from './EntrarSalir';
@@ -202,6 +204,11 @@ export default async function GrupoPage({ params }: { params: Promise<{ id: stri
         </>
       )}
 
+      {g.comision && g.estado === 'convocando' && (
+        <Suspense fallback={null}>
+          <ComisionSeccion grupoId={g.id} />
+        </Suspense>
+      )}
       {g.comision && <Comision g={g} c={g.comision} />}
       {g.bifurcacion && <Bifurcacion g={g} b={g.bifurcacion} />}
 

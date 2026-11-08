@@ -1,9 +1,13 @@
+import { Suspense } from 'react';
 import Link from 'next/link';
 import type { Metadata } from 'next';
 import { serverFetch } from '@/lib/api';
 import type { GroupListResponse, InquietudSummary } from '@decide/shared';
 import { formatDate } from '../status';
-import { OpenDebateForm } from './OpenDebateForm';
+import { MarcaAsistente } from '@/components/SugerenciaAsistente';
+import { UmbralSeccion } from '@/components/SugerenciasSecciones';
+import { DebateRellenable, OpenDebateForm } from './OpenDebateForm';
+import { InquietudesParecidas } from './InquietudesParecidas';
 
 export const metadata: Metadata = { title: 'Agenda — Decide Nicaragua' };
 
@@ -51,25 +55,33 @@ export default async function AgendaPage() {
         [...byGroup.entries()].map(([groupId, list]) => (
           <section key={groupId} className="card mb-4">
             <p className="card-title mb-3">{nameOf(groupId)}</p>
-            <OpenDebateForm
-              groupId={groupId}
-              items={list.map((q) => ({
-                id: q.id,
-                title: q.title,
-                supportCount: q.supportCount,
-                threshold: q.threshold,
-                deadline: q.deadlineAt ? formatDate(q.deadlineAt) : null,
-              }))}
-            />
-            <p className="text-sm mt-4">
-              Para responder en público, abre la inquietud:{' '}
-              {list.map((q, i) => (
-                <span key={q.id}>
-                  {i > 0 && ' · '}
+            <DebateRellenable>
+              <Suspense fallback={null}>
+                <InquietudesParecidas groupId={groupId} idsEnLista={list.map((q) => q.id)} />
+              </Suspense>
+              <OpenDebateForm
+                groupId={groupId}
+                items={list.map((q) => ({
+                  id: q.id,
+                  title: q.title,
+                  supportCount: q.supportCount,
+                  threshold: q.threshold,
+                  deadline: q.deadlineAt ? formatDate(q.deadlineAt) : null,
+                }))}
+              />
+            </DebateRellenable>
+            <p className="text-sm mt-4">Para responder en público, abre la inquietud:</p>
+            {list.map((q) => (
+              <div key={q.id} className="mt-2">
+                <p className="text-sm">
                   <Link href={`/inquietudes/${q.id}`}>{q.title}</Link>
-                </span>
-              ))}
-            </p>
+                  {q.origen === 'asistente' && <> <MarcaAsistente /></>}
+                </p>
+                <Suspense fallback={null}>
+                  <UmbralSeccion inquietudId={q.id} />
+                </Suspense>
+              </div>
+            ))}
           </section>
         ))
       )}

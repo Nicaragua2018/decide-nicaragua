@@ -1,4 +1,6 @@
+import { Suspense } from 'react';
 import type { DecisionTemaResponse } from '@decide/shared';
+import { NuevaSolucionConBorradores } from '@/components/SugerenciasSecciones';
 import { ModerarForm } from '@/components/ModerarForm';
 import { LlevarALaComunidad } from '../../grupos/[id]/LlevarALaComunidad';
 import { JuntarSolucion } from './JuntarSolucion';
@@ -58,6 +60,9 @@ export function SolucionesSection({
               {soluciones.map((s) => (
                 <div key={s.id} className="comment-thread">
                   <p className="font-medium">{s.title}</p>
+                  {s.origen === 'asistente' && (
+                    <p className="text-xs text-muted">A partir de una sugerencia del asistente</p>
+                  )}
                   {s.mergedIntoTitle !== null ? (
                     <p className="text-xs text-muted">Se juntó con «{s.mergedIntoTitle}»</p>
                   ) : (
@@ -82,7 +87,11 @@ export function SolucionesSection({
           {data.debateEndsAt && (
             <p className="text-sm text-muted mb-3">Las soluciones quedan fijas el {fecha(data.debateEndsAt)}</p>
           )}
-          {data.puedeProponer && !soloLectura && <NuevaSolucionForm proposalId={proposalId} />}
+          {data.puedeProponer && !soloLectura && (
+            <Suspense fallback={<NuevaSolucionForm proposalId={proposalId} />}>
+              <NuevaSolucionConBorradores proposalId={proposalId} />
+            </Suspense>
+          )}
         </>
       )}
 

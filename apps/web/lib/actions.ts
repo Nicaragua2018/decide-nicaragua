@@ -630,9 +630,17 @@ export async function createSolucion(
   formData: FormData,
 ): Promise<ActionResult> {
   if (!isUuid(proposalId)) return INVALID;
+  // Si viene de un borrador del asistente, se manda su número (0 a 2).
+  const bruto = formData.get('borrador');
+  const indice = typeof bruto === 'string' && /^[0-2]$/.test(bruto) ? Number(bruto) : null;
   const res = await actionFetch(`/api/decisiones/temas/${proposalId}/soluciones`, {
     method: 'POST',
-    body: JSON.stringify({ title: formData.get('title'), description: formData.get('description'), ...pedirRevision(formData) }),
+    body: JSON.stringify({
+      title: formData.get('title'),
+      description: formData.get('description'),
+      ...(indice !== null ? { borrador: { indice } } : {}),
+      ...pedirRevision(formData),
+    }),
   });
   const rev = await respuestaDeRevision(res);
   if (rev) return rev;
