@@ -217,7 +217,7 @@ Reglas de `convocar(now)`:
 Reglas de `avanzar(now)`:
 - **Al terminar las candidaturas:**
   - con menos candidaturas vivas (no retiradas ni ocultas) que puestos y `prorrogada: false`, suma 7 días a ambos plazos y pone `prorrogada: true` (auditoría `eleccion.prorrogada`);
-  - con 0 candidaturas vivas tras la prórroga, pasa a contada sin papeletas (`electas: []`, `contadaAt: now`) y llama a `PosesionService.cerrarDesierta`;
+  - con 0 candidaturas vivas tras la prórroga, pasa a contada sin papeletas (`electas: []`, `contadaAt: now`) y llama a `dejarEnFunciones`;
   - si no, pasa a `votacion`.
 - **Cada transición** usa `updateMany` con la fase anterior en el `where` (idempotente).
 
