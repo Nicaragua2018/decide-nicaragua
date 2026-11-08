@@ -217,6 +217,9 @@ export default function ExplorePage() {
       <footer className="ln-footer">
         <div className="ln-container ln-footer-inner">
           <span className="ln-brand ln-brand--light">Decide <em>Nicaragua</em></span>
+          <div className="ln-footer-links">
+            <Link href="/representantes" className="ln-footer-link">Quiénes nos representan</Link>
+          </div>
           <span>Código abierto · Auditable · Sin ánimo de lucro</span>
         </div>
       </footer>
