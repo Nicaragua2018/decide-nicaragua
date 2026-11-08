@@ -1004,8 +1004,7 @@ export async function pedirRevocacion(cargoId: string, _prev: ActionResult | nul
   });
   const rev = await respuestaDeRevision(res);
   if (rev) return rev;
-  if (!res.ok) return { error: await parseError(res) };;
-  }
+  if (!res.ok) return { error: await parseError(res) };
   revalidatePath('/elecciones/revocaciones');
   revalidatePath('/representantes');
   return { success: true };
