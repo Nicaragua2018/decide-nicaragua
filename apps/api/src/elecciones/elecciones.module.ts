@@ -9,11 +9,14 @@ import { RevocacionService } from './revocacion.service';
 import { EleccionesScheduler } from './elecciones.scheduler';
 import { EleccionesService } from './elecciones.service';
 import { EleccionesController, RepresentantesController } from './elecciones.controller';
+import { ObservarController } from './observar.controller';
+import { ObservarService } from './observar.service';
+import { ObservadorGuard } from './observador.guard';
 
 @Module({
   imports: [RulesModule, AuditModule, AsistenteModule, BoardModule],
-  controllers: [EleccionesController, RepresentantesController],
-  providers: [ConvocatoriaService, PosesionService, RevocacionService, EleccionesScheduler, EleccionesService],
+  controllers: [EleccionesController, RepresentantesController, ObservarController],
+  providers: [ConvocatoriaService, PosesionService, RevocacionService, ObservarService, ObservadorGuard, EleccionesScheduler, EleccionesService],
   exports: [ConvocatoriaService, PosesionService, RevocacionService, EleccionesService],
 })
 export class EleccionesModule {}

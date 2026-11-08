@@ -84,6 +84,9 @@ function buildPrisma() {
       count: vi.fn().mockResolvedValue(0),
     },
     group: { findMany: vi.fn().mockResolvedValue([]) },
+    observacionPublica: { findMany: vi.fn().mockResolvedValue([]) },
+    profile: { findMany: vi.fn().mockResolvedValue([]) },
+    auditEvent: { findMany: vi.fn().mockResolvedValue([]) },
     $queryRaw: vi.fn().mockResolvedValue([{ id: E }]),
     $transaction: vi.fn(),
   };
@@ -472,6 +475,25 @@ describe('EleccionesService', () => {
     const where = prisma.eleccion.findMany.mock.calls[0]![0].where;
     expect(where.OR[0]).toEqual({ fase: { in: ['candidaturas', 'votacion'] } });
     expect(where.OR[1].fase).toBe('contada');
+  });
+
+  it('una observación publicada aparece en representantes con el nombre visible', async () => {
+    const t = new Date('2027-03-02T10:00:00Z');
+    const e = new Date('2027-03-01T09:00:00Z');
+    prisma.observacionPublica.findMany.mockResolvedValue([
+      { id: 'o1', autorProfileId: 'p3', auditEventId: 'ev1', texto: 'Esto no cuadra.', createdAt: t },
+      { id: 'o2', autorProfileId: 'p3', auditEventId: 'ev-borrado', texto: 'Otra.', createdAt: t },
+    ]);
+    prisma.profile.findMany.mockResolvedValue([{ id: 'p3', displayName: 'Eva Paz' }]);
+    prisma.auditEvent.findMany.mockResolvedValue([{ id: 'ev1', action: 'voto.emitido', createdAt: e }]);
+    const r = await service.representantes();
+    expect(prisma.observacionPublica.findMany.mock.calls[0]![0]).toMatchObject({ take: 20, orderBy: { createdAt: 'desc' } });
+    expect(r.observaciones).toEqual([
+      {
+        id: 'o1', autor: 'Eva Paz', iniciales: 'EP', texto: 'Esto no cuadra.',
+        evento: { action: 'voto.emitido', createdAt: e.toISOString() }, createdAt: t.toISOString(),
+      },
+    ]);
   });
 
   it('representantes es público y no expone correos', async () => {

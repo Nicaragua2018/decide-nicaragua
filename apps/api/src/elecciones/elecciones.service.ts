@@ -292,7 +292,7 @@ export class EleccionesService implements OnModuleInit {
 
   /** «Quiénes nos representan»: pública. Solo el nombre visible, nunca el correo. */
   async representantes(): Promise<RepresentantesVista> {
-    const [asientos, cargos, comunidades, abiertas, revocaciones] = await Promise.all([
+    const [asientos, cargos, comunidades, abiertas, revocaciones, observaciones] = await Promise.all([
       this.prisma.boardSeat.findMany({
         select: { role: true, source: true, since: true, profileId: true, profile: { select: { displayName: true } } },
       }),
@@ -314,7 +314,25 @@ export class EleccionesService implements OnModuleInit {
         select: { groupId: true },
       }),
       this.revocacion.resumenPorCargo(),
+      this.prisma.observacionPublica.findMany({
+        orderBy: { createdAt: 'desc' },
+        take: 20,
+        select: { id: true, autorProfileId: true, auditEventId: true, texto: true, createdAt: true },
+      }),
     ]);
+    // Sin FK en la tabla: el nombre y el evento se buscan aparte, y una observación cuyo evento ya no existe se omite.
+    const [autores, eventos] = await Promise.all([
+      this.prisma.profile.findMany({
+        where: { id: { in: [...new Set(observaciones.map((o) => o.autorProfileId))] } },
+        select: { id: true, displayName: true },
+      }),
+      this.prisma.auditEvent.findMany({
+        where: { id: { in: observaciones.map((o) => o.auditEventId) } },
+        select: { id: true, action: true, createdAt: true },
+      }),
+    ]);
+    const autorDe = new Map(autores.map((a) => [a.id, a.displayName]));
+    const eventoDe = new Map(eventos.map((e) => [e.id, e]));
     const revocacionDe = (cargoId: string | null) => (cargoId ? revocaciones.get(cargoId) ?? null : null);
 
     const persona = (nombre: string) => ({ nombre, iniciales: iniciales(nombre) });
@@ -366,7 +384,21 @@ export class EleccionesService implements OnModuleInit {
           })),
         eleccionAbierta: conEleccion.has(g.id),
       })),
-      observaciones: [],
+      observaciones: observaciones.flatMap((o) => {
+        const evento = eventoDe.get(o.auditEventId);
+        if (!evento) return [];
+        const autor = autorDe.get(o.autorProfileId) ?? '';
+        return [
+          {
+            id: o.id,
+            autor,
+            iniciales: iniciales(autor),
+            texto: o.texto,
+            evento: { action: evento.action, createdAt: evento.createdAt.toISOString() },
+            createdAt: o.createdAt.toISOString(),
+          },
+        ];
+      }),
     };
   }
 
