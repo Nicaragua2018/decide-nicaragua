@@ -28,9 +28,9 @@ export const ESQUEMA_AGRUPAR: Record<string, unknown> = {
       items: {
         type: 'object',
         properties: {
-          titulo: { type: 'string', description: 'El asunto común, en español claro.' },
-          descripcion: { type: 'string', description: 'Qué tienen en común, sin tomar partido.' },
-          refs: { type: 'array', items: { type: 'string' }, description: 'Referencias iN de las inquietudes que se parecen (al menos 2).' },
+          titulo: { type: 'string', maxLength: MAX_TITULO, description: 'El asunto común, en español claro.' },
+          descripcion: { type: 'string', maxLength: MAX_DESCRIPCION, description: 'Qué tienen en común, sin tomar partido.' },
+          refs: { type: 'array', minItems: 2, items: { type: 'string' }, description: 'Referencias iN de las inquietudes que se parecen (al menos 2).' },
         },
         required: ['titulo', 'descripcion', 'refs'],
       },

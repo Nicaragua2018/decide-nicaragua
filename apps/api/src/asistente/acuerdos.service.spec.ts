@@ -183,4 +183,20 @@ describe('AcuerdosService', () => {
       expect(op.material).toContain('Titulo secreto 1');
     }
   });
+
+  it('un fallo en un elemento no frena a los demás', async () => {
+    montar({ enPlazo: [1, 2].map((n) => ({ ...inq(n), _count: { apoyos: 3 } })) });
+    sugerencias.existe.mockRejectedValueOnce(new Error('db'));
+    asistente.pedir.mockResolvedValue({ resumen: 'r', borradorRespuesta: 'b' });
+    expect(await service.procesar(AHORA)).toBe(1);
+    expect(sugerencias.guardar).toHaveBeenCalledTimes(1);
+    expect(sugerencias.guardar.mock.calls[0]![1]).toBe(inq(2).id);
+  });
+
+  it('agrupar: base.inquietudes cuenta lo enviado (máximo 80)', async () => {
+    montar({ abiertas: Array.from({ length: 100 }, (_, n) => inq(n + 1)) });
+    asistente.pedir.mockResolvedValue({ grupos: [{ titulo: 'A', descripcion: 'd', refs: ['i1', 'i2'] }] });
+    await service.procesar(AHORA);
+    expect(sugerencias.guardar.mock.calls[0]![4]).toEqual({ at: AHORA.toISOString(), inquietudes: 80 });
+  });
 });

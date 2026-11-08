@@ -80,6 +80,18 @@ export class AcuerdosService {
     return ronda.guardadas;
   }
 
+  /** Un fallo en un elemento nunca frena a los demás: solo se registra el nombre del error. */
+  private async cadaUno<T>(lista: Iterable<T>, ronda: Ronda, hacer: (x: T) => Promise<void>): Promise<void> {
+    for (const x of lista) {
+      if (ronda.agotada) return;
+      try {
+        await hacer(x);
+      } catch (err) {
+        this.logger.error(`Falló una sugerencia: ${nombreDeError(err)}`);
+      }
+    }
+  }
+
   private async agrupar(ronda: Ronda): Promise<void> {
     const filas = await this.prisma.inquietud.findMany({
       where: { hidden: false, status: { in: [...ABIERTAS] } },
@@ -89,13 +101,13 @@ export class AcuerdosService {
     const porComunidad = new Map<string, typeof filas>();
     for (const f of filas) porComunidad.set(f.groupId, [...(porComunidad.get(f.groupId) ?? []), f]);
 
-    for (const [groupId, lista] of porComunidad) {
-      if (ronda.agotada) return;
-      if (lista.length < MIN_INQUIETUDES_AGRUPAR) continue;
+    await this.cadaUno(porComunidad, ronda, async ([groupId, lista]) => {
+      if (lista.length < MIN_INQUIETUDES_AGRUPAR) return;
       const previa = await this.sugerencias.existe('agrupar', groupId);
-      if (previa && (previa.final || ronda.now.getTime() - previa.updatedAt.getTime() <= REFRESCO_AGRUPAR_MS)) continue;
+      if (previa && (previa.final || ronda.now.getTime() - previa.updatedAt.getTime() <= REFRESCO_AGRUPAR_MS)) return;
 
-      const { material, refs } = materialAgrupar(lista.slice(0, MAX_MATERIAL_AGRUPAR));
+      const enviadas = lista.slice(0, MAX_MATERIAL_AGRUPAR);
+      const { material, refs } = materialAgrupar(enviadas);
       const salida = await ronda.pedir({
         modelo: 'capaz',
         prioridad: 'nocturna',
@@ -104,12 +116,12 @@ export class AcuerdosService {
         herramienta: { nombre: 'agrupar_inquietudes', esquema: ESQUEMA_AGRUPAR },
         validar: esSalidaAgrupar,
       });
-      if (!salida) continue;
+      if (!salida) return;
       const grupos = gruposConIds(salida, refs);
-      if (!grupos.length) continue;
-      await this.sugerencias.guardar('agrupar', groupId, groupId, { grupos }, { at: ronda.now.toISOString(), inquietudes: lista.length });
+      if (!grupos.length) return;
+      await this.sugerencias.guardar('agrupar', groupId, groupId, { grupos }, { at: ronda.now.toISOString(), inquietudes: enviadas.length });
       ronda.guardadas++;
-    }
+    });
   }
 
   private async umbral(ronda: Ronda): Promise<void> {
@@ -118,9 +130,8 @@ export class AcuerdosService {
       select: { id: true, groupId: true, title: true, body: true, _count: { select: { apoyos: true } } },
       orderBy: { createdAt: 'asc' },
     });
-    for (const f of filas) {
-      if (ronda.agotada) return;
-      if (await this.sugerencias.existe('umbral', f.id)) continue;
+    await this.cadaUno(filas, ronda, async (f) => {
+      if (await this.sugerencias.existe('umbral', f.id)) return;
       const salida = await ronda.pedir({
         modelo: 'rapido',
         prioridad: 'nocturna',
@@ -129,7 +140,7 @@ export class AcuerdosService {
         herramienta: { nombre: 'preparar_respuesta', esquema: ESQUEMA_UMBRAL },
         validar: esSalidaUmbral,
       });
-      if (!salida) continue;
+      if (!salida) return;
       await this.sugerencias.guardar(
         'umbral',
         f.id,
@@ -138,7 +149,7 @@ export class AcuerdosService {
         { at: ronda.now.toISOString(), inquietudes: 1 },
       );
       ronda.guardadas++;
-    }
+    });
   }
 
   private async presentacion(ronda: Ronda): Promise<void> {
@@ -147,16 +158,15 @@ export class AcuerdosService {
       select: { id: true, groupId: true },
       orderBy: { createdAt: 'asc' },
     });
-    for (const t of temas) {
-      if (ronda.agotada) return;
-      if (await this.sugerencias.existe('presentacion', t.id)) continue;
+    await this.cadaUno(temas, ronda, async (t) => {
+      if (await this.sugerencias.existe('presentacion', t.id)) return;
       const inquietudes = await this.prisma.inquietud.findMany({
         where: { proposalId: t.id, hidden: false },
         select: { title: true, body: true },
         orderBy: { createdAt: 'asc' },
         take: MAX_MATERIAL_PRESENTACION,
       });
-      if (!inquietudes.length) continue;
+      if (!inquietudes.length) return;
       const salida = await ronda.pedir({
         modelo: 'capaz',
         prioridad: 'nocturna',
@@ -165,7 +175,7 @@ export class AcuerdosService {
         herramienta: { nombre: 'presentar_asunto', esquema: ESQUEMA_PRESENTACION },
         validar: esSalidaPresentacion,
       });
-      if (!salida) continue;
+      if (!salida) return;
       await this.sugerencias.guardar(
         'presentacion',
         t.id,
@@ -174,6 +184,6 @@ export class AcuerdosService {
         { at: ronda.now.toISOString(), inquietudes: inquietudes.length },
       );
       ronda.guardadas++;
-    }
+    });
   }
 }

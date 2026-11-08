@@ -15,7 +15,7 @@ export const TAREA_PRESENTACION = `Tarea: una comunidad de Nicaragua Decide abri
 export const ESQUEMA_PRESENTACION: Record<string, unknown> = {
   type: 'object',
   properties: {
-    presentacion: { type: 'string', description: 'Presentación neutral del asunto, en español claro.' },
+    presentacion: { type: 'string', maxLength: MAX_PRESENTACION, description: 'Presentación neutral del asunto, en español claro.' },
   },
   required: ['presentacion'],
 };

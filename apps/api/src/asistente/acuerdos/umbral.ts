@@ -17,8 +17,8 @@ export const TAREA_UMBRAL = `Tarea: una inquietud de una comunidad de Nicaragua 
 export const ESQUEMA_UMBRAL: Record<string, unknown> = {
   type: 'object',
   properties: {
-    resumen: { type: 'string', description: 'Qué pide o pregunta la inquietud, en español claro.' },
-    borradorRespuesta: { type: 'string', description: 'Borrador de respuesta respetuoso y neutral.' },
+    resumen: { type: 'string', maxLength: MAX_RESUMEN, description: 'Qué pide o pregunta la inquietud, en español claro.' },
+    borradorRespuesta: { type: 'string', maxLength: MAX_BORRADOR, description: 'Borrador de respuesta respetuoso y neutral.' },
   },
   required: ['resumen', 'borradorRespuesta'],
 };
