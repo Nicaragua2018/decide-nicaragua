@@ -54,7 +54,7 @@ type RevocacionFila = {
   id: string;
   cargoId: string;
   motivo: string;
-  estado: 'abierta' | 'lograda' | 'vencida';
+  estado: 'abierta' | 'lograda' | 'vencida' | 'retirada';
   umbral: number;
   venceAt: Date;
   cargo: CargoFila;
@@ -116,7 +116,13 @@ export class RevocacionService implements OnModuleInit {
     if (!(await this.enElectorado(profileId, ambito))) throw new ForbiddenException(NO_ELECTORADO);
     if (cargo.profileId === profileId) throw new ForbiddenException(PROPIA);
     const anterior = await this.prisma.revocacion.findFirst({
-      where: { solicitanteProfileId: profileId, cargoId, createdAt: { gt: new Date(now.getTime() - REVOCACION_ESPERA_DIAS * DIA_MS) } },
+      where: {
+        solicitanteProfileId: profileId,
+        cargoId,
+        createdAt: { gt: new Date(now.getTime() - REVOCACION_ESPERA_DIAS * DIA_MS) },
+        // Un pedido que la mesa retiró por moderación no cuenta para la espera (ADR-029).
+        estado: { not: 'retirada' },
+      },
       orderBy: { createdAt: 'desc' },
       select: { createdAt: true },
     });
@@ -131,7 +137,7 @@ export class RevocacionService implements OnModuleInit {
 
     const texto = motivo.trim();
     // Lo que no depende del texto se comprobó antes: nadie recibe una revisión de un pedido imposible.
-    await this.guardia.antesDePublicar({
+    const { revisado } = await this.guardia.antesDePublicar({
       tipo: 'revocacion',
       texto,
       autorProfileId: profileId,
@@ -174,6 +180,8 @@ export class RevocacionService implements OnModuleInit {
       resource: `revocacion:${id}`,
       metadata: { tipo: cargo.tipo, groupId: cargo.groupId, umbral },
     });
+    // Sin revisión del asistente, el motivo se revisa después (nivel 3); si es de nivel 2, el pedido se cierra.
+    await this.guardia.despuesDePublicar('revocacion', id, revisado);
     // Con un electorado muy pequeño, el apoyo de quien pide ya alcanza.
     if (umbral <= 1) {
       const apoyos = await this.prisma.$transaction(async (tx) => {

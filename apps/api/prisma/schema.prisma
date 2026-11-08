@@ -75,6 +75,7 @@ enum ProposalKind {
   propuesta // propuesta formal: plazo de deliberación y luego votación
 }
 
+/// Las tres últimas (3C) solo llegan a ModerationAction como solicitudes del asistente, nunca desde el foro.
 enum ModerationTarget {
   tema
   respuesta
@@ -82,6 +83,9 @@ enum ModerationTarget {
   frase
   solucion
   informe
+  candidatura
+  revocacion
+  observacion
 }
 
 enum Origen {
@@ -817,6 +821,9 @@ model ModerationAction {
   /// Nació «provisional» (causa urgente). Si se rechaza o vence, una nueva solicitud urgente
   /// sobre el mismo contenido ya no lo oculta de inmediato: queda «pendiente».
   fueProvisional       Boolean          @default(false)
+  /// sha256 del texto que revisó el asistente (fichas, pedidos y observaciones): si el texto cambió,
+  /// confirmar no lo oculta.
+  huella               String?          @db.VarChar(64)
 
   // El índice único parcial `moderation_actions_abierta_key` (una sola solicitud pendiente o
   // provisional por contenido) vive solo en SQL: Prisma no modela índices parciales
@@ -1251,6 +1258,8 @@ enum RevocacionEstado {
   abierta
   lograda
   vencida
+  /// La mesa confirmó (2 firmas) una solicitud de moderación del motivo. No cuenta para la espera.
+  retirada
 }
 
 enum ReactivacionEstado {
@@ -1431,6 +1440,9 @@ model ObservacionPublica {
   autorProfileId String   @db.Uuid
   auditEventId   String   @db.Uuid
   texto          String   @db.VarChar(1000)
+  /// La mesa confirmó (2 firmas) una solicitud de moderación: no se muestra, pero no se borra.
+  oculta         Boolean          @default(false)
+  ocultaCausa    ModeracionCausa?
   createdAt      DateTime @default(now()) @db.Timestamptz
 
   @@index([createdAt])

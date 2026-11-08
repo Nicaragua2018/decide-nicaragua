@@ -1,6 +1,7 @@
 import 'reflect-metadata';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { BadRequestException, ConflictException, ForbiddenException, Logger, NotFoundException } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { BoardService } from './board.service';
 
 function buildPrisma() {
@@ -745,6 +746,43 @@ describe('BoardService', () => {
         data: { estado: 'vencida' },
       });
       expect(prisma.revocacion.updateMany.mock.invocationCallOrder[0]!).toBeLessThan(alSuspender.mock.invocationCallOrder[0]!);
+    });
+
+    it('suspender bloquea primero los pedidos abiertos de sus cargos y después termina los cargos', async () => {
+      prisma.cargo.findMany.mockResolvedValue([{ id: 'c1', tipo: 'secretario', groupId: 'g-general', hasta: HASTA }]);
+      prisma.boardSeat.findMany.mockResolvedValue([{ role: 'secretario' }]);
+
+      await service.voteAction(ADMIN, 'a1', true, 'ip');
+
+      const i = prisma.$queryRaw.mock.calls.findIndex((c) =>
+        (c[0] as { strings: string[] }).strings.join('?').includes('FROM revocaciones'),
+      );
+      expect(i).toBeGreaterThanOrEqual(0);
+      const sql = prisma.$queryRaw.mock.calls[i]![0] as { strings: string[]; values: unknown[] };
+      expect(sql.strings.join('?')).toMatch(/"cargoId" = ANY\(\?::uuid\[\]\) AND estado = 'abierta' FOR UPDATE/);
+      expect(sql.values).toEqual([['c1']]);
+      expect(prisma.$queryRaw.mock.invocationCallOrder[i]!).toBeLessThan(prisma.cargo.updateMany.mock.invocationCallOrder[0]!);
+    });
+
+    it('sin cargos vigentes, suspender no bloquea pedidos', async () => {
+      prisma.cargo.findMany.mockResolvedValue([]);
+      await service.voteAction(ADMIN, 'a1', true, 'ip');
+      const sqls = prisma.$queryRaw.mock.calls.map((c) => (c[0] as { strings: string[] }).strings.join('?'));
+      expect(sqls.some((q) => q.includes('FROM revocaciones'))).toBe(false);
+    });
+
+    it('la firma reintenta una vez si la transacción choca con otra (P2034)', async () => {
+      prisma.cargo.findMany.mockResolvedValue([{ id: 'c1', tipo: 'secretario', groupId: 'g-general', hasta: HASTA }]);
+      prisma.boardSeat.findMany.mockResolvedValue([{ role: 'secretario' }]);
+      const choque = new Prisma.PrismaClientKnownRequestError('deadlock', { code: 'P2034', clientVersion: '6' });
+      prisma.$transaction
+        .mockRejectedValueOnce(choque)
+        .mockImplementationOnce((fn: (tx: unknown) => unknown) => fn(prisma));
+
+      await service.voteAction(ADMIN, 'a1', true, 'ip');
+
+      expect(prisma.$transaction).toHaveBeenCalledTimes(2);
+      expect(resuelta()).toMatchObject({ data: { status: 'executed' } });
     });
 
     it('suspender a un fundador antes de la primera jornada no abre anticipada: la primera jornada cubre el puesto', async () => {

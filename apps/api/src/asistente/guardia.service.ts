@@ -83,11 +83,20 @@ export class GuardiaService {
   }
 
   /**
-   * Si el asistente no revisó el texto, lo deja en la cola de la revisión posterior (nivel 3).
+   * Si el asistente no revisó el texto, lo deja en la cola de la revisión posterior (nivel 3); si lo
+   * revisó, quita la fila que hubiera del mismo contenido (un texto anterior ya cambiado).
    * Se llama ya publicado y fuera de la transacción; nunca lanza (lo publicado queda publicado).
    */
   async despuesDePublicar(target: ModerationTarget, targetId: string, revisado: boolean): Promise<void> {
-    if (revisado) return;
+    if (revisado) {
+      // Una edición ya revisada deja sin objeto la fila que esperaba revisar el texto anterior.
+      try {
+        await this.prisma.colaRevisionPosterior.deleteMany({ where: { target, targetId } });
+      } catch (err) {
+        this.logger.error(`No se pudo quitar de la cola de la revisión posterior: ${nombreDeError(err)}`);
+      }
+      return;
+    }
     try {
       await this.prisma.colaRevisionPosterior.upsert({
         where: { target_targetId: { target, targetId } },

@@ -179,7 +179,6 @@ export class PosesionService {
     now: Date,
   ): Promise<void> {
     if (perfiles.length === 0) return;
-    const termina = { terminadoAt: now, enFunciones: false };
 
     const limite = now.getTime() + RENOVACION_ANTES_DIAS * DIA_MS;
     const vigentes = await tx.cargo.findMany({
@@ -201,7 +200,21 @@ export class PosesionService {
     );
     const salen = [...propios, ...salientes.slice(0, cuantos)];
     if (salen.length > 0) {
-      await tx.cargo.updateMany({ where: { id: { in: salen.map((c) => c.id) } }, data: termina });
+      // Un cargo con un pedido de revocación logrado sale por revocación; los demás, por fin del mandato.
+      const ids = salen.map((c) => c.id);
+      const revocados = new Set(
+        (
+          await tx.revocacion.findMany({ where: { cargoId: { in: ids }, estado: 'lograda' }, select: { cargoId: true } })
+        ).map((r) => r.cargoId),
+      );
+      const porCausa = [
+        { finCausa: 'revocacion' as const, ids: ids.filter((id) => revocados.has(id)) },
+        { finCausa: 'mandato' as const, ids: ids.filter((id) => !revocados.has(id)) },
+      ];
+      for (const { finCausa, ids: grupo } of porCausa) {
+        if (grupo.length === 0) continue;
+        await tx.cargo.updateMany({ where: { id: { in: grupo } }, data: { terminadoAt: now, finCausa, enFunciones: false } });
+      }
     }
 
     // Una elección anticipada hereda el fin del mandato que faltaba.

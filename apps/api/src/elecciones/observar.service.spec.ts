@@ -183,6 +183,15 @@ describe('ObservarService', () => {
       });
     });
 
+    it('una observación publicada sin revisión del asistente entra en la cola de la revisión posterior', async () => {
+      guardia.antesDePublicar.mockResolvedValue({ revisado: false });
+      await service.observar(YO, { auditEventId: EVENTO, texto: TEXTO });
+      expect(guardia.despuesDePublicar).toHaveBeenCalledWith('observacion', 'o1', false);
+      expect(guardia.despuesDePublicar.mock.invocationCallOrder[0]!).toBeGreaterThan(
+        prisma.observacionPublica.create.mock.invocationCallOrder[0]!,
+      );
+    });
+
     it('el publicador vuelve a comprobar al autor y el evento, y lanza si ya no valen', async () => {
       service.onModuleInit();
       expect(publicadores.registrar).toHaveBeenCalledWith('observacion', expect.any(Function));

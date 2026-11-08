@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { Logger } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { RevisionPosteriorService } from './revision-posterior.service';
+import { textoParaRevisar } from '@decide/shared';
 import { ESQUEMA_REVISION, esRevision, tareaRevision } from './moderacion-previa.service';
 
 const AHORA = new Date('2026-11-10T03:00:00Z');
@@ -26,6 +27,10 @@ function build() {
     frase: { findUnique: vi.fn().mockResolvedValue({ text: FRASE, hidden: false }) },
     solucion: { findUnique: vi.fn().mockResolvedValue(null) },
     comisionInforme: { findUnique: vi.fn().mockResolvedValue(null) },
+    // Sin escrituras: la revisión posterior nunca oculta, cierra ni borra lo de las elecciones.
+    candidatura: { findUnique: vi.fn().mockResolvedValue(null) },
+    revocacion: { findUnique: vi.fn().mockResolvedValue(null) },
+    observacionPublica: { findUnique: vi.fn().mockResolvedValue(null) },
   };
   const asistente = {
     activo: vi.fn().mockReturnValue(true),
@@ -158,6 +163,87 @@ describe('RevisionPosteriorService', () => {
       ['Pozo', tareaRevision('solucion')],
       ['Informe', tareaRevision('informe')],
     ]);
+  });
+
+  describe('fichas, pedidos de revocación y observaciones (3C): la mesa decide', () => {
+    const ficha = (over: Record<string, unknown> = {}) => ({
+      eleccionId: 'e1', presentacion: 'Soy de Masaya', compromisos: ['Escuchar', 'Rendir cuentas'],
+      oculta: false, retiradaAt: null, eleccion: { fase: 'candidaturas' }, ...over,
+    });
+    const MAÑANA = new Date(AHORA.getTime() + 86_400_000);
+
+    it('arma el texto de cada uno como la revisión previa, con su tipo', async () => {
+      t.asistente.pedir.mockResolvedValue({ nivel: 0 });
+      t.prisma.colaRevisionPosterior.findMany.mockResolvedValue([
+        fila({ id: 'c1', target: 'candidatura', targetId: 'k1' }),
+        fila({ id: 'c2', target: 'revocacion', targetId: 'v1' }),
+        fila({ id: 'c3', target: 'observacion', targetId: 'o1' }),
+      ]);
+      t.prisma.candidatura.findUnique.mockResolvedValue(ficha());
+      t.prisma.revocacion.findUnique.mockResolvedValue({ motivo: 'No rinde cuentas', estado: 'abierta', venceAt: MAÑANA });
+      t.prisma.observacionPublica.findUnique.mockResolvedValue({ texto: 'Se contó bien', oculta: false });
+      expect(await t.svc.procesar(AHORA)).toBe(3);
+      expect(t.asistente.pedir.mock.calls.map(([op]) => [op.material, op.tarea])).toEqual([
+        [textoParaRevisar('Soy de Masaya', 'Escuchar', 'Rendir cuentas'), tareaRevision('candidatura')],
+        ['No rinde cuentas', tareaRevision('revocacion')],
+        ['Se contó bien', tareaRevision('observacion')],
+      ]);
+      expect(t.forums.solicitarPorAsistente).not.toHaveBeenCalled();
+    });
+
+    it('nivel 2: solo abre la solicitud para la mesa, con el texto revisado; nunca oculta, cierra ni borra', async () => {
+      t.prisma.colaRevisionPosterior.findMany.mockResolvedValue([
+        fila({ id: 'c1', target: 'candidatura', targetId: 'k1' }),
+        fila({ id: 'c2', target: 'revocacion', targetId: 'v1' }),
+        fila({ id: 'c3', target: 'observacion', targetId: 'o1' }),
+      ]);
+      t.prisma.candidatura.findUnique.mockResolvedValue(ficha({ eleccion: { fase: 'votacion' } }));
+      t.prisma.revocacion.findUnique.mockResolvedValue({ motivo: 'No rinde cuentas', estado: 'abierta', venceAt: MAÑANA });
+      t.prisma.observacionPublica.findUnique.mockResolvedValue({ texto: 'Una plaga', oculta: false });
+      expect(await t.svc.procesar(AHORA)).toBe(3);
+      expect(t.forums.solicitarPorAsistente.mock.calls).toEqual([
+        ['candidatura', 'k1', 'odio', textoParaRevisar('Soy de Masaya', 'Escuchar', 'Rendir cuentas')],
+        ['revocacion', 'v1', 'odio', 'No rinde cuentas'],
+        ['observacion', 'o1', 'odio', 'Una plaga'],
+      ]);
+      expect(t.prisma).not.toHaveProperty('candidatura.updateMany');
+      expect(t.audit.log).not.toHaveBeenCalled();
+      expect(t.prisma.colaRevisionPosterior.deleteMany).toHaveBeenCalledTimes(3);
+    });
+
+    it('una ficha oculta, retirada o de una elección ya contada sale de la cola sin pedir', async () => {
+      t.prisma.colaRevisionPosterior.findMany.mockResolvedValue([
+        fila({ id: 'c1', target: 'candidatura', targetId: 'k1' }),
+        fila({ id: 'c2', target: 'candidatura', targetId: 'k2' }),
+        fila({ id: 'c3', target: 'candidatura', targetId: 'k3' }),
+      ]);
+      t.prisma.candidatura.findUnique
+        .mockResolvedValueOnce(ficha({ oculta: true }))
+        .mockResolvedValueOnce(ficha({ retiradaAt: new Date() }))
+        .mockResolvedValueOnce(ficha({ eleccion: { fase: 'contada' } }));
+      expect(await t.svc.procesar(AHORA)).toBe(3);
+      expect(t.asistente.pedir).not.toHaveBeenCalled();
+    });
+
+    it('un pedido cerrado, o ya vencido aunque siga «abierta», sale de la cola sin pedir', async () => {
+      t.prisma.colaRevisionPosterior.findMany.mockResolvedValue([
+        fila({ id: 'c1', target: 'revocacion', targetId: 'v1' }),
+        fila({ id: 'c2', target: 'revocacion', targetId: 'v2' }),
+      ]);
+      t.prisma.revocacion.findUnique
+        .mockResolvedValueOnce({ motivo: 'x', estado: 'retirada', venceAt: MAÑANA })
+        .mockResolvedValueOnce({ motivo: 'x', estado: 'abierta', venceAt: AHORA });
+      expect(await t.svc.procesar(AHORA)).toBe(2);
+      expect(t.asistente.pedir).not.toHaveBeenCalled();
+      expect(t.forums.solicitarPorAsistente).not.toHaveBeenCalled();
+    });
+
+    it('una observación ya oculta sale de la cola sin pedir', async () => {
+      t.prisma.colaRevisionPosterior.findMany.mockResolvedValue([fila({ target: 'observacion', targetId: 'o1' })]);
+      t.prisma.observacionPublica.findUnique.mockResolvedValue({ texto: 'x', oculta: true });
+      expect(await t.svc.procesar(AHORA)).toBe(1);
+      expect(t.asistente.pedir).not.toHaveBeenCalled();
+    });
   });
 
   it('posterior: si abrir la solicitud falla, cuenta un intento y sigue con las demás', async () => {

@@ -22,6 +22,7 @@ import type {
   ResultadoEleccionVista,
 } from '@decide/shared';
 import { PrismaService } from '../prisma/prisma.service';
+import { conReintento } from '../common/utils/reintento.util';
 import { AuditService } from '../audit/audit.service';
 import { BoardService } from '../board/board.service';
 import { GuardiaService, type OpcionesPublicar } from '../asistente/guardia.service';
@@ -274,7 +275,12 @@ export class EleccionesService implements OnModuleInit {
       select: { tipo: true, groupId: true, hasta: true },
     });
     if (!cargo) throw new ConflictException(CARGO_TERMINADO);
-    await this.prisma.$transaction(async (tx) => {
+    // Mismo orden de bloqueo que apoyar un pedido (pedido → cargo): así no se interbloquean.
+    // Si aun así choca con otra transacción, se repite una vez.
+    await conReintento(() => this.prisma.$transaction(async (tx) => {
+      await tx.$queryRaw(
+        Prisma.sql`SELECT id FROM revocaciones WHERE "cargoId" = ANY(${[cargoId]}::uuid[]) AND estado = 'abierta' FOR UPDATE`,
+      );
       const r = await tx.cargo.updateMany({
         where: { id: cargoId, profileId, terminadoAt: null },
         data: { terminadoAt: now, finCausa: 'renuncia', enFunciones: false },
@@ -286,7 +292,7 @@ export class EleccionesService implements OnModuleInit {
       }
       // Un pedido de revocación de un cargo que ya terminó no tiene objeto: se cierra con el cargo.
       await tx.revocacion.updateMany({ where: { cargoId, estado: 'abierta' }, data: { estado: 'vencida' } });
-    });
+    }));
     void this.audit.log({
       action: 'cargo.renuncia',
       resource: `cargo:${cargoId}`,
@@ -326,6 +332,8 @@ export class EleccionesService implements OnModuleInit {
       }),
       this.revocacion.resumenPorCargo(),
       this.prisma.observacionPublica.findMany({
+        // Una observación oculta por la mesa (2 firmas) no se muestra; no se borra.
+        where: { oculta: false },
         orderBy: { createdAt: 'desc' },
         take: 20,
         select: { id: true, autorProfileId: true, auditEventId: true, texto: true, createdAt: true },
@@ -433,8 +441,8 @@ export class EleccionesService implements OnModuleInit {
     const presentacion = ficha.presentacion.trim();
     const compromisos = ficha.compromisos.map((c) => c.trim()).filter((c) => c.length > 0);
     // Se revisa antes de publicar; después, la mesa puede ocultarla con dos firmas
-    // (acción ocultar_candidatura en BoardService).
-    await this.guardia.antesDePublicar({
+    // (acción ocultar_candidatura en BoardService). Sin revisión del asistente, va a la cola posterior.
+    const { revisado } = await this.guardia.antesDePublicar({
       tipo: 'candidatura',
       texto: textoParaRevisar(presentacion, ...compromisos),
       autorProfileId: profileId,
@@ -467,6 +475,7 @@ export class EleccionesService implements OnModuleInit {
       throw err;
     }
     void this.audit.log({ action: 'candidatura.presentada', resource: `candidatura:${id}`, metadata: { eleccionId: e.id } });
+    await this.guardia.despuesDePublicar('candidatura', id, revisado);
     return { id };
   }
 
@@ -488,7 +497,7 @@ export class EleccionesService implements OnModuleInit {
 
     const presentacion = ficha.presentacion.trim();
     const compromisos = ficha.compromisos.map((x) => x.trim()).filter((x) => x.length > 0);
-    await this.guardia.antesDePublicar({
+    const { revisado } = await this.guardia.antesDePublicar({
       tipo: 'candidatura',
       texto: textoParaRevisar(presentacion, ...compromisos),
       autorProfileId: profileId,
@@ -509,9 +518,15 @@ export class EleccionesService implements OnModuleInit {
         where: { type: 'ocultar_candidatura', status: 'pending', params: { path: ['candidaturaId'], equals: c.id } },
         data: { status: 'rejected', resolvedAt: new Date() },
       });
-      return a.count;
+      // Igual con la solicitud del asistente (revisión posterior) que espera las firmas de la mesa.
+      const m = await tx.moderationAction.updateMany({
+        where: { target: 'candidatura', targetId: c.id, status: { in: ['pendiente', 'provisional'] } },
+        data: { status: 'rechazado', resolvedAt: new Date() },
+      });
+      return a.count + m.count;
     });
     void this.audit.log({ action: 'candidatura.editada', resource: `candidatura:${c.id}`, metadata: { eleccionId: e.id } });
+    await this.guardia.despuesDePublicar('candidatura', c.id, revisado);
     if (canceladas > 0) {
       void this.audit.log({
         action: 'candidatura.ocultacion_cancelada',

@@ -19,7 +19,16 @@ const TIPO_DE: Record<ModerationTarget, TipoTexto> = {
   frase: 'frase',
   solucion: 'solucion',
   informe: 'informe',
+  candidatura: 'candidatura',
+  revocacion: 'revocacion',
+  observacion: 'observacion',
 };
+
+/** Una ficha solo se modera mientras su elección está abierta (después ya está contada). */
+const ELECCION_ABIERTA = ['candidaturas', 'votacion'] as const;
+
+/** Fichas, pedidos y observaciones (3C): la solicitud lleva el texto revisado (huella). */
+const esDeEleccion = (t: ModerationTarget): boolean => t === 'candidatura' || t === 'revocacion' || t === 'observacion';
 
 type Contenido = { texto: string; hidden: boolean };
 
@@ -27,6 +36,10 @@ type Contenido = { texto: string; hidden: boolean };
  * Nivel 3: revisa después lo que se publicó sin revisión previa (el asistente no respondió a
  * tiempo). Si es nivel 2, abre una solicitud de moderación que resuelve la mesa; nunca oculta
  * por su cuenta, salvo la ocultación provisional de una causa urgente (como hoy en 3A-3b).
+ *
+ * Fichas de candidatura, pedidos de revocación y observaciones públicas (3C) siguen el mismo
+ * camino: el asistente solo abre la solicitud (siempre pendiente, nunca provisional) y la mesa
+ * decide con 2 firmas (ADR-029). La solicitud guarda la huella del texto revisado.
  */
 @Injectable()
 export class RevisionPosteriorService {
@@ -56,7 +69,7 @@ export class RevisionPosteriorService {
       // El margen se puede acabar a mitad de la tanda: lo que queda espera a la próxima.
       if (!(await this.asistente.tieneMargen('nocturna'))) break;
       try {
-        if (await this.revisar(fila)) salieron += 1;
+        if (await this.revisar(fila, now)) salieron += 1;
       } catch (err) {
         this.logger.error(`Falló la revisión posterior de un contenido: ${nombreDeError(err)}`);
         try {
@@ -70,8 +83,11 @@ export class RevisionPosteriorService {
   }
 
   /** Revisa una fila. Devuelve true si salió de la cola. */
-  private async revisar(fila: { id: string; target: ModerationTarget; targetId: string; intentos: number }): Promise<boolean> {
-    const contenido = await this.contenido(fila.target, fila.targetId);
+  private async revisar(
+    fila: { id: string; target: ModerationTarget; targetId: string; intentos: number },
+    now: Date,
+  ): Promise<boolean> {
+    const contenido = await this.contenido(fila.target, fila.targetId, now);
     if (!contenido || contenido.hidden) {
       await this.sacar(fila.id);
       return true;
@@ -89,7 +105,11 @@ export class RevisionPosteriorService {
     const revision = normalizarRevision(salida);
     if (revision.nivel === 2 && revision.causa) {
       // Si ya hay una solicitud abierta, devuelve null: la mesa ya lo está viendo.
-      await this.forums.solicitarPorAsistente(fila.target, fila.targetId, revision.causa);
+      if (esDeEleccion(fila.target)) {
+        await this.forums.solicitarPorAsistente(fila.target, fila.targetId, revision.causa, contenido.texto);
+      } else {
+        await this.forums.solicitarPorAsistente(fila.target, fila.targetId, revision.causa);
+      }
     }
     await this.sacar(fila.id);
     return true;
@@ -116,7 +136,7 @@ export class RevisionPosteriorService {
   }
 
   /** El texto como lo revisa la moderación previa (`textoParaRevisar`) y si ya está oculto. */
-  private async contenido(target: ModerationTarget, id: string): Promise<Contenido | null> {
+  private async contenido(target: ModerationTarget, id: string, now: Date): Promise<Contenido | null> {
     if (target === 'tema') {
       const t = await this.prisma.proposal.findUnique({ where: { id }, select: { title: true, body: true, hidden: true } });
       return t ? { texto: textoParaRevisar(t.title, t.body), hidden: t.hidden } : null;
@@ -136,6 +156,25 @@ export class RevisionPosteriorService {
     if (target === 'solucion') {
       const s = await this.prisma.solucion.findUnique({ where: { id }, select: { title: true, description: true, hidden: true } });
       return s ? { texto: textoParaRevisar(s.title, s.description), hidden: s.hidden } : null;
+    }
+    if (target === 'candidatura') {
+      const c = await this.prisma.candidatura.findUnique({
+        where: { id },
+        select: { presentacion: true, compromisos: true, oculta: true, retiradaAt: true, eleccion: { select: { fase: true } } },
+      });
+      if (!c) return null;
+      // Retirada o ya contada: ya no se muestra como ficha que se vota, no hay nada que ocultar.
+      const cerrada = c.retiradaAt !== null || !(ELECCION_ABIERTA as readonly string[]).includes(c.eleccion.fase as string);
+      return { texto: textoParaRevisar(c.presentacion, ...c.compromisos), hidden: c.oculta || cerrada };
+    }
+    if (target === 'revocacion') {
+      const r = await this.prisma.revocacion.findUnique({ where: { id }, select: { motivo: true, estado: true, venceAt: true } });
+      // Un pedido ya vencido (aunque el programador aún no lo cerrara) no se revisa: vence solo.
+      return r ? { texto: r.motivo, hidden: (r.estado as string) !== 'abierta' || r.venceAt.getTime() <= now.getTime() } : null;
+    }
+    if (target === 'observacion') {
+      const o = await this.prisma.observacionPublica.findUnique({ where: { id }, select: { texto: true, oculta: true } });
+      return o ? { texto: o.texto, hidden: o.oculta } : null;
     }
     if (target === 'informe') {
       const i = await this.prisma.comisionInforme.findUnique({ where: { id }, select: { texto: true, hidden: true } });

@@ -3,6 +3,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { BadRequestException, ConflictException, ForbiddenException, HttpException, Logger } from '@nestjs/common';
 import { validate } from 'class-validator';
 import { plainToInstance } from 'class-transformer';
+import { Prisma } from '@prisma/client';
 import { EleccionesService } from './elecciones.service';
 import { EleccionesController, RepresentantesController } from './elecciones.controller';
 import { CandidaturaDto } from './dto/candidatura.dto';
@@ -71,6 +72,7 @@ function buildPrisma() {
       updateMany: vi.fn().mockResolvedValue({ count: 1 }),
     },
     boardAction: { updateMany: vi.fn().mockResolvedValue({ count: 0 }) },
+    moderationAction: { updateMany: vi.fn().mockResolvedValue({ count: 0 }) },
     cargo: {
       findMany: vi.fn().mockResolvedValue([]),
       findFirst: vi.fn().mockResolvedValue(null),
@@ -244,6 +246,18 @@ describe('EleccionesService', () => {
     expect(prisma.candidatura.update.mock.calls[0]![0].data).toMatchObject({ retiradaAt: null });
   });
 
+  it('una ficha publicada sin revisión del asistente entra en la cola de la revisión posterior', async () => {
+    guardia.antesDePublicar.mockResolvedValue({ revisado: false });
+    await service.presentarse(YO, E, ficha);
+    expect(guardia.despuesDePublicar).toHaveBeenCalledWith('candidatura', 'c-nueva', false);
+    expect(guardia.despuesDePublicar.mock.invocationCallOrder[0]!).toBeGreaterThan(
+      prisma.candidatura.create.mock.invocationCallOrder[0]!,
+    );
+    guardia.antesDePublicar.mockResolvedValue({ revisado: true });
+    await service.presentarse(YO, E, ficha);
+    expect(guardia.despuesDePublicar).toHaveBeenLastCalledWith('candidatura', 'c-nueva', true);
+  });
+
   it('la segunda comprobación, con la persona bloqueada, cierra la carrera entre dos presentaciones', async () => {
     // Fuera de la transacción no había otra; dentro, la otra petición ya la creó.
     prisma.candidatura.findFirst.mockResolvedValueOnce(null).mockResolvedValueOnce({ id: 'c-otra' });
@@ -273,6 +287,30 @@ describe('EleccionesService', () => {
       // La mesa reproduce la edición aprobada por la misma vía.
       service.onModuleInit();
       expect(publicadores.registrar).toHaveBeenCalledWith('candidatura', expect.any(Function), 'editar');
+    });
+
+    it('una edición sin revisión del asistente vuelve a la cola de la revisión posterior', async () => {
+      guardia.antesDePublicar.mockResolvedValue({ revisado: false });
+      await service.editar(YO, E, { presentacion: 'Nueva presentación', compromisos: [] });
+      expect(guardia.despuesDePublicar).toHaveBeenCalledWith('candidatura', 'c1', false);
+      expect(guardia.despuesDePublicar.mock.invocationCallOrder[0]!).toBeGreaterThan(
+        prisma.candidatura.updateMany.mock.invocationCallOrder[0]!,
+      );
+    });
+
+    it('editar cancela la solicitud de moderación pendiente del asistente sobre esa ficha', async () => {
+      prisma.moderationAction.updateMany.mockResolvedValue({ count: 1 });
+      await service.editar(YO, E, ficha);
+      expect(prisma.moderationAction.updateMany).toHaveBeenCalledWith({
+        where: { target: 'candidatura', targetId: 'c1', status: { in: ['pendiente', 'provisional'] } },
+        data: { status: 'rechazado', resolvedAt: expect.any(Date) },
+      });
+      expect(prisma.moderationAction.updateMany.mock.invocationCallOrder[0]!).toBeGreaterThan(
+        prisma.candidatura.updateMany.mock.invocationCallOrder[0]!,
+      );
+      expect(audit.log).toHaveBeenCalledWith({
+        action: 'candidatura.ocultacion_cancelada', resource: 'candidatura:c1', metadata: { eleccionId: E, acciones: 1 },
+      });
     });
 
     it('editar cancela las propuestas pendientes de ocultar esa ficha', async () => {
@@ -488,7 +526,10 @@ describe('EleccionesService', () => {
     prisma.profile.findMany.mockResolvedValue([{ id: 'p3', displayName: 'Eva Paz' }]);
     prisma.auditEvent.findMany.mockResolvedValue([{ id: 'ev1', action: 'voto.emitido', createdAt: e }]);
     const r = await service.representantes();
-    expect(prisma.observacionPublica.findMany.mock.calls[0]![0]).toMatchObject({ take: 20, orderBy: { createdAt: 'desc' } });
+    expect(prisma.observacionPublica.findMany.mock.calls[0]![0]).toMatchObject({
+      // Una observación oculta por la mesa no se muestra (no se borra).
+      where: { oculta: false }, take: 20, orderBy: { createdAt: 'desc' },
+    });
     expect(r.observaciones).toEqual([
       {
         id: 'o1', autor: 'Eva Paz', iniciales: 'EP', texto: 'Esto no cuadra.',
@@ -601,6 +642,31 @@ describe('EleccionesService', () => {
       expect(prisma.revocacion.updateMany.mock.invocationCallOrder[0]!).toBeLessThan(
         convocatoria.anticipada.mock.invocationCallOrder[0]!,
       );
+    });
+
+    it('renunciar bloquea primero los pedidos abiertos del cargo y después toca el cargo (mismo orden que apoyar)', async () => {
+      prisma.cargo.findFirst.mockResolvedValue(cargoSec);
+      await service.renunciar(YO, 'c1', NOW);
+      const i = prisma.$queryRaw.mock.calls.findIndex((c) =>
+        (c[0] as { strings: string[] }).strings.join('?').includes('FROM revocaciones'),
+      );
+      expect(i).toBeGreaterThanOrEqual(0);
+      const sql = prisma.$queryRaw.mock.calls[i]![0] as { strings: string[]; values: unknown[] };
+      expect(sql.strings.join('?')).toMatch(/"cargoId" = ANY\(\?::uuid\[\]\) AND estado = 'abierta' FOR UPDATE/);
+      expect(sql.values).toEqual([['c1']]);
+      expect(prisma.$queryRaw.mock.invocationCallOrder[i]!).toBeLessThan(prisma.cargo.updateMany.mock.invocationCallOrder[0]!);
+    });
+
+    it('renunciar reintenta una vez si la transacción choca con otra (P2034)', async () => {
+      prisma.cargo.findFirst.mockResolvedValue(cargoSec);
+      const choque = new Prisma.PrismaClientKnownRequestError('deadlock', { code: 'P2034', clientVersion: '6' });
+      prisma.$transaction
+        .mockRejectedValueOnce(choque)
+        .mockImplementationOnce(async (fn: (tx: unknown) => unknown) => fn(prisma));
+      await expect(service.renunciar(YO, 'c1', NOW)).resolves.toBeUndefined();
+      expect(prisma.$transaction).toHaveBeenCalledTimes(2);
+      expect(prisma.cargo.updateMany).toHaveBeenCalledTimes(1);
+      expect(audit.log).toHaveBeenCalledWith(expect.objectContaining({ action: 'cargo.renuncia' }));
     });
 
     it('si la anticipada falla tras la renuncia, la renuncia se confirma, se audita y solo se avisa en el log', async () => {

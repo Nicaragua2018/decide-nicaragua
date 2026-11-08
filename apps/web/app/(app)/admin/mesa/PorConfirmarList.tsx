@@ -12,6 +12,17 @@ const TIPO: Record<ModeracionPorConfirmar['target'], string> = {
   frase: 'Frase',
   solucion: 'Solución',
   informe: 'Informe',
+  // Solo las pide el asistente (revisión posterior): hacen falta 2 firmas de la mesa.
+  candidatura: 'Ficha de candidatura',
+  revocacion: 'Motivo de un pedido de revocación',
+  observacion: 'Observación pública',
+};
+
+/** Qué pasa si la mesa confirma, para los tipos de las elecciones. */
+const EFECTO: Partial<Record<ModeracionPorConfirmar['target'], string>> = {
+  candidatura: 'Si se confirma, la ficha se oculta mientras la elección siga abierta. Quien se presentó puede corregirla en el plazo de candidaturas.',
+  revocacion: 'Si se confirma, el pedido queda retirado y su motivo deja de mostrarse. No cuenta para la espera de quien lo pidió.',
+  observacion: 'Si se confirma, la observación deja de mostrarse en «Quiénes nos representan». No se borra.',
 };
 
 export function PorConfirmarList({ items }: { items: ModeracionPorConfirmar[] }) {
@@ -35,6 +46,7 @@ export function PorConfirmarList({ items }: { items: ModeracionPorConfirmar[] })
           <p className="card-title">{TIPO[m.target]}</p>
           {m.contexto && <p className="text-sm text-muted">{m.contexto}</p>}
           {m.solicitadaPorAsistente && <p className="text-sm text-muted">Pedida por el asistente</p>}
+          {EFECTO[m.target] && <p className="text-sm text-muted">{EFECTO[m.target]}</p>}
           <p className="card-meta">
             Causa: {MODERACION_CAUSAS.find((c) => c.value === m.causa)?.label ?? m.causa}
           </p>

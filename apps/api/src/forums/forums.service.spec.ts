@@ -4,7 +4,7 @@ import { Prisma } from '@prisma/client';
 import { BadRequestException, ConflictException, ForbiddenException, NotFoundException } from '@nestjs/common';
 import { validate } from 'class-validator';
 import { plainToInstance } from 'class-transformer';
-import { ForumsService, LINKED_TOPIC_REASON } from './forums.service';
+import { ForumsService, LINKED_TOPIC_REASON, huellaDe } from './forums.service';
 import { GroupAccessService } from '../groups/group-access.service';
 import { ForumsController } from './forums.controller';
 import { ModerateDto } from './dto/moderate.dto';
@@ -1668,6 +1668,171 @@ describe('ForumsService', () => {
         expect(prisma.moderationAction.updateMany).toHaveBeenCalledWith({
           where: { id: 'ma1', status: 'pendiente', venceAt: { gt: AHORA } },
           data: { status: 'rechazado', confirmadorProfileId: YO, resolvedAt: AHORA },
+        });
+      });
+
+      describe('fichas, pedidos de revocación y observaciones (3C): la mesa decide', () => {
+        const TEXTO = 'Soy de Masaya\n\nEscuchar';
+        let ficha: {
+          texto: ReturnType<typeof vi.fn>;
+          estaOculto: ReturnType<typeof vi.fn>;
+          contexto: ReturnType<typeof vi.fn>;
+          ocultar: ReturnType<typeof vi.fn>;
+          puedeFirmar: ReturnType<typeof vi.fn>;
+        };
+        let auditarEfecto: ReturnType<typeof vi.fn>;
+        beforeEach(() => {
+          auditarEfecto = vi.fn();
+          ficha = {
+            texto: vi.fn().mockResolvedValue(TEXTO),
+            estaOculto: vi.fn().mockResolvedValue(false),
+            contexto: vi.fn().mockResolvedValue('Ficha de candidatura · Secretaría'),
+            ocultar: vi.fn().mockResolvedValue(auditarEfecto),
+            puedeFirmar: vi.fn().mockResolvedValue(null),
+          };
+          service.registrarModeracion('candidatura', ficha);
+        });
+
+        it('el asistente abre una solicitud pendiente con la huella del texto revisado; nunca oculta, ni con causa urgente', async () => {
+          prisma.moderationAction.count.mockResolvedValue(0);
+          expect(await service.solicitarPorAsistente('candidatura', 'k1', 'datos_personales', TEXTO)).toEqual({ id: 'ma1', estado: 'pendiente' });
+          expect(prisma.moderationAction.create).toHaveBeenCalledWith({
+            data: {
+              target: 'candidatura', targetId: 'k1', causa: 'datos_personales', reason: '', moderatorProfileId: null, origen: 'asistente',
+              status: 'pendiente', venceAt: SIETE_DIAS, huella: huellaDe(TEXTO),
+            },
+          });
+          expect(ficha.ocultar).not.toHaveBeenCalled();
+        });
+
+        it('si el texto cambió desde la revisión, o ya está oculto, no abre solicitud', async () => {
+          ficha.texto.mockResolvedValue('Otro texto');
+          expect(await service.solicitarPorAsistente('candidatura', 'k1', 'odio', TEXTO)).toBeNull();
+          ficha.texto.mockResolvedValue(TEXTO);
+          ficha.estaOculto.mockResolvedValue(true);
+          expect(await service.solicitarPorAsistente('candidatura', 'k1', 'odio', TEXTO)).toBeNull();
+          ficha.estaOculto.mockResolvedValue(null);
+          expect(await service.solicitarPorAsistente('candidatura', 'k1', 'odio', TEXTO)).toBeNull();
+          expect(prisma.moderationAction.create).not.toHaveBeenCalled();
+        });
+
+        it('sin un manejador registrado para el tipo, no abre nada', async () => {
+          expect(await service.solicitarPorAsistente('observacion', 'o1', 'odio', 'x')).toBeNull();
+          expect(prisma.moderationAction.create).not.toHaveBeenCalled();
+        });
+
+        it('confirmar pide dos firmas humanas; con la segunda aplica el efecto de elecciones y audita tras confirmar', async () => {
+          const accionFicha = delAsistente({ target: 'candidatura', targetId: 'k1', huella: huellaDe(TEXTO) });
+          prisma.moderationAction.findUnique.mockResolvedValue(accionFicha);
+          await service.confirmar(YO, 'ma1', true, 'ip');
+          expect(prisma.moderationAction.updateMany).toHaveBeenCalledWith({
+            where: { id: 'ma1', status: 'pendiente', venceAt: { gt: AHORA }, moderatorProfileId: null },
+            data: { moderatorProfileId: YO },
+          });
+          expect(ficha.ocultar).not.toHaveBeenCalled();
+
+          prisma.moderationAction.findUnique.mockResolvedValue({ ...accionFicha, moderatorProfileId: YO });
+          await service.confirmar(OTRA, 'ma1', true, 'ip');
+          expect(prisma.moderationAction.updateMany).toHaveBeenLastCalledWith({
+            where: { id: 'ma1', status: 'pendiente', venceAt: { gt: AHORA } },
+            data: { status: 'oculto', confirmadorProfileId: OTRA },
+          });
+          expect(ficha.ocultar).toHaveBeenCalledWith(prisma, 'k1', 'odio', huellaDe(TEXTO));
+          expect(auditarEfecto).toHaveBeenCalledTimes(1);
+          expect(audit.log).toHaveBeenCalledWith(
+            expect.objectContaining({ action: 'moderation.confirmed_by_board', resource: 'candidatura:k1' }),
+          );
+        });
+
+        it('conflicto de interés: quien no puede firmar (p. ej. candidata) recibe 403 en cualquiera de las dos firmas', async () => {
+          const NO = 'Te presentaste a una elección abierta: no puedes firmar que se oculte una ficha.';
+          ficha.puedeFirmar.mockResolvedValue(NO);
+          prisma.moderationAction.findUnique.mockResolvedValue(delAsistente({ target: 'candidatura', targetId: 'k1' }));
+          await expect(service.confirmar(YO, 'ma1', true, 'ip')).rejects.toThrow(new ForbiddenException(NO));
+          prisma.moderationAction.findUnique.mockResolvedValue(delAsistente({ target: 'candidatura', targetId: 'k1', moderatorProfileId: OTRA }));
+          await expect(service.confirmar(YO, 'ma1', true, 'ip')).rejects.toThrow(new ForbiddenException(NO));
+          await expect(service.confirmar(YO, 'ma1', false, 'ip')).rejects.toThrow(ForbiddenException);
+          expect(ficha.puedeFirmar).toHaveBeenCalledWith(YO, 'k1');
+          expect(prisma.moderationAction.updateMany).not.toHaveBeenCalled();
+          expect(ficha.ocultar).not.toHaveBeenCalled();
+        });
+
+        it('solo la mesa firma estas solicitudes: un suplente recibe 403, pero sigue firmando las del foro', async () => {
+          board.roleOf.mockResolvedValue(null);
+          board.puedeFirmarRevision.mockResolvedValue(true);
+          prisma.moderationAction.findUnique.mockResolvedValue(delAsistente({ target: 'candidatura', targetId: 'k1' }));
+          await expect(service.confirmar(YO, 'ma1', true, 'ip')).rejects.toThrow(ForbiddenException);
+          expect(prisma.moderationAction.updateMany).not.toHaveBeenCalled();
+
+          prisma.moderationAction.findUnique.mockResolvedValue(delAsistente({ target: 'frase', targetId: 'f1' }));
+          prisma.frase.update.mockResolvedValue({});
+          await service.confirmar(YO, 'ma1', true, 'ip');
+          expect(prisma.frase.update).toHaveBeenCalledWith({ where: { id: 'f1' }, data: { hidden: true } });
+        });
+
+        it('la cola por confirmar no muestra estas solicitudes a un suplente', async () => {
+          board.roleOf.mockResolvedValue(null);
+          board.puedeFirmarRevision.mockResolvedValue(true);
+          prisma.moderationAction.findMany.mockResolvedValue([
+            delAsistente({ target: 'candidatura', targetId: 'k1' }),
+            delAsistente({ id: 'ma2', target: 'frase', targetId: 'f1' }),
+          ]);
+          prisma.frase.findUnique.mockResolvedValue({ text: 'Una frase' });
+          const r = await service.listPorConfirmar(YO);
+          expect(r.map((x) => x.id)).toEqual(['ma2']);
+        });
+
+        it('si con la segunda firma el efecto ya no aplica (texto editado, elección cerrada), la solicitud queda rechazada sin efecto', async () => {
+          ficha.ocultar.mockResolvedValue(null);
+          prisma.moderationAction.findUnique.mockResolvedValue(
+            delAsistente({ target: 'candidatura', targetId: 'k1', moderatorProfileId: YO, huella: 'h' }),
+          );
+          await service.confirmar(OTRA, 'ma1', true, 'ip');
+          expect(prisma.moderationAction.update).toHaveBeenCalledWith({
+            where: { id: 'ma1' },
+            data: { status: 'rechazado', resolvedAt: AHORA },
+          });
+          expect(audit.log).toHaveBeenCalledWith(
+            expect.objectContaining({ action: 'moderation.sin_efecto', resource: 'candidatura:k1' }),
+          );
+          expect(audit.log).not.toHaveBeenCalledWith(expect.objectContaining({ action: 'moderation.confirmed_by_board' }));
+        });
+
+        it('un rechazo deja todo como estaba', async () => {
+          prisma.moderationAction.findUnique.mockResolvedValue(delAsistente({ target: 'candidatura', targetId: 'k1', moderatorProfileId: YO }));
+          await service.confirmar(OTRA, 'ma1', false, 'ip');
+          expect(prisma.moderationAction.updateMany).toHaveBeenCalledWith({
+            where: { id: 'ma1', status: 'pendiente', venceAt: { gt: AHORA } },
+            data: { status: 'rechazado', confirmadorProfileId: OTRA, resolvedAt: AHORA },
+          });
+          expect(ficha.ocultar).not.toHaveBeenCalled();
+        });
+
+        it('la cola por confirmar muestra qué es, su texto y la causa', async () => {
+          prisma.moderationAction.findMany.mockResolvedValue([delAsistente({ target: 'candidatura', targetId: 'k1' })]);
+          const r = await service.listPorConfirmar(YO);
+          expect(r[0]).toMatchObject({
+            target: 'candidatura', originalText: TEXTO, causa: 'odio', contexto: 'Ficha de candidatura · Secretaría', solicitadaPorAsistente: true,
+          });
+        });
+
+        it('al vencer, la solicitud se cierra sin tocar el contenido', async () => {
+          prisma.moderationAction.findMany.mockResolvedValue([
+            { id: 'ma1', target: 'candidatura', targetId: 'k1', causa: 'odio', status: 'pendiente', createdAt: AHORA },
+          ]);
+          expect(await service.processModerationDeadlines(AHORA)).toBe(1);
+          expect(ficha.ocultar).not.toHaveBeenCalled();
+        });
+
+        it('no se apela: la ficha se corrige editándola', async () => {
+          prisma.moderationAction.findUnique.mockResolvedValue(delAsistente({ target: 'candidatura', targetId: 'k1', status: 'oculto' }));
+          await expect(service.appeal(YO, 'ma1', 'No es odio', 'ip')).rejects.toThrow(BadRequestException);
+        });
+
+        it('el foro no acepta estos tipos para ocultar a mano', async () => {
+          await expect(
+            service.hide(YO, { target: 'candidatura' as never, targetId: 'k1', causa: 'odio' }, 'ip'),
+          ).rejects.toThrow(BadRequestException);
         });
       });
 
