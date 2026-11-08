@@ -2,7 +2,6 @@ import {
   ConflictException,
   ForbiddenException,
   Injectable,
-  Logger,
   NotFoundException,
   type OnModuleInit,
 } from '@nestjs/common';
@@ -75,8 +74,6 @@ const fecha = (d: Date): string =>
  */
 @Injectable()
 export class RevocacionService implements OnModuleInit {
-  private readonly logger = new Logger(RevocacionService.name);
-
   constructor(
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
@@ -88,17 +85,13 @@ export class RevocacionService implements OnModuleInit {
 
   /**
    * La revisión de la mesa publica un motivo aprobado con la misma llamada. Las comprobaciones se
-   * repiten entonces; si ya no se cumplen (el cargo terminó, hay otro pedido…), el pedido no se crea.
+   * repiten entonces; si ya no se cumplen (el cargo terminó, hay otro pedido…), el error sube y la
+   * revisión marca el texto como no publicable, con el motivo.
    */
   onModuleInit(): void {
-    this.publicadores.registrar('revocacion', async (autor, args, opts) => {
+    this.publicadores.registrar('revocacion', (autor, args, opts) => {
       const a = args as { cargoId: string; motivo: string };
-      try {
-        return await this.pedir(autor, a.cargoId, a.motivo, new Date(), opts);
-      } catch (err) {
-        this.logger.warn(`Pedido de revocación aprobado que ya no se puede abrir: ${err instanceof Error ? err.message : 'error'}`);
-        return null;
-      }
+      return this.pedir(autor, a.cargoId, a.motivo, new Date(), opts);
     });
   }
 

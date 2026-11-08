@@ -117,6 +117,15 @@ describe('RevocacionService', () => {
     expect(publicadores.registrar).toHaveBeenCalledWith('revocacion', expect.any(Function));
   });
 
+  it('el publicador aprobado repite las comprobaciones y falla si ya no se cumplen', async () => {
+    service.onModuleInit();
+    const fn = publicadores.registrar.mock.calls[0]![1] as (a: string, args: unknown, o: unknown) => Promise<unknown>;
+    prisma.cargo.findUnique.mockResolvedValueOnce(cargo({ enFunciones: true }));
+    await expect(fn(YO, { cargoId: CARGO, motivo: MOTIVO }, { sinModeracion: true })).rejects.toBeInstanceOf(ConflictException);
+    expect(prisma.revocacion.create).not.toHaveBeenCalled();
+    await expect(fn(YO, { cargoId: CARGO, motivo: MOTIVO }, { sinModeracion: true })).resolves.toEqual({ id: REV });
+  });
+
   it('pedir con una elección abierta da 409', async () => {
     prisma.eleccion.findFirst.mockResolvedValue({ id: 'e-abierta' });
     await expect(service.pedir(YO, CARGO, MOTIVO, NOW)).rejects.toThrow('Ya hay una elección abierta para este cargo.');
