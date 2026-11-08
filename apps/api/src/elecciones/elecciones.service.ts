@@ -7,7 +7,7 @@ import {
   type OnModuleInit,
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
-import { textoParaRevisar } from '@decide/shared';
+import { MODERACION_CAUSAS, textoParaRevisar } from '@decide/shared';
 import type {
   CandidaturaVista,
   CargoTipoValue,
@@ -84,6 +84,52 @@ export function iniciales(nombre: string): string {
     .join('');
 }
 
+const SELECT_FICHA = {
+  id: true,
+  profileId: true,
+  presentacion: true,
+  compromisos: true,
+  profile: {
+    select: {
+      displayName: true,
+      memberships: {
+        where: { group: { type: { in: [...TERRITORIALES] } } },
+        select: { group: { select: { name: true, type: true } } },
+      },
+    },
+  },
+} satisfies Prisma.CandidaturaSelect;
+
+type FichaFila = {
+  id: string;
+  profileId: string;
+  presentacion: string;
+  compromisos: string[];
+  profile: { displayName: string; memberships: { group: { name: string; type: string } }[] };
+};
+
+function vistaDeFicha(c: FichaFila, profileId: string): CandidaturaVista {
+  return {
+    id: c.id,
+    nombre: c.profile.displayName,
+    iniciales: iniciales(c.profile.displayName),
+    comunidades: c.profile.memberships
+      .filter((m) => (TERRITORIALES as readonly string[]).includes(m.group.type))
+      .map((m) => m.group.name)
+      .join(', '),
+    presentacion: c.presentacion,
+    compromisos: [...c.compromisos],
+    esMia: c.profileId === profileId,
+  };
+}
+
+/** «Tu ficha la ocultó la mesa: …», con la causa en lenguaje sencillo. */
+function avisoOculta(causa: string | null): string {
+  const etiqueta = MODERACION_CAUSAS.find((c) => c.value === causa)?.label;
+  if (!etiqueta) return 'Tu ficha la ocultó la mesa.';
+  return `Tu ficha la ocultó la mesa: ${etiqueta.charAt(0).toLocaleLowerCase('es')}${etiqueta.slice(1)}.`;
+}
+
 /** Orden al azar estable por persona: nadie gana por salir primero, y no cambia al recargar. */
 function claveDeOrden(eleccionId: string, profileId: string, candidaturaId: string): string {
   return createHash('sha256').update(`${eleccionId}${profileId}${candidaturaId}`).digest('hex');
@@ -109,6 +155,14 @@ export class EleccionesService implements OnModuleInit {
       const a = args as { eleccionId: string; presentacion: string; compromisos: string[] };
       return this.presentarse(autor, a.eleccionId, { presentacion: a.presentacion, compromisos: a.compromisos }, opts);
     });
+    this.publicadores.registrar(
+      'candidatura',
+      (autor, args, opts) => {
+        const a = args as { eleccionId: string; presentacion: string; compromisos: string[] };
+        return this.editar(autor, a.eleccionId, { presentacion: a.presentacion, compromisos: a.compromisos }, opts);
+      },
+      'editar',
+    );
   }
 
   // ─── Vistas ───────────────────────────────────────────────────────────────
@@ -145,53 +199,37 @@ export class EleccionesService implements OnModuleInit {
     const e = await this.eleccion(eleccionId);
     if (!(await this.convocatoria.enElectorado(profileId, e))) throw new ForbiddenException(NO_ELECTORADO);
 
-    const [filas, papeleta] = await Promise.all([
+    const [filas, papeleta, mia] = await Promise.all([
       this.prisma.candidatura.findMany({
         where: { eleccionId: e.id, oculta: false, retiradaAt: null },
-        select: {
-          id: true,
-          profileId: true,
-          presentacion: true,
-          compromisos: true,
-          profile: {
-            select: {
-              displayName: true,
-              memberships: {
-                where: { group: { type: { in: [...TERRITORIALES] } } },
-                select: { group: { select: { name: true, type: true } } },
-              },
-            },
-          },
-        },
+        select: SELECT_FICHA,
       }),
       // La papeleta propia, leída por su clave única.
       this.prisma.papeletaEleccion.findUnique({
         where: { eleccionId_profileId: { eleccionId: e.id, profileId } },
         select: { abstencion: true, orden: true },
       }),
+      // La ficha propia, aunque esté oculta: solo la ve quien se presentó.
+      this.prisma.candidatura.findUnique({
+        where: { eleccionId_profileId: { eleccionId: e.id, profileId } },
+        select: { ...SELECT_FICHA, oculta: true, ocultaCausa: true, retiradaAt: true },
+      }),
     ]);
 
     const candidaturas: CandidaturaVista[] = filas
       .map((c) => ({ c, k: claveDeOrden(e.id, profileId, c.id) }))
       .sort((a, b) => (a.k < b.k ? -1 : a.k > b.k ? 1 : 0))
-      .map(({ c }) => ({
-        id: c.id,
-        nombre: c.profile.displayName,
-        iniciales: iniciales(c.profile.displayName),
-        comunidades: c.profile.memberships
-          .filter((m) => (TERRITORIALES as readonly string[]).includes(m.group.type))
-          .map((m) => m.group.name)
-          .join(', '),
-        presentacion: c.presentacion,
-        compromisos: [...c.compromisos],
-        esMia: c.profileId === profileId,
-      }));
+      .map(({ c }) => vistaDeFicha(c, profileId));
 
     const nombres = new Map(candidaturas.map((c) => [c.id, c]));
     return {
       ...(await this.resumen(profileId, e, papeleta !== null, now)),
       candidaturas,
       miPapeleta: papeleta ? { abstencion: papeleta.abstencion, orden: [...papeleta.orden] } : null,
+      miCandidatura:
+        mia && mia.retiradaAt === null
+          ? { ficha: vistaDeFicha(mia, profileId), oculta: mia.oculta, aviso: mia.oculta ? avisoOculta(mia.ocultaCausa) : null }
+          : null,
       resultado: e.fase === 'contada' ? this.resultado(e, nombres) : null,
     };
   }
@@ -288,8 +326,8 @@ export class EleccionesService implements OnModuleInit {
 
     const presentacion = ficha.presentacion.trim();
     const compromisos = ficha.compromisos.map((c) => c.trim()).filter((c) => c.length > 0);
-    // Un subgrupo y una candidatura solo se revisan antes: no hay contenido moderable después
-    // (no hay un ModerationTarget 'candidatura'; ver el informe de la Tarea 5).
+    // Se revisa antes de publicar; después, la mesa puede ocultarla con dos firmas
+    // (acción ocultar_candidatura en BoardService).
     await this.guardia.antesDePublicar({
       tipo: 'candidatura',
       texto: textoParaRevisar(presentacion, ...compromisos),
@@ -302,6 +340,11 @@ export class EleccionesService implements OnModuleInit {
     try {
       id = await this.prisma.$transaction(async (tx) => {
         await this.bloquearFase(tx, e.id, 'candidaturas', PLAZO_CERRADO);
+        // Bloquea a la persona y repite la comprobación: dos presentaciones a la vez a elecciones
+        // distintas se ordenan aquí, y la segunda ve la primera.
+        await tx.$queryRaw(Prisma.sql`SELECT id FROM profiles WHERE id = ${profileId}::uuid FOR UPDATE`);
+        const otra = await this.motivoPorOtroCargo(tx, profileId, e);
+        if (otra) throw new BadRequestException(otra);
         const datos = { presentacion, compromisos };
         if (existente) {
           // Volver a presentarse tras retirarse: la misma fila (única por elección y persona).
@@ -319,6 +362,42 @@ export class EleccionesService implements OnModuleInit {
     }
     void this.audit.log({ action: 'candidatura.presentada', resource: `candidatura:${id}`, metadata: { eleccionId: e.id } });
     return { id };
+  }
+
+  /**
+   * Cambia la ficha propia mientras dure el plazo de candidaturas. Pasa otra vez por la revisión
+   * previa y quita la ocultación de la mesa (si la vuelve a ver mal, puede ocultarla de nuevo).
+   */
+  async editar(profileId: string, eleccionId: string, ficha: Ficha, opts: OpcionesPublicar = {}): Promise<{ id: string }> {
+    const e = await this.eleccion(eleccionId);
+    if (!(await this.convocatoria.enElectorado(profileId, e))) throw new ForbiddenException(NO_ELECTORADO);
+    if (e.fase !== 'candidaturas' || Date.now() >= e.candidaturasEndsAt.getTime()) {
+      throw new BadRequestException('La ficha solo se cambia durante el plazo de candidaturas.');
+    }
+    const c = await this.prisma.candidatura.findUnique({
+      where: { eleccionId_profileId: { eleccionId: e.id, profileId } },
+      select: { id: true, retiradaAt: true },
+    });
+    if (!c || c.retiradaAt) throw new BadRequestException('No tienes una candidatura en esta elección.');
+
+    const presentacion = ficha.presentacion.trim();
+    const compromisos = ficha.compromisos.map((x) => x.trim()).filter((x) => x.length > 0);
+    await this.guardia.antesDePublicar({
+      tipo: 'candidatura',
+      texto: textoParaRevisar(presentacion, ...compromisos),
+      autorProfileId: profileId,
+      args: { via: 'editar', eleccionId: e.id, presentacion, compromisos },
+      ...opts,
+    });
+    await this.prisma.$transaction(async (tx) => {
+      await this.bloquearFase(tx, e.id, 'candidaturas', 'La ficha solo se cambia durante el plazo de candidaturas.');
+      await tx.candidatura.update({
+        where: { id: c.id },
+        data: { presentacion, compromisos, oculta: false, ocultaCausa: null },
+      });
+    });
+    void this.audit.log({ action: 'candidatura.editada', resource: `candidatura:${c.id}`, metadata: { eleccionId: e.id } });
+    return { id: c.id };
   }
 
   /** Retira la candidatura propia. Solo antes de la votación. */
@@ -343,7 +422,8 @@ export class EleccionesService implements OnModuleInit {
 
   /**
    * Guarda o cambia la papeleta propia mientras la votación esté abierta. `orden` vacío sin
-   * abstención es «Rechazo a todas». La auditoría solo dice que hubo un voto, sin contenido ni persona.
+   * abstención es «Rechazo a todas». No se audita (como los votos de las decisiones): la auditoría
+   * daría la participación exacta durante la votación; el total queda en `eleccion.contada`.
    */
   async votar(profileId: string, eleccionId: string, p: Papeleta): Promise<void> {
     const e = await this.eleccion(eleccionId);
@@ -370,7 +450,6 @@ export class EleccionesService implements OnModuleInit {
         update: valor,
       });
     });
-    void this.audit.log({ action: 'eleccion.voto_emitido', resource: `eleccion:${e.id}` });
   }
 
   // ─── Ayudas ───────────────────────────────────────────────────────────────
@@ -414,12 +493,24 @@ export class EleccionesService implements OnModuleInit {
     if (e.fase !== 'candidaturas' || now.getTime() >= e.candidaturasEndsAt.getTime()) return PLAZO_CERRADO;
     if (existente && existente.retiradaAt === null) return 'Ya te presentaste a esta elección.';
     if (existente?.oculta) return 'Tu candidatura a esta elección fue ocultada por moderación.';
-    const otra = await this.prisma.candidatura.findFirst({
+    return this.motivoPorOtroCargo(this.prisma, profileId, e);
+  }
+
+  /**
+   * Un cargo a la vez: una candidatura viva en otra elección abierta (de cualquier jornada) o un
+   * cargo incompatible. Se repite dentro de la transacción, con la persona bloqueada.
+   */
+  private async motivoPorOtroCargo(
+    db: Pick<PrismaService, 'candidatura' | 'cargo' | 'boardSeat'> | Prisma.TransactionClient,
+    profileId: string,
+    e: EleccionFila,
+  ): Promise<string | null> {
+    const otra = await db.candidatura.findFirst({
       where: { profileId, retiradaAt: null, eleccionId: { not: e.id }, eleccion: { fase: { in: [...ABIERTA] } } },
       select: { id: true },
     });
     if (otra) return 'Ya te presentaste a otro cargo. Solo puedes presentarte a uno a la vez.';
-    const incompatibles = await conOtroCargo(this.prisma, e, [profileId]);
+    const incompatibles = await conOtroCargo(db as Pick<PrismaService, 'cargo' | 'boardSeat'>, e, [profileId]);
     if (incompatibles.has(profileId)) {
       return 'Ya ocupas otro cargo. Solo puedes presentarte a la renovación del tuyo.';
     }

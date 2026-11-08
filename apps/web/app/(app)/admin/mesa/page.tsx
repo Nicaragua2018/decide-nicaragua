@@ -96,7 +96,9 @@ export default async function MesaPage() {
             <p className="card-title">
               {a.type === 'change_rule'
                 ? descripcionCambioRegla(a)
-                : `${a.type === 'suspend_user' ? 'Suspender' : `Cambiar origen a ${String(a.params['birthDepartment'])}`}: ${a.targetDisplayName ?? '—'}`}
+                : a.type === 'ocultar_candidatura'
+                  ? `Ocultar la ficha de candidatura de ${a.targetDisplayName ?? '—'}`
+                  : `${a.type === 'suspend_user' ? 'Suspender' : `Cambiar origen a ${String(a.params['birthDepartment'])}`}: ${a.targetDisplayName ?? '—'}`}
             </p>
             <p className="card-meta">
               Propuso {a.proposedBy ?? 'la comunidad'} · {a.approvals.filter((x) => x.approve).length} a favor ·{' '}

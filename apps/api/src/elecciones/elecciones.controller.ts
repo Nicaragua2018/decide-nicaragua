@@ -52,6 +52,21 @@ export class EleccionesController {
     );
   }
 
+  /** Cambiar la ficha propia durante el plazo de candidaturas (vuelve a revisarse). */
+  @Put(':id/candidatura')
+  async editar(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: CandidaturaDto,
+    @CurrentUser() user: JwtPayload,
+  ): Promise<{ id: string }> {
+    return this.elecciones.editar(
+      this.perfil(user),
+      id,
+      { presentacion: dto.presentacion, compromisos: dto.compromisos },
+      { pedirRevision: dto.pedirRevision },
+    );
+  }
+
   @Delete(':id/candidatura')
   @HttpCode(204)
   async retirarse(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() user: JwtPayload): Promise<void> {

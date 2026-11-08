@@ -9,7 +9,9 @@ import { Prisma } from '@prisma/client';
 import {
   BOARD_ROLES,
   BoardActionType,
+  MODERACION_CAUSAS,
   NICARAGUA_DEPARTMENTS,
+  type ModeracionCausaValue,
   RULE_DEFINITIONS,
   type BoardActionSummary,
   type BoardRole,
@@ -25,6 +27,8 @@ import type { ProposeActionDto } from './dto/propose-action.dto';
 
 /** Aprobaciones (o rechazos) de personas distintas para resolver una acción. */
 const VOTOS_PARA_RESOLVER = 2;
+/** Una ficha solo se oculta mientras la elección está abierta (después ya está contada). */
+const ELECCION_ABIERTA = ['candidaturas', 'votacion'] as const;
 
 interface ResultadoCambioRegla {
   status: 'executed' | 'rejected';
@@ -127,8 +131,18 @@ export class BoardService {
       throw new BadRequestException('Los cambios de regla llegan a la mesa desde una votación de la comunidad.');
     }
 
-    const target = await this.prisma.user.findUnique({ where: { id: dto.targetUserId } });
-    if (!target) throw new NotFoundException('Persona no encontrada');
+    let targetUserId: string;
+    let params = dto.params;
+    if (dto.type === BoardActionType.ocultar_candidatura) {
+      const o = await this.validarOcultar(dto.params);
+      targetUserId = o.targetUserId;
+      params = { candidaturaId: o.candidaturaId, causa: o.causa };
+    } else {
+      if (!dto.targetUserId) throw new BadRequestException('Indica la persona.');
+      const target = await this.prisma.user.findUnique({ where: { id: dto.targetUserId } });
+      if (!target) throw new NotFoundException('Persona no encontrada');
+      targetUserId = dto.targetUserId;
+    }
 
     if (dto.type === BoardActionType.change_origin) {
       const dept = dto.params['birthDepartment'];
@@ -140,8 +154,8 @@ export class BoardService {
     const action = await this.prisma.boardAction.create({
       data: {
         type: dto.type,
-        targetUserId: dto.targetUserId,
-        params: dto.params as Prisma.InputJsonValue,
+        targetUserId,
+        params: params as Prisma.InputJsonValue,
         reason: dto.reason,
         proposedByProfileId: actor.profileId!,
         approvals: { create: { profileId: actor.profileId!, role, approve: true } },
@@ -153,7 +167,7 @@ export class BoardService {
       action: 'board.action_proposed',
       resource: `board_action:${action.id}`,
       ip,
-      metadata: { type: dto.type, targetUserId: dto.targetUserId },
+      metadata: { type: dto.type, targetUserId },
     });
     return { id: action.id };
   }
@@ -204,14 +218,17 @@ export class BoardService {
     const aFavor = votos.filter(Boolean).length;
     const enContra = votos.length - aFavor;
 
-    if (aFavor >= VOTOS_PARA_RESOLVER) {
-      await this.execute(action.type as unknown as BoardActionType, action.targetUserId, action.params as Record<string, unknown>);
+    const ejecutada =
+      aFavor >= VOTOS_PARA_RESOLVER &&
+      (await this.execute(action.type as unknown as BoardActionType, action.targetUserId, action.params as Record<string, unknown>));
+    if (ejecutada) {
       await this.prisma.boardAction.update({
         where: { id: actionId },
         data: { status: 'executed', resolvedAt: new Date() },
       });
       void this.audit.log({ actorId: actor.sub, action: 'board.action_executed', resource: `board_action:${actionId}`, ip, metadata: { type: action.type } });
-    } else if (enContra >= VOTOS_PARA_RESOLVER) {
+    } else if (enContra >= VOTOS_PARA_RESOLVER || aFavor >= VOTOS_PARA_RESOLVER) {
+      // Dos rechazos, o aprobada cuando ya no se podía aplicar (p. ej. la elección ya se contó).
       await this.prisma.boardAction.update({
         where: { id: actionId },
         data: { status: 'rejected', resolvedAt: new Date() },
@@ -324,7 +341,51 @@ export class BoardService {
     return { status, cambio: { id: cambio.id, key: cambio.key } };
   }
 
-  private async execute(type: BoardActionType, targetUserId: string | null, params: Record<string, unknown>): Promise<void> {
+  /** Valida una propuesta de ocultar una ficha: causa de la lista cerrada y elección abierta. */
+  private async validarOcultar(
+    params: Record<string, unknown>,
+  ): Promise<{ candidaturaId: string; causa: ModeracionCausaValue; targetUserId: string }> {
+    const candidaturaId = params['candidaturaId'];
+    const causa = params['causa'];
+    if (typeof candidaturaId !== 'string') throw new BadRequestException('Indica la candidatura.');
+    const valida = MODERACION_CAUSAS.find((c) => c.value === causa);
+    if (!valida) throw new BadRequestException('Elige una de las causas de moderación.');
+    const c = await this.prisma.candidatura.findUnique({
+      where: { id: candidaturaId },
+      select: { oculta: true, retiradaAt: true, eleccion: { select: { fase: true } }, profile: { select: { userId: true } } },
+    });
+    if (!c) throw new NotFoundException('Candidatura no encontrada');
+    if (c.retiradaAt || !(ELECCION_ABIERTA as readonly string[]).includes(c.eleccion.fase as string)) {
+      throw new BadRequestException('Solo se oculta una ficha mientras la elección está abierta.');
+    }
+    if (c.oculta) throw new BadRequestException('Esa ficha ya está oculta.');
+    return { candidaturaId, causa: valida.value, targetUserId: c.profile.userId };
+  }
+
+  /**
+   * Oculta la ficha si la elección sigue abierta. Devuelve false si ya no se puede (contada o
+   * retirada): la acción queda rechazada. La auditoría no lleva el texto.
+   */
+  private async ocultarCandidatura(params: Record<string, unknown>): Promise<boolean> {
+    const candidaturaId = String(params['candidaturaId']);
+    const causa = params['causa'] as ModeracionCausaValue;
+    const r = await this.prisma.candidatura.updateMany({
+      where: { id: candidaturaId, retiradaAt: null, eleccion: { fase: { in: [...ELECCION_ABIERTA] } } },
+      data: { oculta: true, ocultaCausa: causa },
+    });
+    if (r.count === 0) return false;
+    const c = await this.prisma.candidatura.findUnique({ where: { id: candidaturaId }, select: { eleccionId: true } });
+    void this.audit.log({
+      action: 'candidatura.ocultada',
+      resource: `candidatura:${candidaturaId}`,
+      metadata: { eleccionId: c?.eleccionId ?? null, causa },
+    });
+    return true;
+  }
+
+  /** Aplica la acción aprobada. Devuelve false si ya no se puede aplicar (queda rechazada). */
+  private async execute(type: BoardActionType, targetUserId: string | null, params: Record<string, unknown>): Promise<boolean> {
+    if (type === BoardActionType.ocultar_candidatura) return this.ocultarCandidatura(params);
     // change_rule se resuelve aparte (votarCambioRegla); las demás acciones exigen persona objetivo.
     if (targetUserId === null) throw new BadRequestException('La acción no tiene persona objetivo');
     if (type === BoardActionType.suspend_user) {
@@ -333,7 +394,7 @@ export class BoardService {
         await tx.user.update({ where: { id: targetUserId }, data: { status: 'suspended' } });
         await tx.groupMembership.deleteMany({ where: { profile: { userId: targetUserId } } });
       });
-      return;
+      return true;
     }
     const birthDepartment = params['birthDepartment'] as string;
     const profile = await this.prisma.profile.update({
@@ -345,5 +406,6 @@ export class BoardService {
     if ((user?.status as string | undefined) === 'verified_citizen') {
       await this.groups.syncMemberships(targetUserId, birthDepartment, profile.currentCountry, profile.currentRegion);
     }
+    return true;
   }
 }

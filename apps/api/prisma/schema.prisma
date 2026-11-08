@@ -173,6 +173,7 @@ enum BoardActionType {
   suspend_user
   change_origin
   change_rule
+  ocultar_candidatura
 }
 
 enum CambioReglaEstado {
@@ -1291,6 +1292,8 @@ model Candidatura {
   presentacion String    @db.VarChar(600)
   compromisos  String[]
   oculta       Boolean   @default(false)
+  /// Causa con que la mesa la ocultó (acción ocultar_candidatura, 2 de 3).
+  ocultaCausa  ModeracionCausa?
   retiradaAt   DateTime? @db.Timestamptz
   createdAt    DateTime  @default(now()) @db.Timestamptz
   updatedAt    DateTime  @updatedAt @db.Timestamptz

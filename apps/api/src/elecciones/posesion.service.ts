@@ -127,7 +127,7 @@ export class PosesionService {
     void this.audit.log({
       action: 'eleccion.contada',
       resource: `eleccion:${e.id}`,
-      metadata: { electas: r.electas.length, vacantes },
+      metadata: { electas: r.electas.length, vacantes, papeletasTotal: r.papeletasTotal },
     });
     for (let i = 0; i < elegidas.length; i++) {
       void this.audit.log({

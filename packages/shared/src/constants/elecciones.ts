@@ -61,6 +61,8 @@ export type EleccionResumen = {
 export type EleccionDetalle = EleccionResumen & {
   candidaturas: CandidaturaVista[];
   miPapeleta: { abstencion: boolean; orden: string[] } | null;
+  /** La candidatura viva propia, también si la mesa la ocultó (solo la ve quien se presentó). */
+  miCandidatura: { ficha: CandidaturaVista; oculta: boolean; aviso: string | null } | null;
   resultado: ResultadoEleccionVista | null;
 };
 

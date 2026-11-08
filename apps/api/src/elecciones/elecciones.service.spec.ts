@@ -198,6 +198,62 @@ describe('EleccionesService', () => {
     expect(prisma.candidatura.update.mock.calls[0]![0].data).toMatchObject({ retiradaAt: null });
   });
 
+  it('la segunda comprobación, con la persona bloqueada, cierra la carrera entre dos presentaciones', async () => {
+    // Fuera de la transacción no había otra; dentro, la otra petición ya la creó.
+    prisma.candidatura.findFirst.mockResolvedValueOnce(null).mockResolvedValueOnce({ id: 'c-otra' });
+    await expect(service.presentarse(YO, E, ficha)).rejects.toBeInstanceOf(BadRequestException);
+    expect(prisma.candidatura.create).not.toHaveBeenCalled();
+    const sqls = prisma.$queryRaw.mock.calls.map((c) => (c[0] as { strings: string[] }).strings.join('?'));
+    expect(sqls.some((q) => q.includes('FROM profiles') && q.includes('FOR UPDATE'))).toBe(true);
+  });
+
+  describe('editar la ficha', () => {
+    beforeEach(() => {
+      prisma.candidatura.findUnique.mockResolvedValue({ id: 'c1', oculta: true, retiradaAt: null });
+    });
+
+    it('editar vuelve a pasar la revisión previa y quita la ocultación', async () => {
+      await service.editar(YO, E, { presentacion: 'Nueva presentación', compromisos: ['Uno'] });
+      expect(guardia.antesDePublicar).toHaveBeenCalledWith({
+        tipo: 'candidatura',
+        texto: 'Nueva presentación\n\nUno',
+        autorProfileId: YO,
+        args: { via: 'editar', eleccionId: E, presentacion: 'Nueva presentación', compromisos: ['Uno'] },
+      });
+      expect(prisma.candidatura.update).toHaveBeenCalledWith({
+        where: { id: 'c1' },
+        data: { presentacion: 'Nueva presentación', compromisos: ['Uno'], oculta: false, ocultaCausa: null },
+      });
+      // La mesa reproduce la edición aprobada por la misma vía.
+      service.onModuleInit();
+      expect(publicadores.registrar).toHaveBeenCalledWith('candidatura', expect.any(Function), 'editar');
+    });
+
+    it('editar fuera de candidaturas da 400', async () => {
+      prisma.eleccion.findUnique.mockResolvedValue(eleccion({ fase: 'votacion' }));
+      await expect(service.editar(YO, E, ficha)).rejects.toBeInstanceOf(BadRequestException);
+      prisma.eleccion.findUnique.mockResolvedValue(eleccion());
+      prisma.candidatura.findUnique.mockResolvedValue({ id: 'c1', oculta: false, retiradaAt: new Date() });
+      await expect(service.editar(YO, E, ficha)).rejects.toBeInstanceOf(BadRequestException);
+      expect(guardia.antesDePublicar).not.toHaveBeenCalled();
+      expect(prisma.candidatura.update).not.toHaveBeenCalled();
+    });
+  });
+
+  it('quien se presentó ve su ficha, también oculta, con la causa en lenguaje sencillo', async () => {
+    prisma.candidatura.findMany.mockResolvedValue([cand('c2', 'p2', 'Luis Mora')]);
+    prisma.candidatura.findUnique.mockResolvedValue(
+      cand('c1', YO, 'Ana Ruiz', { oculta: true, ocultaCausa: 'datos_personales' }),
+    );
+    const d = await service.detalle(YO, E);
+    expect(d.candidaturas.map((c) => c.id)).toEqual(['c2']);
+    expect(d.miCandidatura).toMatchObject({ oculta: true, ficha: { id: 'c1', esMia: true } });
+    expect(d.miCandidatura!.aviso).toBe('Tu ficha la ocultó la mesa: datos que identifican o ponen en riesgo a una persona.');
+
+    prisma.candidatura.findUnique.mockResolvedValue(null);
+    expect((await service.detalle(YO, E)).miCandidatura).toBeNull();
+  });
+
   it('retirarse solo antes de la votación', async () => {
     prisma.candidatura.findUnique.mockResolvedValue({ id: 'c1', retiradaAt: null });
     await service.retirarse(YO, E);
@@ -242,12 +298,8 @@ describe('EleccionesService', () => {
       expect(prisma.papeletaEleccion.upsert.mock.calls[0]![0].where).toEqual({
         eleccionId_profileId: { eleccionId: E, profileId: YO },
       });
-      // Auditoría sin contenido ni persona.
-      const votos = audit.log.mock.calls.map((c) => c[0]).filter((a) => a.action === 'eleccion.voto_emitido');
-      expect(votos).toHaveLength(3);
-      for (const v of votos) {
-        expect(v).toEqual({ action: 'eleccion.voto_emitido', resource: `eleccion:${E}` });
-      }
+      // Los votos no se auditan (como en las decisiones): la auditoría daría la participación exacta.
+      expect(audit.log).not.toHaveBeenCalled();
     });
   });
 
@@ -330,13 +382,18 @@ describe('EleccionesService', () => {
     prisma.eleccion.findUnique.mockResolvedValue(eleccion({ fase: 'votacion' }));
     prisma.eleccion.findMany.mockResolvedValue([eleccion({ fase: 'votacion' })]);
     prisma.candidatura.findMany.mockResolvedValue([cand('c1', 'p1', 'Ana Ruiz')]);
-    prisma.papeletaEleccion.findUnique.mockResolvedValue({ abstencion: false, orden: ['c1'] });
-    prisma.papeletaEleccion.findMany.mockResolvedValue([{ eleccionId: E }]);
+    // Filas con dueño: si alguna vista copiara el profileId de una papeleta, aparecería v1 o v2.
+    prisma.papeletaEleccion.findUnique.mockResolvedValue({ profileId: 'v1', abstencion: false, orden: ['c1'] });
+    prisma.papeletaEleccion.findMany.mockResolvedValue([
+      { eleccionId: E, profileId: 'v1', abstencion: false, orden: ['c1'] },
+      { eleccionId: E, profileId: 'v2', abstencion: true, orden: [] },
+    ]);
     prisma.papeletaEleccion.count.mockResolvedValue(7);
     const d = await service.detalle(YO, E);
     const l = await service.listar(YO);
     const texto = JSON.stringify([d, l]);
     for (const votante of ['v1', 'v2', YO]) expect(texto).not.toContain(votante);
+    expect(texto).not.toContain('profileId');
     expect(d.miPapeleta).toEqual({ abstencion: false, orden: ['c1'] });
     expect(l[0]!.yaVote).toBe(true);
     // La papeleta propia se lee por su clave única; las demás nunca se leen con su dueño.

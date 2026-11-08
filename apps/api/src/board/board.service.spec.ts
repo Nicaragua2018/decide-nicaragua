@@ -15,6 +15,7 @@ function buildPrisma() {
     boardApproval: { create: vi.fn(), findMany: vi.fn() },
     cambioRegla: { findFirst: vi.fn(), updateMany: vi.fn() },
     ruleValue: { findFirst: vi.fn(), create: vi.fn(), update: vi.fn() },
+    candidatura: { findUnique: vi.fn(), updateMany: vi.fn() },
   };
   // tx === prisma: la transacción de prueba ejecuta el callback con el mismo mock
   prisma.$transaction.mockImplementation((fn: (tx: unknown) => unknown) => fn(prisma));
@@ -467,6 +468,77 @@ describe('BoardService', () => {
       const [a] = await service.listActions();
       expect(a).toMatchObject({ type: 'change_rule', targetDisplayName: null, proposedBy: null });
       expect(prisma.profile.findUnique).not.toHaveBeenCalled();
+    });
+  });
+  describe('ocultar_candidatura', () => {
+    const params = { candidaturaId: 'c1', causa: 'datos_personales' };
+    const ficha = (fase = 'votacion', over: Record<string, unknown> = {}) => ({
+      id: 'c1', eleccionId: 'e1', oculta: false, retiradaAt: null, eleccion: { fase }, profile: { userId: 'u-cand' }, ...over,
+    });
+    const proponer = (p: Record<string, unknown> = params) =>
+      service.proposeAction(SECRE, { type: 'ocultar_candidatura' as never, reason: 'expone una dirección', params: p }, 'ip');
+
+    it('proponer exige un cargo de la mesa', async () => {
+      prisma.boardSeat.findFirst.mockResolvedValue(null);
+      await expect(proponer()).rejects.toThrow(ForbiddenException);
+      expect(prisma.boardAction.create).not.toHaveBeenCalled();
+    });
+
+    it('se propone con una causa de la lista cerrada, sobre la persona candidata', async () => {
+      prisma.boardSeat.findFirst.mockResolvedValue(asiento('secretario'));
+      prisma.candidatura.findUnique.mockResolvedValue(ficha());
+      await expect(proponer({ candidaturaId: 'c1', causa: 'me_cae_mal' })).rejects.toThrow(BadRequestException);
+      prisma.boardAction.create.mockResolvedValue({ id: 'a9' });
+      await expect(proponer({ ...params, extra: 'x' })).resolves.toEqual({ id: 'a9' });
+      const data = prisma.boardAction.create.mock.calls[0]![0].data;
+      expect(data).toMatchObject({ type: 'ocultar_candidatura', targetUserId: 'u-cand', params });
+      expect(prisma.user.findUnique).not.toHaveBeenCalled();
+    });
+
+    it('no se propone después del conteo', async () => {
+      prisma.boardSeat.findFirst.mockResolvedValue(asiento('secretario'));
+      prisma.candidatura.findUnique.mockResolvedValue(ficha('contada'));
+      await expect(proponer()).rejects.toThrow(BadRequestException);
+      expect(prisma.boardAction.create).not.toHaveBeenCalled();
+    });
+
+    const accion = { id: 'a1', type: 'ocultar_candidatura', targetUserId: 'u-cand', params, status: 'pending' };
+
+    it('una aprobación no oculta; la segunda sí', async () => {
+      prisma.boardSeat.findFirst.mockResolvedValue(asiento('administrador'));
+      prisma.boardApproval.create.mockResolvedValue({});
+      prisma.boardAction.update.mockResolvedValue({});
+      // Primera firma (la de quien propone ya está como aprobación al crearla): aquí, un voto en contra.
+      prisma.boardAction.findUnique.mockResolvedValue({ ...accion, approvals: [{ profileId: 'p-sec', approve: true }] });
+      await service.voteAction(ADMIN, 'a1', false, 'ip');
+      expect(prisma.candidatura.updateMany).not.toHaveBeenCalled();
+
+      prisma.candidatura.updateMany.mockResolvedValue({ count: 1 });
+      prisma.candidatura.findUnique.mockResolvedValue({ eleccionId: 'e1' });
+      await service.voteAction(ADMIN, 'a1', true, 'ip');
+      expect(prisma.candidatura.updateMany).toHaveBeenCalledWith({
+        where: { id: 'c1', retiradaAt: null, eleccion: { fase: { in: ['candidaturas', 'votacion'] } } },
+        data: { oculta: true, ocultaCausa: 'datos_personales' },
+      });
+      expect(prisma.boardAction.update).toHaveBeenLastCalledWith(
+        expect.objectContaining({ data: expect.objectContaining({ status: 'executed' }) }),
+      );
+      expect(audit.log).toHaveBeenCalledWith({
+        action: 'candidatura.ocultada', resource: 'candidatura:c1', metadata: { eleccionId: 'e1', causa: 'datos_personales' },
+      });
+    });
+
+    it('si la elección ya se contó al llegar la segunda firma, la acción queda rechazada', async () => {
+      prisma.boardSeat.findFirst.mockResolvedValue(asiento('administrador'));
+      prisma.boardApproval.create.mockResolvedValue({});
+      prisma.boardAction.update.mockResolvedValue({});
+      prisma.boardAction.findUnique.mockResolvedValue({ ...accion, approvals: [{ profileId: 'p-sec', approve: true }] });
+      prisma.candidatura.updateMany.mockResolvedValue({ count: 0 });
+      await service.voteAction(ADMIN, 'a1', true, 'ip');
+      expect(prisma.boardAction.update).toHaveBeenLastCalledWith(
+        expect.objectContaining({ data: expect.objectContaining({ status: 'rejected' }) }),
+      );
+      expect(audit.log.mock.calls.map((c) => c[0].action)).not.toContain('candidatura.ocultada');
     });
   });
 });

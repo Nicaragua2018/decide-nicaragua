@@ -335,7 +335,7 @@ describe('PosesionService', () => {
     await service.contar('e1', NOW);
     const acciones = audit.log.mock.calls.map((c) => c[0].action);
     expect(acciones).toEqual(['eleccion.contada', 'cargo.posesion']);
-    expect(audit.log.mock.calls[0]![0].metadata).toEqual({ electas: 1, vacantes: 0 });
+    expect(audit.log.mock.calls[0]![0].metadata).toEqual({ electas: 1, vacantes: 0, papeletasTotal: expect.any(Number) });
     expect(audit.log.mock.calls[1]![0].metadata).toEqual({ tipo: 'secretario', groupId: GEN });
     const texto = JSON.stringify(audit.log.mock.calls);
     expect(texto).not.toContain('p1');
