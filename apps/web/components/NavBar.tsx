@@ -7,9 +7,11 @@ interface NavBarProps {
   displayName: string | null;
   email: string;
   status: string;
+  /** La persona tiene un cargo de observador en funciones. */
+  esObservador?: boolean;
 }
 
-export default function NavBar({ displayName, email, status }: NavBarProps) {
+export default function NavBar({ displayName, email, status, esObservador = false }: NavBarProps) {
   const router   = useRouter();
   const pathname = usePathname();
 
@@ -69,6 +71,14 @@ export default function NavBar({ displayName, email, status }: NavBarProps) {
               className={`navbar-link${isActive('/elecciones') ? ' navbar-link-active' : ''}`}
             >
               Elecciones
+            </Link>
+          )}
+          {esObservador && (
+            <Link
+              href="/observar"
+              className={`navbar-link${isActive('/observar') ? ' navbar-link-active' : ''}`}
+            >
+              Observar
             </Link>
           )}
           {status === 'verified_citizen' && (

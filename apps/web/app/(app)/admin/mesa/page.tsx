@@ -1,12 +1,14 @@
 import type { Metadata } from 'next';
 import { conUnidad, ruleDefinition } from '@decide/shared';
 import type { TextoEnRevisionView } from '@decide/shared';
+import type { ReactivacionPendiente } from '@decide/shared';
 import type { BoardActionSummary, BoardSeatSummary, ModeracionPorConfirmar, ModerationAppeal, PausaApeladaItem, UserListResponse } from '@decide/shared';
 import { serverFetch } from '@/lib/api';
 import { AppealsList } from './AppealsList';
 import { PausasApeladas } from './PausasApeladas';
 import { PorConfirmarList } from './PorConfirmarList';
 import { RevisionesList } from './RevisionesList';
+import { ReactivacionesList } from './ReactivacionesList';
 import { AssignSeatForm, ProposeActionForm, ROLE_LABEL, VoteButtons } from './MesaForms';
 
 export const metadata: Metadata = { title: 'Mesa directiva' };
@@ -27,7 +29,7 @@ function descripcionCambioRegla(a: BoardActionSummary): string {
 }
 
 export default async function MesaPage() {
-  const [seatsRes, meRes, actionsRes, usersRes, appealsRes, porConfirmarRes, pausasRes, estadoRes, revisionesRes] = await Promise.all([
+  const [seatsRes, meRes, actionsRes, usersRes, appealsRes, porConfirmarRes, pausasRes, estadoRes, revisionesRes, reactivacionesRes] = await Promise.all([
     serverFetch('/api/board/seats'),
     serverFetch('/api/board/me'),
     serverFetch('/api/board/actions'),
@@ -37,10 +39,38 @@ export default async function MesaPage() {
     serverFetch('/api/grupos/pausas/apeladas'),
     serverFetch('/api/asistente/estado'),
     serverFetch('/api/asistente/revisiones'),
+    serverFetch('/api/board/reactivaciones'),
   ]);
   const seats = seatsRes.ok ? ((await seatsRes.json()) as BoardSeatSummary[]) : [];
   const me = meRes.ok ? ((await meRes.json()) as { role: string | null }) : { role: null };
-  if (!me.role) return <p className="empty-state">Esta sección es solo para la mesa directiva.</p>;
+  if (!me.role) {
+    // Quien suple a la mesa (observadores provisionales) solo firma las dos revisiones de 2 firmas.
+    if (porConfirmarRes.ok || revisionesRes.ok) {
+      const porConfirmarSup = porConfirmarRes.ok ? ((await porConfirmarRes.json()) as ModeracionPorConfirmar[]) : [];
+      const revisionesSup = revisionesRes.ok
+        ? ((await revisionesRes.json()) as { mesaSuficiente: boolean; revisiones: TextoEnRevisionView[] })
+        : { mesaSuficiente: true, revisiones: [] };
+      return (
+        <>
+          <div className="page-header">
+            <h1 className="page-title">Como suplente de la mesa</h1>
+            <p className="page-sub">
+              La mesa tiene menos de 2 personas, así que en lo provisional firmas solo estas dos revisiones.
+            </p>
+          </div>
+          <section className="mt-2">
+            <h2 className="section-title">Ocultaciones por confirmar</h2>
+            <PorConfirmarList items={porConfirmarSup} />
+          </section>
+          <section className="mt-2">
+            <h2 className="section-title">Textos en revisión</h2>
+            <RevisionesList items={revisionesSup.revisiones} mesaSuficiente={revisionesSup.mesaSuficiente} />
+          </section>
+        </>
+      );
+    }
+    return <p className="empty-state">Esta sección es solo para la mesa directiva.</p>;
+  }
 
   const actions = actionsRes.ok ? ((await actionsRes.json()) as BoardActionSummary[]) : [];
   const users = usersRes.ok ? ((await usersRes.json()) as UserListResponse).users : [];
@@ -51,6 +81,7 @@ export default async function MesaPage() {
   const revisiones = revisionesRes.ok
     ? ((await revisionesRes.json()) as { mesaSuficiente: boolean; revisiones: TextoEnRevisionView[] })
     : { mesaSuficiente: true, revisiones: [] };
+  const reactivaciones = reactivacionesRes.ok ? ((await reactivacionesRes.json()) as ReactivacionPendiente[]) : [];
   const noElected = seats.every((s) => s.source !== 'eleccion');
 
   return (
@@ -98,7 +129,11 @@ export default async function MesaPage() {
                 ? descripcionCambioRegla(a)
                 : a.type === 'ocultar_candidatura'
                   ? `Ocultar la ficha de candidatura de ${a.targetDisplayName ?? '—'}`
-                  : `${a.type === 'suspend_user' ? 'Suspender' : `Cambiar origen a ${String(a.params['birthDepartment'])}`}: ${a.targetDisplayName ?? '—'}`}
+                  : a.type === 'reactivate_user'
+                  ? `Reactivar la cuenta de ${a.targetDisplayName ?? '—'}`
+                  : a.type === 'rechazar_reactivacion'
+                    ? `Rechazar el pedido de reactivación de ${a.targetDisplayName ?? '—'}`
+                    : `${a.type === 'suspend_user' ? 'Suspender' : `Cambiar origen a ${String(a.params['birthDepartment'])}`}: ${a.targetDisplayName ?? '—'}`}
             </p>
             <p className="card-meta">
               Propuso {a.proposedBy ?? 'la comunidad'} · {a.approvals.filter((x) => x.approve).length} a favor ·{' '}
@@ -108,6 +143,11 @@ export default async function MesaPage() {
             {a.status === 'pending' && <VoteButtons actionId={a.id} />}
           </div>
         ))}
+      </section>
+
+      <section className="mt-2">
+        <h2 className="section-title">Pedidos de reactivación</h2>
+        <ReactivacionesList items={reactivaciones} />
       </section>
 
       <section className="mt-2">

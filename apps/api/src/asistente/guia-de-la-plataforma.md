@@ -65,6 +65,13 @@ La plataforma elige por votación a quienes la representan: el administrador, el
 - **«En funciones».** Si un puesto queda sin elegir, o la elección no reúne la participación mínima, quien lo ocupaba sigue en el cargo «en funciones» hasta que otra elección lo reemplace, para que la plataforma nunca se quede sin mesa. Un puesto sin elegir se vuelve a convocar a los 30 días, y la renovación de quien termina su período se convoca 21 días antes, aunque haya un puesto pendiente.
 - **Quiénes nos representan.** La página [g12] muestra quién ocupa cada cargo, hasta cuándo y quién está «en funciones». Cualquier persona puede verla, tenga cuenta o no.
 
+### Cuidar los cargos
+
+- **Pedir que un cargo se vote de nuevo (revocar).** Cualquier persona verificada puede pedir la revocación de un cargo elegido, menos del suyo, y explicar por qué. Otras personas pueden apoyar el pedido. Nadie ve quién lo pidió ni quién lo apoyó. Si reúne la fracción de apoyos que fija la regla de revocación (por defecto un tercio), el cargo se vota de nuevo en una elección anticipada.
+- **Renunciar.** Quien tiene un cargo elegido puede dejarlo cuando quiera desde la página de elecciones. Se convoca la elección que lo cubre. Los asientos fundadores no se renuncian: se reemplazan por elección. Si al cargo le quedan 45 días o menos, no se hace anticipada: espera a la renovación normal.
+- **Reactivar una cuenta suspendida.** Quien entra con la cuenta suspendida ve el motivo y puede pedir la reactivación con un texto de hasta 1000 caracteres. La mesa decide con 2 de 3 firmas. Si la rechaza, puede volver a pedirlo pasados 30 días. Al reactivarse, la cuenta recupera el estado que tenía antes, o vuelve a pedir verificación si no se puede saber.
+- **Observar.** Los observadores en funciones tienen la página «Observar», solo de lectura: la auditoría, las verificaciones, las matrices de los conteos y los gastos del asistente. Pueden dejar una observación pública sobre un hecho del registro, con su nombre, que pasa por la revisión previa. Nunca ven quién votó qué ni correos. Si la mesa tiene menos de 2 personas, dos de ellos firman de forma provisional las revisiones de textos y las ocultaciones por confirmar, y nada más.
+
 El asistente no recomienda candidaturas, no compara fichas ni dice a quién votar: solo explica cómo funcionan las elecciones.
 
 ## Las reglas y la mesa

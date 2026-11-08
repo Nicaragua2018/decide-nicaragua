@@ -3,7 +3,7 @@ import type { ReactNode } from 'react';
 import { serverFetch } from '@/lib/api';
 import NavBar from '@/components/NavBar';
 import AsistentePanel from '@/components/AsistentePanel';
-import type { AuthResponse } from '@decide/shared';
+import type { AuthResponse, MiCargoVista } from '@decide/shared';
 
 export default async function AppLayout({ children }: { children: ReactNode }) {
   const res = await serverFetch('/api/auth/me');
@@ -18,9 +18,18 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
   const estadoRes = await serverFetch('/api/asistente/estado').catch(() => null);
   const estado = estadoRes?.ok ? ((await estadoRes.json()) as { activo: boolean; topeAlcanzado: boolean }) : null;
 
+  // «Observar» solo se muestra a quien observa; si la llamada falla, no se muestra.
+  let esObservador = false;
+  try {
+    const cargosRes = await serverFetch('/api/elecciones/mis-cargos');
+    if (cargosRes.ok) esObservador = ((await cargosRes.json()) as MiCargoVista[]).some((c) => c.tipo === 'observador');
+  } catch {
+    esObservador = false;
+  }
+
   return (
     <>
-      <NavBar displayName={user.displayName} email={user.email} status={user.status} />
+      <NavBar displayName={user.displayName} email={user.email} status={user.status} esObservador={esObservador} />
       <main className="container page">{children}</main>
       {estado?.activo && <AsistentePanel topeAlcanzado={estado.topeAlcanzado} />}
     </>

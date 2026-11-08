@@ -755,7 +755,35 @@ El plan 3C-1 reemplaza a los fundadores por personas elegidas: administrador, co
 - Los fundadores no pueden ser coordinadores ni observadores mientras ocupen la mesa fundadora; si un fundador gana otro rol de la mesa, la mesa queda con 2 asientos (1 si solo había 2 fundadores) hasta la convocatoria de los 30 días.
 - La auditoría no muestra la hora de cada voto, solo el total contado.
 - Menores anotados: los cargos vencidos siguen vigentes «en funciones» hasta el relevo (es lo diseñado); el coordinador no necesita ser miembro del grupo para moderar; la web no se verificó en un navegador real.
-- Sigue 3C-2: revocación, renuncia, vacantes, mesa incompleta, reactivación de cuentas, página de observadores, elecciones en «Desde tu última visita» y moderación posterior de fichas.
+- 3C-2 (hecho; ver ADR-029): revocación, renuncia, vacantes, mesa incompleta, reactivación de cuentas y página de observadores. Sigue: elecciones en «Desde tu última visita» y moderación posterior de fichas.
+
+---
+
+## ADR-029: Elecciones, cuidar los cargos (2026-11-08)
+**Fecha:** 2026-11-08
+**Estado:** Aceptado
+
+### Contexto
+El plan 3C-2 completa a 3C-1: cómo se deja, se pide dejar o se pierde un cargo, qué pasa con las cuentas suspendidas y cómo vigilan los observadores. Carlos pidió lo mismo que antes: complejidad automatizada, nada que dependa de una persona y nada que exponga a quien apoya o a quien vota. Las decisiones siguientes son las que quedaron en el código, cada una con su porqué.
+
+### Decisión
+- **No se convoca una anticipada si faltan 45 días o menos para que acabe el mandato.** Una elección anticipada tarda unos 14 días más la posesión; con tan poco mandato por delante, la renovación normal (21 días antes) llega casi a la vez. Evita dos elecciones seguidas para el mismo cargo. Costo: el cargo queda vacante hasta esa renovación.
+- **Los fundadores no tienen botón de renuncia.** Su asiento no tiene fila `Cargo` ni período: «renunciar» sería dejar a la mesa por debajo de 2 asientos sin que nadie lo cubra. Los fundadores salen por elección (ADR-028) o por suspensión, no por decisión propia.
+- **La suspensión quita también los asientos fundadores y abre elecciones anticipadas.** Una cuenta suspendida no puede firmar ni ocupar la mesa, así que su cargo termina (`finCausa`) y se convoca la anticipada que lo cubre. Si no, un cargo ocupado por una cuenta suspendida seguiría contando como mesa suficiente.
+- **Quien pide una revocación es anónimo.** Se registra en la auditoría sin actor (`revocacion.abierta` no lleva `actorId`), y el titular del cargo no puede pedir ni apoyar su propia revocación. Así nadie sabe quién empezó el pedido y el cargo no puede usarlo para defenderse de quien lo pidió.
+- **Los apoyos no se auditan.** Cada apoyo es un secreto como el voto: una auditoría con hora de cada apoyo permitiría adivinar quién apoyó. Solo se audita que el pedido se abrió o se logró, con el total.
+- **Suplentes solo para las dos revisiones de 2 firmas.** Cuando la mesa tiene menos de 2 personas, 2 observadores provisionales pueden firmar los textos en revisión (`RevisionesService`) y confirmar las ocultaciones de la moderación («por confirmar»). No pueden firmar acciones de la mesa (suspender, cambiar reglas, ocultar fichas, reactivar): suplir la mesa entera sería darles su poder sin haber sido elegidos para eso. En la web, `/admin/mesa` les muestra solo esas dos secciones («Como suplente de la mesa»).
+- **Pase de reactivación acotado: 30 minutos y un solo propósito.** Una persona suspendida no puede iniciar sesión; el 403 del inicio de sesión lleva un token firmado que solo sirve para ver su caso (`/api/auth/reactivacion/caso`) y pedir la reactivación. No abre sesión, no sirve para nada más y vence a los 30 minutos. Comparte el límite de intentos del inicio de sesión (5 cada 15 minutos), así que la web pide el caso una sola vez por carga de página.
+- **Se restaura el estado previo.** Al suspender se guarda `estadoPrevio`; al reactivar vuelve a cualquier estado válido menos `suspended`. Si no hay estado previo o no es válido, vuelve a `pending_verification`: una persona nunca queda verificada por una reactivación sin pasar de nuevo por las referencias. Un pedido rechazado espera 30 días (`REACTIVACION_ESPERA_DIAS`) para repetirse; mientras hay uno pendiente no se abre otro.
+- **Los correos no salen en ninguna vista de metadatos de la auditoría.** `/audit` y `/observar` filtran el correo de los metadatos de todos los eventos, no solo de los nuevos: los observadores y el público ven nombres visibles, nunca correos.
+- **`revocacion.fraccion` queda conectada.** Es la regla de la colmena que ADR-028 dejó sin conectar: el umbral de apoyos de una revocación sale de ella.
+- **La página Observar es solo lectura.** Auditoría, verificaciones, matrices y gastos; la API responde 403 («Esta sección es solo para los observadores.») a cualquier otra persona. Las observaciones públicas pasan por la revisión previa (tipo `observacion`) y se publican con el nombre de quien observa.
+- **Variables de entorno:** ninguna nueva.
+
+### Consecuencias
+- El anonimato del pedido de revocación y la falta de auditoría de apoyos tienen un costo: no se puede investigar quién apoyó ni quién pidió si hay abuso. Se aceptó para proteger a quien participa.
+- La mesa necesita 2 firmas para reactivar o rechazar (acciones `reactivate_user` y `rechazar_reactivacion`); sin mesa suficiente, nadie reactiva cuentas.
+- La web no se verificó en un navegador real.
 
 ---
 

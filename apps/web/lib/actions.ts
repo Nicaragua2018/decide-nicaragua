@@ -3,7 +3,7 @@
 import { cookies } from 'next/headers';
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
-import { COMPROMISOS_MAX, MODERACION_CAUSAS, type RevisionTexto, type TipoTexto } from '@decide/shared';
+import { COMPROMISOS_MAX, MODERACION_CAUSAS, type CasoSuspension, type RevisionTexto, type TipoTexto } from '@decide/shared';
 
 const API_URL = process.env.API_URL ?? 'http://localhost:4000';
 
@@ -375,7 +375,13 @@ export async function assignSeat(_prev: ActionResult | null, formData: FormData)
 
 export async function proposeBoardAction(_prev: ActionResult | null, formData: FormData): Promise<ActionResult> {
   const type = formData.get('type');
-  const params = type === 'change_origin' ? { birthDepartment: formData.get('birthDepartment') } : {};
+  const solicitudId = formData.get('solicitudId');
+  const params =
+    type === 'change_origin'
+      ? { birthDepartment: formData.get('birthDepartment') }
+      : type === 'reactivate_user' || type === 'rechazar_reactivacion'
+        ? { solicitudId }
+        : {};
   const res = await actionFetch('/api/board/actions', {
     method: 'POST',
     body: JSON.stringify({ type, targetUserId: formData.get('targetUserId'), reason: formData.get('reason'), params }),
@@ -1026,6 +1032,42 @@ export async function renunciarCargo(cargoId: string): Promise<ActionResult> {
   const res = await actionFetch(`/api/elecciones/cargos/${cargoId}/renuncia`, { method: 'POST' });
   if (!res.ok) return { error: await parseError(res) };
   revalidatePath('/elecciones');
+  revalidatePath('/representantes');
+  return { success: true };
+}
+
+// ─── Reactivación y observación (3C-2) ────────────────────────────────────────
+
+/** Ver el caso de la cuenta suspendida. Se llama una sola vez por carga de la página (comparte el límite del inicio de sesión). */
+export async function verCasoSuspension(token: string): Promise<{ caso: CasoSuspension } | { error: string }> {
+  if (typeof token !== 'string' || token.length === 0) return { error: 'Vuelve a entrar con tu contraseña para ver tu caso.' };
+  const res = await actionFetch('/api/auth/reactivacion/caso', { method: 'POST', body: JSON.stringify({ token }) });
+  if (!res.ok) return { error: await parseError(res) };
+  return { caso: (await res.json()) as CasoSuspension };
+}
+
+/** Pedir la reactivación de la cuenta suspendida. Usa el pase de 30 minutos que dio el inicio de sesión. */
+export async function pedirReactivacion(token: string, texto: string): Promise<{ caso: CasoSuspension } | { error: string }> {
+  if (typeof token !== 'string' || token.length === 0) return { error: 'Vuelve a entrar con tu contraseña para ver tu caso.' };
+  const res = await actionFetch('/api/auth/reactivacion', {
+    method: 'POST',
+    body: JSON.stringify({ token, texto }),
+  });
+  if (!res.ok) return { error: await parseError(res) };
+  return { caso: (await res.json()) as CasoSuspension };
+}
+
+/** Dejar una observación pública sobre un hecho del registro. Pasa por la revisión previa. */
+export async function dejarObservacion(auditEventId: string, _prev: ActionResult | null, formData: FormData): Promise<ActionResult> {
+  if (!isUuid(auditEventId)) return INVALID;
+  const res = await actionFetch('/api/observar/observaciones', {
+    method: 'POST',
+    body: JSON.stringify({ auditEventId, texto: String(formData.get('texto') ?? ''), ...pedirRevision(formData) }),
+  });
+  const rev = await respuestaDeRevision(res);
+  if (rev) return rev;
+  if (!res.ok) return { error: await parseError(res) };
+  revalidatePath('/observar');
   revalidatePath('/representantes');
   return { success: true };
 }

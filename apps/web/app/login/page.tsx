@@ -31,7 +31,16 @@ function LoginForm() {
         router.push(nextPath);
         router.refresh();
       } else {
-        const data = await res.json() as { message?: string };
+        const data = await res.json() as { message?: string; codigo?: string; reactivacionToken?: string };
+        if (res.status === 403 && data.codigo === 'cuenta_suspendida' && data.reactivacionToken) {
+          try {
+            sessionStorage.setItem('reactivacionToken', data.reactivacionToken);
+          } catch {
+            // sin almacenamiento: la página de reactivación pedirá volver a entrar
+          }
+          router.push('/reactivacion');
+          return;
+        }
         setError(data.message ?? 'Credenciales incorrectas.');
       }
     } catch {
