@@ -16,6 +16,8 @@ export enum BoardActionType {
   suspend_user = 'suspend_user',
   change_origin = 'change_origin',
   change_rule = 'change_rule',
+  /** Oculta una ficha de candidatura publicada. params: { candidaturaId, causa }. */
+  ocultar_candidatura = 'ocultar_candidatura',
 }
 
 export interface BoardSeatSummary {

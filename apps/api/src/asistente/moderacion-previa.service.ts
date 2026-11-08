@@ -53,6 +53,7 @@ const QUE_ES: Record<TipoTexto, string> = {
   informe: 'el informe de una comisión de trabajo',
   motivo_regla: 'el motivo para cambiar una regla de la comunidad',
   subgrupo: 'el nombre y el propósito de un grupo de trabajo nuevo',
+  candidatura: 'la ficha de una persona que se presenta a un cargo (presentación y compromisos)',
 };
 
 /**

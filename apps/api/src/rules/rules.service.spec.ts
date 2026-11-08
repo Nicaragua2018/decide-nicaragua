@@ -226,7 +226,7 @@ describe('RulesService', () => {
     it('una regla sin conectar lleva conectada = false y nunca puedoProponer', async () => {
       const s = conCambios([], ['g1', GENERAL]);
       const list = await s.list('g1', 'p-yo');
-      const obs = list.find((x) => x.key === 'observadores.numero')!;
+      const obs = list.find((x) => x.key === 'revocacion.fraccion')!;
       expect(obs).toMatchObject({ conectada: false, puedoProponer: false });
       expect(list.find((x) => x.key === 'invitaciones.pendientes_max')).toMatchObject({ conectada: true, puedoProponer: true });
       expect(list.find((x) => x.key === 'debate.plazo_dias')).toMatchObject({ conectada: true, puedoProponer: true });

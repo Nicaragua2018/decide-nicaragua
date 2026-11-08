@@ -63,16 +63,16 @@ export const RULE_DEFINITIONS: readonly RuleDefinition[] = [
     conectada: true,
   },
   int('reglas.participacion_minima', 'colmena', 'Participación mínima para cambiar las reglas (%)', 30, 10, 100, 'porcentaje'),
-  int('observadores.numero', 'colmena', 'Número de observadores (personas)', 7, 3, 15, 'personas', SIN_CONECTAR),
-  int('comunidad.minimo_activacion', 'colmena', 'Personas mínimas para activar una comunidad (personas)', 7, 3, 50, 'personas', SIN_CONECTAR),
-  int('eleccion.minimo_primera', 'colmena', 'Personas mínimas para la primera elección (personas)', 12, 5, 100, 'personas', SIN_CONECTAR),
+  int('observadores.numero', 'colmena', 'Número de observadores (personas)', 7, 3, 15, 'personas'),
+  int('comunidad.minimo_activacion', 'colmena', 'Personas mínimas para activar una comunidad (personas)', 7, 3, 50, 'personas'),
+  int('eleccion.minimo_primera', 'colmena', 'Personas mínimas para la primera elección (personas)', 12, 5, 100, 'personas'),
   int('invitaciones.pendientes_max', 'colmena', 'Invitaciones pendientes por persona (máximo)', 5, 1, 20, 'personas'),
   int('asistente.preguntas_por_dia', 'colmena', 'Preguntas al asistente por persona y día', 30, 10, 100, 'preguntas'),
   int('revocacion.fraccion', 'colmena', 'Apoyos necesarios para revocar un cargo (%)', 33, 10, 50, 'porcentaje', SIN_CONECTAR),
-  int('cargos.periodo_mesa_meses', 'colmena', 'Duración del cargo en la mesa (meses)', 12, 6, 24, 'meses', SIN_CONECTAR),
-  int('cargos.periodo_coordinadores_meses', 'colmena', 'Duración del cargo de coordinación (meses)', 6, 3, 12, 'meses', SIN_CONECTAR),
-  int('eleccion.plazo_candidaturas_dias', 'colmena', 'Plazo para presentar candidaturas (días)', 7, 3, 30, 'dias', SIN_CONECTAR),
-  int('eleccion.plazo_votacion_dias', 'colmena', 'Plazo de votación de una elección (días)', 7, 3, 30, 'dias', SIN_CONECTAR),
+  int('cargos.periodo_mesa_meses', 'colmena', 'Duración del cargo en la mesa (meses)', 12, 6, 24, 'meses'),
+  int('cargos.periodo_coordinadores_meses', 'colmena', 'Duración del cargo de coordinación (meses)', 6, 3, 12, 'meses'),
+  int('eleccion.plazo_candidaturas_dias', 'colmena', 'Plazo para presentar candidaturas (días)', 7, 3, 30, 'dias'),
+  int('eleccion.plazo_votacion_dias', 'colmena', 'Plazo de votación de una elección (días)', 7, 3, 30, 'dias'),
 ];
 
 export function ruleDefinition(key: string): RuleDefinition {

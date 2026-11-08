@@ -1,0 +1,84 @@
+/** Elecciones y cargos: tipos y límites compartidos entre API y web. */
+
+export type CargoTipoValue = 'administrador' | 'coordinador_general' | 'secretario' | 'observador' | 'coordinador';
+export type EleccionFaseValue = 'candidaturas' | 'votacion' | 'contada';
+export type EleccionMotivoValue = 'primera' | 'renovacion' | 'reintento';
+
+export const CARGO_ETIQUETA: Record<CargoTipoValue, string> = {
+  administrador: 'Administración',
+  coordinador_general: 'Coordinación general',
+  secretario: 'Secretaría',
+  observador: 'Observadores',
+  coordinador: 'Coordinación de la comunidad',
+};
+
+export const PRESENTACION_MAX = 600;
+export const COMPROMISOS_MAX = 3;
+export const COMPROMISO_MAX = 140;
+
+export type CandidaturaVista = {
+  id: string;
+  nombre: string;
+  iniciales: string;
+  comunidades: string;
+  presentacion: string;
+  compromisos: string[];
+  esMia: boolean;
+};
+
+export type ResultadoEleccionVista = {
+  electas: { candidaturaId: string; nombre: string; iniciales: string; lugar: number }[];
+  vacantes: number;
+  sinQuorum: boolean;
+  papeletasTotal: number;
+  abstenciones: number;
+  miembros: number;
+  /**
+   * Cifras exactas tras el conteo (las matrices ya son públicas): `aparece` es en cuántas papeletas
+   * sin abstención aparece la persona; `validas`, cuántas papeletas no se abstuvieron.
+   */
+  filas: { candidaturaId: string; nombre: string; aparece: number; validas: number; electa: boolean }[];
+  /** `gana` y `pierde` son ids de candidatura (los nombres están en `filas`). */
+  duelos: { gana: string; pierde: string; aFavor: number; enContra: number }[];
+  candidatasOrden: string[];
+  pairwiseMatrix: number[][];
+  schulzeMatrix: number[][];
+  semilla: string | null;
+};
+
+export type EleccionResumen = {
+  id: string;
+  cargo: CargoTipoValue;
+  ambito: { id: string; nombre: string };
+  puestos: number;
+  fase: EleccionFaseValue;
+  motivo: EleccionMotivoValue;
+  candidaturasEndsAt: string;
+  votacionEndsAt: string;
+  jornadaId: string | null;
+  puedoPresentarme: boolean;
+  yaVote: boolean;
+  /** Participación redondeada de 5 en 5 durante la votación; null si no se muestra. */
+  participacionAprox: number | null;
+};
+
+export type EleccionDetalle = EleccionResumen & {
+  candidaturas: CandidaturaVista[];
+  miPapeleta: { abstencion: boolean; orden: string[] } | null;
+  /** La candidatura viva propia, también si la mesa la ocultó (solo la ve quien se presentó). */
+  miCandidatura: { ficha: CandidaturaVista; oculta: boolean; aviso: string | null } | null;
+  resultado: ResultadoEleccionVista | null;
+};
+
+export type RepresentantesVista = {
+  /** `hasta` es null en un asiento fundador: no tiene período, sigue en funciones hasta su elección. */
+  mesa: { tipo: CargoTipoValue; nombre: string; iniciales: string; desde: string; hasta: string | null; enFunciones: boolean; fundador: boolean }[];
+  observadores: { nombre: string; iniciales: string; desde: string; hasta: string }[];
+  comunidades: {
+    id: string;
+    nombre: string;
+    activa: boolean;
+    coordinadores: { nombre: string; iniciales: string; desde: string; hasta: string; enFunciones: boolean }[];
+    eleccionAbierta: boolean;
+  }[];
+};

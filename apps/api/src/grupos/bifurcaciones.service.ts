@@ -20,7 +20,7 @@ const NO_BIFURCABLE = 'Esta solución no se puede bifurcar.';
 const PLAZO_VENCIDO = 'El plazo para iniciar una iniciativa con esta solución ya venció.';
 const YA_EXISTE = 'Ya hay una iniciativa para esta solución: puedes sumarte a ella.';
 const NO_ES_BIFURCACION = 'Esto no es una iniciativa de un grupo.';
-const NO_ORGANIZA = 'Solo quien organiza la comunidad puede pausar esta iniciativa.';
+const NO_ORGANIZA = 'Solo la mesa directiva puede pausar esta iniciativa.';
 const NO_ACTIVA = 'Solo se puede pausar una iniciativa activa.';
 const NO_PAUSADA = 'Esta iniciativa no está pausada.';
 const YA_APELADA = 'Esta pausa ya fue apelada.';
@@ -213,14 +213,15 @@ export class BifurcacionesService {
   // ─── Pausa ────────────────────────────────────────────────────────────────
 
   /**
-   * Quien organiza la comunidad puede pausar sus bifurcaciones activas desde la lista de grupos
-   * (quien llama ya sabe que es miembro del ámbito). No lee nada de dentro de la bifurcación.
+   * Solo la mesa pausa las bifurcaciones activas desde la lista de grupos (quien llama ya sabe
+   * que es miembro del ámbito): los coordinadores de la comunidad no, porque los elige la misma
+   * mayoría de la que la bifurcación se separa. No lee nada de dentro de la bifurcación.
    */
-  puedePausarEn(profileId: string, ambitoId: string): Promise<boolean> {
-    return this.forums.canOrganize(profileId, ambitoId);
+  puedePausarEn(profileId: string, _ambitoId: string): Promise<boolean> {
+    return this.forums.esMesa(profileId);
   }
 
-  /** Quien organiza la comunidad (y es miembro de ella) pausa una bifurcación activa. */
+  /** La mesa (siendo miembro de la comunidad) pausa una bifurcación activa. */
   async pausar(
     profileId: string,
     id: string,
@@ -231,7 +232,7 @@ export class BifurcacionesService {
   ): Promise<void> {
     const g = await this.bifurcacion(id);
     const [organiza, enAmbito] = await Promise.all([
-      this.forums.canOrganize(profileId, g.parentGroupId),
+      this.forums.esMesa(profileId),
       this.access.isParticipant(g.parentGroupId, profileId),
     ]);
     if (!organiza || !enAmbito) throw new ForbiddenException(NO_ORGANIZA);
@@ -362,7 +363,7 @@ export class BifurcacionesService {
     const S = g.origenSolucionId;
     const [s, organiza, llevada, comisionViva] = await Promise.all([
       S ? this.prisma.solucion.findUnique({ where: { id: S }, select: { title: true, proposalId: true, hidden: true } }) : null,
-      activa && enAmbito && g.parentGroupId ? this.forums.canOrganize(profileId, g.parentGroupId) : false,
+      activa && enAmbito && g.parentGroupId ? this.forums.esMesa(profileId) : false,
       S ? this.prisma.inquietud.findUnique({ where: { origenSolucionId: S }, select: { id: true } }) : null,
       // La comisión propia solo se muestra a los miembros (su existencia no sale de la bifurcación).
       S && soyMiembro

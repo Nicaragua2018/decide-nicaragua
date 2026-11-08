@@ -292,10 +292,10 @@ describe('BifurcacionesService', () => {
       prisma.group.updateMany.mockResolvedValue({ count: 1 });
     });
 
-    it('quien organiza y es del ámbito la pausa con causa, detalle y fecha de inicio; audita con su actor', async () => {
-      forums.canOrganize.mockResolvedValue(true);
+    it('la mesa, siendo del ámbito, la pausa con causa, detalle y fecha de inicio; audita con su actor', async () => {
+      forums.esMesa.mockResolvedValue(true);
       await service.pausar(YO, BIF, 'insultos_amenazas', 'Hubo amenazas en el foro.', '1.1.1.1', NOW);
-      expect(forums.canOrganize).toHaveBeenCalledWith(YO, AMBITO);
+      expect(forums.esMesa).toHaveBeenCalledWith(YO);
       expect(prisma.group.updateMany).toHaveBeenCalledWith({
         where: { id: BIF, trabajoTipo: 'bifurcacion', trabajoEstado: 'activo' },
         data: {
@@ -312,8 +312,8 @@ describe('BifurcacionesService', () => {
       expect(audit.log.mock.calls[0]![0]).toMatchObject({ actorId: 'u-yo', ip: '1.1.1.1' });
     });
 
-    it('I2: si quien organiza es miembro de la bifurcación, la pausa se audita sin actor ni ip', async () => {
-      forums.canOrganize.mockResolvedValue(true);
+    it('I2: si quien pausa es miembro de la bifurcación, la pausa se audita sin actor ni ip', async () => {
+      forums.esMesa.mockResolvedValue(true);
       miembros.get(YO)!.add(BIF);
       await service.pausar(YO, BIF, 'spam', undefined, '1.1.1.1', NOW);
       expect(acciones()).toEqual(['bifurcacion.paused']);
@@ -322,23 +322,35 @@ describe('BifurcacionesService', () => {
     });
 
     it('si la consulta del actor falla tras pausar, no hay 500: audita sin actor', async () => {
-      forums.canOrganize.mockResolvedValue(true);
+      forums.esMesa.mockResolvedValue(true);
       prisma.profile.findUnique.mockRejectedValue(new Error('caída'));
       await expect(service.pausar(YO, BIF, 'spam', undefined, '1.1.1.1', NOW)).resolves.toBeUndefined();
       expect(acciones()).toEqual(['bifurcacion.paused']);
       expect(audit.log.mock.calls[0]![0]).not.toHaveProperty('actorId');
     });
 
-    it('sin organizar, o sin ser del ámbito, 403', async () => {
+    it('sin ser de la mesa, o sin ser del ámbito, 403', async () => {
       await expect(service.pausar(YO, BIF, 'spam', undefined, '1.1.1.1')).rejects.toBeInstanceOf(ForbiddenException);
-      forums.canOrganize.mockResolvedValue(true);
+      forums.esMesa.mockResolvedValue(true);
       miembros.set(YO, new Set());
       await expect(service.pausar(YO, BIF, 'spam', undefined, '1.1.1.1')).rejects.toBeInstanceOf(ForbiddenException);
       expect(prisma.group.updateMany).not.toHaveBeenCalled();
     });
 
+    it('I4: un coordinador de la comunidad no pausa una bifurcación (solo la mesa), ni ve el botón', async () => {
+      forums.canOrganize.mockResolvedValue(true); // coordinador vigente de la comunidad madre
+      forums.esMesa.mockResolvedValue(false);
+      await expect(service.pausar(YO, BIF, 'spam', undefined, '1.1.1.1')).rejects.toBeInstanceOf(ForbiddenException);
+      expect(prisma.group.updateMany).not.toHaveBeenCalled();
+      expect(await service.puedePausarEn(YO, AMBITO)).toBe(false);
+      expect((await service.vista(bif(), YO, true, true)).puedoPausar).toBe(false);
+      forums.esMesa.mockResolvedValue(true);
+      expect(await service.puedePausarEn(YO, AMBITO)).toBe(true);
+      expect((await service.vista(bif(), YO, true, true)).puedoPausar).toBe(true);
+    });
+
     it('una que no está activa da 409; otro tipo de grupo da 400', async () => {
-      forums.canOrganize.mockResolvedValue(true);
+      forums.esMesa.mockResolvedValue(true);
       prisma.group.updateMany.mockResolvedValue({ count: 0 });
       await expect(service.pausar(YO, BIF, 'spam', undefined, '1.1.1.1')).rejects.toBeInstanceOf(ConflictException);
       prisma.group.findUnique.mockResolvedValue(bif({ trabajoTipo: 'subgrupo' }));
@@ -554,7 +566,7 @@ describe('BifurcacionesService', () => {
 
     it('activa: pide comisión si no hay una viva; ya llevada si existe la inquietud', async () => {
       prisma.solucion.findUnique.mockResolvedValue({ title: 'Huerto comunitario', proposalId: 't-1', hidden: false });
-      forums.canOrganize.mockResolvedValue(true);
+      forums.esMesa.mockResolvedValue(true);
       let v = await service.vista(bif(), YO, true, true);
       expect(v).toMatchObject({ pausa: null, puedoApelar: false, puedoPausar: true, puedoPedirComision: true, yaLlevada: false });
       prisma.group.findFirst.mockResolvedValue({ id: 'g-com' });

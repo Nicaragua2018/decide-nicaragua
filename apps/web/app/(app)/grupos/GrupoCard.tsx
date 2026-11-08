@@ -66,7 +66,7 @@ export function GrupoCard({ g }: { g: GrupoTrabajoItem }) {
       ) : (
         puedeUnirse && <EntrarSalir grupoId={g.id} accion="entrar" />
       )}
-      {/* Quien organiza la comunidad pausa desde aquí, sin ver nada de dentro de la iniciativa. */}
+      {/* La mesa pausa desde aquí, sin ver nada de dentro de la iniciativa. */}
       {g.puedoPausar && <PausarForm grupoId={g.id} />}
     </li>
   );

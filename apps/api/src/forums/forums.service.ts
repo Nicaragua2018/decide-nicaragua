@@ -105,17 +105,38 @@ export class ForumsService {
   // ─── Permisos ─────────────────────────────────────────────────────────────
 
   /**
-   * Quién puede crear foros y moderar en un grupo. Plan 2: la mesa directiva,
-   * incluido el administrador del sitio (cargo `administrador`), con titular
-   * verificado. El plan 3 agrega a los coordinadores de la comunidad.
+   * Quién puede crear foros y moderar en un grupo: la mesa directiva (titular verificado) o
+   * un coordinador vigente de la comunidad. En un grupo de trabajo cuenta también el coordinador
+   * de la comunidad de la que cuelga (subgrupos y comisiones), pero no en las bifurcaciones, que están reservadas a su ámbito y las modera solo la mesa (también la pausa, que se decide en la comunidad madre: ver `BifurcacionesService.puedePausarEn`). Las apelaciones y la segunda firma siguen siendo solo de la mesa.
    */
-  async canModerate(profileId: string, _groupId: string): Promise<boolean> {
-    return (await this.board.roleOf(profileId)) !== null;
+  async canModerate(profileId: string, groupId: string): Promise<boolean> {
+    if ((await this.board.roleOf(profileId)) !== null) return true;
+    return this.esCoordinador(profileId, groupId);
   }
 
-  /** Organizar la agenda de inquietudes; igual a canModerate hasta que existan los roles de 3C. */
+  /** Organizar la agenda de inquietudes: quienes pueden moderar en el grupo. */
   async canOrganize(profileId: string, groupId: string): Promise<boolean> {
     return this.canModerate(profileId, groupId);
+  }
+
+  private async esCoordinador(profileId: string, groupId: string): Promise<boolean> {
+    const g = await this.prisma.group.findUnique({ where: { id: groupId }, select: { type: true, parentGroupId: true, trabajoTipo: true } });
+    const ambitos = [groupId];
+    // Una bifurcación está reservada a su ámbito: no hereda a los coordinadores de la comunidad.
+    if (g && (g.type as string) === 'trabajo' && g.parentGroupId && (g.trabajoTipo as string | null) !== 'bifurcacion') {
+      ambitos.push(g.parentGroupId);
+    }
+    const cargo = await this.prisma.cargo.findFirst({
+      where: {
+        profileId,
+        tipo: 'coordinador',
+        terminadoAt: null,
+        groupId: { in: ambitos },
+        profile: { user: { status: 'verified_citizen' } },
+      },
+      select: { id: true },
+    });
+    return cargo !== null;
   }
 
   /** La mesa directiva (titular verificado); también resuelve las apelaciones de pausas de bifurcaciones. */
@@ -226,7 +247,7 @@ export class ForumsService {
 
   async createForum(profileId: string, dto: CreateForumDto, ip: string): Promise<{ id: string }> {
     if (!(await this.canModerate(profileId, dto.groupId))) {
-      throw new ForbiddenException('Solo la mesa directiva o el administrador pueden abrir foros por ahora.');
+      throw new ForbiddenException('Solo la mesa directiva o quienes coordinan la comunidad pueden abrir foros.');
     }
     const group = await this.prisma.group.findUnique({ where: { id: dto.groupId } });
     if (!group) throw new NotFoundException('Comunidad no encontrada');

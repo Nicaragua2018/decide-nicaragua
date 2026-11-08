@@ -1,0 +1,17 @@
+import { Module } from '@nestjs/common';
+import { AuditModule } from '../audit/audit.module';
+import { AsistenteModule } from '../asistente/asistente.module';
+import { RulesModule } from '../rules/rules.module';
+import { ConvocatoriaService } from './convocatoria.service';
+import { PosesionService } from './posesion.service';
+import { EleccionesScheduler } from './elecciones.scheduler';
+import { EleccionesService } from './elecciones.service';
+import { EleccionesController, RepresentantesController } from './elecciones.controller';
+
+@Module({
+  imports: [RulesModule, AuditModule, AsistenteModule],
+  controllers: [EleccionesController, RepresentantesController],
+  providers: [ConvocatoriaService, PosesionService, EleccionesScheduler, EleccionesService],
+  exports: [ConvocatoriaService, PosesionService, EleccionesService],
+})
+export class EleccionesModule {}

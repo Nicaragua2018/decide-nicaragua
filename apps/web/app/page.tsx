@@ -208,6 +208,7 @@ export default function LandingPage() {
           <div className="ln-footer-links">
             <a href="#contacto" className="ln-footer-link">Contacto</a>
             <Link href="/explore" className="ln-footer-link">Modo observador</Link>
+            <Link href="/representantes" className="ln-footer-link">Quiénes nos representan</Link>
             <Link href="/login" className="ln-footer-link">Registrarme</Link>
           </div>
           <span className="ln-footer-copy">Código abierto · Auditable · Sin ánimo de lucro</span>

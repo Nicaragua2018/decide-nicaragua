@@ -57,7 +57,7 @@ export function estaAprobada(aprobaciones: number, validas: number): boolean {
 }
 
 /** Convierte un orden de preferencia en la papeleta que espera Schulze. */
-function aBallot(orden: string[]): BallotInput {
+export function aBallot(orden: string[]): BallotInput {
   return orden.map((candidateId, i) => ({ candidateId, rank: i + 1 }));
 }
 

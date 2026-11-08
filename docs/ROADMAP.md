@@ -64,6 +64,22 @@ El asistente acompaña a cada persona sin decidir por ella (ADR-026):
 
 ---
 
+## Primeros 200 — Plan 3C-1 (elegir): COMPLETO
+
+La plataforma elige a quienes la representan, sin intervención humana en la convocatoria (ADR-028):
+
+- [x] Cargos con historial (`Cargo`) sincronizado con los asientos de la mesa; «en funciones» para que nunca falte quien ocupe el puesto
+- [x] Convocatoria automática: primera jornada, activación de una comunidad y una sola convocatoria por cargo (renovación 21 días antes, vacantes a los 30 días)
+- [x] Fichas de candidatura iguales para todas, con revisión previa y ocultar con 2 de 3 de la mesa
+- [x] Papeleta secreta y cambiable hasta el cierre; conteo con Schulze entre las aprobadas y desempate con semilla pública
+- [x] Un cargo a la vez e incompatibilidades (fundadores incluidos)
+- [x] Coordinadores de comunidad con moderación en su comunidad (no en bifurcaciones)
+- [x] Páginas «Elecciones» y «Quiénes nos representan»; la guía del asistente las explica sin recomendar candidaturas
+
+**Sigue:** 3C-2: revocación, renuncia, vacantes, mesa incompleta, reactivación de cuentas, página de observadores, elecciones en «Desde tu última visita» y moderación posterior de fichas.
+
+---
+
 ## Primeros 200 — Plan 3B-3 (asistente: acuerdos): COMPLETO
 
 El asistente ayuda a encontrar acuerdos sin decidir nada (ADR-027):
@@ -76,7 +92,7 @@ El asistente ayuda a encontrar acuerdos sin decidir nada (ADR-027):
 - [x] Ronda horaria con tope de 20 pedidos y prioridad nocturna
 - [x] Examen de acuerdos (17 casos; pendiente de correrlo en el servidor con la clave)
 
-**Sigue:** 3C.
+**Sigue:** 3C-1 (hecho; ver arriba).
 
 ---
 

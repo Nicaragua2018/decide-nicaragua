@@ -3,7 +3,7 @@
 import { cookies } from 'next/headers';
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
-import type { RevisionTexto, TipoTexto } from '@decide/shared';
+import { COMPROMISOS_MAX, MODERACION_CAUSAS, type RevisionTexto, type TipoTexto } from '@decide/shared';
 
 const API_URL = process.env.API_URL ?? 'http://localhost:4000';
 
@@ -927,4 +927,68 @@ export async function cerrarAlDia(): Promise<void> {
 export async function cerrarCrecer(groupId: string): Promise<void> {
   await actionFetch(`/api/asistente/crecer/${groupId}/cerrar`, { method: 'POST' });
   revalidatePath(`/groups/${groupId}`);
+}
+
+// ─── Elecciones (3C-1) ────────────────────────────────────────────────────────
+
+/** Presentarse (o cambiar la ficha propia, con `editar=1`). Pasa por la revisión previa. */
+export async function guardarCandidatura(_prev: ActionResult | null, formData: FormData): Promise<ActionResult> {
+  const eleccionId = String(formData.get('eleccionId') ?? '');
+  if (!isUuid(eleccionId)) return INVALID;
+  const editar = formData.get('editar') === '1';
+  const compromisos = Array.from({ length: COMPROMISOS_MAX }, (_, i) => i)
+    .map((i) => String(formData.get(`compromiso${i}`) ?? '').trim())
+    .filter((c) => c.length > 0);
+  const res = await actionFetch(`/api/elecciones/${eleccionId}/candidatura`, {
+    method: editar ? 'PUT' : 'POST',
+    body: JSON.stringify({ presentacion: String(formData.get('presentacion') ?? ''), compromisos, ...pedirRevision(formData) }),
+  });
+  const rev = await respuestaDeRevision(res);
+  if (rev) return rev;
+  if (!res.ok) return { error: await parseError(res) };
+  revalidatePath(`/elecciones/${eleccionId}`);
+  revalidatePath('/elecciones');
+  return { success: true };
+}
+
+export async function retirarCandidatura(eleccionId: string): Promise<ActionResult> {
+  if (!isUuid(eleccionId)) return INVALID;
+  const res = await actionFetch(`/api/elecciones/${eleccionId}/candidatura`, { method: 'DELETE' });
+  if (!res.ok) return { error: await parseError(res) };
+  revalidatePath(`/elecciones/${eleccionId}`);
+  revalidatePath('/elecciones');
+  return { success: true };
+}
+
+/** La papeleta de una elección: abstención, o el orden de quienes se aceptan (vacío = rechazo a todas). */
+export async function votarEleccion(eleccionId: string, abstencion: boolean, orden: string[]): Promise<ActionResult> {
+  if (!isUuid(eleccionId) || typeof abstencion !== 'boolean') return INVALID;
+  if (!Array.isArray(orden) || !orden.every(isUuid)) return INVALID;
+  const res = await actionFetch(`/api/elecciones/${eleccionId}/papeleta`, {
+    method: 'PUT',
+    body: JSON.stringify({ abstencion, orden: abstencion ? [] : orden }),
+  });
+  if (!res.ok) return { error: await parseError(res) };
+  revalidatePath(`/elecciones/${eleccionId}`);
+  revalidatePath('/elecciones');
+  return { success: true };
+}
+
+/** Un miembro de la mesa propone ocultar una ficha (necesita la segunda firma en la página de la mesa). */
+export async function pedirOcultarCandidatura(
+  eleccionId: string,
+  candidaturaId: string,
+  causa: string,
+): Promise<ActionResult> {
+  if (!isUuid(eleccionId) || !isUuid(candidaturaId)) return INVALID;
+  const etiqueta = MODERACION_CAUSAS.find((c) => c.value === causa)?.label;
+  if (!etiqueta) return { error: 'Elige una de las causas.' };
+  const res = await actionFetch('/api/board/actions', {
+    method: 'POST',
+    body: JSON.stringify({ type: 'ocultar_candidatura', reason: etiqueta, params: { candidaturaId, causa } }),
+  });
+  if (!res.ok) return { error: await parseError(res) };
+  revalidatePath('/admin/mesa');
+  revalidatePath(`/elecciones/${eleccionId}`);
+  return { success: true };
 }

@@ -41,18 +41,9 @@ describe('RULE_DEFINITIONS', () => {
     expect([plazo.level, plazo.default, plazo.min, plazo.max, plazo.unit]).toEqual(['local', '14', 7, 60, 'dias']);
   });
 
-  it('las reglas de la colmena que aún no lee ningún código están marcadas sin conectar', () => {
+  it('las reglas de elecciones están conectadas y revocacion.fraccion no', () => {
     const sinConectar = RULE_DEFINITIONS.filter((d) => !d.conectada).map((d) => d.key);
-    expect(sinConectar).toEqual([
-      'observadores.numero',
-      'comunidad.minimo_activacion',
-      'eleccion.minimo_primera',
-      'revocacion.fraccion',
-      'cargos.periodo_mesa_meses',
-      'cargos.periodo_coordinadores_meses',
-      'eleccion.plazo_candidaturas_dias',
-      'eleccion.plazo_votacion_dias',
-    ]);
+    expect(sinConectar).toEqual(['revocacion.fraccion']);
     expect(ruleDefinition('invitaciones.pendientes_max').conectada).toBe(true);
     expect(ruleDefinition('reglas.participacion_minima').conectada).toBe(true);
     expect(ruleDefinition('comision.forma').conectada).toBe(true);
