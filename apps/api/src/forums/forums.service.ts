@@ -120,9 +120,12 @@ export class ForumsService {
   }
 
   private async esCoordinador(profileId: string, groupId: string): Promise<boolean> {
-    const g = await this.prisma.group.findUnique({ where: { id: groupId }, select: { type: true, parentGroupId: true } });
+    const g = await this.prisma.group.findUnique({ where: { id: groupId }, select: { type: true, parentGroupId: true, trabajoTipo: true } });
     const ambitos = [groupId];
-    if (g && (g.type as string) === 'trabajo' && g.parentGroupId) ambitos.push(g.parentGroupId);
+    // Una bifurcación está reservada a su ámbito: no hereda a los coordinadores de la comunidad.
+    if (g && (g.type as string) === 'trabajo' && g.parentGroupId && (g.trabajoTipo as string | null) !== 'bifurcacion') {
+      ambitos.push(g.parentGroupId);
+    }
     const cargo = await this.prisma.cargo.findFirst({
       where: {
         profileId,
