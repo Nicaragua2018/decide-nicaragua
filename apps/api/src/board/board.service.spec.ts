@@ -966,6 +966,25 @@ describe('BoardService', () => {
         expect(prisma.user.updateMany).toHaveBeenCalledWith({ where: { id: 'u-t', status: 'suspended' }, data: { status: 'pending_verification' } });
       });
 
+      it('un estado previo rejected se devuelve tal cual (no pasa a pending_verification) y no resincroniza', async () => {
+        prisma.boardAction.findUnique.mockResolvedValue(accion('reactivate_user'));
+        prisma.boardAction.findFirst.mockResolvedValue({ params: { estadoPrevio: 'rejected' } });
+
+        await service.voteAction(ADMIN, 'a9', true, 'ip');
+
+        expect(prisma.user.updateMany).toHaveBeenCalledWith({ where: { id: 'u-t', status: 'suspended' }, data: { status: 'rejected' } });
+        expect(groups.syncMemberships).not.toHaveBeenCalled();
+      });
+
+      it('un estado previo que no es un AccountStatus vuelve a pending_verification', async () => {
+        prisma.boardAction.findUnique.mockResolvedValue(accion('reactivate_user'));
+        prisma.boardAction.findFirst.mockResolvedValue({ params: { estadoPrevio: 'inventado' } });
+
+        await service.voteAction(ADMIN, 'a9', true, 'ip');
+
+        expect(prisma.user.updateMany).toHaveBeenCalledWith({ where: { id: 'u-t', status: 'suspended' }, data: { status: 'pending_verification' } });
+      });
+
       it('si la cuenta ya no está suspendida, la acción queda rechazada sin tocar la solicitud', async () => {
         prisma.boardAction.findUnique.mockResolvedValue(accion('reactivate_user'));
         prisma.user.updateMany.mockResolvedValue({ count: 0 });

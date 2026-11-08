@@ -11,7 +11,6 @@ import {
   AccountStatus,
   BOARD_ROLES,
   BoardActionType,
-  LOGIN_STATUSES,
   GENERAL_GROUP_SLUG,
   MODERACION_CAUSAS,
   NICARAGUA_DEPARTMENTS,
@@ -552,8 +551,8 @@ export class BoardService {
   /**
    * Reactiva la cuenta dentro de la transacción de la firma. Se bloquean la cuenta y la solicitud
    * (una suspensión o la otra resolución de la misma solicitud, a la vez, esperan). La cuenta vuelve
-   * al estado previo a la última suspensión (`params.estadoPrevio`; si falta o no es un estado con
-   * acceso, `pending_verification`). No recupera cargos ni asientos. Si la solicitud ya no está
+   * al estado previo a la última suspensión (`params.estadoPrevio`, sea cual sea, también `rejected`;
+   * solo si falta, no es un estado válido o es `suspended`, `pending_verification`). No recupera cargos ni asientos. Si la solicitud ya no está
    * pendiente o la cuenta ya no está suspendida, devuelve false sin tocar nada.
    */
   private async reactivar(
@@ -578,7 +577,9 @@ export class BoardService {
     });
     const previo = (suspension?.params as Record<string, unknown> | null | undefined)?.['estadoPrevio'];
     const estado =
-      typeof previo === 'string' && (LOGIN_STATUSES as string[]).includes(previo)
+      typeof previo === 'string' &&
+      previo !== (AccountStatus.suspended as string) &&
+      (Object.values(AccountStatus) as string[]).includes(previo)
         ? previo
         : AccountStatus.pending_verification;
 
