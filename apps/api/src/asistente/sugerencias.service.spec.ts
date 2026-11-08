@@ -2,6 +2,7 @@ import 'reflect-metadata';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ForbiddenException } from '@nestjs/common';
 import { AsistenteController } from './asistente.controller';
+import { Prisma } from '@prisma/client';
 import { SugerenciasService } from './sugerencias.service';
 
 const G = '11111111-1111-4111-8111-111111111111';
@@ -30,7 +31,12 @@ describe('SugerenciasService', () => {
 
   beforeEach(() => {
     prisma = {
-      sugerenciaAsistente: { findUnique: vi.fn().mockResolvedValue(null), upsert: vi.fn().mockResolvedValue({}), update: vi.fn() },
+      sugerenciaAsistente: {
+        findUnique: vi.fn().mockResolvedValue(null),
+        updateMany: vi.fn().mockResolvedValue({ count: 1 }),
+        create: vi.fn().mockResolvedValue({}),
+        update: vi.fn(),
+      },
       inquietud: { findMany: vi.fn().mockResolvedValue([]), findUnique: vi.fn() },
       proposal: {
         findUnique: vi.fn().mockResolvedValue({ id: T, groupId: G, status: 'open', hidden: false, deliberationEndsAt: FUTURO, decision: null }),
@@ -46,19 +52,32 @@ describe('SugerenciasService', () => {
 
   describe('guardar', () => {
     it('guardar hace upsert y no pisa una fila final', async () => {
+      // Existe y no es final: se actualiza con escritura condicional.
       await service.guardar('presentacion', T, G, { presentacion: 'x' }, BASE);
-      expect(prisma.sugerenciaAsistente.upsert).toHaveBeenCalledTimes(1);
-      const args = prisma.sugerenciaAsistente.upsert.mock.calls[0][0];
-      expect(args.where).toEqual({ tipo_objetoId: { tipo: 'presentacion', objetoId: T } });
-      expect(args.create).toMatchObject({ tipo: 'presentacion', objetoId: T, groupId: G, final: false });
+      const args = prisma.sugerenciaAsistente.updateMany.mock.calls[0][0];
+      expect(args.where).toEqual({ tipo: 'presentacion', objetoId: T, final: false });
+      expect(prisma.sugerenciaAsistente.create).not.toHaveBeenCalled();
       expect(audit.log).toHaveBeenCalledWith(
         expect.objectContaining({ action: 'asistente.sugerencia_guardada', metadata: { tipo: 'presentacion', objetoId: T } }),
       );
 
-      prisma.sugerenciaAsistente.upsert.mockClear();
-      prisma.sugerenciaAsistente.findUnique.mockResolvedValue({ final: true });
+      // No existe: se crea.
+      prisma.sugerenciaAsistente.updateMany.mockResolvedValue({ count: 0 });
+      await service.guardar('presentacion', T, G, { presentacion: 'x' }, BASE);
+      expect(prisma.sugerenciaAsistente.create.mock.calls[0][0].data).toMatchObject({ tipo: 'presentacion', objetoId: T, groupId: G, final: false });
+    });
+
+    it('guardar no pisa una fila final, tampoco en carrera', async () => {
+      audit.log.mockClear();
+      // Fila final: la actualización condicional no toca nada y la creación choca (P2002).
+      prisma.sugerenciaAsistente.updateMany.mockResolvedValue({ count: 0 });
+      prisma.sugerenciaAsistente.create.mockRejectedValue(
+        new Prisma.PrismaClientKnownRequestError('dup', { code: 'P2002', clientVersion: 'x' }),
+      );
       await service.guardar('presentacion', T, G, { presentacion: 'y' }, BASE);
-      expect(prisma.sugerenciaAsistente.upsert).not.toHaveBeenCalled();
+      expect(prisma.sugerenciaAsistente.updateMany).toHaveBeenCalledTimes(2);
+      for (const c of prisma.sugerenciaAsistente.updateMany.mock.calls) expect(c[0].where.final).toBe(false);
+      expect(audit.log).not.toHaveBeenCalled();
     });
   });
 
@@ -102,9 +121,9 @@ describe('SugerenciasService', () => {
   describe('umbral', () => {
     it('umbral: null si la inquietud ya fue respondida', async () => {
       prisma.sugerenciaAsistente.findUnique.mockResolvedValue(fila('umbral', I1, { resumen: 'r', borradorRespuesta: 'b' }));
-      prisma.inquietud.findUnique.mockResolvedValue({ hidden: false, status: 'respondida' });
+      prisma.inquietud.findUnique.mockResolvedValue({ groupId: G, hidden: false, status: 'respondida' });
       expect(await service.ver(YO, 'umbral', I1)).toBeNull();
-      prisma.inquietud.findUnique.mockResolvedValue({ hidden: false, status: 'en_plazo' });
+      prisma.inquietud.findUnique.mockResolvedValue({ groupId: G, hidden: false, status: 'en_plazo' });
       expect(await service.ver(YO, 'umbral', I1)).toMatchObject({ tipo: 'umbral', contenido: { resumen: 'r', borradorRespuesta: 'b' } });
     });
   });
@@ -172,6 +191,41 @@ describe('SugerenciasService', () => {
       prisma.sugerenciaAsistente.findUnique.mockResolvedValue(fila('mapa', T, contenido, { final: true }));
       access.requireReader.mockRejectedValue(new ForbiddenException('no'));
       await expect(service.ver(YO, 'mapa', T)).rejects.toBeInstanceOf(ForbiddenException);
+    });
+  });
+
+  describe('acceso por objeto, sin revelar existencia', () => {
+    const OTRO = '55555555-5555-4555-8555-555555555555';
+
+    it('agrupar decide por el objeto, no por el groupId guardado', async () => {
+      prisma.sugerenciaAsistente.findUnique.mockResolvedValue(fila('agrupar', G, { grupos: [] }, { groupId: OTRO }));
+      await service.ver(YO, 'agrupar', G);
+      expect(forums.canOrganize).toHaveBeenCalledWith(YO, G);
+    });
+
+    it('umbral decide por el grupo real de la inquietud', async () => {
+      prisma.sugerenciaAsistente.findUnique.mockResolvedValue(fila('umbral', I1, { resumen: 'r', borradorRespuesta: 'b' }, { groupId: OTRO }));
+      prisma.inquietud.findUnique.mockResolvedValue({ groupId: G, hidden: false, status: 'en_plazo' });
+      forums.canOrganize.mockImplementation(async (_p: string, g: string) => g === G);
+      expect(await service.ver(YO, 'umbral', I1)).toMatchObject({ tipo: 'umbral' });
+      expect(forums.canOrganize).toHaveBeenCalledWith(YO, G);
+      forums.canOrganize.mockImplementation(async () => false);
+      await expect(service.ver(YO, 'umbral', I1)).rejects.toBeInstanceOf(ForbiddenException);
+    });
+
+    it('comision decide por el id del grupo comisión', async () => {
+      prisma.sugerenciaAsistente.findUnique.mockResolvedValue(fila('comision', G, { capacidades: [], comentario: 'c' }, { groupId: OTRO }));
+      await service.ver(YO, 'comision', G);
+      expect(access.requireReader).toHaveBeenCalledWith(G, YO);
+    });
+
+    it('sin acceso y sin fila: 403 igual que con fila', async () => {
+      forums.canOrganize.mockResolvedValue(false);
+      await expect(service.ver(YO, 'agrupar', G)).rejects.toBeInstanceOf(ForbiddenException);
+      access.requireReader.mockRejectedValue(new ForbiddenException('no'));
+      await expect(service.ver(YO, 'comision', G)).rejects.toBeInstanceOf(ForbiddenException);
+      await expect(service.ver(YO, 'mapa', T)).rejects.toBeInstanceOf(ForbiddenException);
+      expect(prisma.sugerenciaAsistente.findUnique).not.toHaveBeenCalled();
     });
   });
 

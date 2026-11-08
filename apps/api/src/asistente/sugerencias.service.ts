@@ -16,6 +16,13 @@ const MIN_GRUPO = 2;
 const SIN_ACCESO = 'No tienes acceso a esta sugerencia.';
 
 type Json = Record<string, any>;
+interface TemaSug {
+  groupId: string;
+  status: string;
+  hidden: boolean;
+  deliberationEndsAt: Date | null;
+  decision: { id: string } | null;
+}
 
 @Injectable()
 export class SugerenciasService {
@@ -35,17 +42,21 @@ export class SugerenciasService {
     base: BaseSugerencia,
     final = false,
   ): Promise<void> {
-    const actual = await this.prisma.sugerenciaAsistente.findUnique({
-      where: { tipo_objetoId: { tipo, objetoId } },
-      select: { final: true },
-    });
-    if (actual?.final) return;
     const datos = { groupId, contenido: contenido as Prisma.InputJsonValue, base: base as unknown as Prisma.InputJsonValue, final };
-    await this.prisma.sugerenciaAsistente.upsert({
-      where: { tipo_objetoId: { tipo, objetoId } },
-      create: { tipo, objetoId, ...datos },
-      update: datos,
-    });
+    const donde = { tipo, objetoId, final: false };
+    // Escritura condicional: una fila final nunca se reescribe, ni siquiera con dos escrituras a la vez.
+    let { count } = await this.prisma.sugerenciaAsistente.updateMany({ where: donde, data: datos });
+    if (count === 0) {
+      try {
+        await this.prisma.sugerenciaAsistente.create({ data: { tipo, objetoId, ...datos } });
+        count = 1;
+      } catch (err) {
+        if (!(err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002')) throw err;
+        // Alguien la creó justo ahora: un solo reintento condicional (si es final, no se toca).
+        ({ count } = await this.prisma.sugerenciaAsistente.updateMany({ where: donde, data: datos }));
+      }
+    }
+    if (count === 0) return;
     void this.audit.log({
       action: 'asistente.sugerencia_guardada',
       resource: `sugerencia_asistente:${objetoId}`,
@@ -89,6 +100,27 @@ export class SugerenciasService {
 
   /** La sugerencia tal como la ve esta persona, o null si no hay nada que mostrar. 403 si no tiene acceso. */
   async ver(profileId: string, tipo: SugerenciaTipo, objetoId: string): Promise<SugerenciaVista | null> {
+    // El acceso se decide por el objeto y antes de mirar si hay fila: así no se revela si existe.
+    let inq: { groupId: string; hidden: boolean; status: string } | null = null;
+    let tema: TemaSug | null = null;
+    let participa = false;
+    if (tipo === 'agrupar') {
+      await this.requireOrganiza(profileId, objetoId);
+    } else if (tipo === 'umbral') {
+      inq = await this.prisma.inquietud.findUnique({ where: { id: objetoId }, select: { groupId: true, hidden: true, status: true } });
+      if (!inq) throw new ForbiddenException(SIN_ACCESO);
+      await this.requireOrganiza(profileId, inq.groupId);
+    } else if (tipo === 'comision') {
+      await this.access.requireReader(objetoId, profileId);
+    } else {
+      tema = await this.prisma.proposal.findUnique({
+        where: { id: objetoId },
+        select: { id: true, groupId: true, status: true, hidden: true, deliberationEndsAt: true, decision: { select: { id: true } } },
+      });
+      if (!tema) throw new NotFoundException('Tema no encontrado.');
+      ({ participa } = await this.access.requireReader(tema.groupId, profileId));
+    }
+
     const fila = await this.prisma.sugerenciaAsistente.findUnique({ where: { tipo_objetoId: { tipo, objetoId } } });
     if (!fila) return null;
     const base = fila.base as unknown as BaseSugerencia;
@@ -97,18 +129,14 @@ export class SugerenciasService {
 
     switch (tipo) {
       case 'agrupar': {
-        await this.requireOrganiza(profileId, fila.groupId);
-        const grupos = await this.resolverAgrupar(fila.groupId, contenido);
+        const grupos = await this.resolverAgrupar(objetoId, contenido);
         return grupos.length ? { tipo, ...comun, contenido: { grupos } } : null;
       }
       case 'umbral': {
-        await this.requireOrganiza(profileId, fila.groupId);
-        const inq = await this.prisma.inquietud.findUnique({ where: { id: objetoId }, select: { hidden: true, status: true } });
-        if (!inq || inq.hidden || inq.status !== 'en_plazo') return null;
+        if (inq!.hidden || inq!.status !== 'en_plazo') return null;
         return { tipo, ...comun, contenido: { resumen: String(contenido.resumen ?? ''), borradorRespuesta: String(contenido.borradorRespuesta ?? '') } };
       }
-      case 'comision': {
-        await this.access.requireReader(fila.groupId, profileId);
+      case 'comision':
         return {
           tipo,
           ...comun,
@@ -117,9 +145,8 @@ export class SugerenciasService {
             comentario: String(contenido.comentario ?? ''),
           },
         };
-      }
       default:
-        return this.verDeTema(profileId, tipo, objetoId, fila.final, contenido, comun);
+        return this.verDeTema(profileId, tipo, objetoId, fila.final, contenido, comun, tema!, participa);
     }
   }
 
@@ -134,13 +161,9 @@ export class SugerenciasService {
     final: boolean,
     contenido: Json,
     comun: { base: BaseSugerencia; final: boolean; actualizadaAt: string },
+    tema: TemaSug,
+    participa: boolean,
   ): Promise<SugerenciaVista | null> {
-    const tema = await this.prisma.proposal.findUnique({
-      where: { id: proposalId },
-      select: { id: true, groupId: true, status: true, hidden: true, deliberationEndsAt: true, decision: { select: { id: true } } },
-    });
-    if (!tema) throw new NotFoundException('Tema no encontrado.');
-    const { participa } = await this.access.requireReader(tema.groupId, profileId);
     if (tema.hidden) return null;
     const extra = { ...comun, proposalId };
 
