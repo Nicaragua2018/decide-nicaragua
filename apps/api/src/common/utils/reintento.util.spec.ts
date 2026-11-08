@@ -3,7 +3,7 @@ import { Prisma } from '@prisma/client';
 import { conReintento, esConflictoDeBloqueo } from './reintento.util';
 
 const conocido = (code: string, meta?: Record<string, unknown>) =>
-  new Prisma.PrismaClientKnownRequestError('fallo', { code, clientVersion: '6', meta });
+  new Prisma.PrismaClientKnownRequestError('fallo', { code, clientVersion: '6', ...(meta ? { meta } : {}) });
 
 describe('esConflictoDeBloqueo()', () => {
   it('P2034 (conflicto de escritura o interbloqueo) cuenta', () => {
