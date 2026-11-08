@@ -22,6 +22,7 @@ import { CrecerService } from './crecer.service';
 import { Publicadores } from './publicadores';
 import { RevisionPosteriorService } from './revision-posterior.service';
 import { SemillasService } from './semillas.service';
+import { SugerenciasService } from './sugerencias.service';
 
 @Module({
   imports: [AuditModule, EmailModule, BoardModule, ForumsModule, GroupsModule, RulesModule, VerificationModule],
@@ -53,8 +54,9 @@ import { SemillasService } from './semillas.service';
     AlDiaService,
     CrecerService,
     SemillasService,
+    SugerenciasService,
     AsistenteScheduler,
   ],
-  exports: [AsistenteService, ModeracionPreviaService, GuardiaService, Publicadores, ContextoPersonaService],
+  exports: [AsistenteService, ModeracionPreviaService, GuardiaService, Publicadores, ContextoPersonaService, SugerenciasService],
 })
 export class AsistenteModule {}

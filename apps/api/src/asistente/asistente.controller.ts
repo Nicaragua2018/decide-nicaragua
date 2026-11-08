@@ -1,6 +1,7 @@
-import { BadRequestException, Body, Controller, ForbiddenException, Get, HttpCode, Param, ParseUUIDPipe, Post, UseGuards } from '@nestjs/common';
+import { BadRequestException, Body, Controller, ForbiddenException, Get, HttpCode, Param, ParseUUIDPipe, Post, Res, UseGuards } from '@nestjs/common';
+import type { Response } from 'express';
 import { Throttle } from '@nestjs/throttler';
-import type { AlDiaView, CrecerView, JwtPayload, RespuestaPanel, RevisionTexto } from '@decide/shared';
+import type { AlDiaView, CrecerView, JwtPayload, RespuestaPanel, RevisionTexto, SugerenciaTipo, SugerenciaVista } from '@decide/shared';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { AsistenteService, type EstadoAsistente } from './asistente.service';
@@ -8,6 +9,7 @@ import { ModeracionPreviaService } from './moderacion-previa.service';
 import { PanelService } from './panel.service';
 import { AlDiaService, VISTA_VACIA } from './al-dia.service';
 import { CrecerService } from './crecer.service';
+import { SUGERENCIA_TIPOS, SugerenciasService } from './sugerencias.service';
 import { RevisarTextoDto } from './dto/revisar-texto.dto';
 import { PreguntarDto } from './dto/preguntar.dto';
 
@@ -20,6 +22,7 @@ export class AsistenteController {
     private readonly panel: PanelService,
     private readonly alDiaServicio: AlDiaService,
     private readonly crecerServicio: CrecerService,
+    private readonly sugerencias: SugerenciasService,
   ) {}
 
   /** Si el asistente funciona y si se alcanzó el tope del mes. Cualquier cuenta con perfil. */
@@ -85,5 +88,23 @@ export class AsistenteController {
     if (!user.profileId) throw new ForbiddenException('Perfil requerido');
     if (user.status !== 'verified_citizen') return;
     await this.crecerServicio.cerrar(groupId, user.profileId);
+  }
+
+  /** Sugerencia del asistente para un objeto; 204 si no hay nada que mostrar. El acceso se comprueba por tipo. */
+  @Get('sugerencias/:tipo/:objetoId')
+  async sugerencia(
+    @Param('tipo') tipo: string,
+    @Param('objetoId', new ParseUUIDPipe()) objetoId: string,
+    @CurrentUser() user: JwtPayload,
+    @Res({ passthrough: true }) res: Response,
+  ): Promise<SugerenciaVista | void> {
+    if (!user.profileId) throw new ForbiddenException('Perfil requerido');
+    if (!(SUGERENCIA_TIPOS as readonly string[]).includes(tipo)) throw new BadRequestException('Tipo de sugerencia no válido.');
+    const vista = await this.sugerencias.ver(user.profileId, tipo as SugerenciaTipo, objetoId);
+    if (!vista) {
+      res.status(204);
+      return;
+    }
+    return vista;
   }
 }
