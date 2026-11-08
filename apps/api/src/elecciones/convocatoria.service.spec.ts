@@ -411,4 +411,48 @@ describe('ConvocatoriaService', () => {
       });
     });
   });
+
+  describe('anticipada', () => {
+    const MANDATO = new Date(NOW.getTime() + 120 * DIA);
+
+    it('abre 1 puesto con mandatoHasta', async () => {
+      const id = await service.anticipada({ groupId: GEN, cargo: 'secretario', mandatoHasta: MANDATO }, NOW);
+      expect(id).toBe('e-new');
+      expect(creadas()).toHaveLength(1);
+      expect(creadas()[0]).toMatchObject({
+        groupId: GEN, cargo: 'secretario', puestos: 1, motivo: 'anticipada', jornadaId: null, mandatoHasta: MANDATO,
+      });
+      expect(audit.log).toHaveBeenCalledWith(
+        expect.objectContaining({ action: 'eleccion.convocada', metadata: { cargo: 'secretario', motivo: 'anticipada', groupId: GEN } }),
+      );
+    });
+
+    it('devuelve null si ya hay una abierta (P2002)', async () => {
+      prisma.eleccion.create.mockRejectedValue(
+        new Prisma.PrismaClientKnownRequestError('dup', { code: 'P2002', clientVersion: 'x' }),
+      );
+      expect(await service.anticipada({ groupId: GEN, cargo: 'secretario', mandatoHasta: MANDATO }, NOW)).toBeNull();
+    });
+
+    it('con tx comprueba antes si hay una abierta y no crea', async () => {
+      prisma.eleccion.findFirst.mockResolvedValue({ id: 'abierta' });
+      const r = await service.anticipada({ groupId: GEN, cargo: 'secretario', mandatoHasta: MANDATO }, NOW, prisma as never);
+      expect(r).toBeNull();
+      expect(prisma.eleccion.create).not.toHaveBeenCalled();
+    });
+
+    it('con tx y sin abierta crea dentro de la tx', async () => {
+      const r = await service.anticipada({ groupId: GEN, cargo: 'secretario', mandatoHasta: null }, NOW, prisma as never);
+      expect(r).toBe('e-new');
+      expect(creadas()[0]).toMatchObject({ mandatoHasta: null });
+    });
+
+    it('no abre a 45 días o menos del fin', async () => {
+      const r = await service.anticipada(
+        { groupId: GEN, cargo: 'secretario', mandatoHasta: new Date(NOW.getTime() + 45 * DIA) }, NOW,
+      );
+      expect(r).toBeNull();
+      expect(prisma.eleccion.create).not.toHaveBeenCalled();
+    });
+  });
 });

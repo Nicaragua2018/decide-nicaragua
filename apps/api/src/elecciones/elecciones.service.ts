@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import {
   BadRequestException,
+  ConflictException,
   ForbiddenException,
   Injectable,
   NotFoundException,
@@ -15,6 +16,7 @@ import type {
   EleccionFaseValue,
   EleccionMotivoValue,
   EleccionResumen,
+  MiCargoVista,
   RepresentantesVista,
   ResultadoEleccionVista,
 } from '@decide/shared';
@@ -37,6 +39,7 @@ const TERRITORIALES = ['territorial_origin', 'territorial_residence'] as const;
 const NO_ELECTORADO = 'Esta elección es para otra comunidad o para cuentas verificadas.';
 const NO_ENCONTRADA = 'Elección no encontrada.';
 const PLAZO_CERRADO = 'El plazo para presentarse no está abierto.';
+const CARGO_TERMINADO = 'Este cargo ya terminó.';
 const VOTACION_CERRADA = 'La votación no está abierta.';
 
 type Ficha = { presentacion: string; compromisos: string[] };
@@ -232,6 +235,50 @@ export class EleccionesService implements OnModuleInit {
           : null,
       resultado: e.fase === 'contada' ? this.resultado(e, nombres) : null,
     };
+  }
+
+  /** Los cargos vigentes de la persona. Puede renunciar a uno que no esté en funciones. */
+  async misCargos(profileId: string): Promise<MiCargoVista[]> {
+    const cargos = await this.prisma.cargo.findMany({
+      where: { profileId, terminadoAt: null },
+      orderBy: { desde: 'asc' },
+      select: { id: true, tipo: true, desde: true, hasta: true, enFunciones: true, group: { select: { name: true } } },
+    });
+    return cargos.map((c) => ({
+      id: c.id,
+      tipo: c.tipo,
+      comunidad: c.tipo === 'coordinador' ? c.group.name : null,
+      desde: c.desde.toISOString(),
+      hasta: c.hasta ? c.hasta.toISOString() : null,
+      enFunciones: c.enFunciones,
+      puedeRenunciar: !c.enFunciones,
+    }));
+  }
+
+  /** Renuncia a un cargo propio: termina, libera el asiento de la mesa y abre la elección anticipada. */
+  async renunciar(profileId: string, cargoId: string, now: Date): Promise<void> {
+    const cargo = await this.prisma.cargo.findFirst({
+      where: { id: cargoId, profileId, terminadoAt: null },
+      select: { tipo: true, groupId: true, hasta: true },
+    });
+    if (!cargo) throw new ConflictException(CARGO_TERMINADO);
+    await this.prisma.$transaction(async (tx) => {
+      const r = await tx.cargo.updateMany({
+        where: { id: cargoId, profileId, terminadoAt: null },
+        data: { terminadoAt: now, finCausa: 'renuncia', enFunciones: false },
+      });
+      if (r.count === 0) throw new ConflictException(CARGO_TERMINADO);
+      if (MESA.includes(cargo.tipo)) {
+        const role = cargo.tipo as 'administrador' | 'coordinador_general' | 'secretario';
+        await tx.boardSeat.deleteMany({ where: { role, profileId } });
+      }
+    });
+    await this.convocatoria.anticipada({ groupId: cargo.groupId, cargo: cargo.tipo, mandatoHasta: cargo.hasta }, now);
+    void this.audit.log({
+      action: 'cargo.renuncia',
+      resource: `cargo:${cargoId}`,
+      metadata: { tipo: cargo.tipo, groupId: cargo.groupId },
+    });
   }
 
   /** «Quiénes nos representan»: pública. Solo el nombre visible, nunca el correo. */

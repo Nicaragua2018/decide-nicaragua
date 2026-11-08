@@ -1,6 +1,6 @@
 import 'reflect-metadata';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { BadRequestException, ForbiddenException, HttpException } from '@nestjs/common';
+import { BadRequestException, ConflictException, ForbiddenException, HttpException } from '@nestjs/common';
 import { validate } from 'class-validator';
 import { plainToInstance } from 'class-transformer';
 import { EleccionesService } from './elecciones.service';
@@ -71,8 +71,12 @@ function buildPrisma() {
       updateMany: vi.fn().mockResolvedValue({ count: 1 }),
     },
     boardAction: { updateMany: vi.fn().mockResolvedValue({ count: 0 }) },
-    cargo: { findMany: vi.fn().mockResolvedValue([]) },
-    boardSeat: { findMany: vi.fn().mockResolvedValue([]) },
+    cargo: {
+      findMany: vi.fn().mockResolvedValue([]),
+      findFirst: vi.fn().mockResolvedValue(null),
+      updateMany: vi.fn().mockResolvedValue({ count: 1 }),
+    },
+    boardSeat: { findMany: vi.fn().mockResolvedValue([]), deleteMany: vi.fn().mockResolvedValue({ count: 1 }) },
     papeletaEleccion: {
       findUnique: vi.fn().mockResolvedValue(null),
       findMany: vi.fn().mockResolvedValue([]),
@@ -88,7 +92,7 @@ function buildPrisma() {
 describe('EleccionesService', () => {
   let prisma: ReturnType<typeof buildPrisma>;
   let audit: { log: ReturnType<typeof vi.fn> };
-  let convocatoria: { enElectorado: ReturnType<typeof vi.fn> };
+  let convocatoria: { enElectorado: ReturnType<typeof vi.fn>; anticipada: ReturnType<typeof vi.fn> };
   let guardia: ReturnType<typeof guardiaMock>;
   let publicadores: ReturnType<typeof publicadoresMock>;
   let service: EleccionesService;
@@ -97,7 +101,7 @@ describe('EleccionesService', () => {
     prisma = buildPrisma();
     prisma.$transaction.mockImplementation(async (fn: (tx: unknown) => unknown) => fn(prisma));
     audit = { log: vi.fn().mockResolvedValue(undefined) };
-    convocatoria = { enElectorado: vi.fn().mockResolvedValue(true) };
+    convocatoria = { enElectorado: vi.fn().mockResolvedValue(true), anticipada: vi.fn().mockResolvedValue('e-ant') };
     guardia = guardiaMock();
     service = new EleccionesService(
       prisma as never,
@@ -511,6 +515,60 @@ describe('EleccionesService', () => {
 
       expect(await validate(plainToInstance(PapeletaEleccionDto, { abstencion: false, orden: [] }))).toHaveLength(0);
       expect(await validate(plainToInstance(PapeletaEleccionDto, { abstencion: 'no', orden: ['x'] }))).toHaveLength(2);
+    });
+  });
+
+  describe('mis cargos y renuncia', () => {
+    const NOW = new Date('2027-01-20T12:00:00Z');
+    const HASTA = new Date(NOW.getTime() + 200 * DIA);
+    const cargoSec = { tipo: 'secretario', groupId: GEN, hasta: HASTA };
+
+    it('misCargos da la comunidad solo a coordinadores y puedeRenunciar según enFunciones', async () => {
+      prisma.cargo.findMany.mockResolvedValue([
+        { id: 'c1', tipo: 'secretario', desde: NOW, hasta: HASTA, enFunciones: false, group: { name: 'Nicaragua Decide' } },
+        { id: 'c2', tipo: 'coordinador', desde: NOW, hasta: HASTA, enFunciones: true, group: { name: 'Managua' } },
+      ]);
+      const r = await service.misCargos(YO);
+      expect(r[0]).toMatchObject({ id: 'c1', comunidad: null, puedeRenunciar: true });
+      expect(r[1]).toMatchObject({ id: 'c2', comunidad: 'Managua', enFunciones: true, puedeRenunciar: false });
+    });
+
+    it('renunciar termina el cargo, libera el asiento y abre la anticipada', async () => {
+      prisma.cargo.findFirst.mockResolvedValue(cargoSec);
+      await service.renunciar(YO, 'c1', NOW);
+      expect(prisma.cargo.updateMany).toHaveBeenCalledWith({
+        where: { id: 'c1', profileId: YO, terminadoAt: null },
+        data: { terminadoAt: NOW, finCausa: 'renuncia', enFunciones: false },
+      });
+      expect(prisma.boardSeat.deleteMany).toHaveBeenCalledWith({ where: { role: 'secretario', profileId: YO } });
+      expect(convocatoria.anticipada).toHaveBeenCalledWith({ groupId: GEN, cargo: 'secretario', mandatoHasta: HASTA }, NOW);
+      expect(audit.log).toHaveBeenCalledWith(
+        expect.objectContaining({ action: 'cargo.renuncia', metadata: { tipo: 'secretario', groupId: GEN } }),
+      );
+    });
+
+    it('renunciar un cargo de coordinador no toca la mesa', async () => {
+      prisma.cargo.findFirst.mockResolvedValue({ tipo: 'coordinador', groupId: 'g-com', hasta: HASTA });
+      await service.renunciar(YO, 'c1', NOW);
+      expect(prisma.boardSeat.deleteMany).not.toHaveBeenCalled();
+      expect(convocatoria.anticipada).toHaveBeenCalled();
+    });
+
+    it('renunciar dos veces da 409 y no abre otra', async () => {
+      prisma.cargo.findFirst.mockResolvedValue(cargoSec);
+      await service.renunciar(YO, 'c1', NOW);
+      convocatoria.anticipada.mockClear();
+      prisma.cargo.findFirst.mockResolvedValue(null);
+      await expect(service.renunciar(YO, 'c1', NOW)).rejects.toBeInstanceOf(ConflictException);
+      expect(convocatoria.anticipada).not.toHaveBeenCalled();
+    });
+
+    it('renunciar un cargo ajeno (updateMany cuenta 0) da 409', async () => {
+      prisma.cargo.findFirst.mockResolvedValue(cargoSec);
+      prisma.cargo.updateMany.mockResolvedValue({ count: 0 });
+      await expect(service.renunciar(YO, 'c1', NOW)).rejects.toThrow('Este cargo ya terminó.');
+      expect(prisma.boardSeat.deleteMany).not.toHaveBeenCalled();
+      expect(convocatoria.anticipada).not.toHaveBeenCalled();
     });
   });
 });

@@ -167,7 +167,14 @@ export class PosesionService {
    */
   private async darPosesion(
     tx: Prisma.TransactionClient,
-    e: { id: string; groupId: string; cargo: CargoTipoValue; periodoMeses: number | null; plenos: number | null },
+    e: {
+      id: string;
+      groupId: string;
+      cargo: CargoTipoValue;
+      periodoMeses: number | null;
+      plenos: number | null;
+      mandatoHasta?: Date | null;
+    },
     perfiles: string[],
     now: Date,
   ): Promise<void> {
@@ -197,13 +204,17 @@ export class PosesionService {
       await tx.cargo.updateMany({ where: { id: { in: salen.map((c) => c.id) } }, data: termina });
     }
 
-    const meses =
-      e.periodoMeses ??
-      (await this.rules.getInt(
-        e.cargo === 'coordinador' ? 'cargos.periodo_coordinadores_meses' : 'cargos.periodo_mesa_meses',
-        null,
-      ));
-    const hasta = sumarMeses(now, meses);
+    // Una elección anticipada hereda el fin del mandato que faltaba.
+    const hasta =
+      e.mandatoHasta ??
+      sumarMeses(
+        now,
+        e.periodoMeses ??
+          (await this.rules.getInt(
+            e.cargo === 'coordinador' ? 'cargos.periodo_coordinadores_meses' : 'cargos.periodo_mesa_meses',
+            null,
+          )),
+      );
     for (const profileId of perfiles) {
       await tx.cargo.create({
         data: { tipo: e.cargo, groupId: e.groupId, profileId, eleccionId: e.id, desde: now, hasta },

@@ -158,6 +158,14 @@ describe('PosesionService', () => {
     );
   });
 
+  it('darPosesion usa mandatoHasta de una anticipada', async () => {
+    const fin = new Date(NOW.getTime() + 200 * DIA);
+    preparar([{ id: 'c1', profileId: 'p1' }], voto(10, ['c1']), votantes(10));
+    prisma.eleccion.findUnique.mockResolvedValue(eleccion({ motivo: 'anticipada', mandatoHasta: fin }));
+    await service.contar('e1', NOW);
+    expect(prisma.cargo.create.mock.calls[0]![0].data.hasta).toEqual(fin);
+  });
+
   it('coordinadores no tocan la mesa y usan su período', async () => {
     preparar([{ id: 'c1', profileId: 'p1' }], voto(10, ['c1']), votantes(10));
     prisma.eleccion.findUnique.mockResolvedValue(eleccion({ cargo: 'coordinador', groupId: 'g-com', puestos: 2 }));

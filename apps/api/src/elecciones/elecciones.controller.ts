@@ -11,7 +11,7 @@ import {
   Put,
   UseGuards,
 } from '@nestjs/common';
-import type { EleccionDetalle, EleccionResumen, JwtPayload, RepresentantesVista } from '@decide/shared';
+import type { EleccionDetalle, EleccionResumen, JwtPayload, MiCargoVista, RepresentantesVista } from '@decide/shared';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { EleccionesService } from './elecciones.service';
@@ -31,6 +31,18 @@ export class EleccionesController {
   @Get()
   async listar(@CurrentUser() user: JwtPayload): Promise<EleccionResumen[]> {
     return this.elecciones.listar(this.perfil(user));
+  }
+
+  /** Declarada antes de `:id` para que no la capture esa ruta. */
+  @Get('mis-cargos')
+  async misCargos(@CurrentUser() user: JwtPayload): Promise<MiCargoVista[]> {
+    return this.elecciones.misCargos(this.perfil(user));
+  }
+
+  @Post('cargos/:cargoId/renuncia')
+  @HttpCode(204)
+  async renunciar(@Param('cargoId', ParseUUIDPipe) cargoId: string, @CurrentUser() user: JwtPayload): Promise<void> {
+    await this.elecciones.renunciar(this.perfil(user), cargoId, new Date());
   }
 
   @Get(':id')
