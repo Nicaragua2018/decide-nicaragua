@@ -8,6 +8,7 @@
     "render": "node render.mjs"
   },
   "dependencies": {
+    "@remotion/bundler": "4.0.541",
     "@remotion/cli": "4.0.541",
     "@remotion/google-fonts": "4.0.541",
     "@remotion/renderer": "4.0.541",

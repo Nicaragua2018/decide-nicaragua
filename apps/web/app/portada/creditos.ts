@@ -8,16 +8,16 @@ export const CREDITOS: readonly {
   url: string;
 }[] = [
   {
-    obra: "Volcán Concepción, isla de Ometepe (foto 03 de la serie)",
+    obra: "Volcán Concepción, isla de Ometepe",
     autor: "Ridiculopathy",
     licencia: "CC0",
     url: "https://commons.wikimedia.org/wiki/File:Concepci%C3%B3n_(volcano)._Conceptcion._Ometepe_Island,_Nicaragua_03.jpg",
   },
   {
-    obra: "Isla Momotombito y volcán Momotombo, lago de Managua",
-    autor: "Pi3.124",
-    licencia: "CC BY-SA 4.0",
-    url: "https://commons.wikimedia.org/wiki/File:Isla_Momotombito_in_Lake_Managua,_and_Momotombo_Volcano,_with_San_Cristobal_Volcano_in_the_distance.jpg",
+    obra: "Volcán Momotombo desde el lago de Managua",
+    autor: "Diego Tirira",
+    licencia: "CC BY-SA 2.0",
+    url: "https://commons.wikimedia.org/wiki/File:NI_Lago_Managua_0411_013_(17258681665).jpg",
   },
   {
     obra: "Guardabarranco (Eumomota superciliosa)",
