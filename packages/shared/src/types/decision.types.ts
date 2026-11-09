@@ -107,3 +107,11 @@ export interface ComunidadDecisiones {
 export interface DecisionesResumenResponse {
   comunidades: ComunidadDecisiones[];
 }
+
+/** Decisión cerrada del espacio general, para la portada pública: sin cifras, votantes ni ids. */
+export interface DecisionPublicaItem {
+  title: string;
+  estado: 'aprobada' | 'rechazada';
+  /** ISO. */
+  fecha: string;
+}

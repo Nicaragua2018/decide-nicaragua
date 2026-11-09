@@ -49,9 +49,9 @@ RUN addgroup -S appgroup && adduser -S appuser -G appgroup
 # Next.js standalone: incluye server.js + node_modules mínimos
 # En monorepo, el standalone se genera en apps/web/.next/standalone/
 # y replica la estructura de directorios desde la raíz del monorepo
-COPY --from=builder /monorepo/apps/web/.next/standalone ./
-COPY --from=builder /monorepo/apps/web/.next/static     ./apps/web/.next/static
-COPY --from=builder /monorepo/apps/web/public           ./apps/web/public
+COPY --from=builder --chown=appuser:appgroup /monorepo/apps/web/.next/standalone ./
+COPY --from=builder --chown=appuser:appgroup /monorepo/apps/web/.next/static     ./apps/web/.next/static
+COPY --from=builder --chown=appuser:appgroup /monorepo/apps/web/public           ./apps/web/public
 
 USER appuser
 EXPOSE 3000

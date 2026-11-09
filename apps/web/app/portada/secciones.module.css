@@ -1,0 +1,703 @@
+/* ============================================================
+   Portada «colmena» — las partes de debajo de la primera pantalla.
+   Usa las variables (--pt-*) y las fuentes que define .portada
+   en portada.module.css.
+   ============================================================ */
+
+.seccion {
+  --pt-platino-suave: #f4f4f2;
+  background: var(--pt-blanco);
+  padding: 64px var(--pt-gutter);
+}
+
+.seccionPlatino {
+  background: var(--pt-platino-suave);
+  border-top: 1px solid var(--pt-platino);
+  border-bottom: 1px solid var(--pt-platino);
+}
+
+@media (min-width: 900px) {
+  .seccion {
+    padding-top: 96px;
+    padding-bottom: 96px;
+  }
+}
+
+.interior {
+  max-width: 1200px;
+  margin: 0 auto;
+  min-width: 0;
+}
+
+.titulo {
+  font-family: var(--pt-serif), Georgia, serif;
+  font-weight: 600;
+  font-size: clamp(30px, 4.2vw, 44px);
+  line-height: 1.12;
+  letter-spacing: -0.01em;
+  color: var(--pt-texto);
+  margin: 0 0 28px;
+  text-wrap: balance;
+}
+
+/* Pequeño hexágono amarillo delante de cada título, como sello de la colmena. */
+.titulo::before {
+  content: '';
+  display: block;
+  width: 22px;
+  height: 25px;
+  margin-bottom: 14px;
+  background: var(--pt-amarillo);
+  clip-path: polygon(50% 0, 100% 25%, 100% 75%, 50% 100%, 0 75%, 0 25%);
+}
+
+.entrada {
+  margin: -12px 0 28px;
+  color: var(--pt-texto-2);
+  font-size: 16px;
+  line-height: 1.6;
+  max-width: 40em;
+}
+
+.subtitulo {
+  font-family: var(--pt-serif), Georgia, serif;
+  font-weight: 600;
+  font-size: 22px;
+  line-height: 1.25;
+  color: var(--pt-texto);
+  margin: 0 0 10px;
+}
+
+/* ── Cómo funciona ───────────────────────────────────────── */
+
+.pasos {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 22px;
+}
+
+.paso {
+  display: grid;
+  grid-template-columns: 64px minmax(0, 1fr);
+  gap: 16px;
+  align-items: start;
+}
+
+.pasoCelda {
+  position: relative;
+  width: 64px;
+  height: 72px;
+}
+
+.pasoCelda svg {
+  display: block;
+}
+
+.pasoNumero {
+  position: absolute;
+  top: -4px;
+  right: -6px;
+  min-width: 22px;
+  height: 22px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: var(--pt-azul);
+  color: var(--pt-blanco);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 22px;
+  text-align: center;
+}
+
+.pasoTitulo {
+  font-family: var(--pt-serif), Georgia, serif;
+  font-weight: 600;
+  font-size: 19px;
+  line-height: 1.3;
+  color: var(--pt-texto);
+  margin: 8px 0 4px;
+}
+
+.pasoTexto {
+  margin: 0;
+  color: var(--pt-texto-2);
+  font-size: 15px;
+  line-height: 1.55;
+}
+
+@media (min-width: 900px) {
+  .pasos {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    gap: 28px;
+    position: relative;
+  }
+
+  /* Hilo que une las celdas, a la altura del centro de los hexágonos. */
+  .pasos::before {
+    content: '';
+    position: absolute;
+    top: 36px;
+    left: 32px;
+    right: calc(20% - 32px);
+    border-top: 2px dashed var(--pt-azul-pastel);
+  }
+
+  .paso {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 12px;
+    position: relative;
+  }
+
+  .pasoCelda {
+    background: var(--pt-blanco);
+  }
+}
+
+/* ── Tu lugar ────────────────────────────────────────────── */
+
+.dosColumnas {
+  display: grid;
+  gap: 40px;
+  align-items: center;
+}
+
+@media (min-width: 900px) {
+  .dosColumnas {
+    grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr);
+    gap: 64px;
+  }
+}
+
+.puntos {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 14px;
+}
+
+.puntos li {
+  position: relative;
+  padding-left: 28px;
+  font-size: 16px;
+  line-height: 1.6;
+  color: var(--pt-texto-2);
+}
+
+.puntos li::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0.45em;
+  width: 13px;
+  height: 15px;
+  background: var(--pt-azul);
+  clip-path: polygon(50% 0, 100% 25%, 100% 75%, 50% 100%, 0 75%, 0 25%);
+}
+
+.puntos strong {
+  color: var(--pt-texto);
+  font-weight: 600;
+}
+
+/* Tres celdas en forma de panal. */
+.panal {
+  --lado: clamp(118px, 34vw, 168px);
+  position: relative;
+  width: calc(var(--lado) * 2 + 8px);
+  height: calc(var(--lado) * 1.155 * 1.75 + 8px);
+  margin: 0 auto;
+}
+
+.celda {
+  position: absolute;
+  width: var(--lado);
+  height: calc(var(--lado) * 1.155);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 18px;
+  text-align: center;
+  font-family: var(--pt-serif), Georgia, serif;
+  font-weight: 600;
+  font-size: clamp(14px, 3.6vw, 17px);
+  line-height: 1.2;
+  color: var(--pt-texto);
+  clip-path: polygon(50% 0, 100% 25%, 100% 75%, 50% 100%, 0 75%, 0 25%);
+}
+
+.celdaAmarilla {
+  top: 0;
+  left: 0;
+  background: var(--pt-amarillo);
+}
+
+.celdaAzul {
+  top: 0;
+  left: calc(var(--lado) + 8px);
+  background: var(--pt-azul-pastel);
+}
+
+.celdaBlanca {
+  top: calc(var(--lado) * 1.155 * 0.75 + 8px);
+  left: calc(var(--lado) / 2 + 4px);
+  /* Celda blanca sobre el fondo platinado: el espacio general, común a todos. */
+  background: var(--pt-blanco);
+}
+
+/* ── Lo que ya decidimos ─────────────────────────────────── */
+
+.tarjetas {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 16px;
+}
+
+@media (min-width: 600px) {
+  .tarjetas {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 900px) {
+  .tarjetas {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 20px;
+  }
+}
+
+.tarjeta {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 20px 22px;
+  background: var(--pt-blanco);
+  border: 1px solid var(--pt-platino);
+  border-radius: 16px;
+  box-shadow: 0 10px 26px -22px rgba(27, 42, 74, 0.45);
+  min-width: 0;
+}
+
+.estado {
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--pt-texto);
+}
+
+.estadoAprobada {
+  background: var(--pt-azul-pastel);
+}
+
+.estadoAprobada svg {
+  color: var(--pt-azul);
+}
+
+.estadoRechazada {
+  background: var(--pt-platino);
+}
+
+.estadoRechazada svg {
+  color: var(--pt-texto-2);
+}
+
+.tarjetaTitulo {
+  margin: 0;
+  font-family: var(--pt-serif), Georgia, serif;
+  font-weight: 600;
+  font-size: 18px;
+  line-height: 1.35;
+  color: var(--pt-texto);
+  overflow-wrap: anywhere;
+}
+
+.tarjetaFecha {
+  margin-top: auto;
+  font-size: 14px;
+  color: var(--pt-texto-2);
+}
+
+.vacio {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 24px;
+  border: 1px dashed #c9d9ea;
+  border-radius: 16px;
+  background: #f7fafd;
+}
+
+.vacio svg {
+  flex-shrink: 0;
+}
+
+.vacio p {
+  margin: 0;
+  font-family: var(--pt-serif), Georgia, serif;
+  font-weight: 600;
+  font-size: 19px;
+  line-height: 1.35;
+  color: var(--pt-texto);
+}
+
+.enlaces {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 28px;
+}
+
+.botonSecundario,
+.botonPrincipal {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  padding: 10px 18px;
+  border-radius: 12px;
+  font-size: 15px;
+  font-weight: 600;
+  text-decoration: none;
+  transition: background-color 0.15s ease, border-color 0.15s ease;
+}
+
+.botonSecundario {
+  color: var(--pt-azul-hover);
+  background: var(--pt-blanco);
+  border: 1.5px solid var(--pt-azul);
+}
+
+.botonSecundario:hover {
+  background: var(--pt-azul-pastel);
+}
+
+.botonPrincipal {
+  color: var(--pt-blanco);
+  background: var(--pt-azul);
+  border: 1.5px solid var(--pt-azul);
+}
+
+.botonPrincipal:hover {
+  background: var(--pt-azul-hover);
+  border-color: var(--pt-azul-hover);
+}
+
+.botonSecundario:focus-visible,
+.botonPrincipal:focus-visible,
+.enlaceTexto:focus-visible,
+.pie a:focus-visible {
+  outline: 3px solid var(--pt-azul);
+  outline-offset: 3px;
+  border-radius: 6px;
+}
+
+@media (max-width: 599px) {
+  .enlaces > a {
+    flex: 1 1 100%;
+  }
+}
+
+/* ── Por qué confiar ─────────────────────────────────────── */
+
+.razones {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 16px;
+}
+
+@media (min-width: 600px) {
+  .razones {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 1100px) {
+  .razones {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 20px;
+  }
+}
+
+.razon {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  padding: 20px;
+  background: var(--pt-blanco);
+  border: 1px solid var(--pt-platino);
+  border-radius: 16px;
+  min-width: 0;
+}
+
+.razon svg {
+  flex-shrink: 0;
+}
+
+.razon p {
+  margin: 4px 0 0;
+  font-size: 16px;
+  line-height: 1.55;
+  color: var(--pt-texto);
+}
+
+.enlaceTexto {
+  color: var(--pt-azul-hover);
+  font-weight: 600;
+  text-underline-offset: 3px;
+  white-space: nowrap;
+}
+
+/* ── Quiénes somos ───────────────────────────────────────── */
+
+.renacer {
+  display: grid;
+  gap: 28px;
+  align-items: center;
+}
+
+@media (min-width: 900px) {
+  .renacer {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: 56px;
+  }
+}
+
+.renacerFigura {
+  margin: 0;
+  min-width: 0;
+}
+
+.renacerFoto {
+  display: block;
+  width: 100%;
+  height: auto;
+  border-radius: 20px;
+  border: 1px solid var(--pt-platino);
+  box-shadow: 0 18px 40px -26px rgba(27, 42, 74, 0.4);
+}
+
+.avisoIa {
+  margin-top: 8px;
+  font-size: 13px;
+  color: var(--pt-texto-2);
+}
+
+.renacerTexto p {
+  margin: 0 0 12px;
+  font-size: 16px;
+  line-height: 1.65;
+  color: var(--pt-texto-2);
+}
+
+.contactoFila {
+  display: grid;
+  gap: 16px;
+  margin-top: 48px;
+}
+
+@media (min-width: 900px) {
+  .contactoFila {
+    grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr);
+    gap: 20px;
+  }
+}
+
+.caja {
+  padding: 24px;
+  background: var(--pt-platino-suave);
+  border: 1px solid var(--pt-platino);
+  border-radius: 18px;
+  min-width: 0;
+  scroll-margin-top: 24px;
+}
+
+.cajaTexto {
+  margin: 0 0 16px;
+  font-size: 15px;
+  line-height: 1.6;
+  color: var(--pt-texto-2);
+  overflow-wrap: anywhere;
+}
+
+/* El formulario del boletín trae estilos para fondo oscuro (globals.css);
+   aquí solo se adapta a la caja clara, sin cambiar su lógica. */
+.boletin :global(.nl-input) {
+  background: var(--pt-blanco);
+  color: var(--pt-texto);
+  border: 1px solid #c9ccd3;
+  border-radius: 10px;
+  font-family: inherit;
+  min-height: 44px;
+}
+
+.boletin :global(.nl-input)::placeholder {
+  color: #6b7486;
+}
+
+.boletin :global(.nl-input):focus-visible {
+  outline: 3px solid var(--pt-azul);
+  outline-offset: 1px;
+  border-color: var(--pt-azul);
+  box-shadow: none;
+}
+
+.boletin :global(.nl-btn) {
+  background: var(--pt-azul);
+  border-radius: 10px;
+  font-family: inherit;
+  font-weight: 600;
+  min-height: 44px;
+}
+
+.boletin :global(.nl-btn):focus-visible {
+  outline: 3px solid var(--pt-azul);
+  outline-offset: 2px;
+}
+
+.boletin :global(.nl-note) {
+  color: var(--pt-texto-2);
+  margin: 0;
+}
+
+.boletin :global(.nl-error) {
+  color: #b42318;
+}
+
+.boletin :global(.nl-success) {
+  color: var(--pt-texto);
+}
+
+/* ── Pie ─────────────────────────────────────────────────── */
+
+.pie {
+  position: relative;
+  background: var(--pt-platino-suave, #f4f4f2);
+  border-top: 1px solid var(--pt-platino);
+  padding: 48px var(--pt-gutter) calc(18px + 40px);
+  font-size: 14px;
+  color: var(--pt-texto-2);
+}
+
+/* Franja azul pastel abajo, como la de la primera pantalla. */
+.pie::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 18px;
+  background: var(--pt-azul-pastel);
+}
+
+.pie a {
+  color: var(--pt-azul-hover);
+  text-underline-offset: 3px;
+}
+
+.pieArriba {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px 24px;
+  padding-bottom: 24px;
+  margin-bottom: 24px;
+  border-bottom: 1px solid var(--pt-platino);
+}
+
+.pie .pieMarca {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--pt-texto);
+  text-decoration: none;
+  font-family: var(--pt-serif), Georgia, serif;
+  font-weight: 600;
+  font-size: 18px;
+}
+
+.pieMarca img {
+  display: block;
+}
+
+.pieMarcaAzul {
+  color: var(--pt-azul);
+}
+
+.pieEnlaces {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 20px;
+}
+
+.pieEnlaces a {
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.pieEnlaces a:hover {
+  text-decoration: underline;
+}
+
+.creditosTitulo {
+  margin: 0 0 10px;
+  font-family: var(--pt-sans), system-ui, sans-serif;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--pt-texto);
+}
+
+.creditos {
+  margin: 0;
+  padding: 0 0 0 18px;
+  display: grid;
+  gap: 4px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+@media (min-width: 900px) {
+  .creditos {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    column-gap: 40px;
+  }
+}
+
+.cambios {
+  margin: 12px 0 0;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.pieNota {
+  margin: 20px 0 0;
+  font-size: 13px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .botonSecundario,
+  .botonPrincipal {
+    transition: none;
+  }
+}
+
+@media (min-width: 600px) {
+  /* En globals.css .nl-field va en columna; en pantallas anchas, correo y botón en una fila. */
+  .boletin :global(.nl-form--compact .nl-field--row) {
+    flex-direction: row;
+    flex-wrap: nowrap;
+  }
+}

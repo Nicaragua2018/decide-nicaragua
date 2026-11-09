@@ -13,6 +13,7 @@ import type {
   ComunidadTipo,
   DecisionesResumenResponse,
   DecisionModoValue,
+  DecisionPublicaItem,
   DecisionResumenItem,
   CandidataView,
   DecisionResultadoView,
@@ -950,6 +951,54 @@ export class DecisionesService implements OnModuleInit {
   }
 
   // ─── Página «Decisiones» ──────────────────────────────────────────────────
+
+  /**
+   * Portada pública: últimas decisiones cerradas (aprobadas o rechazadas) del grupo general.
+   * Solo título, estado y fecha. Misma clasificación que `getResumen`.
+   */
+  async getPublicasGenerales(limite = 6): Promise<DecisionPublicaItem[]> {
+    const general = await this.prisma.group.findUnique({
+      where: { slug: GENERAL_GROUP_SLUG },
+      select: { id: true },
+    });
+    if (!general) return [];
+
+    const temas = await this.prisma.proposal.findMany({
+      where: {
+        groupId: general.id,
+        hidden: false,
+        electionId: null,
+        OR: [
+          { decision: { fase: 'contada' } },
+          { status: 'closed', conclusion: { not: null } },
+        ],
+      },
+      select: {
+        title: true, status: true, hidden: true, conclusion: true, closedAt: true, updatedAt: true,
+        decision: { select: { fase: true, resultado: true, contadaAt: true, updatedAt: true } },
+      },
+    });
+
+    const cerradas: { item: DecisionPublicaItem; orden: number }[] = [];
+    for (const t of temas) {
+      if (t.hidden) continue;
+      const d = t.decision;
+      let estado: DecisionPublicaItem['estado'] | null = null;
+      let fecha: Date = t.updatedAt;
+      if (d) {
+        if ((d.fase as string) !== 'contada') continue;
+        fecha = d.contadaAt ?? d.updatedAt;
+        if (d.resultado === 'aprobada') estado = 'aprobada';
+        else if (d.resultado && Object.prototype.hasOwnProperty.call(DETALLE_RECHAZO, d.resultado)) estado = 'rechazada';
+      } else if (t.status === 'closed' && t.conclusion !== null) {
+        estado = 'aprobada';
+        fecha = t.closedAt ?? t.updatedAt;
+      }
+      if (!estado) continue;
+      cerradas.push({ item: { title: t.title, estado, fecha: fecha.toISOString() }, orden: fecha.getTime() });
+    }
+    return cerradas.sort((a, b) => b.orden - a.orden).slice(0, limite).map((x) => x.item);
+  }
 
   /**
    * Aprobadas, rechazadas y en curso de cada comunidad de quien consulta. Consultas fijas

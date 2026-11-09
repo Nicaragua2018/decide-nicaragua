@@ -2,8 +2,17 @@ import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 
 /** Rutas que NO requieren autenticación (exactas o por prefijo) */
-const PUBLIC_EXACT = new Set(['/explore', '/representantes', '/reactivacion']);
-const PUBLIC_PREFIXES = ['/login', '/invite', '/explore/', '/api/'];
+const PUBLIC_EXACT = new Set([
+  '/explore',
+  '/representantes',
+  '/reactivacion',
+  // Archivos de public/ que usa la portada (la ven personas sin sesión).
+  '/logo-nicaragua-decide.svg',
+  '/renacer.jpg',
+  // Imagen para redes de la portada (los robots de las redes no tienen sesión).
+  '/opengraph-image.jpg',
+]);
+const PUBLIC_PREFIXES = ['/login', '/invite', '/explore/', '/api/', '/portada/'];
 
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
