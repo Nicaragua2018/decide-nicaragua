@@ -57,3 +57,7 @@ infra/traefik/acme.json
 
 # Next.js (generado)
 apps/web/next-env.d.ts
+
+# Video de la portada (Remotion)
+video/portada/node_modules
+video/portada/out
