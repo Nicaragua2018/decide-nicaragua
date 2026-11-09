@@ -1,0 +1,466 @@
+/* ============================================================
+   Portada «colmena» — estilos nuevos (estilo «Bandera suave»).
+   Las fuentes llegan por --pt-serif y --pt-sans (fuentes.ts).
+   ============================================================ */
+
+.portada {
+  --pt-blanco: #ffffff;
+  --pt-azul-pastel: #cfe3f7;
+  --pt-amarillo: #fce9a8;
+  --pt-platino: #e5e4e2;
+  --pt-texto: #1b2a4a;
+  --pt-texto-2: #3d4a63;
+  --pt-azul: #0067c6;
+  --pt-azul-hover: #0057a8;
+  --pt-franja: 18px;
+  --pt-barra-alto: 68px;
+  --pt-gutter: 16px;
+
+  background: var(--pt-blanco);
+  color: var(--pt-texto);
+  font-family: var(--pt-sans), system-ui, -apple-system, 'Segoe UI', sans-serif;
+  overflow-x: clip;
+}
+
+@media (min-width: 600px) {
+  .portada {
+    --pt-gutter: 32px;
+  }
+}
+
+@media (min-width: 900px) {
+  .portada {
+    --pt-gutter: 44px;
+  }
+}
+
+/* ── Barra de arriba ─────────────────────────────────────── */
+
+.barra {
+  background: var(--pt-blanco);
+  border-bottom: 1px solid var(--pt-platino);
+}
+
+.barraInterior {
+  max-width: 1200px;
+  margin: 0 auto;
+  min-height: var(--pt-barra-alto);
+  padding: 0 var(--pt-gutter);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.marca {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--pt-texto);
+  text-decoration: none;
+  font-family: var(--pt-serif), Georgia, serif;
+  font-weight: 600;
+  font-size: 1.15rem;
+  letter-spacing: -0.01em;
+  border-radius: 8px;
+  flex-shrink: 0;
+}
+
+.marca img {
+  display: block;
+  width: 36px;
+  height: 36px;
+}
+
+.marcaAzul {
+  color: var(--pt-azul);
+}
+
+.barraAcciones {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.barraEnlace {
+  color: var(--pt-texto-2);
+  text-decoration: none;
+  font-size: 0.9rem;
+  font-weight: 600;
+  padding: 8px 10px;
+  border-radius: 8px;
+  transition: color 0.15s ease, background-color 0.15s ease;
+}
+
+.barraEnlace:hover {
+  color: var(--pt-texto);
+  background: rgba(27, 42, 74, 0.05);
+}
+
+.barraEntrar {
+  display: inline-flex;
+  align-items: center;
+  color: var(--pt-blanco);
+  background: var(--pt-azul);
+  text-decoration: none;
+  font-size: 0.9rem;
+  font-weight: 600;
+  padding: 8px 16px;
+  border-radius: 10px;
+  transition: background-color 0.15s ease;
+}
+
+.barraEntrar:hover {
+  background: var(--pt-azul-hover);
+}
+
+/* El botón compartido de /explore: aquí solo se ajusta a la barra clara. */
+.barra :global(.ln-share-btn) {
+  font-family: inherit;
+  font-weight: 600;
+  border-radius: 10px;
+  white-space: nowrap;
+}
+
+.marca:focus-visible,
+.barraEnlace:focus-visible,
+.barraEntrar:focus-visible,
+.barra :global(.ln-share-btn):focus-visible {
+  outline: 3px solid var(--pt-azul);
+  outline-offset: 3px;
+}
+
+/* Celular: el nombre se oculta a la vista (queda para lectores de pantalla). */
+@media (max-width: 599px) {
+  .marca > span {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+    border: 0;
+  }
+  .barraAcciones {
+    gap: 6px;
+  }
+  .barraEnlace {
+    padding: 8px 6px;
+  }
+  .barra :global(.ln-share-btn) {
+    padding: 0.4rem 0.7rem;
+  }
+  .barraEntrar {
+    padding: 8px 14px;
+  }
+}
+
+/* Muy estrecho (≈320 px): «Contacto» sigue en el pie de la página. */
+@media (max-width: 379px) {
+  .barraEnlace {
+    display: none;
+  }
+}
+
+/* ── Hero ────────────────────────────────────────────────── */
+
+.hero {
+  position: relative;
+  background: var(--pt-blanco);
+  padding: calc(var(--pt-franja) + 36px) var(--pt-gutter) calc(var(--pt-franja) + 36px);
+}
+
+/* Franjas azul pastel, como la bandera. */
+.hero::before,
+.hero::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: var(--pt-franja);
+  background: var(--pt-azul-pastel);
+}
+
+.hero::before {
+  top: 0;
+}
+
+.hero::after {
+  bottom: 0;
+}
+
+.heroInterior {
+  max-width: 1200px;
+  margin: 0 auto;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-areas:
+    'texto'
+    'video'
+    'accion';
+  row-gap: 24px;
+}
+
+.heroTexto {
+  grid-area: texto;
+  min-width: 0;
+}
+
+.heroVideo {
+  grid-area: video;
+  min-width: 0;
+}
+
+.heroAccion {
+  grid-area: accion;
+  min-width: 0;
+}
+
+.titulo {
+  font-family: var(--pt-serif), Georgia, serif;
+  font-weight: 600;
+  font-size: 46px;
+  line-height: 1;
+  letter-spacing: -0.01em;
+  margin: 0 0 16px;
+  color: var(--pt-texto);
+}
+
+.palabra {
+  display: inline-block;
+  opacity: 0;
+  transform: translateY(14px);
+  animation: sube 0.6s cubic-bezier(0.2, 0.7, 0.2, 1) forwards;
+}
+
+.palabraAzul {
+  color: var(--pt-azul);
+  animation-delay: 0.3s;
+}
+
+@keyframes sube {
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.descripcion {
+  font-size: 15px;
+  line-height: 1.55;
+  color: var(--pt-texto-2);
+  margin: 0;
+  max-width: 34em;
+}
+
+.boton {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--pt-azul);
+  color: var(--pt-blanco);
+  font-weight: 600;
+  font-size: 16px;
+  line-height: 1.2;
+  text-decoration: none;
+  padding: 14px 22px;
+  border-radius: 12px;
+  box-shadow: 0 6px 18px -8px rgba(0, 103, 198, 0.55);
+  transition: background-color 0.15s ease, transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.boton:hover {
+  background: var(--pt-azul-hover);
+  transform: translateY(-1px);
+  box-shadow: 0 10px 22px -10px rgba(0, 103, 198, 0.6);
+}
+
+.boton:focus-visible {
+  outline: 3px solid var(--pt-azul);
+  outline-offset: 3px;
+}
+
+/* Celular: el botón ocupa todo el ancho, fácil de tocar. */
+@media (max-width: 599px) {
+  .boton {
+    display: flex;
+    justify-content: center;
+    width: 100%;
+  }
+}
+
+/* Computadora: dos columnas, el video a la derecha. */
+@media (min-width: 900px) {
+  .hero {
+    min-height: calc(100svh - var(--pt-barra-alto));
+    display: flex;
+    align-items: center;
+    padding-top: calc(var(--pt-franja) + 48px);
+    padding-bottom: calc(var(--pt-franja) + 48px);
+  }
+
+  .heroInterior {
+    width: 100%;
+    grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr);
+    grid-template-rows: 1fr auto auto 1fr;
+    grid-template-areas:
+      '.      video'
+      'texto  video'
+      'accion video'
+      '.      video';
+    column-gap: 48px;
+    row-gap: 0;
+    align-items: center;
+  }
+
+  .heroTexto {
+    padding-bottom: 28px;
+  }
+
+  .heroAccion {
+    align-self: start;
+  }
+
+  .titulo {
+    font-size: clamp(56px, 5.2vw, 64px);
+    margin-bottom: 20px;
+  }
+
+  .descripcion {
+    font-size: 17px;
+    max-width: 420px;
+  }
+}
+
+/* ── Video ───────────────────────────────────────────────── */
+
+.videoBloque {
+  width: 100%;
+  margin: 0 auto;
+}
+
+@media (min-width: 900px) {
+  .videoBloque {
+    /* Que quepa entero en la primera pantalla de una laptop. */
+    width: min(100%, 560px, max(340px, calc(100svh - 250px)));
+    margin-right: 0;
+  }
+}
+
+@media (min-width: 600px) and (max-width: 899px) {
+  .videoBloque {
+    max-width: 520px;
+    margin-left: 0;
+  }
+}
+
+.marco {
+  position: relative;
+  aspect-ratio: 1 / 1;
+  width: 100%;
+  overflow: hidden;
+  border-radius: 20px;
+  background: var(--pt-blanco) url('/portada/colmena-final.webp') center / cover no-repeat;
+  border: 1px solid var(--pt-platino);
+  box-shadow: 0 18px 40px -24px rgba(27, 42, 74, 0.35);
+}
+
+.video,
+.fijaSiempre,
+.fijaCss {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+/* Solo se ve antes de hidratar y si la persona prefiere menos movimiento. */
+.fijaCss {
+  display: none;
+}
+
+.controles {
+  display: flex;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.controles[hidden] {
+  display: none;
+}
+
+.control {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 36px;
+  padding: 6px 12px;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--pt-texto);
+  background: var(--pt-blanco);
+  border: 1px solid var(--pt-platino);
+  border-radius: 999px;
+  cursor: pointer;
+  transition: background-color 0.15s ease, border-color 0.15s ease;
+}
+
+.control:hover {
+  background: var(--pt-azul-pastel);
+  border-color: var(--pt-azul-pastel);
+}
+
+.control[aria-pressed='true'] {
+  background: var(--pt-azul-pastel);
+  border-color: #b5d2ef;
+}
+
+.control:focus-visible {
+  outline: 3px solid var(--pt-azul);
+  outline-offset: 2px;
+}
+
+.control svg {
+  flex-shrink: 0;
+}
+
+/* ── Menos movimiento ────────────────────────────────────── */
+
+@media (prefers-reduced-motion: reduce) {
+  .palabra {
+    animation: none;
+    opacity: 1;
+    transform: none;
+  }
+
+  .boton,
+  .control,
+  .barraEnlace,
+  .barraEntrar {
+    transition: none;
+  }
+
+  .boton:hover {
+    transform: none;
+  }
+
+  .video {
+    display: none;
+  }
+
+  .fijaCss {
+    display: block;
+  }
+
+  .controles {
+    display: none;
+  }
+}

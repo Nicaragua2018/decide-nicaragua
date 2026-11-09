@@ -2,6 +2,10 @@ import Link from 'next/link';
 import type { Metadata } from 'next';
 import { NewsletterForm } from './newsletter/NewsletterForm';
 import { ShareButton } from './components/ShareButton';
+import { Barra } from './portada/Barra';
+import { Hero } from './portada/Hero';
+import { clasesFuentes } from './portada/fuentes';
+import portada from './portada/portada.module.css';
 
 export const metadata: Metadata = {
   title: 'Decide Nicaragua — Plataforma de participación democrática',
@@ -14,52 +18,14 @@ export default function LandingPage() {
     <div className="ln-root">
       <a href="#main-content" className="skip-link">Ir al contenido principal</a>
 
-      {/* ── Navbar ─────────────────────────────────────────────── */}
-      <nav className="ln-nav">
-        <div className="ln-nav-inner">
-          <span className="ln-brand">Decide <em>Nicaragua</em></span>
-
-          <div className="ln-nav-actions">
-            <a href="#contacto" className="ln-nav-link">Contacto</a>
-            <ShareButton variant="nav" />
-            <Link href="/login" className="ln-nav-cta">Registrarme</Link>
-          </div>
-        </div>
-      </nav>
-
-      {/* ── Hero ───────────────────────────────────────────────── */}
-      <section className="ln-hero">
-        <div className="ln-hero-overlay" />
-        <div className="ln-hero-content">
-          <p className="ln-eyebrow">Plataforma democrática · Diáspora nicaragüense</p>
-          <h1 className="ln-hero-title">
-            Nicaragua<br /><em>decide.</em>
-          </h1>
-          <p className="ln-hero-sub">
-            Infraestructura para la participación democrática verificable —
-            deliberación legítima y decisiones auditables, desde cualquier
-            lugar del mundo.
-          </p>
-
-          <div className="ln-cta-group">
-            <Link href="/login" className="ln-btn-white">
-              Registrarme
-            </Link>
-            <Link href="/explore" className="ln-btn-ghost-white">
-              Ver como observador
-            </Link>
-            <ShareButton variant="hero" />
-          </div>
-
-          <p className="ln-hero-note">
-            Acceso por invitación.{' '}
-            <Link href="/login">¿Tienes un código?</Link>
-          </p>
-        </div>
-      </section>
+      {/* ── Primera pantalla (portada colmena) ────────────────── */}
+      <div className={`${portada.portada} ${clasesFuentes}`}>
+        <Barra />
+        <Hero />
+      </div>
 
       {/* ── Cómo funciona ──────────────────────────────────────── */}
-      <section className="ln-how" id="main-content">
+      <section className="ln-how">
         <div className="ln-container">
           <span className="ln-label">01 · Cómo funciona</span>
           <h2 className="ln-section-title">
