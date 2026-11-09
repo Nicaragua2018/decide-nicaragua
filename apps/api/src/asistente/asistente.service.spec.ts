@@ -157,6 +157,28 @@ describe('AsistenteService', () => {
     expect(await crear().pedir(op())).toBeNull();
   });
 
+  describe('pedir: reintento de una salida descartada', () => {
+    it('nocturna: si la primera salida se descarta, pide una vez más y devuelve la segunda', async () => {
+      cliente.messages.create
+        .mockResolvedValueOnce({ content: [{ type: 'text', text: 'sin herramienta' }], usage: { input_tokens: 10, output_tokens: 5 } })
+        .mockResolvedValueOnce(respuesta({ nivel: 1 }));
+      expect(await crear().pedir(op({ prioridad: 'nocturna' }))).toEqual({ nivel: 1 });
+      expect(cliente.messages.create).toHaveBeenCalledTimes(2);
+    });
+
+    it('nocturna: si la segunda también se descarta, devuelve null sin un tercer intento', async () => {
+      cliente.messages.create.mockResolvedValue(respuesta({ nivel: 'cero' }));
+      expect(await crear().pedir(op({ prioridad: 'nocturna' }))).toBeNull();
+      expect(cliente.messages.create).toHaveBeenCalledTimes(2);
+    });
+
+    it('interactiva: no reintenta (la persona está esperando)', async () => {
+      cliente.messages.create.mockResolvedValue(respuesta({ nivel: 'cero' }));
+      expect(await crear().pedir(op())).toBeNull();
+      expect(cliente.messages.create).toHaveBeenCalledTimes(1);
+    });
+  });
+
   describe('pedir: error o tiempo agotado devuelve null', () => {
     it('el cliente rechaza', async () => {
       cliente.messages.create.mockRejectedValue(new Error('caído'));

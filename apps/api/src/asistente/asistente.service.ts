@@ -119,31 +119,37 @@ export class AsistenteService {
         op.tarea +
         `\n\nEntrega el resultado llamando a la herramienta «${op.herramienta.nombre}».`;
 
-      const respuesta = await this.conTiempoMaximo(op.timeoutMs ?? TIMEOUT_POR_DEFECTO_MS, (signal) =>
-        this.cliente!.messages.create(
-          {
-            model: modelo,
-            max_tokens: forzada ? 2048 : 16_000,
-            system,
-            tools: [herramienta],
-            tool_choice: forzada ? { type: 'tool', name: op.herramienta.nombre } : { type: 'auto' },
-            messages: [{ role: 'user', content: `<material>\n${neutralizarEtiquetas(limpiarTexto(op.material))}\n</material>` }],
-          },
-          { signal, ...(op.prioridad === 'interactiva' ? { maxRetries: 0 } : {}) },
-        ),
-      );
-      if (!respuesta) return null;
+      // Una salida descartada (sin la herramienta o con forma inválida) se pide una vez más en las
+      // tareas de fondo; en las interactivas no, porque la persona está esperando.
+      const intentos = op.prioridad === 'interactiva' ? 1 : 2;
+      for (let intento = 1; intento <= intentos; intento++) {
+        const respuesta = await this.conTiempoMaximo(op.timeoutMs ?? TIMEOUT_POR_DEFECTO_MS, (signal) =>
+          this.cliente!.messages.create(
+            {
+              model: modelo,
+              max_tokens: forzada ? 2048 : 16_000,
+              system,
+              tools: [herramienta],
+              tool_choice: forzada ? { type: 'tool', name: op.herramienta.nombre } : { type: 'auto' },
+              messages: [{ role: 'user', content: `<material>\n${neutralizarEtiquetas(limpiarTexto(op.material))}\n</material>` }],
+            },
+            { signal, ...(op.prioridad === 'interactiva' ? { maxRetries: 0 } : {}) },
+          ),
+        );
+        if (!respuesta) return null;
 
-      await this.registrarGasto(modelo, respuesta.usage);
+        await this.registrarGasto(modelo, respuesta.usage);
 
-      const bloque = respuesta.content.find(
-        (b): b is Anthropic.ToolUseBlock => b.type === 'tool_use' && b.name === op.herramienta.nombre,
-      );
-      if (!bloque || !op.validar(bloque.input)) {
-        this.logger.warn(`Salida del asistente descartada (herramienta ${op.herramienta.nombre})`);
-        return null;
+        const bloque = respuesta.content.find(
+          (b): b is Anthropic.ToolUseBlock => b.type === 'tool_use' && b.name === op.herramienta.nombre,
+        );
+        if (bloque && op.validar(bloque.input)) return bloque.input;
+        const motivo = bloque ? 'forma inválida' : 'sin la herramienta';
+        this.logger.warn(
+          `Salida del asistente descartada (herramienta ${op.herramienta.nombre}, ${motivo}, intento ${intento} de ${intentos})`,
+        );
       }
-      return bloque.input;
+      return null;
     } catch (err) {
       this.logger.warn(`El asistente no respondió: ${err instanceof Error ? err.name : 'error'}`);
       return null;

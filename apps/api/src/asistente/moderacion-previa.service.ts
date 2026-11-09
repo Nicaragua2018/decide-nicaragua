@@ -67,6 +67,7 @@ export const TAREA_REVISION = `Tarea: revisar un texto que una persona quiere pu
 Nivel 0: se publica sin aviso. Es el caso normal.
 - La crítica política con argumentos, contra cualquier gobierno, partido, institución, persona pública o lado, SIEMPRE es nivel 0, aunque sea dura o incómoda. Nunca es nivel 1 ni nivel 2.
 - También son nivel 0 el desacuerdo, la queja, la indignación, la ironía, las malas palabras sin destinatario y los modismos nicaragüenses dichos sin intención de ofender.
+- Los calificativos políticos duros contra un lado, partido, gobierno o movimiento en su conjunto (por ejemplo «vendepatria», «traidores», «golpistas», «dictadura», «corruptos») son parte de la crítica política: si van con argumentos, son nivel 0, sea cual sea el lado criticado. El nivel 1 es para el insulto dirigido a una persona concreta.
 
 Nivel 1: se publica, pero se avisa en privado y con amabilidad a quien escribe.
 - Un insulto suelto o una descalificación personal sin amenaza (por ejemplo, llamar «idiota» o «inútil» a alguien) es nivel 1, nunca nivel 2.
