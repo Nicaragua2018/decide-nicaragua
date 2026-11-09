@@ -9,6 +9,8 @@ const PUBLIC_EXACT = new Set([
   // Archivos de public/ que usa la portada (la ven personas sin sesión).
   '/logo-nicaragua-decide.svg',
   '/renacer.jpg',
+  // Imagen para redes de la portada (los robots de las redes no tienen sesión).
+  '/opengraph-image.jpg',
 ]);
 const PUBLIC_PREFIXES = ['/login', '/invite', '/explore/', '/api/', '/portada/'];
 

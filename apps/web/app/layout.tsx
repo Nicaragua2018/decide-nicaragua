@@ -19,6 +19,8 @@ const dmSans = DM_Sans({
 });
 
 export const metadata: Metadata = {
+  // URL base para las imágenes de redes (opengraph-image) de todas las páginas.
+  metadataBase: new URL(process.env.NEXT_PUBLIC_APP_URL || 'https://nicaraguadecide.org'),
   title: {
     default: 'Decide Nicaragua',
     template: '%s | Decide Nicaragua',

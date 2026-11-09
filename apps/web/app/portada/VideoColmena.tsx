@@ -131,6 +131,7 @@ export function VideoColmena() {
         <img className={styles.fijaCss} src={POSTER} alt={ALT_FIJA} width={1080} height={1080} />
       </div>
 
+      {/* Etiquetas fijas con aria-pressed: «Sonido, presionado» = suena; «Pausa, presionado» = en pausa. */}
       <div className={styles.controles} hidden={sinVideo}>
         <button
           type="button"
@@ -139,7 +140,7 @@ export function VideoColmena() {
           onClick={alternarSonido}
         >
           {silenciado ? <IconoSinSonido /> : <IconoSonido />}
-          <span>{silenciado ? 'Activar sonido' : 'Silenciar'}</span>
+          <span>Sonido</span>
         </button>
         <button
           type="button"
@@ -148,7 +149,7 @@ export function VideoColmena() {
           onClick={alternarPausa}
         >
           {pausado ? <IconoReproducir /> : <IconoPausa />}
-          <span>{pausado ? 'Reproducir' : 'Pausar'}</span>
+          <span>Pausa</span>
         </button>
       </div>
       {textos}
