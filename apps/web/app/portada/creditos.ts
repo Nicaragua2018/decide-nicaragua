@@ -1,6 +1,10 @@
 // Créditos de las obras de terceros usadas en el video y en la portada.
 // Misma lista que video/portada/CREDITOS.md.
 
+/** Aviso de cambios que piden las licencias CC BY y CC BY-SA; va junto a los créditos. */
+export const CAMBIOS_FOTOS =
+  "Fotos redimensionadas y recortadas para encajar en las celdas del panal; a la del Momotombo se le quitó el borde del escaneo.";
+
 export const CREDITOS: readonly {
   obra: string;
   autor: string;

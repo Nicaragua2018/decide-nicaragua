@@ -1,6 +1,6 @@
 # Créditos del video de la portada
 
-Todas las fotos vienen de Wikimedia Commons (datos tomados de la ficha de cada archivo por la API de Commons el 2026-11-09). Se redujeron a 800 px como máximo y se recortan para encajar en las celdas del panal; no se les aplicó otra modificación. La misma lista está en `apps/web/app/portada/creditos.ts` y en el pie de la portada.
+Todas las fotos vienen de Wikimedia Commons (datos tomados de la ficha de cada archivo por la API de Commons el 2026-11-09). **Cambios:** todas las fotos se redimensionaron (800 px como máximo) y en el video se recortan y amplían para encajar en las celdas hexagonales del panal (la de Renacer también se muestra en gris, partida en pedazos y desenfocada). A la del Momotombo, además, se le quitó el borde negro del escaneo (unos pocos píxeles). No se les aplicó ninguna otra modificación. La misma lista está en `apps/web/app/portada/creditos.ts` y en el pie de la portada.
 
 | Obra | Autor | Licencia | Enlace |
 |---|---|---|---|

@@ -15,7 +15,6 @@ const RAIZ = path.dirname(fileURLToPath(import.meta.url));
 const SALIDA = path.resolve(RAIZ, '../../apps/web/public/portada');
 const CAPTURAS = path.join(RAIZ, 'out');
 const LIMITE = 4 * 1024 * 1024; // 4 194 304 bytes
-const ULTIMO_CUADRO = 1049;
 
 const mb = (b) => `${(b / 1024 / 1024).toFixed(2)} MB (${b} bytes)`;
 
@@ -91,7 +90,7 @@ const webm = await renderizarVideo({
 
 const fija = path.join(SALIDA, 'colmena-final.webp');
 console.log('\nImagen fija (último cuadro)…');
-await renderStill({ serveUrl, composition, frame: ULTIMO_CUADRO, output: fija, imageFormat: 'webp' });
+await renderStill({ serveUrl, composition, frame: composition.durationInFrames - 1, output: fija, imageFormat: 'webp' });
 
 console.log('\nListo:');
 for (const r of [mp4, webm]) console.log(`  ${path.basename(r.output)}: ${mb(r.peso)} · crf ${r.crf} · escala ${r.scale.toFixed(2)}`);

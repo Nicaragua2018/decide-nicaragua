@@ -32,7 +32,7 @@ node render.mjs --capturas 90,285,480,705,945   # PNG en out/ (no se sube a git)
 
 ## Cómo está hecho
 
-- `src/Root.tsx`: composición `Colmena` (1080×1080, 30 fps, 1050 cuadros), textos, aviso de IA y música (fundido de entrada y de salida).
+- `src/Root.tsx`: composición `Colmena` (1080×1080, 30 fps, 1092 cuadros = 36,4 s), textos, aviso de IA y música (fundido de entrada y de salida).
 - `src/tiempos.ts`: en qué cuadro empieza y termina cada escena.
 - `src/escenas/`: una escena por archivo (Dispersos, Ruido, Renace, Multiplica, República).
 - `src/Honey.tsx`: el vuelo de Honey (tramos curvos, balanceo de ±8 px, giro de ±4°) y las piezas que lleva.

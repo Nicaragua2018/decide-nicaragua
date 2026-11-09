@@ -1,4 +1,4 @@
-// Composición «Colmena»: 1080×1080, 30 fps, 35 s. Cinco escenas, Honey, los textos
+// Composición «Colmena»: 1080×1080, 30 fps, 36,4 s. Cinco escenas, Honey, los textos
 // (tercio superior), el aviso de IA y la música con fundido de entrada y de salida.
 import React from 'react';
 import { AbsoluteFill, Audio, Composition, interpolate, Sequence, staticFile } from 'remotion';

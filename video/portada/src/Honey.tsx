@@ -18,36 +18,94 @@ export const PIEZA_R = 56;
 
 const sobre = (p: P): P => ({ x: p.x, y: p.y - CARGA_DY });
 
-// --- puntos clave del guion
+// ---------------------------------------------------------------- escena 3
 const w1 = anchoCelda(PRIMERA.R);
-/** Donde Honey suelta la mitad derecha de la primera celda (escena 3). */
-export const HONEY_UNE = { x: PRIMERA.cx + w1 / 4, y: PRIMERA.cy - PRIMERA.R + 8 };
+/** Honey lleva cada mitad de la primera celda colgada así (centro de la mitad respecto a Honey). */
+export const MITAD_DY = PRIMERA.R - 8;
+export const MITAD_DX = w1 / 4;
+/** Cuadros (globales) de la escena 3: suelta la mitad izquierda, recoge la derecha y las une. */
+export const S3 = {
+  sueltaIzq: 440,
+  recogeDer: 480,
+  union: 525,
+  /** Donde espera flotando la mitad derecha (centro de la celda entera). */
+  esperaDer: { x: 905, y: 740 },
+};
+const HONEY_IZQ = { x: PRIMERA.cx - MITAD_DX, y: PRIMERA.cy - MITAD_DY };
+/** Donde Honey suelta la mitad derecha y se forma la celda. */
+export const HONEY_UNE = { x: PRIMERA.cx + MITAD_DX, y: PRIMERA.cy - MITAD_DY };
+const HONEY_DER = { x: S3.esperaDer.x + MITAD_DX, y: S3.esperaDer.y - MITAD_DY };
 const DESCANSO_3 = { x: 862, y: 600 };
 export const DESCANSO_FINAL = { x: 905, y: 880 };
 
-/** Piezas que Honey recoge y lleva a su celda en la escena 4 (cuadros globales). */
-export const PIEZAS_HONEY = [
-  { celda: 'guardabarranco', espera: { x: 975, y: 962 }, recoge: 612, suelta: 660 },
-  { celda: 'ometepe', espera: { x: 100, y: 735 }, recoge: 702, suelta: 745 },
-  { celda: 'sacuanjoche', espera: { x: 92, y: 992 }, recoge: 782, suelta: 822 },
-] as const;
+// ---------------------------------------------------------------- escena 4
+/** Separación horizontal entre las dos piezas que Honey lleva a la vez. */
+export const PAR_DX = 46;
 
-const destino = (id: string) => sobre(centroCelda(celdaPorId(id), PANAL));
-const [p1, p2, p3] = PIEZAS_HONEY;
+export type Entrega = { celda: string; lado: -1 | 1; f: number };
+/** Viajes de Honey en la escena 4: recoge dos piezas a la vez y entrega cada una en su celda. */
+export const VIAJES: { espera: P; recoge: number; entregas: [Entrega, Entrega] }[] = [
+  { espera: { x: 965, y: 900 }, recoge: 600, entregas: [{ celda: 'guardabarranco', lado: -1, f: 634 }, { celda: 'bandera', lado: 1, f: 654 }] },
+  { espera: { x: 120, y: 600 }, recoge: 689, entregas: [{ celda: 'gueguense', lado: 1, f: 716 }, { celda: 'granada', lado: -1, f: 738 }] },
+  { espera: { x: 112, y: 988 }, recoge: 773, entregas: [{ celda: 'miel', lado: 1, f: 795 }, { celda: 'ometepe', lado: -1, f: 815 }] },
+  { espera: { x: 962, y: 988 }, recoge: 850, entregas: [{ celda: 'momotombo', lado: -1, f: 878 }, { celda: 'sacuanjoche', lado: 1, f: 898 }] },
+];
+
+/** Posición de Honey cuando deja la pieza de ese lado justo encima de su celda. */
+const alEntregar = (e: Entrega): P => {
+  const c = centroCelda(celdaPorId(e.celda), PANAL);
+  return { x: c.x - e.lado * PAR_DX, y: c.y - CARGA_DY };
+};
+
+/** Tramo con una curva suave: los controles se apartan de la recta hacia el centro del cuadro. */
+const arco = (f0: number, f1: number, p0: P, p1: P, k = 0.22): Tramo => {
+  const dx = p1.x - p0.x;
+  const dy = p1.y - p0.y;
+  const largo = Math.hypot(dx, dy) || 1;
+  let nx = -dy / largo;
+  let ny = dx / largo;
+  // Que la curva se combe hacia abajo arriba del cuadro y hacia arriba abajo: nunca hacia el texto ni fuera.
+  const medioY = (p0.y + p1.y) / 2;
+  if ((medioY < 760 && ny < 0) || (medioY >= 760 && ny > 0)) {
+    nx = -nx;
+    ny = -ny;
+  }
+  const o = largo * k;
+  return {
+    f0,
+    f1,
+    p0,
+    p1,
+    c1: { x: p0.x + dx * 0.3 + nx * o, y: p0.y + dy * 0.3 + ny * o },
+    c2: { x: p0.x + dx * 0.7 + nx * o, y: p0.y + dy * 0.7 + ny * o },
+  };
+};
+
+const tramosEscena4 = (): Tramo[] => {
+  const t: Tramo[] = [];
+  let desde = DESCANSO_3;
+  let libre = 572;
+  for (const v of VIAJES) {
+    const recoger = sobre(v.espera);
+    t.push(arco(libre, v.recoge, desde, recoger));
+    const [a, b] = v.entregas;
+    t.push(arco(v.recoge + 4, a.f, recoger, alEntregar(a), 0.18));
+    t.push(arco(a.f + 4, b.f, alEntregar(a), alEntregar(b), 0.15));
+    desde = alEntregar(b);
+    libre = b.f + 3;
+  }
+  t.push(arco(libre + 1, 944, desde, DESCANSO_FINAL));
+  return t;
+};
 
 const TRAMOS: Tramo[] = [
-  // Escena 3: entra por la derecha con la mitad de la celda y la une.
-  { f0: 392, f1: 462, p0: { x: 1280, y: 470 }, c1: { x: 1040, y: 470 }, c2: { x: 790, y: 640 }, p1: HONEY_UNE },
-  { f0: 478, f1: 528, p0: HONEY_UNE, c1: { x: 690, y: 470 }, c2: { x: 860, y: 470 }, p1: DESCANSO_3 },
-  // Escena 4: tres viajes de ida y vuelta.
-  { f0: 572, f1: p1.recoge, p0: DESCANSO_3, c1: { x: 950, y: 660 }, c2: { x: 990, y: 790 }, p1: sobre(p1.espera) },
-  { f0: p1.recoge + 4, f1: p1.suelta, p0: sobre(p1.espera), c1: { x: 930, y: 900 }, c2: { x: 800, y: 700 }, p1: destino(p1.celda) },
-  { f0: p1.suelta + 3, f1: p2.recoge, p0: destino(p1.celda), c1: { x: 640, y: 980 }, c2: { x: 180, y: 930 }, p1: sobre(p2.espera) },
-  { f0: p2.recoge + 4, f1: p2.suelta, p0: sobre(p2.espera), c1: { x: 150, y: 520 }, c2: { x: 260, y: 540 }, p1: destino(p2.celda) },
-  { f0: p2.suelta + 3, f1: p3.recoge, p0: destino(p2.celda), c1: { x: 330, y: 830 }, c2: { x: 120, y: 790 }, p1: sobre(p3.espera) },
-  { f0: p3.recoge + 4, f1: p3.suelta, p0: sobre(p3.espera), c1: { x: 190, y: 960 }, c2: { x: 400, y: 900 }, p1: destino(p3.celda) },
-  // Hacia el lugar de descanso junto al panal (escena 5).
-  { f0: p3.suelta + 4, f1: 872, p0: destino(p3.celda), c1: { x: 600, y: 930 }, c2: { x: 860, y: 990 }, p1: DESCANSO_FINAL },
+  // Escena 3: trae la mitad izquierda, va por la derecha y las une.
+  { f0: 392, f1: S3.sueltaIzq, p0: { x: -200, y: 500 }, c1: { x: 80, y: 470 }, c2: { x: 320, y: 620 }, p1: HONEY_IZQ },
+  { f0: S3.sueltaIzq + 4, f1: S3.recogeDer, p0: HONEY_IZQ, c1: { x: 640, y: 470 }, c2: { x: 900, y: 470 }, p1: HONEY_DER },
+  { f0: S3.recogeDer + 4, f1: S3.union, p0: HONEY_DER, c1: { x: 900, y: 650 }, c2: { x: 720, y: 640 }, p1: HONEY_UNE },
+  { f0: S3.union + 7, f1: 566, p0: HONEY_UNE, c1: { x: 690, y: 470 }, c2: { x: 860, y: 470 }, p1: DESCANSO_3 },
+  // Escena 4: cuatro viajes, dos piezas por viaje. Después, a descansar junto al panal.
+  ...tramosEscena4(),
 ];
 
 const bezier = (t: number, a: number, b: number, c: number, d: number) => {
@@ -83,7 +141,7 @@ export const estadoHoney = (f: number): EstadoHoney => {
   const deriva = Math.sin(f * 0.047) * 6;
   const inclinacion = Math.max(-4, Math.min(4, vx * 0.35 + Math.sin(f * 0.13 + 0.6) * 1.4));
   const respira = 1 + Math.sin(f * 0.33 + 1.1) * 0.022;
-  const ancho = interpolate(f, [840, 880], [HONEY_ANCHO, 172], {
+  const ancho = interpolate(f, [912, 950], [HONEY_ANCHO, 172], {
     extrapolateLeft: 'clamp',
     extrapolateRight: 'clamp',
     easing: Easing.inOut(Easing.cubic),
@@ -115,8 +173,8 @@ export const Honey: React.FC = () => {
   );
 };
 
-/** Centro de la pieza que Honey lleva colgada en el cuadro f. */
-export const piezaColgada = (f: number): P => {
+/** Centro de una pieza que Honey lleva colgada en el cuadro f (dx: desplazamiento lateral). */
+export const piezaColgada = (f: number, dx = 0, dy = CARGA_DY): P => {
   const e = estadoHoney(f);
-  return { x: e.x, y: e.y + CARGA_DY };
+  return { x: e.x + dx, y: e.y + dy };
 };

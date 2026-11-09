@@ -1,37 +1,13 @@
 // Escena 4 · Se multiplica: la primera celda toma su lugar y el panal se llena.
-// Honey trae las tres primeras piezas; después las demás llegan solas, cada una
-// por su lado: la colmena crece sin un jefe en el centro.
+// Honey junta ella misma todas las piezas: en cada viaje recoge dos que llegan
+// flotando a la orilla del cuadro y deja cada una en su celda.
 import React from 'react';
 import { AbsoluteFill, Easing, interpolate, spring, useCurrentFrame, useVideoConfig } from 'remotion';
-import { PIEZA_R, PIEZAS_HONEY, piezaColgada } from '../Honey';
-import {
-  CELDAS,
-  CeldaDibujo,
-  celdaPorId,
-  centroCelda,
-  HexBorde,
-  HexHueco,
-  PANAL,
-  PRIMERA,
-} from '../Panal';
+import { PAR_DX, PIEZA_R, piezaColgada, VIAJES } from '../Honey';
+import { CELDAS, CeldaDibujo, celdaPorId, centroCelda, HexBorde, HexHueco, PANAL, PRIMERA } from '../Panal';
 import { clamp } from './comun';
 
 type P = { x: number; y: number };
-
-/** Piezas que llegan solas: desde fuera del cuadro, por una curva (cuadros globales). */
-const PIEZAS_SOLAS: { celda: string; desde: P; control: P; sale: number }[] = [
-  { celda: 'miel', desde: { x: -140, y: 1180 }, control: { x: 40, y: 1040 }, sale: 714 },
-  { celda: 'gueguense', desde: { x: -140, y: 470 }, control: { x: 170, y: 410 }, sale: 726 },
-  { celda: 'granada', desde: { x: 1220, y: 400 }, control: { x: 900, y: 380 }, sale: 738 },
-  { celda: 'bandera', desde: { x: 1220, y: 640 }, control: { x: 1060, y: 450 }, sale: 750 },
-  { celda: 'momotombo', desde: { x: 780, y: 1220 }, control: { x: 900, y: 1010 }, sale: 762 },
-];
-const VIAJE = 46;
-
-const curva = (t: number, a: P, c: P, b: P): P => ({
-  x: (1 - t) * (1 - t) * a.x + 2 * (1 - t) * t * c.x + t * t * b.x,
-  y: (1 - t) * (1 - t) * a.y + 2 * (1 - t) * t * c.y + t * t * b.y,
-});
 
 export const Multiplica: React.FC<{ desde: number }> = ({ desde }) => {
   const local = useCurrentFrame();
@@ -44,47 +20,42 @@ export const Multiplica: React.FC<{ desde: number }> = ({ desde }) => {
 
   const piezas: React.ReactNode[] = [];
 
-  // Piezas que trae Honey: llegan flotando a su punto de espera, Honey las recoge y las suelta.
-  PIEZAS_HONEY.forEach((p, i) => {
-    const celda = celdaPorId(p.celda);
-    const destino = centroCelda(celda);
-    const aparece = p.recoge - 44;
+  VIAJES.forEach((v, i) => {
+    // Las dos piezas llegan flotando desde fuera del cuadro hasta la orilla y esperan a Honey.
+    const aparece = Math.max(desde + 1, v.recoge - 46);
     if (f < aparece) return;
-    const flota = interpolate(f, [aparece, aparece + 38], [0, 1], { ...clamp, easing: Easing.out(Easing.cubic) });
-    const fuera = { x: p.espera.x < 540 ? -120 : 1200, y: p.espera.y + 70 };
-    const espera = {
-      x: fuera.x + (p.espera.x - fuera.x) * flota,
-      y: fuera.y + (p.espera.y - fuera.y) * flota + Math.sin(f * 0.16 + i) * 5,
-    };
-    let pos = espera;
-    let R = PIEZA_R;
-    let giro = Math.sin(f * 0.12 + i * 2) * 6;
-    if (f >= p.recoge) {
-      const colgada = piezaColgada(f);
-      const toma = interpolate(f, [p.recoge, p.recoge + 5], [0, 1], clamp);
-      pos = { x: espera.x + (colgada.x - espera.x) * toma, y: espera.y + (colgada.y - espera.y) * toma };
-    }
-    if (f >= p.suelta - 4) {
-      const encaja = spring({ frame: f - (p.suelta - 4), fps, config: { damping: 13, stiffness: 150 } });
-      const colgada = piezaColgada(Math.min(f, p.suelta));
-      pos = { x: colgada.x + (destino.x - colgada.x) * Math.min(1, encaja), y: colgada.y + (destino.y - colgada.y) * Math.min(1, encaja) };
-      R = PIEZA_R + (PANAL.R - PIEZA_R) * encaja;
-      giro *= 1 - Math.min(1, encaja);
-    }
-    piezas.push(<CeldaDibujo key={p.celda} celda={celda} cx={pos.x} cy={pos.y} R={R} rotacion={giro} />);
-  });
+    const flota = interpolate(f, [aparece, v.recoge - 6], [0, 1], { ...clamp, easing: Easing.out(Easing.cubic) });
+    const haciaFuera = v.espera.x < 540 ? -1 : 1;
 
-  // Piezas que llegan solas.
-  PIEZAS_SOLAS.forEach((p, i) => {
-    if (f < p.sale) return;
-    const celda = celdaPorId(p.celda);
-    const destino = centroCelda(celda);
-    const t = interpolate(f, [p.sale, p.sale + VIAJE], [0, 1], { ...clamp, easing: Easing.bezier(0.35, 0, 0.25, 1) });
-    const pos = curva(t, p.desde, p.control, destino);
-    const encaja = spring({ frame: f - (p.sale + VIAJE - 6), fps, config: { damping: 13, stiffness: 150 } });
-    const R = PIEZA_R + (PANAL.R - PIEZA_R) * (f < p.sale + VIAJE - 6 ? 0 : encaja);
-    const giro = (i % 2 ? 18 : -18) * (1 - t);
-    piezas.push(<CeldaDibujo key={p.celda} celda={celda} cx={pos.x} cy={pos.y} R={R} rotacion={giro} />);
+    v.entregas.forEach((e, j) => {
+      const celda = celdaPorId(e.celda);
+      const destino = centroCelda(celda);
+      const vaiven = Math.sin(f * 0.16 + i * 2 + j * 1.3) * 5;
+      const espera: P = {
+        x: v.espera.x + e.lado * PAR_DX + haciaFuera * 300 * (1 - flota),
+        y: v.espera.y + 40 * (1 - flota) + vaiven,
+      };
+      let pos = espera;
+      let R = PIEZA_R;
+      let giro = Math.sin(f * 0.12 + i * 2 + j) * 6;
+      if (f >= v.recoge) {
+        const colgada = piezaColgada(Math.min(f, e.f), e.lado * PAR_DX);
+        const toma = interpolate(f, [v.recoge, v.recoge + 5], [0, 1], clamp);
+        pos = { x: espera.x + (colgada.x - espera.x) * toma, y: espera.y + (colgada.y - espera.y) * toma };
+      }
+      if (f >= e.f - 4) {
+        // Al soltarla, la pieza baja a su celda y crece hasta llenarla.
+        const encaja = spring({ frame: f - (e.f - 4), fps, config: { damping: 13, stiffness: 150 } });
+        const k = Math.min(1, encaja);
+        const colgada = piezaColgada(Math.min(f, e.f), e.lado * PAR_DX);
+        pos = { x: colgada.x + (destino.x - colgada.x) * k, y: colgada.y + (destino.y - colgada.y) * k };
+        R = PIEZA_R + (PANAL.R - PIEZA_R) * encaja;
+        giro *= 1 - k;
+      }
+      piezas.push(
+        <CeldaDibujo key={e.celda} celda={celda} cx={pos.x} cy={pos.y} R={R} rotacion={giro} style={{ zIndex: f >= e.f ? 0 : 1 }} />,
+      );
+    });
   });
 
   return (
