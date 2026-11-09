@@ -1,3 +1,4 @@
+import { sinTomaDePartido } from './neutralidad';
 import type { AgregadoPublico } from '../../frases/agregado';
 import { conReferencias } from './referencias';
 import { enUnaLinea } from './una-linea';
@@ -68,7 +69,7 @@ export const ESQUEMA_MAPA: Record<string, unknown> = {
 const esTexto = (x: unknown, max: number): x is string => typeof x === 'string' && x.trim().length > 0 && x.length <= max;
 const esRefs = (x: unknown, max: number): x is string[] => Array.isArray(x) && x.length <= max && x.every((r) => typeof r === 'string');
 
-export function esSalidaMapa(x: unknown): x is SalidaMapa {
+function formaMapa(x: unknown): x is SalidaMapa {
   if (typeof x !== 'object' || x === null) return false;
   const r = x as Record<string, unknown>;
   if (!esTexto(r['resumen'], MAX_RESUMEN)) return false;
@@ -137,4 +138,9 @@ export function contenidoMapa(
     }),
     puentes: { texto: salida.puentes.texto.trim(), citaIds: ids(salida.puentes.refs, MAX_REFS_PUENTES) },
   };
+}
+
+/** Forma válida y sin frases de tomar partido (filtro fijo de neutralidad). */
+export function esSalidaMapa(x: unknown): x is SalidaMapa {
+  return formaMapa(x) && sinTomaDePartido(x);
 }

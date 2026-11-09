@@ -1,3 +1,4 @@
+import { sinTomaDePartido } from './neutralidad';
 import { enUnaLinea } from './una-linea';
 const MAX_PRESENTACION = 1500;
 /** Cuántas inquietudes entran como máximo en un pedido. */
@@ -21,7 +22,7 @@ export const ESQUEMA_PRESENTACION: Record<string, unknown> = {
   required: ['presentacion'],
 };
 
-export function esSalidaPresentacion(x: unknown): x is SalidaPresentacion {
+function formaPresentacion(x: unknown): x is SalidaPresentacion {
   if (typeof x !== 'object' || x === null) return false;
   const p = (x as Record<string, unknown>)['presentacion'];
   return typeof p === 'string' && p.trim().length > 0 && p.length <= MAX_PRESENTACION;
@@ -29,4 +30,9 @@ export function esSalidaPresentacion(x: unknown): x is SalidaPresentacion {
 
 export function materialPresentacion(datos: { title: string; body: string }[]) {
   return { material: datos.map((d, i) => `[${i + 1}] ${enUnaLinea(d.title)} — ${enUnaLinea(d.body)}`).join('\n') };
+}
+
+/** Forma válida y sin frases de tomar partido (filtro fijo de neutralidad). */
+export function esSalidaPresentacion(x: unknown): x is SalidaPresentacion {
+  return formaPresentacion(x) && sinTomaDePartido(x);
 }

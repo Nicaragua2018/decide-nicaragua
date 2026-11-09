@@ -1,3 +1,4 @@
+import { sinTomaDePartido } from './neutralidad';
 import { conReferencias } from './referencias';
 import { enUnaLinea } from './una-linea';
 
@@ -40,7 +41,7 @@ export const ESQUEMA_AGRUPAR: Record<string, unknown> = {
   required: ['grupos'],
 };
 
-export function esSalidaAgrupar(x: unknown): x is SalidaAgrupar {
+function formaAgrupar(x: unknown): x is SalidaAgrupar {
   if (typeof x !== 'object' || x === null) return false;
   const grupos = (x as Record<string, unknown>)['grupos'];
   if (!Array.isArray(grupos) || grupos.length > MAX_GRUPOS) return false;
@@ -82,4 +83,9 @@ export function gruposConIds(
     grupos.push({ titulo: g.titulo.trim(), descripcion: g.descripcion.trim(), inquietudIds: ids });
   }
   return grupos;
+}
+
+/** Forma válida y sin frases de tomar partido (filtro fijo de neutralidad). */
+export function esSalidaAgrupar(x: unknown): x is SalidaAgrupar {
+  return formaAgrupar(x) && sinTomaDePartido(x);
 }

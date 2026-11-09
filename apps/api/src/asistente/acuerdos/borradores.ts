@@ -1,3 +1,4 @@
+import { sinTomaDePartido } from './neutralidad';
 import type { AgregadoPublico } from '../../frases/agregado';
 import { conReferencias } from './referencias';
 import { enUnaLinea } from './una-linea';
@@ -47,7 +48,7 @@ export const ESQUEMA_BORRADORES: Record<string, unknown> = {
 
 const esTexto = (x: unknown, max: number): x is string => typeof x === 'string' && x.trim().length > 0 && x.length <= max;
 
-export function esSalidaBorradores(x: unknown): x is SalidaBorradores {
+function formaBorradores(x: unknown): x is SalidaBorradores {
   if (typeof x !== 'object' || x === null) return false;
   const lista = (x as Record<string, unknown>)['borradores'];
   if (!Array.isArray(lista) || lista.length < MIN_BORRADORES || lista.length > MAX_BORRADORES) return false;
@@ -94,4 +95,9 @@ export function contenidoBorradores(
   const buenos = salida.borradores.filter((b) => b.refs.some((r) => refs.id(r) !== null));
   if (buenos.length < MIN_BORRADORES) return null;
   return { borradores: buenos.map((b) => ({ titulo: b.titulo.trim(), descripcion: b.descripcion.trim(), adoptado: false })) };
+}
+
+/** Forma válida y sin frases de tomar partido (filtro fijo de neutralidad). */
+export function esSalidaBorradores(x: unknown): x is SalidaBorradores {
+  return formaBorradores(x) && sinTomaDePartido(x);
 }

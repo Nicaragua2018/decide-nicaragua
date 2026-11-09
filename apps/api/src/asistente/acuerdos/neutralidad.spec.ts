@@ -1,0 +1,34 @@
+import { describe, expect, it } from 'vitest';
+import { sinTomaDePartido } from './neutralidad';
+
+describe('sinTomaDePartido', () => {
+  it('acepta una salida neutral', () => {
+    expect(sinTomaDePartido({ resumen: 'Hay acuerdo en la salud del campo.', grupos: [{ piensa: 'Quiere más impuestos.' }] })).toBe(true);
+  });
+
+  it('rechaza «tiene razón» en cualquier campo, incluso anidado y sin tilde ni mayúsculas', () => {
+    expect(sinTomaDePartido({ grupos: [{ piensa: 'El grupo B TIENE RAZON en todo.' }] })).toBe(false);
+    expect(sinTomaDePartido({ puentes: { texto: 'Nadie tiene razón del todo.' } })).toBe(false);
+  });
+
+  it('rechaza las otras frases de tomar partido', () => {
+    for (const frase of [
+      'está en lo cierto',
+      'tienen razón',
+      'tiene la verdad',
+      'la verdad es',
+      'el gobierno debe',
+      'la oposición debe',
+      'es culpable',
+      'tienen la culpa',
+      'la oposición miente',
+      'el gobierno miente',
+    ]) {
+      expect(sinTomaDePartido({ resumen: `Algo: ${frase} y más.` })).toBe(false);
+    }
+  });
+
+  it('no mira las referencias ni los números', () => {
+    expect(sinTomaDePartido({ refs: ['f1', 'f2'], tamano: 3 })).toBe(true);
+  });
+});
