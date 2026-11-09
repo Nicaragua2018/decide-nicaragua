@@ -68,11 +68,11 @@ COPY --from=builder /monorepo/apps/api/dist ./dist
 COPY --from=builder /monorepo/apps/api/dist-seed ./dist-seed
 
 # Schema de Prisma (necesario para prisma migrate deploy en entrypoint)
-COPY apps/api/prisma ./prisma
+COPY --chown=appuser:appgroup apps/api/prisma ./prisma
 
 # Script de arranque
-COPY apps/api/entrypoint.sh ./entrypoint.sh
-RUN chmod +x /app/entrypoint.sh
+COPY --chown=appuser:appgroup apps/api/entrypoint.sh ./entrypoint.sh
+RUN chmod 755 /app/entrypoint.sh && chmod -R a+rX /app/prisma
 
 USER appuser
 EXPOSE 4000
