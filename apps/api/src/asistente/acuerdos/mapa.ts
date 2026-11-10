@@ -1,4 +1,4 @@
-import { sinTomaDePartido } from './neutralidad';
+import { REGLA_DE_PALABRAS, sinTomaDePartido } from './neutralidad';
 import type { AgregadoPublico } from '../../frases/agregado';
 import { conReferencias } from './referencias';
 import { enUnaLinea } from './una-linea';
@@ -34,7 +34,8 @@ export const TAREA_MAPA = `Tarea: describir, para quienes debaten un tema en Nic
 - «puentes»: lo que une a todos los grupos. «texto» (máximo ${MAX_TEXTO_PUENTES} caracteres) y «refs» (hasta ${MAX_REFS_PUENTES}) con las frases que varios grupos comparten.
 - Sé neutral: no tomes partido, no digas qué opinión es mejor ni qué debería decidirse, y trata igual a todos los grupos.
 - No nombres a nadie ni atribuyas nada a personas concretas. No inventes cifras ni frases: usa solo lo que trae el material y las referencias fN.
-- Escribe en español claro y sencillo.`;
+- Escribe en español claro y sencillo.
+${REGLA_DE_PALABRAS}`;
 
 export const ESQUEMA_MAPA: Record<string, unknown> = {
   type: 'object',

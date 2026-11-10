@@ -1,4 +1,4 @@
-import { sinTomaDePartido } from './neutralidad';
+import { REGLA_DE_PALABRAS, sinTomaDePartido } from './neutralidad';
 import { conReferencias } from './referencias';
 import { enUnaLinea } from './una-linea';
 
@@ -19,7 +19,8 @@ export const TAREA_AGRUPAR = `Tarea: ayudar a quien organiza una comunidad de Ni
 - «titulo» (máximo ${MAX_TITULO} caracteres) nombra el asunto común. «descripcion» (máximo ${MAX_DESCRIPCION} caracteres) explica en pocas frases qué tienen en común.
 - Sé neutral: no tomes partido, no digas qué es mejor ni qué debería decidirse.
 - No nombres a nadie ni atribuyas lo escrito a personas. Usa solo las referencias iN del material.
-- Escribe en español claro y sencillo.`;
+- Escribe en español claro y sencillo.
+${REGLA_DE_PALABRAS}`;
 
 export const ESQUEMA_AGRUPAR: Record<string, unknown> = {
   type: 'object',

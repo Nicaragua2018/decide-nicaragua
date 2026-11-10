@@ -23,6 +23,8 @@ const TIEMPO_MAXIMO_MS = 20_000;
 const CONTADOR_SEGUNDOS = 26 * 3600;
 const REDIS_MAXIMO_MS = 300;
 const MENSAJE_REINTENTO = 'Ahora no pude responder. Intenta de nuevo en un momento.';
+export const NEGATIVA_PRIVACIDAD =
+  'Eso no te lo puedo decir. En Nicaragua Decide nadie puede saber quién escribió, apoyó o votó algo, ni quién está en cada grupo: así cuidamos a todas las personas. Puedes ver los resultados y los debates, que sí son públicos.';
 
 /** Esquema de la herramienta `responder`. */
 export const ESQUEMA_PANEL: Record<string, unknown> = {
@@ -134,6 +136,11 @@ export class PanelService {
       validar: esRespuestaPanel,
     });
     if (!salida) return { salida: null, respuesta: { tipo: 'respuesta', texto: MENSAJE_REINTENTO, enlaces: [] } };
+    // La negativa por privacidad es siempre el mismo texto: así nunca repite un nombre ni confirma nada.
+    if (salida.motivo === 'privacidad') {
+      const fija: SalidaPanel = { respuesta: NEGATIVA_PRIVACIDAD, motivo: 'privacidad' };
+      return { salida: fija, respuesta: { tipo: 'respuesta', texto: NEGATIVA_PRIVACIDAD, enlaces: [] } };
+    }
 
     const enlaces: { texto: string; ruta: string }[] = [];
     for (const e of salida.enlaces ?? []) {
