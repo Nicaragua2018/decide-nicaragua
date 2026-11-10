@@ -12,7 +12,9 @@
  * - No usa la caché de Redis: cada corrida pregunta al modelo de nuevo.
  * - Corre tres partes: la moderación previa, el panel de preguntas (PanelService real, con material inventado)
  *   y las tareas de acuerdos (agrupar, mapa, borradores y presentación, con AsistenteService.pedir real).
- * - Termina con código 1 si falla cualquier caso de cualquiera de las tres.
+ * - Un caso que falla se repite dos veces más y aprueba si acierta 2 de 3 (regla decidida por
+ *   Carlos el 2026-11-10; ver dos-de-tres.ts).
+ * - Termina con código 1 si reprueba cualquier caso de cualquiera de las tres.
  */
 import 'reflect-metadata';
 import { existsSync } from 'node:fs';
@@ -26,6 +28,7 @@ import type { RedisService } from '../../redis/redis.service';
 import { AsistenteService } from '../asistente.service';
 import { ModeracionPreviaService } from '../moderacion-previa.service';
 import { PanelService } from '../panel.service';
+import { dosDeTres } from './dos-de-tres';
 import { ESQUEMA_AGRUPAR, TAREA_AGRUPAR, esSalidaAgrupar } from '../acuerdos/agrupar';
 import { ESQUEMA_BORRADORES, TAREA_BORRADORES, esSalidaBorradores } from '../acuerdos/borradores';
 import { ESQUEMA_MAPA, TAREA_MAPA, esSalidaMapa } from '../acuerdos/mapa';
@@ -104,15 +107,29 @@ async function main(): Promise<number> {
     const fallos: string[] = [];
     let sinRespuesta = 0;
 
+    const repetidos: string[] = [];
+    const anotarRepeticion = (id: string, r: { aciertos: number; intentos: number }, aprobo: boolean) => {
+      if (r.intentos > 1) {
+        repetidos.push(
+          `- ${id}: falló la primera vez; ${r.aciertos.toString()} de ${(r.intentos - 1).toString()} repeticiones bien → ${aprobo ? 'aprobó' : 'reprobó'}`,
+        );
+      }
+    };
+
     for (const caso of casos) {
-      const revision = await moderacion.revisar(caso.texto, caso.tipo);
-      const fallo = evaluarCaso(caso, revision);
+      let sinRevisar = false;
+      const r = await dosDeTres(async () => {
+        const revision = await moderacion.revisar(caso.texto, caso.tipo);
+        sinRevisar = !revision.revisado;
+        return evaluarCaso(caso, revision);
+      });
+      anotarRepeticion(caso.id, r, r.fallo === null);
       totales.set(caso.categoria, (totales.get(caso.categoria) ?? 0) + 1);
-      if (fallo === null) {
+      if (r.fallo === null) {
         aprobados.set(caso.categoria, (aprobados.get(caso.categoria) ?? 0) + 1);
       } else {
-        if (!revision.revisado) sinRespuesta++;
-        fallos.push(`- ${caso.id} (${caso.categoria}): ${fallo}`);
+        if (sinRevisar) sinRespuesta++;
+        fallos.push(`- ${caso.id} (${caso.categoria}): ${r.fallo}`);
       }
     }
 
@@ -136,14 +153,19 @@ async function main(): Promise<number> {
       const refs = new Map(
         Object.entries(caso.refs ?? {}).map(([ref, ruta]) => [ref, { texto: 'Ver en la plataforma', ruta }]),
       );
-      const { salida } = await panel.responderConMaterial(caso.contexto, refs, [...(caso.turnos ?? []), { rol: 'persona', texto: caso.pregunta }]);
-      const fallo = evaluarCasoPanel(caso, salida);
+      let sinSalida = false;
+      const r = await dosDeTres(async () => {
+        const { salida } = await panel.responderConMaterial(caso.contexto, refs, [...(caso.turnos ?? []), { rol: 'persona', texto: caso.pregunta }]);
+        sinSalida = !salida;
+        return evaluarCasoPanel(caso, salida);
+      });
+      anotarRepeticion(caso.id, r, r.fallo === null);
       totalesPanel.set(caso.categoria, (totalesPanel.get(caso.categoria) ?? 0) + 1);
-      if (fallo === null) {
+      if (r.fallo === null) {
         aprobadosPanel.set(caso.categoria, (aprobadosPanel.get(caso.categoria) ?? 0) + 1);
       } else {
-        if (!salida) sinRespuestaPanel++;
-        fallosPanel.push(`- ${caso.id} (${caso.categoria}): ${fallo}`);
+        if (sinSalida) sinRespuestaPanel++;
+        fallosPanel.push(`- ${caso.id} (${caso.categoria}): ${r.fallo}`);
       }
     }
 
@@ -163,21 +185,27 @@ async function main(): Promise<number> {
 
     for (const caso of casosAcuerdos) {
       const t = TAREAS_ACUERDOS[caso.tarea];
-      const salida = await asistente.pedir<unknown>({
-        modelo: 'capaz',
-        prioridad: 'nocturna',
-        tarea: t.tarea,
-        material: caso.material,
-        herramienta: { nombre: t.herramienta, esquema: t.esquema },
-        validar: t.validar as (x: unknown) => x is unknown,
+      let sinSalida = false;
+      const r = await dosDeTres(async () => {
+        const salida = await asistente.pedir<unknown>({
+          modelo: 'capaz',
+          prioridad: 'nocturna',
+          tarea: t.tarea,
+          material: caso.material,
+          herramienta: { nombre: t.herramienta, esquema: t.esquema },
+          validar: t.validar as (x: unknown) => x is unknown,
+        });
+        sinSalida = salida === null;
+        const e = evaluarCasoAcuerdos(caso, salida);
+        return e.ok ? null : (e.motivo ?? 'falló');
       });
-      const r = evaluarCasoAcuerdos(caso, salida);
+      anotarRepeticion(caso.id, r, r.fallo === null);
       totalesAcuerdos.set(caso.categoria, (totalesAcuerdos.get(caso.categoria) ?? 0) + 1);
-      if (r.ok) {
+      if (r.fallo === null) {
         aprobadosAcuerdos.set(caso.categoria, (aprobadosAcuerdos.get(caso.categoria) ?? 0) + 1);
       } else {
-        if (salida === null) sinRespuestaAcuerdos++;
-        fallosAcuerdos.push(`- ${caso.id} (${caso.categoria}): ${r.motivo}`);
+        if (sinSalida) sinRespuestaAcuerdos++;
+        fallosAcuerdos.push(`- ${caso.id} (${caso.categoria}): ${r.fallo}`);
       }
     }
 
@@ -186,6 +214,11 @@ async function main(): Promise<number> {
       console.log(`  ${categoria}: ${aprobadosAcuerdos.get(categoria) ?? 0} / ${totalesAcuerdos.get(categoria) ?? 0}`);
     }
     console.log(`  TOTAL: ${casosAcuerdos.length - fallosAcuerdos.length} / ${casosAcuerdos.length}`);
+
+    if (repetidos.length > 0) {
+      console.log('\nCasos repetidos (regla 2 de 3):');
+      for (const linea of repetidos) console.log(linea);
+    }
 
     const todosLosFallos = [...fallos, ...fallosPanel, ...fallosAcuerdos];
     if (todosLosFallos.length > 0) {

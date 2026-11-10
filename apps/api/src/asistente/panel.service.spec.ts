@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createHash } from 'node:crypto';
 import { validate } from 'class-validator';
 import { plainToInstance } from 'class-transformer';
-import { PanelService, TAREA_PANEL, ESQUEMA_PANEL, esRespuestaPanel } from './panel.service';
+import { PanelService, TAREA_PANEL, ESQUEMA_PANEL, esRespuestaPanel, NEGATIVA_PRIVACIDAD } from './panel.service';
 import { AsistenteController } from './asistente.controller';
 import { PreguntarDto } from './dto/preguntar.dto';
 
@@ -47,6 +47,17 @@ describe('PanelService', () => {
   });
 
   const mensajes = [{ rol: 'persona' as const, texto: PREGUNTA }];
+
+  it('privacidad: la negativa es siempre el texto fijo, sin nombres de la conversación', async () => {
+    asistente.pedir.mockResolvedValue({ respuesta: 'No puedo confirmar cómo votó María.', motivo: 'privacidad' });
+    const { salida, respuesta } = await service.responderConMaterial('material', new Map(), [
+      { rol: 'persona', texto: '¿María votó en contra?' },
+    ]);
+    expect(salida?.respuesta).toBe(NEGATIVA_PRIVACIDAD);
+    expect(salida?.motivo).toBe('privacidad');
+    expect(respuesta).toEqual({ tipo: 'respuesta', texto: NEGATIVA_PRIVACIDAD, enlaces: [] });
+    expect(NEGATIVA_PRIVACIDAD.toLowerCase()).not.toContain('maría');
+  });
 
   it('apagado: no toca Redis', async () => {
     asistente.activo.mockReturnValue(false);

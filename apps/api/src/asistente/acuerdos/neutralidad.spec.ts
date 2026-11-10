@@ -28,6 +28,12 @@ describe('sinTomaDePartido', () => {
     }
   });
 
+  it('busca frases enteras: «sostiene razones» o «inculpable» no cuentan', () => {
+    expect(sinTomaDePartido({ piensa: 'El grupo sostiene razones económicas y mantiene razones de fondo.' })).toBe(true);
+    expect(sinTomaDePartido({ piensa: 'Nadie lo considera inculpable ni que obtiene la verdadera solución.' })).toBe(true);
+    expect(sinTomaDePartido({ resumen: 'Quieren que se diga la verdad establecida.' })).toBe(true);
+  });
+
   it('no mira las referencias ni los números', () => {
     expect(sinTomaDePartido({ refs: ['f1', 'f2'], tamano: 3 })).toBe(true);
   });

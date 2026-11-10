@@ -134,7 +134,7 @@ El asistente está apagado por defecto (ADR-025). Para encenderlo:
      pnpm --filter @decide/api asistente:examen
    ```
 
-   Tiene que terminar sin fallos. El gasto de la corrida cuenta para el tope del mes.
+   Tiene que terminar sin fallos. Un caso que falla se repite dos veces más y aprueba si acierta 2 de 3 (regla decidida el 2026-11-10); la lista «Casos repetidos» lo muestra. El gasto de la corrida cuenta para el tope del mes.
 
 3. Solo si el examen aprueba completo: cambiar `ASISTENTE_ACTIVO=false` por `ASISTENTE_ACTIVO=true` en `env.production` y reiniciar:
 

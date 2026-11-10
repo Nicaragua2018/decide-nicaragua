@@ -1,4 +1,4 @@
-import { sinTomaDePartido } from './neutralidad';
+import { REGLA_DE_PALABRAS, sinTomaDePartido } from './neutralidad';
 import type { AgregadoPublico } from '../../frases/agregado';
 import { conReferencias } from './referencias';
 import { enUnaLinea } from './una-linea';
@@ -23,7 +23,8 @@ export const TAREA_BORRADORES = `Tarea: proponer borradores de soluciones para u
 - Son solo sugerencias: quien participa puede cambiarlas o ignorarlas. No decidas nada ni digas cuál es la mejor.
 - Sé neutral: no tomes partido ni favorezcas una postura. No inventes datos, cifras ni frases.
 - No nombres a nadie ni atribuyas nada a personas concretas.
-- Escribe en español claro y sencillo.`;
+- Escribe en español claro y sencillo.
+${REGLA_DE_PALABRAS}`;
 
 export const ESQUEMA_BORRADORES: Record<string, unknown> = {
   type: 'object',
