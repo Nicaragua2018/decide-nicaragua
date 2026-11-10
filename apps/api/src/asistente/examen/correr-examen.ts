@@ -32,6 +32,7 @@ import { dosDeTres } from './dos-de-tres';
 import { ESQUEMA_AGRUPAR, TAREA_AGRUPAR, esSalidaAgrupar } from '../acuerdos/agrupar';
 import { ESQUEMA_BORRADORES, TAREA_BORRADORES, esSalidaBorradores } from '../acuerdos/borradores';
 import { ESQUEMA_MAPA, TAREA_MAPA, esSalidaMapa } from '../acuerdos/mapa';
+import { explicarTomaDePartido } from '../acuerdos/neutralidad';
 import { ESQUEMA_PRESENTACION, TAREA_PRESENTACION, esSalidaPresentacion } from '../acuerdos/presentacion';
 import {
   CATEGORIAS,
@@ -47,11 +48,11 @@ import {
 } from './evaluar';
 
 /** Las tareas reales de acuerdos: las mismas instrucciones, esquemas y validaciones que usa la plataforma. */
-const TAREAS_ACUERDOS: Record<TareaAcuerdos, { herramienta: string; tarea: string; esquema: Record<string, unknown>; validar: (x: unknown) => boolean }> = {
-  agrupar: { herramienta: 'agrupar_inquietudes', tarea: TAREA_AGRUPAR, esquema: ESQUEMA_AGRUPAR, validar: esSalidaAgrupar },
-  mapa: { herramienta: 'mapear_opiniones', tarea: TAREA_MAPA, esquema: ESQUEMA_MAPA, validar: esSalidaMapa },
-  borradores: { herramienta: 'proponer_soluciones', tarea: TAREA_BORRADORES, esquema: ESQUEMA_BORRADORES, validar: esSalidaBorradores },
-  presentacion: { herramienta: 'presentar_asunto', tarea: TAREA_PRESENTACION, esquema: ESQUEMA_PRESENTACION, validar: esSalidaPresentacion },
+const TAREAS_ACUERDOS: Record<TareaAcuerdos, { herramienta: string; tarea: string; esquema: Record<string, unknown>; validar: (x: unknown) => boolean; explicarRechazo: (x: unknown) => string | null }> = {
+  agrupar: { herramienta: 'agrupar_inquietudes', tarea: TAREA_AGRUPAR, esquema: ESQUEMA_AGRUPAR, validar: esSalidaAgrupar, explicarRechazo: explicarTomaDePartido },
+  mapa: { herramienta: 'mapear_opiniones', tarea: TAREA_MAPA, esquema: ESQUEMA_MAPA, validar: esSalidaMapa, explicarRechazo: explicarTomaDePartido },
+  borradores: { herramienta: 'proponer_soluciones', tarea: TAREA_BORRADORES, esquema: ESQUEMA_BORRADORES, validar: esSalidaBorradores, explicarRechazo: explicarTomaDePartido },
+  presentacion: { herramienta: 'presentar_asunto', tarea: TAREA_PRESENTACION, esquema: ESQUEMA_PRESENTACION, validar: esSalidaPresentacion, explicarRechazo: explicarTomaDePartido },
 };
 
 /** Mismo orden que ConfigModule: .env.local primero; lo que ya está en el entorno gana. */
@@ -194,6 +195,7 @@ async function main(): Promise<number> {
           material: caso.material,
           herramienta: { nombre: t.herramienta, esquema: t.esquema },
           validar: t.validar as (x: unknown) => x is unknown,
+          explicarRechazo: t.explicarRechazo,
         });
         sinSalida = salida === null;
         const e = evaluarCasoAcuerdos(caso, salida);
