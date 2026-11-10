@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { sinTomaDePartido } from './neutralidad';
+import { REGLA_DE_PALABRAS, explicarTomaDePartido, sinTomaDePartido } from './neutralidad';
 
 describe('sinTomaDePartido', () => {
   it('acepta una salida neutral', () => {
@@ -36,5 +36,23 @@ describe('sinTomaDePartido', () => {
 
   it('no mira las referencias ni los números', () => {
     expect(sinTomaDePartido({ refs: ['f1', 'f2'], tamano: 3 })).toBe(true);
+  });
+});
+
+describe('explicarTomaDePartido', () => {
+  it('nombra las expresiones usadas, sin el resto del texto', () => {
+    const motivo = explicarTomaDePartido({ grupos: [{ piensa: 'Cree que El Gobierno debe bajar precios; nadie tiene razón.' }] });
+    expect(motivo).toBe('usó «tiene razon», «el gobierno debe»');
+    expect(motivo).not.toContain('precios');
+  });
+
+  it('null si la salida es neutral', () => {
+    expect(explicarTomaDePartido({ resumen: 'El grupo A apoya que el gobierno controle los precios.' })).toBeNull();
+  });
+});
+
+describe('REGLA_DE_PALABRAS', () => {
+  it('trae un ejemplo de cómo contar lo que un grupo pide al gobierno o a la oposición', () => {
+    expect(REGLA_DE_PALABRAS).toContain('apoya que el gobierno controle');
   });
 });

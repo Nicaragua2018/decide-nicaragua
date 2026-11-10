@@ -35,6 +35,7 @@ import {
 } from './acuerdos/borradores';
 import { ESQUEMA_COMISION, esSalidaComision, materialComision, TAREA_COMISION } from './acuerdos/comision';
 import { contenidoMapa, ESQUEMA_MAPA, esSalidaMapa, materialMapa, MIN_VOTOS_MAPA, TAREA_MAPA } from './acuerdos/mapa';
+import { explicarTomaDePartido } from './acuerdos/neutralidad';
 
 export const MAX_PEDIDOS_POR_RONDA = 20;
 /** Las tareas nocturnas son largas (mapa y borradores): más tiempo que los 30 s de una consulta interactiva. */
@@ -163,6 +164,7 @@ export class AcuerdosService {
         material,
         herramienta: { nombre: 'agrupar_inquietudes', esquema: ESQUEMA_AGRUPAR },
         validar: esSalidaAgrupar,
+        explicarRechazo: explicarTomaDePartido,
       });
       if (!salida) return;
       const grupos = gruposConIds(salida, refs);
@@ -222,6 +224,7 @@ export class AcuerdosService {
         material: materialPresentacion(inquietudes).material,
         herramienta: { nombre: 'presentar_asunto', esquema: ESQUEMA_PRESENTACION },
         validar: esSalidaPresentacion,
+        explicarRechazo: explicarTomaDePartido,
       });
       if (!salida) return;
       await this.sugerencias.guardar(
@@ -263,6 +266,7 @@ export class AcuerdosService {
         material: material.material,
         herramienta: { nombre: 'mapear_opiniones', esquema: ESQUEMA_MAPA },
         validar: esSalidaMapa,
+        explicarRechazo: explicarTomaDePartido,
       });
       if (!salida) return;
       const contenido = contenidoMapa(salida, material.letras, material.refs);
@@ -314,6 +318,7 @@ export class AcuerdosService {
         material: material.material,
         herramienta: { nombre: 'proponer_soluciones', esquema: ESQUEMA_BORRADORES },
         validar: esSalidaBorradores,
+        explicarRechazo: explicarTomaDePartido,
       });
       if (!salida) return;
       const contenido = contenidoBorradores(salida, material.refs);

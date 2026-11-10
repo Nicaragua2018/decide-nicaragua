@@ -172,6 +172,27 @@ describe('AsistenteService', () => {
       expect(cliente.messages.create).toHaveBeenCalledTimes(2);
     });
 
+    it('nocturna: el segundo intento le dice al modelo por qué se descartó, fuera del material', async () => {
+      cliente.messages.create
+        .mockResolvedValueOnce(respuesta({ nivel: 'cero' }))
+        .mockResolvedValueOnce(respuesta({ nivel: 1 }));
+      const explicarRechazo = vi.fn(() => 'usó «la verdad es»');
+      expect(await crear().pedir(op({ prioridad: 'nocturna', explicarRechazo }))).toEqual({ nivel: 1 });
+      expect(explicarRechazo).toHaveBeenCalledWith({ nivel: 'cero' });
+      const primero: string = cliente.messages.create.mock.calls[0]![0].messages[0].content;
+      const segundo: string = cliente.messages.create.mock.calls[1]![0].messages[0].content;
+      expect(primero.endsWith('</material>')).toBe(true);
+      expect(segundo.startsWith(primero)).toBe(true);
+      expect(segundo.slice(primero.length)).toContain('usó «la verdad es»');
+    });
+
+    it('nocturna: sin explicación, el segundo intento repite el mismo mensaje', async () => {
+      cliente.messages.create.mockResolvedValue(respuesta({ nivel: 'cero' }));
+      await crear().pedir(op({ prioridad: 'nocturna', explicarRechazo: () => null }));
+      const [a, b] = cliente.messages.create.mock.calls.map((c) => c[0].messages[0].content);
+      expect(b).toBe(a);
+    });
+
     it('interactiva: no reintenta (la persona está esperando)', async () => {
       cliente.messages.create.mockResolvedValue(respuesta({ nivel: 'cero' }));
       expect(await crear().pedir(op())).toBeNull();

@@ -26,6 +26,11 @@ export interface PedidoAsistente<T> {
   material: string;
   herramienta: { nombre: string; esquema: Record<string, unknown> };
   validar: (x: unknown) => x is T;
+  /**
+   * Si una salida se descarta, explica por qué con texto fijo del código (nunca texto de la
+   * salida ni de miembros). La explicación va en el segundo intento, después del material.
+   */
+  explicarRechazo?: (x: unknown) => string | null;
   timeoutMs?: number;
 }
 
@@ -122,6 +127,8 @@ export class AsistenteService {
       // Una salida descartada (sin la herramienta o con forma inválida) se pide una vez más en las
       // tareas de fondo; en las interactivas no, porque la persona está esperando.
       const intentos = op.prioridad === 'interactiva' ? 1 : 2;
+      const mensaje = `<material>\n${neutralizarEtiquetas(limpiarTexto(op.material))}\n</material>`;
+      let aviso = '';
       for (let intento = 1; intento <= intentos; intento++) {
         const respuesta = await this.conTiempoMaximo(op.timeoutMs ?? TIMEOUT_POR_DEFECTO_MS, (signal) =>
           this.cliente!.messages.create(
@@ -131,7 +138,7 @@ export class AsistenteService {
               system,
               tools: [herramienta],
               tool_choice: forzada ? { type: 'tool', name: op.herramienta.nombre } : { type: 'auto' },
-              messages: [{ role: 'user', content: `<material>\n${neutralizarEtiquetas(limpiarTexto(op.material))}\n</material>` }],
+              messages: [{ role: 'user', content: mensaje + aviso }],
             },
             { signal, ...(op.prioridad === 'interactiva' ? { maxRetries: 0 } : {}) },
           ),
@@ -144,7 +151,11 @@ export class AsistenteService {
           (b): b is Anthropic.ToolUseBlock => b.type === 'tool_use' && b.name === op.herramienta.nombre,
         );
         if (bloque && op.validar(bloque.input)) return bloque.input;
-        const motivo = bloque ? 'forma inválida' : 'sin la herramienta';
+        const explicacion = bloque && op.explicarRechazo ? op.explicarRechazo(bloque.input) : null;
+        if (explicacion) {
+          aviso = `\n\nAviso: tu respuesta anterior no se pudo usar porque ${explicacion}. Hazla de nuevo cumpliendo todas las reglas, sin esas expresiones.`;
+        }
+        const motivo = explicacion ?? (bloque ? 'forma inválida' : 'sin la herramienta');
         this.logger.warn(
           `Salida del asistente descartada (herramienta ${op.herramienta.nombre}, ${motivo}, intento ${intento} de ${intentos})`,
         );
