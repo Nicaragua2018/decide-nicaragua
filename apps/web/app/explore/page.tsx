@@ -1,10 +1,11 @@
 import Link from 'next/link';
 import type { Metadata } from 'next';
+import { Volver } from '@/components/Volver';
 
 export const metadata: Metadata = {
   title: 'Modo observador',
   description:
-    'Explora la actividad pública de Decide Nicaragua sin necesidad de cuenta: propuestas, elecciones, sorticiones y auditoría.',
+    'Explora la actividad pública de Nicaragua Decide sin necesidad de cuenta: propuestas, elecciones, sorticiones y auditoría.',
 };
 
 export default function ExplorePage() {
@@ -16,9 +17,10 @@ export default function ExplorePage() {
       <nav className="ln-nav">
         <div className="ln-nav-inner">
           <Link href="/" className="ln-brand" style={{ textDecoration: 'none' }}>
-            Decide <em>Nicaragua</em>
+            Nicaragua <em>Decide</em>
           </Link>
           <div className="ln-nav-actions">
+            <Volver href="/">Inicio</Volver>
             <a href="#contacto" className="ln-nav-link">Contacto</a>
             <Link href="/login" className="ln-nav-cta">Registrarme</Link>
           </div>
@@ -56,12 +58,12 @@ export default function ExplorePage() {
           <div className="ex-brief-lead">
             <span className="ln-label">Resumen ejecutivo</span>
             <h2 className="ex-brief-title">
-              ¿Qué es<br /><em>Decide Nicaragua?</em>
+              ¿Qué es<br /><em>Nicaragua Decide?</em>
             </h2>
           </div>
           <div className="ex-brief-body">
             <p>
-              Decide Nicaragua es una <strong>infraestructura digital para la participación
+              Nicaragua Decide es una <strong>infraestructura digital para la participación
               democrática verificable</strong> diseñada para ciudadanas y ciudadanos
               nicaragüenses — comenzando por los cientos de miles que viven en el exilio.
             </p>
@@ -216,7 +218,7 @@ export default function ExplorePage() {
       {/* ── Footer ──────────────────────────────────────────────── */}
       <footer className="ln-footer">
         <div className="ln-container ln-footer-inner">
-          <span className="ln-brand ln-brand--light">Decide <em>Nicaragua</em></span>
+          <span className="ln-brand ln-brand--light">Nicaragua <em>Decide</em></span>
           <div className="ln-footer-links">
             <Link href="/representantes" className="ln-footer-link">Quiénes nos representan</Link>
           </div>

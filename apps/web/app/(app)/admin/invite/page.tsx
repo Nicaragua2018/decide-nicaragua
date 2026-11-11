@@ -1,9 +1,9 @@
 'use client';
 
 import { useActionState } from 'react';
-import Link from 'next/link';
 import { inviteUser } from '@/lib/actions';
 import type { ActionResult } from '@/lib/actions';
+import { Volver } from '@/components/Volver';
 
 const initialState: ActionResult | null = null;
 
@@ -19,9 +19,7 @@ export default function AdminInvitePage() {
             Se enviará un email con el enlace de activación de cuenta.
           </p>
         </div>
-        <Link href="/admin/users" className="btn btn-ghost btn-sm">
-          ← Usuarios
-        </Link>
+        <Volver href="/admin/users">Usuarios</Volver>
       </div>
 
       <div className="card" style={{ maxWidth: 480 }}>

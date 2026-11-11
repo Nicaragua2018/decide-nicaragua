@@ -13,7 +13,7 @@ const DESCRIPCION =
   'Confianza, comunicación y coordinación entre afines. Sin manipulación y sin el ruido de las redes.';
 
 export const metadata: Metadata = {
-  // «absolute»: sin la coletilla «| Decide Nicaragua» que añade el layout.
+  // «absolute»: sin la coletilla «| Nicaragua Decide» que añade el layout.
   title: { absolute: TITULO },
   description: DESCRIPCION,
   openGraph: {

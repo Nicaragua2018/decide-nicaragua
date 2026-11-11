@@ -4,6 +4,7 @@ import { serverFetch } from '@/lib/api';
 import { ConfirmForm } from '@/components/ConfirmForm';
 import { executeDraw, cancelDraw } from '@/lib/actions';
 import type { SortitionDrawDetail, SortitionStatus, SortitionVerificationResult } from '@decide/shared';
+import { Volver } from '@/components/Volver';
 
 const STATUS_LABEL: Record<SortitionStatus, string> = {
   pending: 'Pendiente', completed: 'Completado', cancelled: 'Cancelado',
@@ -47,9 +48,7 @@ export default async function SortitionPage({
   return (
     <>
       <div className="page-header">
-        <Link href={`/groups/${draw.groupId}?tab=sortition`} className="text-sm text-muted">
-          ← Volver al grupo
-        </Link>
+        <Volver href={`/groups/${draw.groupId}?tab=sortition`}>Volver al grupo</Volver>
         <div className="flex justify-between items-center mt-2">
           <h1 className="page-title">{draw.title}</h1>
           <span className={`badge badge-${draw.status}`}>

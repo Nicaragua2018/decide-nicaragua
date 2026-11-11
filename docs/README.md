@@ -1,6 +1,6 @@
 # Documentación técnica
 
-Este directorio contiene la documentación de diseño, decisiones y seguridad del proyecto Decide Nicaragua.
+Este directorio contiene la documentación de diseño, decisiones y seguridad del proyecto Nicaragua Decide.
 
 ## ¿Qué encontrarás aquí?
 

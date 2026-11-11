@@ -8,6 +8,7 @@ import { MarcaAsistente } from '@/components/SugerenciaAsistente';
 import { UmbralSeccion } from '@/components/SugerenciasSecciones';
 import { DebateRellenable, OpenDebateForm } from './OpenDebateForm';
 import { InquietudesParecidas } from './InquietudesParecidas';
+import { Volver } from '@/components/Volver';
 
 export const metadata: Metadata = { title: 'Agenda' };
 
@@ -40,7 +41,7 @@ export default async function AgendaPage() {
   return (
     <>
       <div className="page-header">
-        <Link href="/inquietudes" className="text-sm text-muted">← Volver a las inquietudes</Link>
+        <Volver href="/inquietudes">Volver a las inquietudes</Volver>
         <h1 className="page-title mt-2">Agenda</h1>
         <p className="page-sub">
           Inquietudes con apoyo suficiente. Abre un debate (puedes juntar varias de la misma comunidad) o responde en público.

@@ -1,4 +1,4 @@
-# SECURITY.md — Decide Nicaragua
+# SECURITY.md — Nicaragua Decide
 
 > Documento vivo. Actualizar cuando cambie el modelo de amenazas o los controles.
 > Última actualización: 2026-03-23

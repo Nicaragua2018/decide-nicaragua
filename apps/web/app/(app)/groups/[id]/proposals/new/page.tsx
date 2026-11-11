@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { use } from 'react';
 import { createProposal } from '@/lib/actions';
 import { useFormConRevision } from '@/components/RevisarAntesDePublicar';
+import { Volver } from '@/components/Volver';
 
 export default function NewProposalPage({
   params,
@@ -22,9 +23,7 @@ export default function NewProposalPage({
   return (
     <>
       <div className="page-header">
-        <Link href={`/groups/${id}?tab=proposals`} className="text-sm text-muted">
-          ← Volver al grupo
-        </Link>
+        <Volver href={`/groups/${id}?tab=proposals`}>Volver al grupo</Volver>
         <h1 className="page-title mt-2">Nueva propuesta</h1>
       </div>
 

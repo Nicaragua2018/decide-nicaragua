@@ -27,7 +27,7 @@ export class EmailService {
   constructor(private readonly config: ConfigService) {
     this.resend = new Resend(this.config.getOrThrow<string>('RESEND_API_KEY'));
     this.from = this.config.getOrThrow<string>('EMAIL_FROM');
-    this.fromName = this.config.get<string>('EMAIL_FROM_NAME') ?? 'Decide Nicaragua';
+    this.fromName = this.config.get<string>('EMAIL_FROM_NAME') ?? 'Nicaragua Decide';
   }
 
   async sendInvite(options: SendInviteOptions): Promise<void> {
@@ -36,7 +36,7 @@ export class EmailService {
     const { error } = await this.resend.emails.send({
       from: `${this.fromName} <${this.from}>`,
       to,
-      subject: 'Invitación a Decide Nicaragua',
+      subject: 'Invitación a Nicaragua Decide',
       html: inviteEmailHtml({ inviteUrl, expiresInHours: INVITE_TOKEN_TTL_HOURS }),
       text: inviteEmailText({ inviteUrl, expiresInHours: INVITE_TOKEN_TTL_HOURS }),
     });

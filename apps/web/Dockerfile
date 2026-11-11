@@ -1,5 +1,5 @@
 # =============================================================
-# Decide Nicaragua — Web Dockerfile
+# Nicaragua Decide — Web Dockerfile
 # Contexto de build: raíz del monorepo
 #   docker build -f apps/web/Dockerfile -t decide-web .
 # =============================================================

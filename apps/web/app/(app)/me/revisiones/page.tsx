@@ -1,8 +1,8 @@
 import type { Metadata } from 'next';
-import Link from 'next/link';
 import { MODERACION_CAUSAS } from '@decide/shared';
 import type { EstadoTextoEnRevision, TextoEnRevisionView } from '@decide/shared';
 import { serverFetch } from '@/lib/api';
+import { Volver } from '@/components/Volver';
 
 export const metadata: Metadata = { title: 'Mis textos en revisión' };
 
@@ -24,7 +24,7 @@ export default async function MisRevisionesPage() {
   return (
     <>
       <div className="page-header">
-        <Link href="/me" className="text-sm text-muted">← Mi perfil</Link>
+        <Volver href="/me">Mi perfil</Volver>
         <h1 className="page-title mt-2">Mis textos en revisión</h1>
         <p className="page-sub">Textos que pediste que la mesa revise antes de publicarse.</p>
       </div>

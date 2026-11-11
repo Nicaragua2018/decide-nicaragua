@@ -1,6 +1,6 @@
 #!/bin/sh
 # =============================================================
-# Decide Nicaragua — API entrypoint
+# Nicaragua Decide — API entrypoint
 #
 # Ejecuta migraciones de Prisma antes de arrancar el servidor.
 # Diseñado para correr como usuario sin privilegios (appuser).

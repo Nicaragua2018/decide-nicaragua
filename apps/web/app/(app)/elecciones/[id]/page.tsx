@@ -9,6 +9,7 @@ import { ResultadoEleccion } from '@/components/elecciones/ResultadoEleccion';
 import { cuentaAtras, fechaLarga, puestosTexto, tituloEleccion } from '@/components/elecciones/textos';
 import { CandidaturaForm } from './CandidaturaForm';
 import { MiCandidatura, OcultarFicha } from './Acciones';
+import { Volver } from '@/components/Volver';
 
 export const metadata: Metadata = { title: 'Elección' };
 
@@ -23,7 +24,7 @@ export default async function EleccionPage({ params }: { params: Promise<{ id: s
     return (
       <div className="el-pagina">
         <p className="alert alert-info">Esta elección es de otra comunidad: solo votan y se presentan sus miembros.</p>
-        <Link href="/elecciones">Volver a las elecciones</Link>
+        <Volver href="/elecciones">Volver a las elecciones</Volver>
       </div>
     );
   }
@@ -40,7 +41,7 @@ export default async function EleccionPage({ params }: { params: Promise<{ id: s
   return (
     <div className="el-pagina">
       <p className="mb-3">
-        <Link href="/elecciones">← Elecciones</Link>
+        <Volver href="/elecciones">Elecciones</Volver>
       </p>
       <header className="el-tarjeta">
         <p className="el-etiqueta">{puestosTexto(e.puestos)}</p>

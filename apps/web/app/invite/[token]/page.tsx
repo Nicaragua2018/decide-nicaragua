@@ -74,7 +74,7 @@ export default function AcceptInvitePage({
     <div className="auth-page">
       <div className="auth-card" style={{ maxWidth: 480 }}>
         <h1 className="auth-title">Completa tu registro</h1>
-        <p className="auth-sub">Configura tu cuenta en Decide Nicaragua</p>
+        <p className="auth-sub">Configura tu cuenta en Nicaragua Decide</p>
 
         {error && <div className="alert alert-error">{error}</div>}
 

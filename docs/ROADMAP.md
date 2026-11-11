@@ -1,4 +1,4 @@
-# ROADMAP.md — Decide Nicaragua
+# ROADMAP.md — Nicaragua Decide
 
 > Última actualización: 2026-11-06
 

@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { use, useActionState, useState } from 'react';
 import { createElection } from '@/lib/actions';
+import { Volver } from '@/components/Volver';
 
 export default function NewElectionPage({
   params,
@@ -29,9 +30,7 @@ export default function NewElectionPage({
   return (
     <>
       <div className="page-header">
-        <Link href={`/groups/${id}?tab=elections`} className="text-sm text-muted">
-          ← Volver al grupo
-        </Link>
+        <Volver href={`/groups/${id}?tab=elections`}>Volver al grupo</Volver>
         <h1 className="page-title mt-2">Nueva elección Condorcet</h1>
         <p className="page-sub">
           Los miembros ordenarán los candidatos por preferencia. El método Condorcet-Schulze
