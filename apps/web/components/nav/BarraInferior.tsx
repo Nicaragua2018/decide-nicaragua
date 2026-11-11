@@ -20,7 +20,7 @@ const ICONOS: Record<BloqueId, ReactNode> = {
       <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
     </svg>
   ),
-  comunidad: <Sacuanjoche variante="contorno" tamano={22} />,
+  comunidad: <Sacuanjoche variante="contorno" tamano={22} color="currentColor" />,
   transparencia: (
     <svg width="22" height="22" viewBox="0 0 24 24" {...trazo} aria-hidden="true">
       <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />

@@ -11,7 +11,7 @@ interface Props {
   className?: string;
 }
 
-export function Sacuanjoche({ variante, tamano, color = '#0a3880', centro = '#f2b00a', className }: Props) {
+export function Sacuanjoche({ variante, tamano, color, centro = '#f2b00a', className }: Props) {
   if (variante === 'logo') {
     const t = tamano ?? 34;
     return (
@@ -29,6 +29,8 @@ export function Sacuanjoche({ variante, tamano, color = '#0a3880', centro = '#f2
 
   const t = tamano ?? 24;
   const contorno = variante === 'contorno';
+  // «contorno» es gris por defecto; con color="currentColor" sigue al texto (p. ej. pestaña activa).
+  const tinta = color ?? (contorno ? '#94a3b8' : '#0a3880');
   return (
     <svg viewBox="0 0 24 24" width={t} height={t} className={className} aria-hidden="true">
       <g transform="translate(12 12)">
@@ -38,11 +40,11 @@ export function Sacuanjoche({ variante, tamano, color = '#0a3880', centro = '#f2
             d={PETALO_ICONO}
             transform={`rotate(${a})`}
             {...(contorno
-              ? { fill: 'none', stroke: '#94a3b8', strokeWidth: 1.8, strokeLinejoin: 'round' as const }
-              : { fill: color })}
+              ? { fill: 'none', stroke: tinta, strokeWidth: 1.8, strokeLinejoin: 'round' as const }
+              : { fill: tinta })}
           />
         ))}
-        <circle r={contorno ? 1.6 : 2.2} fill={contorno ? '#94a3b8' : centro} />
+        <circle r={contorno ? 1.6 : 2.2} fill={contorno ? tinta : centro} />
       </g>
     </svg>
   );

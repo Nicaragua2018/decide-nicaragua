@@ -191,7 +191,7 @@ export default function AsistentePanel() {
               onKeyDown={alTeclear}
             />
             <button type="button" className="btn btn-primary btn-sm" disabled={pensando || topeAlcanzado || texto.trim() === ''} onClick={() => void enviar()}>
-              {pensando ? 'Pensando…' : 'Enviar'}
+              {pensando ? 'Enviando…' : 'Enviar'}
             </button>
             <p className="form-hint">Guardián puede equivocarse. No guarda esta conversación.</p>
           </div>

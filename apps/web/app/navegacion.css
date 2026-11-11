@@ -27,7 +27,7 @@
   min-height: 44px; box-sizing: border-box;
   transition: transform .2s ease, box-shadow .2s ease;
 }
-.navbar-marca:hover { transform: translateY(-1px); box-shadow: 0 6px 16px rgba(0, 0, 0, .18); }
+.navbar-marca:hover { transform: translateY(-1px); box-shadow: 0 6px 16px rgba(0, 0, 0, .18); text-decoration: none; }
 .navbar-marca-texto {
   font-family: var(--font-display); font-weight: 600; font-size: 20px;
   letter-spacing: -0.01em; white-space: nowrap;
@@ -73,6 +73,7 @@
 }
 .nav-opcion:hover,
 .nav-opcion:focus-visible { transform: translateX(4px); background: var(--bg); }
+.nav-opcion:hover { text-decoration: none; }
 .navbar .nav-menu .nav-opcion:focus-visible { outline: 3px solid var(--primary); outline-offset: -3px; }
 .nav-opcion-titulo { font-weight: 600; font-size: 15px; }
 .nav-opcion-ayuda { font-size: 12px; color: var(--text-muted); }
@@ -126,6 +127,15 @@
   border-radius: var(--radius-pill); padding: 2px 8px;
 }
 
+/* Tableta y zoom: marca y Guardián solo con icono para que la barra quepa */
+@media (min-width: 600px) and (max-width: 1079px) {
+  .navbar-inner { gap: 12px; }
+  .navbar-marca { padding: 5px; }
+  .navbar-marca-texto,
+  .btn-guardian-texto { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+  .btn-guardian { padding: 4px; width: 44px; height: 44px; box-sizing: border-box; justify-content: center; }
+}
+
 /* Celular */
 @media (max-width: 599px) {
   .navbar-inner { padding: 0 16px; gap: 12px; }
@@ -142,7 +152,7 @@
 /* Barra inferior y hoja (solo celular) */
 .barra-inferior, .hoja-fondo { display: none; }
 @media (max-width: 599px) {
-  .page-con-barra { padding-bottom: calc(72px + env(safe-area-inset-bottom, 0px)); }
+  .page-con-barra { padding-bottom: calc(168px + env(safe-area-inset-bottom, 0px)); }
   .barra-inferior {
     position: fixed; left: 0; right: 0; bottom: 0; z-index: 50;
     display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr);

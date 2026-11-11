@@ -54,7 +54,7 @@ export default function MenuAvatar({ nombre, iniciales, status, abierto, onAlter
       </button>
       {abierto && (
         <div id={idMenu} role="menu" aria-label="Tu cuenta" className="nav-menu nav-avatar-menu">
-          <div className="nav-avatar-cabecera">
+          <div className="nav-avatar-cabecera" role="none">
             <span className="nav-avatar-iniciales" aria-hidden="true">{iniciales}</span>
             <span className="nav-avatar-nombre">{nombre}</span>
           </div>

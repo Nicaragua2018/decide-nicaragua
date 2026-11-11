@@ -7,11 +7,17 @@ export default function BotonGuardian() {
   const { activo, abrir } = useAsistente();
   if (!activo) return null;
   return (
-    <button type="button" className="btn btn-guardian gd-btn" data-guardian-boton="" onClick={abrir}>
+    <button
+      type="button"
+      className="btn btn-guardian gd-btn"
+      data-guardian-boton=""
+      aria-label="Pregúntale a Guardián"
+      onClick={abrir}
+    >
       <span className="btn-guardian-circulo">
         <Guardian tamano={28} />
       </span>
-      Pregúntale a Guardián
+      <span className="btn-guardian-texto">Pregúntale a Guardián</span>
     </button>
   );
 }
