@@ -1,0 +1,188 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Inquietudes: las 12 preguntas</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@500;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#ffffff}
+a{color:#0a3880}a:hover{color:#072a60}
+.nav-link{position:relative;transition:background .2s,color .2s}
+.nav-link::after{content:"";position:absolute;left:16px;right:16px;bottom:5px;height:2px;border-radius:2px;background:#f2b00a;transform:scaleX(0);transform-origin:left;transition:transform .25s ease}
+.nav-link:hover{background:rgba(255,255,255,0.14);color:#ffffff}
+.nav-link:hover::after{transform:scaleX(1)}
+.btn-pill{transition:transform .2s ease,box-shadow .2s ease,background .2s ease}
+.btn-pill:hover{transform:translateY(-2px);box-shadow:0 8px 20px rgba(15,23,42,0.16)}
+.btn-pill:active{transform:translateY(0) scale(.98)}
+.avatar-btn{transition:transform .2s,border-color .2s}
+.avatar-btn:hover{transform:scale(1.06);border-color:#f2b00a}
+.marca{transition:transform .2s ease,box-shadow .2s ease}.marca:hover{transform:translateY(-1px);box-shadow:0 6px 16px rgba(0,0,0,0.18)}
+.tab{transition:transform .2s,background .2s}.tab:hover{transform:translateY(-1px);background:#e9eef7}
+.card{transition:transform .25s ease,box-shadow .25s ease,border-color .25s ease}
+.card:hover{transform:translateY(-3px);box-shadow:0 12px 28px rgba(10,56,128,0.12);border-color:rgba(10,56,128,0.4)}
+.vote{transition:transform .15s,background .2s,color .2s}
+.vote:hover{transform:scale(1.06);background:#0a3880;color:#ffffff}
+.vote:active{transform:scale(.95)}
+.fade-up{animation:fade-up .6s cubic-bezier(.22,.68,0,1.1) both}
+.d1{animation-delay:.05s}.d2{animation-delay:.15s}.d3{animation-delay:.25s}.d4{animation-delay:.35s}.d5{animation-delay:.45s}.d6{animation-delay:.55s}
+@keyframes fade-up{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:translateY(0)}}
+.panel{animation:panel-in .5s cubic-bezier(.22,.68,0,1.1) both}
+@keyframes panel-in{from{opacity:0;transform:translateX(24px)}to{opacity:1;transform:translateX(0)}}
+.bubble{animation:fade-up .4s ease both}
+.gd{overflow:visible}
+.gd-body,.gd-tail,.gd-eyes{transform-box:fill-box}
+.gd-body{transform-origin:center;animation:gd-bob 2.6s ease-in-out infinite}
+.gd-tail{transform-origin:top left;animation:gd-tail 2.6s ease-in-out infinite}
+.gd-eyes{transform-origin:center;animation:gd-blink 4.5s infinite}
+.gd-btn:hover .gd-body{animation:gd-hop .5s ease-out}
+@keyframes gd-bob{0%,100%{transform:translateY(0)}50%{transform:translateY(-1.5px)}}
+@keyframes gd-tail{0%,100%{transform:rotate(-6deg)}50%{transform:rotate(6deg)}}
+@keyframes gd-blink{0%,90%,100%{transform:scaleY(1)}94%{transform:scaleY(.1)}}
+@keyframes gd-hop{0%{transform:translateY(0)}40%{transform:translateY(-5px)}100%{transform:translateY(0)}}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style>
+</helmet>
+<div style="width: 100%; min-height: 100%; box-sizing: border-box; font-family: 'Inter', sans-serif; color: #0f172a; background: #ffffff; display: flex; flex-direction: column">
+
+  <!-- Barra de navegación -->
+  <header style="background: #0a3880; box-shadow: 0 2px 14px rgba(10,56,128,0.28); position: sticky; top: 0; z-index: 10">
+    <div style="max-width: 1200px; margin: 0 auto; padding: 0 24px; height: 72px; display: flex; align-items: center; justify-content: space-between; gap: 24px; flex-wrap: wrap">
+      <a href="Main.dc.html" class="marca" style="display: flex; align-items: center; gap: 10px; text-decoration: none; color: #0f172a; background: #ffffff; padding: 5px 18px 5px 5px; border-radius: 999px; min-height: 44px; box-sizing: border-box">
+        <svg width="34" height="34" viewBox="0 0 34 34" aria-hidden="true"><rect width="34" height="34" rx="10" fill="#0a3880"/><g transform="translate(17 17)" fill="#ffffff"><path d="M0 0C-3.2-2.2-5-6.4-3.6-9.8C-2.6-12.6 1.2-13.2 3-10.8C5-8 3.4-3.2 0 0Z"/><path d="M0 0C-3.2-2.2-5-6.4-3.6-9.8C-2.6-12.6 1.2-13.2 3-10.8C5-8 3.4-3.2 0 0Z" transform="rotate(72)"/><path d="M0 0C-3.2-2.2-5-6.4-3.6-9.8C-2.6-12.6 1.2-13.2 3-10.8C5-8 3.4-3.2 0 0Z" transform="rotate(144)"/><path d="M0 0C-3.2-2.2-5-6.4-3.6-9.8C-2.6-12.6 1.2-13.2 3-10.8C5-8 3.4-3.2 0 0Z" transform="rotate(216)"/><path d="M0 0C-3.2-2.2-5-6.4-3.6-9.8C-2.6-12.6 1.2-13.2 3-10.8C5-8 3.4-3.2 0 0Z" transform="rotate(288)"/></g><circle cx="17" cy="17" r="3.2" fill="#f2b00a"/></svg>
+        <span style="font-family: 'Poppins', sans-serif; font-weight: 600; font-size: 20px; letter-spacing: -0.01em">Nicaragua <span style="color: #0a3880">Decide</span></span>
+      </a>
+      <nav aria-label="Principal" style="display: flex; align-items: center; gap: 4px; flex-wrap: wrap">
+        <a href="Navegacion.dc.html" class="nav-link" style="display: flex; align-items: center; gap: 6px; padding: 10px 16px; border-radius: 999px; font-family: 'Poppins', sans-serif; font-weight: 500; font-size: 15px; color: #ffffff; text-decoration: none; background: rgba(255,255,255,0.16)">Participar <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></a>
+        <a href="Navegacion.dc.html" class="nav-link" style="display: flex; align-items: center; gap: 6px; padding: 10px 16px; border-radius: 999px; font-family: 'Poppins', sans-serif; font-weight: 500; font-size: 15px; color: #ffffff; text-decoration: none">Comunidad <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></a>
+        <a href="Navegacion.dc.html" class="nav-link" style="display: flex; align-items: center; gap: 6px; padding: 10px 16px; border-radius: 999px; font-family: 'Poppins', sans-serif; font-weight: 500; font-size: 15px; color: #ffffff; text-decoration: none">Transparencia <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></a>
+      </nav>
+      <div style="display: flex; align-items: center; gap: 12px">
+        <a href="Inquietudes.dc.html" class="btn-pill gd-btn" style="display: flex; align-items: center; gap: 8px; padding: 6px 16px 6px 6px; border-radius: 999px; background: #f2b00a; color: #0f172a; text-decoration: none; font-family: 'Poppins', sans-serif; font-weight: 600; font-size: 14px; min-height: 44px">
+          <span style="width: 34px; height: 34px; border-radius: 50%; background: #ffffff; display: flex; align-items: center; justify-content: center"><svg class="gd" width="28" height="28" viewBox="0 0 64 64" aria-hidden="true"><g class="gd-body"><g class="gd-tail"><path d="M34 50 L46 60" stroke="#1F6FB2" stroke-width="3" stroke-linecap="round" fill="none"/><path d="M31 52 L40 61" stroke="#1F6FB2" stroke-width="3" stroke-linecap="round" fill="none"/><ellipse cx="47.5" cy="61" rx="3.4" ry="2.3" fill="#27B5A5" transform="rotate(40 47.5 61)"/><ellipse cx="41.5" cy="62" rx="3" ry="2" fill="#27B5A5" transform="rotate(48 41.5 62)"/></g><ellipse cx="30" cy="40" rx="15" ry="13" fill="#E58A2D"/><path d="M17 36 C13 43 16 51 25 51 C22 45 22 39 27 33 Z" fill="#1F6FB2"/><circle cx="30" cy="22" r="14" fill="#27B5A5"/><path d="M17 19 Q30 3 43 19 Q30 13 17 19 Z" fill="#1E9A8C"/><path d="M16 22 Q30 16 44 22 Q30 30 16 22 Z" fill="#0F172A"/><g class="gd-eyes"><circle cx="24" cy="22" r="4.6" fill="#ffffff"/><circle cx="36" cy="22" r="4.6" fill="#ffffff"/><circle cx="24.8" cy="22.5" r="2.6" fill="#0F172A"/><circle cx="36.8" cy="22.5" r="2.6" fill="#0F172A"/><circle cx="25.8" cy="21.4" r="0.9" fill="#ffffff"/><circle cx="37.8" cy="21.4" r="0.9" fill="#ffffff"/></g><circle cx="19.5" cy="28" r="2" fill="#F2B00A" opacity="0.7"/><circle cx="40.5" cy="28" r="2" fill="#F2B00A" opacity="0.7"/><path d="M27 28.5 L30 33.5 L33 28.5 Z" fill="#1E293B"/></g></svg></span>
+          Pregúntale a Guardián
+        </a>
+        <button type="button" class="avatar-btn" aria-label="Menú de Carlos: Mi perfil, Admin, Salir" style="width: 44px; height: 44px; border-radius: 50%; border: 2px solid rgba(255,255,255,0.6); background: rgba(255,255,255,0.14); color: #ffffff; font-family: 'Poppins', sans-serif; font-weight: 600; font-size: 14px; cursor: pointer">CR</button>
+      </div>
+    </div>
+  </header>
+
+  <!-- Cuerpo: lista + panel de Guardián -->
+  <div style="max-width: 1200px; width: 100%; margin: 0 auto; box-sizing: border-box; padding: 40px 24px 56px; display: flex; gap: 32px; flex-wrap: wrap; align-items: flex-start">
+
+    <!-- Columna principal -->
+    <main style="flex: 999 1 560px; min-width: 0; display: flex; flex-direction: column; gap: 24px">
+      <nav aria-label="Migas" class="fade-up d1" style="display: flex; align-items: center; gap: 8px; font-size: 13px; color: #64748b">
+        <a href="Main.dc.html" style="text-decoration: none">Inicio</a><span aria-hidden="true">›</span><span style="color: #0a3880; font-weight: 500">Participar</span><span aria-hidden="true">›</span><span style="color: #0f172a; font-weight: 500">Inquietudes</span>
+      </nav>
+
+      <div class="fade-up d2" style="display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; flex-wrap: wrap">
+        <div style="display: flex; flex-direction: column; gap: 8px">
+          <h1 style="margin: 0; font-family: 'Poppins', sans-serif; font-weight: 700; font-size: 36px; letter-spacing: -0.02em; color: #0a3880; line-height: 1.15">Las 12 primeras preguntas</h1>
+          <p style="margin: 0; font-size: 16px; color: #475569; max-width: 560px; line-height: 1.55">Apoya las que importan. Cuando una pregunta reúne apoyo, pasa a debate y después a votación.</p>
+        </div>
+        <a href="Inquietudes.dc.html" class="btn-pill" style="display: inline-flex; align-items: center; gap: 8px; padding: 12px 20px; border-radius: 999px; background: #0a3880; color: #ffffff; text-decoration: none; font-family: 'Poppins', sans-serif; font-weight: 600; font-size: 14px; min-height: 44px"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>Nueva inquietud</a>
+      </div>
+
+      <!-- Pestañas de comunidad -->
+      <div role="tablist" aria-label="Comunidad" class="fade-up d3" style="display: flex; gap: 8px; flex-wrap: wrap; padding-bottom: 4px">
+        <a href="Inquietudes.dc.html" role="tab" aria-selected="true" class="tab" style="display: inline-flex; align-items: center; gap: 8px; padding: 9px 16px; border-radius: 999px; background: #0a3880; color: #ffffff; text-decoration: none; font-weight: 500; font-size: 14px; min-height: 40px"><svg width="12" height="12" viewBox="0 0 24 24" aria-hidden="true"><g transform="translate(12 12)" fill="#f2b00a"><path d="M0 0C-2.6-1.7-4-5-2.9-7.8C-2.1-10 .9-10.5 2.3-8.6C3.9-6.4 2.6-2.5 0 0Z"/><path d="M0 0C-2.6-1.7-4-5-2.9-7.8C-2.1-10 .9-10.5 2.3-8.6C3.9-6.4 2.6-2.5 0 0Z" transform="rotate(72)"/><path d="M0 0C-2.6-1.7-4-5-2.9-7.8C-2.1-10 .9-10.5 2.3-8.6C3.9-6.4 2.6-2.5 0 0Z" transform="rotate(144)"/><path d="M0 0C-2.6-1.7-4-5-2.9-7.8C-2.1-10 .9-10.5 2.3-8.6C3.9-6.4 2.6-2.5 0 0Z" transform="rotate(216)"/><path d="M0 0C-2.6-1.7-4-5-2.9-7.8C-2.1-10 .9-10.5 2.3-8.6C3.9-6.4 2.6-2.5 0 0Z" transform="rotate(288)"/></g><circle cx="12" cy="12" r="2.2" fill="#ffffff"/></svg>Exilio y diáspora <span style="background: rgba(255,255,255,0.2); border-radius: 999px; padding: 1px 8px; font-size: 12px">12</span></a>
+        <a href="Inquietudes.dc.html" role="tab" aria-selected="false" class="tab" style="display: inline-flex; align-items: center; gap: 8px; padding: 9px 16px; border-radius: 999px; background: #f4f6fa; color: #1b2a4a; text-decoration: none; font-weight: 500; font-size: 14px; min-height: 40px">Managua <span style="color: #64748b; font-size: 12px">0</span></a>
+        <a href="Inquietudes.dc.html" role="tab" aria-selected="false" class="tab" style="display: inline-flex; align-items: center; gap: 8px; padding: 9px 16px; border-radius: 999px; background: #f4f6fa; color: #1b2a4a; text-decoration: none; font-weight: 500; font-size: 14px; min-height: 40px">Estados Unidos · Florida <span style="color: #64748b; font-size: 12px">0</span></a>
+      </div>
+
+      <!-- Lista de inquietudes -->
+      <div style="display: flex; flex-direction: column; gap: 12px">
+
+        <article class="card fade-up d3" style="display: flex; gap: 20px; align-items: flex-start; background: #ffffff; border: 1px solid rgba(15,23,42,0.08); border-radius: 16px; padding: 20px 22px">
+          <button type="button" class="vote" aria-label="Apoyar esta inquietud" style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; width: 60px; min-height: 64px; border-radius: 12px; border: 2px solid #0a3880; background: #0a3880; color: #ffffff; cursor: pointer; font-family: 'Poppins', sans-serif; font-weight: 600; flex-shrink: 0"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m18 15-6-6-6 6"/></svg><span style="font-size: 16px">3</span></button>
+          <div style="display: flex; flex-direction: column; gap: 8px; flex: 1; min-width: 0">
+            <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap"><span style="font-size: 11px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: #92400e; background: #fff8e1; border-radius: 999px; padding: 3px 10px">Sembrada por Guardián</span><span style="font-size: 11px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: #065f46; background: #d1fae5; border-radius: 999px; padding: 3px 10px">En debate</span></div>
+            <a href="Inquietudes.dc.html" style="font-family: 'Poppins', sans-serif; font-weight: 600; font-size: 17px; color: #0f172a; text-decoration: none; line-height: 1.35">¿Cómo afecta el precio de la canasta básica a las familias que dependen de remesas?</a>
+            <p style="margin: 0; font-size: 14px; color: #475569; line-height: 1.55">Muchas familias reciben dinero desde fuera y lo gastan en comida. Queremos saber qué pesa más hoy: el tipo de cambio, el precio local o el costo de enviar.</p>
+            <div style="display: flex; gap: 16px; font-size: 13px; color: #64748b; flex-wrap: wrap"><span>3 apoyos</span><span>1 comentario</span><span>Abierta hace 2 días</span></div>
+          </div>
+        </article>
+
+        <article class="card fade-up d4" style="display: flex; gap: 20px; align-items: flex-start; background: #ffffff; border: 1px solid rgba(15,23,42,0.08); border-radius: 16px; padding: 20px 22px">
+          <button type="button" class="vote" aria-label="Apoyar esta inquietud" style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; width: 60px; min-height: 64px; border-radius: 12px; border: 2px solid rgba(10,56,128,0.2); background: #ffffff; color: #0a3880; cursor: pointer; font-family: 'Poppins', sans-serif; font-weight: 600; flex-shrink: 0"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m18 15-6-6-6 6"/></svg><span style="font-size: 16px">1</span></button>
+          <div style="display: flex; flex-direction: column; gap: 8px; flex: 1; min-width: 0">
+            <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap"><span style="font-size: 11px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: #92400e; background: #fff8e1; border-radius: 999px; padding: 3px 10px">Sembrada por Guardián</span><span style="font-size: 11px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: #0a3880; background: rgba(10,56,128,0.08); border-radius: 999px; padding: 3px 10px">Abierta</span></div>
+            <a href="Inquietudes.dc.html" style="font-family: 'Poppins', sans-serif; font-weight: 600; font-size: 17px; color: #0f172a; text-decoration: none; line-height: 1.35">¿Qué trámites desde fuera del país son hoy los más difíciles de resolver?</a>
+            <p style="margin: 0; font-size: 14px; color: #475569; line-height: 1.55">Pasaportes, partidas de nacimiento, poderes notariales. Cuéntanos cuál te ha costado más y qué ayudaría.</p>
+            <div style="display: flex; gap: 16px; font-size: 13px; color: #64748b; flex-wrap: wrap"><span>1 apoyo</span><span>Sin comentarios</span><span>Abierta hace 2 días</span></div>
+          </div>
+        </article>
+
+        <article class="card fade-up d5" style="display: flex; gap: 20px; align-items: flex-start; background: #ffffff; border: 1px solid rgba(15,23,42,0.08); border-radius: 16px; padding: 20px 22px">
+          <button type="button" class="vote" aria-label="Apoyar esta inquietud" style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; width: 60px; min-height: 64px; border-radius: 12px; border: 2px solid rgba(10,56,128,0.2); background: #ffffff; color: #0a3880; cursor: pointer; font-family: 'Poppins', sans-serif; font-weight: 600; flex-shrink: 0"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m18 15-6-6-6 6"/></svg><span style="font-size: 16px">0</span></button>
+          <div style="display: flex; flex-direction: column; gap: 8px; flex: 1; min-width: 0">
+            <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap"><span style="font-size: 11px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: #92400e; background: #fff8e1; border-radius: 999px; padding: 3px 10px">Sembrada por Guardián</span><span style="font-size: 11px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: #0a3880; background: rgba(10,56,128,0.08); border-radius: 999px; padding: 3px 10px">Abierta</span></div>
+            <a href="Inquietudes.dc.html" style="font-family: 'Poppins', sans-serif; font-weight: 600; font-size: 17px; color: #0f172a; text-decoration: none; line-height: 1.35">¿Cómo mantener el vínculo de los niños nacidos fuera con Nicaragua?</a>
+            <p style="margin: 0; font-size: 14px; color: #475569; line-height: 1.55">Idioma, historia, comida, familia. ¿Qué hacen hoy las familias y qué podríamos organizar juntos?</p>
+            <div style="display: flex; gap: 16px; font-size: 13px; color: #64748b; flex-wrap: wrap"><span>Sin apoyos aún</span><span>Sin comentarios</span><span>Abierta hace 2 días</span></div>
+          </div>
+        </article>
+
+        <article class="card fade-up d6" style="display: flex; gap: 20px; align-items: flex-start; background: #ffffff; border: 1px solid rgba(15,23,42,0.08); border-radius: 16px; padding: 20px 22px">
+          <button type="button" class="vote" aria-label="Apoyar esta inquietud" style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; width: 60px; min-height: 64px; border-radius: 12px; border: 2px solid rgba(10,56,128,0.2); background: #ffffff; color: #0a3880; cursor: pointer; font-family: 'Poppins', sans-serif; font-weight: 600; flex-shrink: 0"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m18 15-6-6-6 6"/></svg><span style="font-size: 16px">0</span></button>
+          <div style="display: flex; flex-direction: column; gap: 8px; flex: 1; min-width: 0">
+            <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap"><span style="font-size: 11px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: #92400e; background: #fff8e1; border-radius: 999px; padding: 3px 10px">Sembrada por Guardián</span><span style="font-size: 11px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: #0a3880; background: rgba(10,56,128,0.08); border-radius: 999px; padding: 3px 10px">Abierta</span></div>
+            <a href="Inquietudes.dc.html" style="font-family: 'Poppins', sans-serif; font-weight: 600; font-size: 17px; color: #0f172a; text-decoration: none; line-height: 1.35">¿Qué debería tener una primera elección de la comunidad para que confíes en ella?</a>
+            <p style="margin: 0; font-size: 14px; color: #475569; line-height: 1.55">Observadores sorteados, resultados verificables, reglas antes de empezar. ¿Qué más?</p>
+            <div style="display: flex; gap: 16px; font-size: 13px; color: #64748b; flex-wrap: wrap"><span>Sin apoyos aún</span><span>Sin comentarios</span><span>Abierta hace 2 días</span></div>
+          </div>
+        </article>
+
+        <a href="Inquietudes.dc.html" class="btn-pill" style="display: flex; align-items: center; justify-content: center; gap: 8px; padding: 14px; border-radius: 16px; border: 1px dashed rgba(15,23,42,0.2); text-decoration: none; font-family: 'Poppins', sans-serif; font-weight: 500; font-size: 14px; color: #0a3880; min-height: 48px">Ver las 8 preguntas restantes <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></a>
+      </div>
+    </main>
+
+    <!-- Panel de Guardián -->
+    <aside aria-label="Guardián, el asistente" class="panel" style="flex: 1 1 320px; max-width: 380px; display: flex; flex-direction: column; background: #ffffff; border: 1px solid rgba(242,176,10,0.5); border-radius: 20px; overflow: hidden; box-shadow: 0 12px 32px rgba(15,23,42,0.08)">
+      <div style="display: flex; align-items: center; gap: 12px; padding: 16px 18px; background: #fff8e1; border-bottom: 1px solid rgba(242,176,10,0.4)">
+        <span style="width: 48px; height: 48px; border-radius: 50%; background: #ffffff; border: 2px solid #f2b00a; display: flex; align-items: center; justify-content: center"><svg class="gd" width="38" height="38" viewBox="0 0 64 64" aria-hidden="true"><g class="gd-body"><g class="gd-tail"><path d="M34 50 L46 60" stroke="#1F6FB2" stroke-width="3" stroke-linecap="round" fill="none"/><path d="M31 52 L40 61" stroke="#1F6FB2" stroke-width="3" stroke-linecap="round" fill="none"/><ellipse cx="47.5" cy="61" rx="3.4" ry="2.3" fill="#27B5A5" transform="rotate(40 47.5 61)"/><ellipse cx="41.5" cy="62" rx="3" ry="2" fill="#27B5A5" transform="rotate(48 41.5 62)"/></g><ellipse cx="30" cy="40" rx="15" ry="13" fill="#E58A2D"/><path d="M17 36 C13 43 16 51 25 51 C22 45 22 39 27 33 Z" fill="#1F6FB2"/><circle cx="30" cy="22" r="14" fill="#27B5A5"/><path d="M17 19 Q30 3 43 19 Q30 13 17 19 Z" fill="#1E9A8C"/><path d="M16 22 Q30 16 44 22 Q30 30 16 22 Z" fill="#0F172A"/><g class="gd-eyes"><circle cx="24" cy="22" r="4.6" fill="#ffffff"/><circle cx="36" cy="22" r="4.6" fill="#ffffff"/><circle cx="24.8" cy="22.5" r="2.6" fill="#0F172A"/><circle cx="36.8" cy="22.5" r="2.6" fill="#0F172A"/><circle cx="25.8" cy="21.4" r="0.9" fill="#ffffff"/><circle cx="37.8" cy="21.4" r="0.9" fill="#ffffff"/></g><circle cx="19.5" cy="28" r="2" fill="#F2B00A" opacity="0.7"/><circle cx="40.5" cy="28" r="2" fill="#F2B00A" opacity="0.7"/><path d="M27 28.5 L30 33.5 L33 28.5 Z" fill="#1E293B"/></g></svg></span>
+        <div style="display: flex; flex-direction: column; gap: 2px; flex: 1">
+          <span style="font-family: 'Poppins', sans-serif; font-weight: 600; font-size: 16px; color: #0f172a">Guardián</span>
+          <span style="font-size: 12px; color: #92400e">Asistente de la comunidad · no vota ni decide</span>
+        </div>
+        <button type="button" aria-label="Cerrar el panel de Guardián" style="width: 36px; height: 36px; border-radius: 50%; border: none; background: rgba(15,23,42,0.06); color: #0f172a; cursor: pointer; display: flex; align-items: center; justify-content: center"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
+      </div>
+      <div style="display: flex; flex-direction: column; gap: 14px; padding: 18px; min-height: 360px">
+        <div class="bubble d2" style="align-self: flex-end; max-width: 85%; background: #0a3880; color: #ffffff; border-radius: 16px 16px 4px 16px; padding: 12px 14px; font-size: 14px; line-height: 1.5">Mi tema dice publicado pero sigue en el recuadro como en edición.</div>
+        <div class="bubble d4" style="align-self: flex-start; max-width: 90%; background: #f4f6fa; color: #0f172a; border-radius: 16px 16px 16px 4px; padding: 12px 14px; font-size: 14px; line-height: 1.55">Tu tema sí quedó publicado; lo veo en el foro de Exilio y diáspora. Lo que viste es un fallo del formulario, que no se vació después de publicar. Ya está anotado para corregirlo.</div>
+        <div class="bubble d6" style="align-self: flex-start; display: flex; gap: 8px; flex-wrap: wrap">
+          <a href="Inquietudes.dc.html" class="btn-pill" style="padding: 8px 14px; border-radius: 999px; border: 1.5px solid rgba(10,56,128,0.25); color: #0a3880; text-decoration: none; font-size: 13px; font-weight: 500; min-height: 36px; display: inline-flex; align-items: center">Ver mi tema</a>
+          <a href="Inquietudes.dc.html" class="btn-pill" style="padding: 8px 14px; border-radius: 999px; border: 1.5px solid rgba(10,56,128,0.25); color: #0a3880; text-decoration: none; font-size: 13px; font-weight: 500; min-height: 36px; display: inline-flex; align-items: center">¿Qué puedo hacer hoy?</a>
+        </div>
+      </div>
+      <form style="display: flex; gap: 8px; padding: 14px 18px 18px; border-top: 1px solid rgba(15,23,42,0.06)">
+        <label for="pregunta-guardian" style="position: absolute; left: -9999px">Escribe tu pregunta a Guardián</label>
+        <input id="pregunta-guardian" type="text" placeholder="Pregúntale algo a Guardián…" style="flex: 1; min-width: 0; padding: 12px 14px; border-radius: 999px; border: 1.5px solid rgba(15,23,42,0.15); font-family: 'Inter', sans-serif; font-size: 14px; min-height: 44px; box-sizing: border-box">
+        <button type="button" class="btn-pill" aria-label="Enviar" style="width: 44px; height: 44px; border-radius: 50%; border: none; background: #f2b00a; color: #0f172a; cursor: pointer; display: flex; align-items: center; justify-content: center; flex-shrink: 0"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></button>
+      </form>
+    </aside>
+  </div>
+
+  <footer style="margin-top: auto; border-top: 1px solid rgba(15,23,42,0.08); background: #f4f6fa">
+    <div style="max-width: 1200px; margin: 0 auto; padding: 20px 24px; display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; font-size: 13px; color: #64748b">
+      <span style="display: flex; align-items: center; gap: 8px"><img src="/_blob/eef205102d2c528135a01bff0c7a93b0" alt="" style="width: 22px; height: 22px; object-fit: contain">Impulsado por OpenCivic Solutions</span>
+      <span style="display: flex; gap: 18px"><a href="Navegacion.dc.html" style="text-decoration: none">Reglas</a><a href="Navegacion.dc.html" style="text-decoration: none">Verificaciones</a><a href="Navegacion.dc.html" style="text-decoration: none">Auditoría</a></span>
+    </div>
+  </footer>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1360,"height":1560}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {};
+  }
+}
+</script>
+</body>
+</html>

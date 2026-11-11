@@ -5,6 +5,7 @@ import { useTransition } from 'react';
 import type { ItemAlDia } from '@decide/shared';
 import { cerrarAlDia } from '@/lib/actions';
 import { esRutaInterna } from '@/lib/rutas';
+import { Guardian } from '@/components/guardian/Guardian';
 
 const ETIQUETA: Record<ItemAlDia['clase'], string> = {
   debate: 'Debate nuevo',
@@ -30,14 +31,17 @@ export default function AlDiaCard({ resumen, items }: { resumen: string | null; 
   return (
     <section className="card al-dia" aria-labelledby="al-dia-titulo">
       <div className="al-dia-cabecera">
-        <h2 id="al-dia-titulo" className="card-title">Desde tu última visita</h2>
+        <h2 id="al-dia-titulo" className="card-title al-dia-titulo">
+          <Guardian tamano={32} />
+          Desde tu última visita
+        </h2>
         <button type="button" className="btn btn-ghost btn-sm" disabled={ocupado} onClick={() => empezar(() => cerrarAlDia())}>
           Cerrar
         </button>
       </div>
       {resumen && (
         <div className="al-dia-resumen">
-          <p className="marca-asistente">sugerencia del asistente</p>
+          <p className="marca-guardian">sugerencia de Guardián</p>
           <p>{resumen}</p>
         </div>
       )}

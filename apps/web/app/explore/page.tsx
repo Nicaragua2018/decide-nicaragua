@@ -2,7 +2,7 @@ import Link from 'next/link';
 import type { Metadata } from 'next';
 
 export const metadata: Metadata = {
-  title: 'Modo observador — Decide Nicaragua',
+  title: 'Modo observador',
   description:
     'Explora la actividad pública de Decide Nicaragua sin necesidad de cuenta: propuestas, elecciones, sorticiones y auditoría.',
 };

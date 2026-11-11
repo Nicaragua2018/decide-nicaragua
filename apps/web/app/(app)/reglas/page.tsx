@@ -5,7 +5,7 @@ import { GENERAL_GROUP_SLUG } from '@decide/shared';
 import type { CambioReglaView, GroupListResponse, RuleView } from '@decide/shared';
 import { ProponerCambio } from './ProponerCambio';
 
-export const metadata: Metadata = { title: 'Reglas — Decide Nicaragua' };
+export const metadata: Metadata = { title: 'Reglas' };
 
 const UNIT_LABEL: Record<string, string> = {
   personas: 'personas',
@@ -141,7 +141,7 @@ export default async function ReglasPage() {
       </div>
 
       <section className="card mb-4">
-        <p className="card-title mb-3">Reglas de toda la colmena</p>
+        <p className="card-title mb-3">Reglas de todo Nicaragua Decide</p>
         {colmenaRules.length === 0 ? (
           <p className="text-sm text-muted">No se pudieron cargar las reglas.</p>
         ) : (

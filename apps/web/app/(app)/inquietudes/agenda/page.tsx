@@ -9,7 +9,7 @@ import { UmbralSeccion } from '@/components/SugerenciasSecciones';
 import { DebateRellenable, OpenDebateForm } from './OpenDebateForm';
 import { InquietudesParecidas } from './InquietudesParecidas';
 
-export const metadata: Metadata = { title: 'Agenda — Decide Nicaragua' };
+export const metadata: Metadata = { title: 'Agenda' };
 
 export default async function AgendaPage() {
   const [res, groupsRes] = await Promise.all([

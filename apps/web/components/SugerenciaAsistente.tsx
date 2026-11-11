@@ -1,8 +1,9 @@
 import type { ReactNode } from 'react';
 import type { BaseSugerencia } from '@decide/shared';
+import { Guardian } from '@/components/guardian/Guardian';
 import { formatDate } from '@/app/(app)/inquietudes/status';
 
-export const ETIQUETA_SUGERENCIA = 'Sugerencia del asistente';
+export const ETIQUETA_SUGERENCIA = 'Sugerencia de Guardián';
 
 /** «Basado en N frases y M opiniones, al <fecha>», con lo que haya en `base`. */
 export function lineaBase(base: BaseSugerencia): string {
@@ -17,9 +18,9 @@ export function lineaBase(base: BaseSugerencia): string {
   return `Basado en ${texto}, al ${fecha}`;
 }
 
-/** Etiqueta pequeña para contenido creado por el asistente (inquietudes y temas). */
+/** Etiqueta pequeña para contenido sembrado por Guardián (inquietudes y temas). */
 export function MarcaAsistente() {
-  return <span className="badge badge-asistente">{ETIQUETA_SUGERENCIA}</span>;
+  return <span className="badge badge-asistente">Sembrada por Guardián</span>;
 }
 
 /** Marco común de toda sugerencia del asistente. */
@@ -34,7 +35,10 @@ export function SugerenciaAsistente({
 }) {
   return (
     <aside className="card sugerencia-asistente mb-4" aria-label={ETIQUETA_SUGERENCIA}>
-      <p className="sugerencia-asistente-etiqueta">{ETIQUETA_SUGERENCIA}</p>
+      <p className="sugerencia-asistente-etiqueta">
+        <Guardian tamano={20} />
+        {ETIQUETA_SUGERENCIA}
+      </p>
       {titulo && <p className="card-title">{titulo}</p>}
       {children}
       <p className="card-meta mt-2">{lineaBase(base)}</p>

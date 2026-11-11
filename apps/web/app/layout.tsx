@@ -1,7 +1,11 @@
 import type { Metadata } from 'next';
 import type { ReactNode } from 'react';
-import { Cormorant_Garamond, DM_Sans } from 'next/font/google';
+import { Cormorant_Garamond, Inter, Poppins } from 'next/font/google';
 import './globals.css';
+import './navegacion.css';
+import './guardian.css';
+import './inicio.css';
+import './inquietudes.css';
 
 const cormorant = Cormorant_Garamond({
   subsets: ['latin'],
@@ -11,9 +15,16 @@ const cormorant = Cormorant_Garamond({
   display: 'swap',
 });
 
-const dmSans = DM_Sans({
+const poppins = Poppins({
   subsets: ['latin'],
-  weight: ['300', '400', '500', '600', '700'],
+  weight: ['500', '600', '700'],
+  variable: '--font-display-poppins',
+  display: 'swap',
+});
+
+const inter = Inter({
+  subsets: ['latin'],
+  weight: ['400', '500', '600'],
   variable: '--font-sans',
   display: 'swap',
 });
@@ -22,8 +33,8 @@ export const metadata: Metadata = {
   // URL base para las imágenes de redes (opengraph-image) de todas las páginas.
   metadataBase: new URL(process.env.NEXT_PUBLIC_APP_URL || 'https://nicaraguadecide.org'),
   title: {
-    default: 'Decide Nicaragua',
-    template: '%s | Decide Nicaragua',
+    default: 'Nicaragua Decide',
+    template: '%s | Nicaragua Decide',
   },
   description:
     'Plataforma de participación democrática verificable para ciudadanos nicaragüenses.',
@@ -35,7 +46,7 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
-    <html lang="es" className={`${cormorant.variable} ${dmSans.variable}`}>
+    <html lang="es" className={`${cormorant.variable} ${poppins.variable} ${inter.variable}`}>
       <body>{children}</body>
     </html>
   );

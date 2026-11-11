@@ -66,7 +66,7 @@ export function NuevaSolucionForm({ proposalId }: { proposalId: string }) {
     alUsarSugerencia: setDescription,
     alUsarTitulo: setTitle,
     reiniciar: false,
-    alOk: () => {
+    alVaciar: () => {
       setTitle('');
       setDescription('');
       setBorrador?.(null);

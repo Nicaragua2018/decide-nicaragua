@@ -1,10 +1,11 @@
 'use client';
 
+import type { RefObject } from 'react';
 import { createTopic } from '@/lib/actions';
 import { useFormConRevision } from '@/components/RevisarAntesDePublicar';
 
 export function NewTopicForm({ groupId, forumId }: { groupId: string; forumId: string }) {
-  const { formRef, formAction, onSubmit, state, ocupado, aviso } = useFormConRevision({
+  const { formRef, avisoRef, formAction, onSubmit, state, ocupado, aviso } = useFormConRevision({
     tipo: 'tema',
     accion: createTopic,
     campos: ['title', 'body'],
@@ -25,7 +26,11 @@ export function NewTopicForm({ groupId, forumId }: { groupId: string; forumId: s
       {aviso}
       <button className="btn btn-primary" disabled={ocupado}>Publicar tema</button>
       {state && 'error' in state && <p className="alert alert-error">{state.error}</p>}
-      {state && 'success' in state && <p className="alert alert-success">Tema publicado.</p>}
+      {state && 'success' in state && (
+        <p className="alert alert-success" tabIndex={-1} ref={avisoRef as RefObject<HTMLParagraphElement | null>}>
+          Tema publicado.
+        </p>
+      )}
     </form>
   );
 }

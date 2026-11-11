@@ -7,7 +7,8 @@
     "dev": "next dev --port 3000",
     "start": "next start",
     "typecheck": "tsc --noEmit",
-    "lint": "next lint"
+    "lint": "next lint",
+    "test": "vitest run"
   },
   "dependencies": {
     "@decide/shared": "workspace:*",
@@ -20,6 +21,7 @@
     "@types/node": "^22.10.7",
     "@types/react": "^19.0.7",
     "@types/react-dom": "^19.0.3",
-    "typescript": "^5.7.3"
+    "typescript": "^5.7.3",
+    "vitest": "^3.0.5"
   }
 }

@@ -1,55 +1,52 @@
-import Link from 'next/link';
 import type { Metadata } from 'next';
-import { serverFetch } from '@/lib/api';
 import { Suspense } from 'react';
-import AlDiaSeccion from '@/components/AlDiaSeccion';
+import { serverFetch } from '@/lib/api';
+import { comunidadPrincipal, contarEleccionesEnCurso, pasoQueToca, type Cifras as CifrasDatos } from '@/lib/inicio';
+import Bienvenida from '@/components/inicio/Bienvenida';
+import Cifras from '@/components/inicio/Cifras';
+import PasosMesa from '@/components/inicio/PasosMesa';
+import TarjetaGuardian from '@/components/inicio/TarjetaGuardian';
+import MapaComunidad from '@/components/inicio/MapaComunidad';
 import type {
-  GroupListResponse,
-  GroupType,
   AuthResponse,
+  EleccionResumen,
+  GroupDetail,
+  GroupListResponse,
+  InquietudSummary,
   VerificationStatus,
 } from '@decide/shared';
 
-export const metadata: Metadata = { title: 'Panel — Decide Nicaragua' };
+export const metadata: Metadata = { title: 'Inicio' };
 
-const GROUP_TYPE_LABEL: Record<GroupType, string> = {
-  territorial_origin:    'Dpto. de origen',
-  territorial_residence: 'País de residencia',
-  custom:                'Grupo personalizado',
-  trabajo:               'Grupo de trabajo',
-};
-
-const PIPELINE_STEPS = [
-  { label: 'Propuesta',    desc: 'Plantea una idea al grupo' },
-  { label: 'Deliberación', desc: 'Debate y señales de consenso' },
-  { label: 'Elección',     desc: 'Votación Condorcet' },
-  { label: 'Sorteo',       desc: 'Selección verificable' },
-  { label: 'Auditoría',    desc: 'Registro inmutable' },
-];
+/** Una llamada que falla (red o estado no 2xx) devuelve null: la cifra se omite, no se inventa. */
+async function leer<T>(ruta: string): Promise<T | null> {
+  try {
+    const res = await serverFetch(ruta);
+    return res.ok ? ((await res.json()) as T) : null;
+  } catch {
+    return null;
+  }
+}
 
 export default async function DashboardPage() {
-  // Plan 1: quien aún no está verificado ve su estado de verificación en lugar de los grupos.
+  // Quien aún no está verificado ve su estado de verificación en lugar de la mesa de la comunidad.
   const vRes = await serverFetch('/api/verifications/me');
   const verif = vRes.ok ? ((await vRes.json()) as VerificationStatus) : null;
   if (verif && verif.status === 'pending_verification') {
     return (
-      <>
-        <div className="dash-welcome">
-          <div>
-            <h1 className="page-title">Tu verificación</h1>
-            <p className="page-sub">
-              Para participar necesitas dos confirmaciones: la de quien te invitó y la del administrador u otro
-              miembro de tu territorio o de tu comunidad de acogida.
-            </p>
-          </div>
+      <div className="inicio inicio-verificacion">
+        <h1 className="inicio-h1 fade-up d1">Tu verificación</h1>
+        <p className="inicio-lead fade-up d2">
+          Para participar necesitas dos confirmaciones: la de quien te invitó y la del administrador u otro
+          miembro de tu territorio o de tu comunidad de acogida.
+        </p>
+
+        <div className="inicio-seccion-cab fade-up d3">
+          <h2 className="inicio-h2">Confirmaciones</h2>
+          <span className="inicio-seccion-sub">{verif.references.length} de 2</span>
         </div>
 
-        <div className="dash-section-header">
-          <h2 className="dash-section-title">Confirmaciones</h2>
-          <span className="dash-section-count">{verif.references.length} de 2</span>
-        </div>
-
-        <div className="card">
+        <div className="card fade-up d4">
           <p className="card-title">{verif.references.length} de 2 confirmaciones</p>
           {verif.references.map((r) => (
             <div key={r.kind} className="alert alert-success">
@@ -62,102 +59,58 @@ export default async function DashboardPage() {
             </div>
           ))}
         </div>
-      </>
+      </div>
     );
   }
 
-  const [groupsRes, meRes] = await Promise.all([
-    serverFetch('/api/groups'),
-    serverFetch('/api/auth/me'),
+  const [groupsData, me] = await Promise.all([
+    leer<GroupListResponse>('/api/groups'),
+    leer<AuthResponse>('/api/auth/me'),
   ]);
+  const groups = groupsData?.groups ?? [];
+  const principal = comunidadPrincipal(groups);
 
-  const groups = groupsRes.ok
-    ? ((await groupsRes.json()) as GroupListResponse).groups ?? []
-    : [];
+  // Las cifras de la comunidad principal, en paralelo; cada fallo deja null.
+  const [detalle, inquietudes, elecciones] = principal
+    ? await Promise.all([
+        leer<GroupDetail>(`/api/groups/${principal.id}`),
+        leer<InquietudSummary[]>(`/api/inquietudes?groupId=${principal.id}`),
+        leer<EleccionResumen[]>('/api/elecciones'),
+      ])
+    : [null, null, null];
 
-  const displayName = meRes.ok
-    ? ((await meRes.json()) as AuthResponse).user.displayName
-    : null;
+  const cifras: CifrasDatos = principal
+    ? {
+        miembros: detalle?.memberCount ?? null,
+        activada: detalle?.activated ?? null,
+        preguntas: inquietudes ? inquietudes.filter((i) => !i.hidden).length : null,
+        elecciones: elecciones ? contarEleccionesEnCurso(elecciones, principal.id) : null,
+      }
+    : { miembros: null, preguntas: null, elecciones: null, activada: null };
+
+  // Sin comunidad principal el primer paso es sumar gente; si no, lo decide la regla de pasoQueToca.
+  const paso = principal ? pasoQueToca(cifras) : 1;
+  const nombre = me?.user.displayName?.split(' ')[0] ?? null;
+  const puedeInvitar = me?.user.status === 'verified_citizen';
 
   return (
-    <>
-      {/* ── Bienvenida ─────────────────────────────────────────── */}
-      <div className="dash-welcome">
-        <div>
-          <h1 className="page-title">
-            {displayName ? `Hola, ${displayName.split(' ')[0]}` : 'Panel'}
-          </h1>
-          <p className="page-sub">Tus grupos de participación democrática.</p>
+    <div className="inicio">
+      <Bienvenida nombre={nombre} comunidad={principal?.name ?? null} preguntas={cifras.preguntas}>
+        <Cifras cifras={cifras} />
+      </Bienvenida>
+
+      <PasosMesa paso={paso} puedeInvitar={puedeInvitar} />
+
+      <div className="inicio-rejilla">
+        <div className="inicio-guardian fade-up d6">
+          <Suspense fallback={null}>
+            <TarjetaGuardian groupId={principal?.id} />
+          </Suspense>
         </div>
-        <Link href="/audit" className="btn btn-ghost btn-sm">
-          Ver auditoría pública →
-        </Link>
-      </div>
-
-      <Suspense fallback={null}>
-        <AlDiaSeccion />
-      </Suspense>
-
-      {/* ── Pipeline ───────────────────────────────────────────── */}
-      <div className="pipeline">
-        <p className="pipeline-label">Flujo de decisión dentro de un grupo</p>
-        <ol className="pipeline-steps">
-          {PIPELINE_STEPS.map((step, i) => (
-            <li key={step.label} className="pipeline-step">
-              <span className="pipeline-num">{i + 1}</span>
-              <div className="pipeline-body">
-                <strong>{step.label}</strong>
-                <span>{step.desc}</span>
-              </div>
-              {i < PIPELINE_STEPS.length - 1 && (
-                <span className="pipeline-arrow" aria-hidden>›</span>
-              )}
-            </li>
-          ))}
-        </ol>
-      </div>
-
-      {/* ── Grupos ─────────────────────────────────────────────── */}
-      <div className="dash-section-header">
-        <h2 className="dash-section-title">Mis grupos</h2>
-        <span className="dash-section-count">{groups.length}</span>
-      </div>
-
-      {groups.length === 0 ? (
-        <div className="empty-card">
-          <span className="empty-card-icon">🏛️</span>
-          <p className="empty-card-title">Aún no tienes grupos asignados</p>
-          <p className="empty-card-sub">
-            Los grupos se asignan automáticamente según tu departamento de origen
-            y país de residencia. Completa tu perfil para que aparezcan.
-          </p>
-          <Link href="/me" className="btn btn-primary">
-            Completar mi perfil
-          </Link>
+        <div className="inicio-mapa fade-up d7">
+          <MapaComunidad groups={groupsData ? groups : null} />
         </div>
-      ) : (
-        <div className="group-grid">
-          {groups.map((group) => (
-            <Link
-              key={group.id}
-              href={`/groups/${group.id}`}
-              className="group-card"
-            >
-              <div className="group-card-type">
-                {GROUP_TYPE_LABEL[group.type]}
-              </div>
-              <h3 className="group-card-name">{group.name}</h3>
-              {group.description && (
-                <p className="group-card-desc">{group.description}</p>
-              )}
-              <div className="group-card-footer">
-                <span className="group-card-members">Comunidad</span>
-                <span className="group-card-cta">Ver grupo →</span>
-              </div>
-            </Link>
-          ))}
-        </div>
-      )}
-    </>
+      </div>
+    </div>
   );
 }

@@ -3,29 +3,32 @@
 import Link from 'next/link';
 import { useEffect, useRef, useState, type KeyboardEvent } from 'react';
 import { esRutaInterna } from '@/lib/rutas';
+import { useAsistente } from '@/components/asistente/AsistenteContexto';
+import { Guardian } from '@/components/guardian/Guardian';
 import type { MensajePanel, RespuestaPanel } from '@decide/shared';
 
 const MAX_MENSAJES = 12;
 const MAX_CARACTERES = 1000;
-const TEXTO_DESCANSA = 'El asistente descansa hasta el próximo mes.';
+const TEXTO_DESCANSA = 'Guardián descansa hasta el próximo mes.';
+const BIENVENIDA = 'Hola, soy Guardián. Pregúntame cómo plantear una inquietud, apoyar una pregunta o preparar una elección.';
+const RAPIDAS = ['¿Cómo planteo una inquietud?', '¿Cómo apoyo una pregunta?', '¿Qué es una elección?'];
 const TEXTO_ERROR = 'Ahora no pude responder. Intenta de nuevo en un momento.';
 
 type Linea = MensajePanel & { enlaces?: { texto: string; ruta: string }[]; aviso?: boolean };
 
-export default function AsistentePanel({ topeAlcanzado }: { topeAlcanzado: boolean }) {
-  const [abierto, setAbierto] = useState(false);
+export default function AsistentePanel() {
+  const { activo, topeAlcanzado, abierto, cerrar: cerrarContexto } = useAsistente();
   const [lineas, setLineas] = useState<Linea[]>([]);
   const [texto, setTexto] = useState('');
   const [pensando, setPensando] = useState(false);
   const areaRef = useRef<HTMLTextAreaElement>(null);
   const finRef = useRef<HTMLDivElement>(null);
-  const botonRef = useRef<HTMLButtonElement>(null);
   const generacion = useRef(0);
   const estuvoAbierto = useRef(false);
 
   function cerrar() {
     generacion.current += 1; // descarta cualquier respuesta que aún viaje
-    setAbierto(false);
+    cerrarContexto();
     setLineas([]);
     setTexto('');
     setPensando(false);
@@ -36,7 +39,7 @@ export default function AsistentePanel({ topeAlcanzado }: { topeAlcanzado: boole
       estuvoAbierto.current = true;
       areaRef.current?.focus();
     } else if (estuvoAbierto.current) {
-      botonRef.current?.focus();
+      Array.from(document.querySelectorAll<HTMLElement>('[data-guardian-boton]')).find((b) => b.offsetParent !== null)?.focus();
     }
   }, [abierto]);
 
@@ -53,8 +56,8 @@ export default function AsistentePanel({ topeAlcanzado }: { topeAlcanzado: boole
     finRef.current?.scrollIntoView?.({ block: 'end' });
   }, [lineas, pensando]);
 
-  async function enviar() {
-    const pregunta = texto.trim();
+  async function enviar(rapida?: string) {
+    const pregunta = (rapida ?? texto).trim();
     if (!pregunta || pensando || topeAlcanzado) return;
     const nuevas: Linea[] = [...lineas, { rol: 'persona', texto: pregunta }];
     setLineas(nuevas);
@@ -94,38 +97,65 @@ export default function AsistentePanel({ topeAlcanzado }: { topeAlcanzado: boole
     }
   }
 
+  if (!activo) return null;
+
   return (
     <>
-      {!abierto && (
-        <button ref={botonRef} type="button" className="asistente-boton btn btn-primary" aria-label="Pregúntale al asistente" onClick={() => setAbierto(true)}>
-          Pregúntale al asistente
-        </button>
-      )}
       {abierto && (
-        <aside className="asistente-panel" role="dialog" aria-modal="true" aria-label="Asistente">
-          <div className="asistente-cabecera">
-            <strong>Asistente</strong>
-            <button type="button" className="btn btn-ghost btn-sm" aria-label="Cerrar el asistente" onClick={cerrar}>
-              Cerrar
+        <aside className="guardian-panel" role="dialog" aria-modal="true" aria-label="Guardián">
+          <div className="guardian-cabecera">
+            <span className="guardian-avatar">
+              <Guardian tamano={38} />
+            </span>
+            <div className="guardian-titulo">
+              <strong>Guardián</strong>
+              <span>te ayuda a usar la plataforma</span>
+            </div>
+            <button type="button" className="guardian-cerrar" aria-label="Cerrar a Guardián" onClick={cerrar}>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" aria-hidden="true">
+                <path d="M18 6 6 18M6 6l12 12" />
+              </svg>
             </button>
           </div>
-          <div className="asistente-mensajes" aria-live="polite">
+          <div className="guardian-mensajes" aria-live="polite">
             {topeAlcanzado ? (
               <p className="alert alert-info">{TEXTO_DESCANSA}</p>
             ) : (
-              lineas.length === 0 && <p className="text-sm">Hazme una pregunta sobre cómo usar la plataforma.</p>
+              (
+                <>
+                  <div className="guardian-burbuja fade-up">
+                    <p>{BIENVENIDA}</p>
+                  </div>
+                  <div className="guardian-rapidas">
+                    {RAPIDAS.map((q) => (
+                      <button
+                        key={q}
+                        type="button"
+                        className="guardian-rapida"
+                        disabled={pensando}
+                        onClick={() => void enviar(q)}
+                      >
+                        {q}
+                      </button>
+                    ))}
+                  </div>
+                </>
+              )
             )}
             {lineas.map((l, i) =>
               l.rol === 'persona' ? (
-                <p key={i} className="asistente-msg asistente-msg-persona">{l.texto}</p>
+                <p key={i} className="guardian-burbuja-persona fade-up">{l.texto}</p>
               ) : l.aviso ? (
-                <p key={i} className="alert alert-info">{l.texto}</p>
+                <p key={i} className="alert alert-info fade-up">{l.texto}</p>
               ) : (
-                <div key={i} className="asistente-msg asistente-msg-asistente">
-                  <p className="marca-asistente">sugerencia del asistente</p>
+                <div key={i} className="guardian-burbuja fade-up">
+                  <p className="guardian-marca">
+                    <Guardian tamano={20} />
+                    sugerencia de Guardián
+                  </p>
                   <p style={{ whiteSpace: 'pre-wrap' }}>{l.texto}</p>
                   {l.enlaces && l.enlaces.length > 0 && (
-                    <ul className="asistente-enlaces">
+                    <ul className="guardian-enlaces">
                       {l.enlaces.map((e, j) => (
                         <li key={`${e.ruta}-${j}`}>
                           {esRutaInterna(e.ruta) ? <Link href={e.ruta} onClick={cerrar}>{e.texto}</Link> : e.texto}
@@ -136,10 +166,19 @@ export default function AsistentePanel({ topeAlcanzado }: { topeAlcanzado: boole
                 </div>
               ),
             )}
-            {pensando && <p className="text-sm">Pensando…</p>}
+            {pensando && (
+              <div className="guardian-escribiendo">
+                <span className="guardian-etiqueta-escribiendo">Guardián está escribiendo</span>
+                <div className="guardian-puntos" aria-hidden="true">
+                  <span />
+                  <span />
+                  <span />
+                </div>
+              </div>
+            )}
             <div ref={finRef} />
           </div>
-          <div className="asistente-pie">
+          <div className="guardian-pie">
             <textarea
               ref={areaRef}
               className="form-textarea"
@@ -152,9 +191,9 @@ export default function AsistentePanel({ topeAlcanzado }: { topeAlcanzado: boole
               onKeyDown={alTeclear}
             />
             <button type="button" className="btn btn-primary btn-sm" disabled={pensando || topeAlcanzado || texto.trim() === ''} onClick={() => void enviar()}>
-              {pensando ? 'Pensando…' : 'Enviar'}
+              {pensando ? 'Enviando…' : 'Enviar'}
             </button>
-            <p className="form-hint">El asistente puede equivocarse. No guarda esta conversación.</p>
+            <p className="form-hint">Guardián puede equivocarse. No guarda esta conversación.</p>
           </div>
         </aside>
       )}

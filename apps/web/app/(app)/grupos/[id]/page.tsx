@@ -18,7 +18,7 @@ import {
   SorteoVerificable,
 } from './ComisionForms';
 
-export const metadata: Metadata = { title: 'Grupo de trabajo — Decide Nicaragua' };
+export const metadata: Metadata = { title: 'Grupo de trabajo' };
 
 const DIA_MS = 86_400_000;
 

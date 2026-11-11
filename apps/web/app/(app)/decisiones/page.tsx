@@ -4,7 +4,7 @@ import { serverFetch } from '@/lib/api';
 import type { ComunidadDecisiones, ComunidadTipo, DecisionesResumenResponse, DecisionResumenItem } from '@decide/shared';
 import { UltimoInforme } from '../grupos/GrupoCard';
 
-export const metadata: Metadata = { title: 'Decisiones — Decide Nicaragua' };
+export const metadata: Metadata = { title: 'Decisiones' };
 
 const ENCABEZADO: Record<ComunidadTipo, string> = {
   origen: 'Tu territorio de origen',

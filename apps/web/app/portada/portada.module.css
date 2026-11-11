@@ -1,19 +1,20 @@
 /* ============================================================
-   Portada «colmena» — estilos nuevos (estilo «Bandera suave»).
-   Las fuentes llegan por --pt-serif y --pt-sans (fuentes.ts).
+   Portada pública — identidad «Guardián» (azul, amarillo, Poppins).
+   Las fuentes llegan de app/layout.tsx por --font-display y --font-sans.
    ============================================================ */
 
 .portada {
+  --pt-display: var(--font-display);
+  --pt-sans: var(--font-sans);
   --pt-blanco: #ffffff;
-  --pt-azul-pastel: #cfe3f7;
-  --pt-amarillo: #fce9a8;
-  --pt-platino: #e5e4e2;
-  --pt-texto: #1b2a4a;
-  --pt-texto-2: #3d4a63;
-  --pt-azul: #0067c6;
-  --pt-azul-hover: #0057a8;
-  --pt-franja: 18px;
-  --pt-barra-alto: 68px;
+  --pt-azul: #0a3880;
+  --pt-azul-hover: #072a60;
+  --pt-texto: #0f172a;
+  --pt-texto-2: #475569;
+  --pt-niebla: #f4f6fa;
+  --pt-amarillo: #f2b00a;
+  --pt-borde: rgba(15, 23, 42, 0.08);
+  --pt-barra-alto: 72px;
   --pt-gutter: 16px;
 
   background: var(--pt-blanco);
@@ -37,43 +38,22 @@
 /* ── Barra de arriba ─────────────────────────────────────── */
 
 .barra {
-  background: var(--pt-blanco);
-  border-bottom: 1px solid var(--pt-platino);
+  background: var(--pt-azul);
+  box-shadow: 0 2px 14px rgba(10, 56, 128, 0.28);
+  position: sticky;
+  top: 0;
+  z-index: 10;
 }
 
 .barraInterior {
   max-width: 1200px;
   margin: 0 auto;
-  min-height: var(--pt-barra-alto);
+  height: var(--pt-barra-alto);
   padding: 0 var(--pt-gutter);
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-}
-
-.marca {
-  display: inline-flex;
-  align-items: center;
-  gap: 10px;
-  color: var(--pt-texto);
-  text-decoration: none;
-  font-family: var(--pt-serif), Georgia, serif;
-  font-weight: 600;
-  font-size: 1.15rem;
-  letter-spacing: -0.01em;
-  border-radius: 8px;
-  flex-shrink: 0;
-}
-
-.marca img {
-  display: block;
-  width: 36px;
-  height: 36px;
-}
-
-.marcaAzul {
-  color: var(--pt-azul);
 }
 
 .barraAcciones {
@@ -84,77 +64,89 @@
 }
 
 .barraEnlace {
-  color: var(--pt-texto-2);
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  color: var(--pt-blanco);
   text-decoration: none;
-  font-size: 0.9rem;
-  font-weight: 600;
-  padding: 8px 10px;
-  border-radius: 8px;
-  transition: color 0.15s ease, background-color 0.15s ease;
+  font-family: var(--pt-display), system-ui, sans-serif;
+  font-size: 15px;
+  font-weight: 500;
+  padding: 0 14px;
+  border-radius: 999px;
+  transition: background-color 0.2s ease;
 }
 
 .barraEnlace:hover {
-  color: var(--pt-texto);
-  background: rgba(27, 42, 74, 0.05);
+  background: rgba(255, 255, 255, 0.14);
 }
 
 .barraEntrar {
   display: inline-flex;
   align-items: center;
-  color: var(--pt-blanco);
-  background: var(--pt-azul);
+  min-height: 44px;
+  color: var(--pt-texto);
+  background: var(--pt-amarillo);
   text-decoration: none;
-  font-size: 0.9rem;
+  font-family: var(--pt-display), system-ui, sans-serif;
+  font-size: 14px;
   font-weight: 600;
-  padding: 8px 16px;
-  border-radius: 10px;
-  transition: background-color 0.15s ease;
+  padding: 0 20px;
+  border-radius: 999px;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
 }
 
 .barraEntrar:hover {
-  background: var(--pt-azul-hover);
+  transform: translateY(-2px);
+  box-shadow: 0 8px 20px rgba(15, 23, 42, 0.16);
 }
 
-/* El botón compartido de /explore: aquí solo se ajusta a la barra clara. */
+/* El botón compartido de /explore: aquí es una píldora blanca de borde sobre el azul. */
 .barra :global(.ln-share-btn) {
-  font-family: inherit;
-  font-weight: 600;
-  border-radius: 10px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 0 16px;
+  background: transparent;
+  color: var(--pt-blanco);
+  border: 1.5px solid rgba(255, 255, 255, 0.55);
+  border-radius: 999px;
+  font-family: var(--pt-display), system-ui, sans-serif;
+  font-size: 14px;
+  font-weight: 500;
   white-space: nowrap;
+  cursor: pointer;
+  transition: transform 0.2s ease, box-shadow 0.2s ease, background-color 0.2s ease;
 }
 
-.marca:focus-visible,
+.barra :global(.ln-share-btn):hover {
+  background: rgba(255, 255, 255, 0.14);
+  color: var(--pt-blanco);
+  border-color: rgba(255, 255, 255, 0.55);
+  transform: translateY(-2px);
+}
+
 .barraEnlace:focus-visible,
 .barraEntrar:focus-visible,
-.barra :global(.ln-share-btn):focus-visible {
-  outline: 3px solid var(--pt-azul);
+.barra :global(.ln-share-btn):focus-visible,
+.barra :global(.navbar-marca):focus-visible {
+  outline: 3px solid var(--pt-amarillo);
   outline-offset: 3px;
 }
 
-/* Celular: el nombre se oculta a la vista (queda para lectores de pantalla). */
 @media (max-width: 599px) {
-  .marca > span {
-    position: absolute;
-    width: 1px;
-    height: 1px;
-    padding: 0;
-    margin: -1px;
-    overflow: hidden;
-    clip: rect(0 0 0 0);
-    white-space: nowrap;
-    border: 0;
-  }
   .barraAcciones {
     gap: 6px;
   }
   .barraEnlace {
-    padding: 8px 6px;
+    padding: 0 8px;
   }
   .barra :global(.ln-share-btn) {
-    padding: 0.4rem 0.7rem;
+    padding: 0 12px;
   }
   .barraEntrar {
-    padding: 8px 14px;
+    padding: 0 16px;
   }
 }
 
@@ -169,71 +161,97 @@
 
 .hero {
   position: relative;
-  background: var(--pt-blanco);
-  padding: calc(var(--pt-franja) + 36px) var(--pt-gutter) calc(var(--pt-franja) + 36px);
+  overflow: hidden;
+  background: var(--pt-niebla);
+  padding: 56px var(--pt-gutter);
 }
 
-/* Franjas azul pastel, como la bandera. */
-.hero::before,
-.hero::after {
-  content: '';
+/* Sacuanjoches muy tenues a ambos lados. */
+.flores {
   position: absolute;
-  left: 0;
-  right: 0;
-  height: var(--pt-franja);
-  background: var(--pt-azul-pastel);
-}
-
-.hero::before {
+  left: 50%;
   top: 0;
-}
-
-.hero::after {
-  bottom: 0;
+  transform: translateX(-50%);
+  opacity: 0.07;
+  pointer-events: none;
 }
 
 .heroInterior {
-  max-width: 1200px;
+  position: relative;
+  max-width: 860px;
   margin: 0 auto;
   display: grid;
   grid-template-columns: minmax(0, 1fr);
   grid-template-areas:
     'texto'
-    'video'
-    'accion';
-  row-gap: 24px;
+    'accion'
+    'video';
+  justify-items: center;
+  text-align: center;
+  row-gap: 20px;
 }
 
 .heroTexto {
   grid-area: texto;
   min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 20px;
 }
 
 .heroVideo {
   grid-area: video;
+  width: 100%;
   min-width: 0;
 }
 
 .heroAccion {
   grid-area: accion;
   min-width: 0;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 12px;
+  margin-top: 4px;
+}
+
+.etiqueta {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--pt-display), system-ui, sans-serif;
+  font-weight: 600;
+  font-size: 12px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--pt-azul);
+  background: rgba(10, 56, 128, 0.08);
+  padding: 6px 14px;
+  border-radius: 999px;
 }
 
 .titulo {
-  font-family: var(--pt-serif), Georgia, serif;
-  font-weight: 600;
+  font-family: var(--pt-display), system-ui, sans-serif;
+  font-weight: 700;
   font-size: 46px;
   line-height: 1;
-  letter-spacing: -0.01em;
-  margin: 0 0 16px;
+  letter-spacing: -0.02em;
+  margin: 0;
   color: var(--pt-texto);
+}
+
+@media (min-width: 600px) {
+  .titulo {
+    font-size: 76px;
+  }
 }
 
 .palabra {
   display: inline-block;
   opacity: 0;
   transform: translateY(14px);
-  animation: sube 0.6s cubic-bezier(0.2, 0.7, 0.2, 1) forwards;
+  animation: sube 0.7s cubic-bezier(0.2, 0.7, 0.2, 1) forwards;
 }
 
 .palabraAzul {
@@ -249,89 +267,70 @@
 }
 
 .descripcion {
-  font-size: 15px;
+  font-size: 19px;
   line-height: 1.55;
   color: var(--pt-texto-2);
   margin: 0;
   max-width: 34em;
 }
 
-.boton {
+.boton,
+.botonSecundario {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 8px;
-  background: var(--pt-azul);
-  color: var(--pt-blanco);
-  font-weight: 600;
+  min-height: 48px;
+  box-sizing: border-box;
+  font-family: var(--pt-display), system-ui, sans-serif;
   font-size: 16px;
   line-height: 1.2;
   text-decoration: none;
-  padding: 14px 22px;
-  border-radius: 12px;
-  box-shadow: 0 6px 18px -8px rgba(0, 103, 198, 0.55);
-  transition: background-color 0.15s ease, transform 0.15s ease, box-shadow 0.15s ease;
+  border-radius: 999px;
+  transition: background-color 0.2s ease, transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.boton {
+  background: var(--pt-azul);
+  color: var(--pt-blanco);
+  font-weight: 600;
+  padding: 14px 26px;
 }
 
 .boton:hover {
   background: var(--pt-azul-hover);
-  transform: translateY(-1px);
-  box-shadow: 0 10px 22px -10px rgba(0, 103, 198, 0.6);
+  transform: translateY(-2px);
+  box-shadow: 0 8px 20px rgba(15, 23, 42, 0.16);
 }
 
-.boton:focus-visible {
+.botonSecundario {
+  background: var(--pt-blanco);
+  color: var(--pt-azul);
+  font-weight: 500;
+  padding: 14px 22px;
+  border: 1.5px solid rgba(10, 56, 128, 0.35);
+}
+
+.botonSecundario:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 20px rgba(15, 23, 42, 0.16);
+}
+
+.boton:focus-visible,
+.botonSecundario:focus-visible {
   outline: 3px solid var(--pt-azul);
   outline-offset: 3px;
 }
 
-/* Celular: el botón ocupa todo el ancho, fácil de tocar. */
+/* Celular: los botones ocupan todo el ancho, fáciles de tocar. */
 @media (max-width: 599px) {
-  .boton {
-    display: flex;
-    justify-content: center;
-    width: 100%;
-  }
-}
-
-/* Computadora: dos columnas, el video a la derecha. */
-@media (min-width: 900px) {
-  .hero {
-    min-height: calc(100svh - var(--pt-barra-alto));
-    display: flex;
-    align-items: center;
-    padding-top: calc(var(--pt-franja) + 48px);
-    padding-bottom: calc(var(--pt-franja) + 48px);
-  }
-
-  .heroInterior {
-    width: 100%;
-    grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr);
-    grid-template-rows: 1fr auto auto 1fr;
-    grid-template-areas:
-      '.      video'
-      'texto  video'
-      'accion video'
-      '.      video';
-    column-gap: 48px;
-    row-gap: 0;
-    align-items: center;
-  }
-
-  .heroTexto {
-    padding-bottom: 28px;
-  }
-
   .heroAccion {
-    align-self: start;
+    width: 100%;
+    flex-direction: column;
   }
-
-  .titulo {
-    font-size: clamp(56px, 5.2vw, 64px);
-    margin-bottom: 20px;
-  }
-
-  .descripcion {
-    font-size: 17px;
-    max-width: 420px;
+  .boton,
+  .botonSecundario {
+    width: 100%;
   }
 }
 
@@ -339,22 +338,8 @@
 
 .videoBloque {
   width: 100%;
-  margin: 0 auto;
-}
-
-@media (min-width: 900px) {
-  .videoBloque {
-    /* Que quepa entero en la primera pantalla de una laptop. */
-    width: min(100%, 560px, max(340px, calc(100svh - 250px)));
-    margin-right: 0;
-  }
-}
-
-@media (min-width: 600px) and (max-width: 899px) {
-  .videoBloque {
-    max-width: 520px;
-    margin-left: 0;
-  }
+  max-width: 560px;
+  margin: 28px auto 0;
 }
 
 .marco {
@@ -364,8 +349,8 @@
   overflow: hidden;
   border-radius: 20px;
   background: var(--pt-blanco) url('/portada/colmena-final.webp') center / cover no-repeat;
-  border: 1px solid var(--pt-platino);
-  box-shadow: 0 18px 40px -24px rgba(27, 42, 74, 0.35);
+  border: 1px solid var(--pt-borde);
+  box-shadow: 0 18px 40px -24px rgba(10, 56, 128, 0.35);
 }
 
 .video,
@@ -400,27 +385,27 @@
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  min-height: 36px;
-  padding: 6px 12px;
+  min-height: 44px;
+  padding: 6px 14px;
   font-family: inherit;
   font-size: 13px;
   font-weight: 600;
   color: var(--pt-texto);
   background: var(--pt-blanco);
-  border: 1px solid var(--pt-platino);
+  border: 1px solid rgba(15, 23, 42, 0.12);
   border-radius: 999px;
   cursor: pointer;
   transition: background-color 0.15s ease, border-color 0.15s ease;
 }
 
 .control:hover {
-  background: var(--pt-azul-pastel);
-  border-color: var(--pt-azul-pastel);
+  background: #e9eef7;
+  border-color: var(--pt-azul);
 }
 
 .control[aria-pressed='true'] {
-  background: var(--pt-azul-pastel);
-  border-color: #b5d2ef;
+  background: #e9eef7;
+  border-color: var(--pt-azul);
 }
 
 .control:focus-visible {
@@ -442,13 +427,18 @@
   }
 
   .boton,
+  .botonSecundario,
   .control,
   .barraEnlace,
-  .barraEntrar {
+  .barraEntrar,
+  .barra :global(.ln-share-btn) {
     transition: none;
   }
 
-  .boton:hover {
+  .boton:hover,
+  .botonSecundario:hover,
+  .barraEntrar:hover,
+  .barra :global(.ln-share-btn):hover {
     transform: none;
   }
 

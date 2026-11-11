@@ -76,6 +76,11 @@ export function OpenDebateForm({ groupId, items }: { groupId: string; items: Age
     alUsarSugerencia: setBody,
     alUsarTitulo: setTitle,
     reiniciar: false,
+    alVaciar: () => {
+      setTitle('');
+      setBody('');
+      setMarcadas([]);
+    },
   });
   return (
     <form id="abrir-debate" ref={formRef} action={formAction} onSubmit={onSubmit} className="form">

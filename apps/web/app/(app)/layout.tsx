@@ -1,7 +1,8 @@
 import { redirect } from 'next/navigation';
 import type { ReactNode } from 'react';
 import { serverFetch } from '@/lib/api';
-import NavBar from '@/components/NavBar';
+import NavBar from '@/components/nav/NavBar';
+import { AsistenteProvider } from '@/components/asistente/AsistenteContexto';
 import AsistentePanel from '@/components/AsistentePanel';
 import type { AuthResponse, MiCargoVista } from '@decide/shared';
 
@@ -28,10 +29,10 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
   }
 
   return (
-    <>
+    <AsistenteProvider activo={estado?.activo ?? false} topeAlcanzado={estado?.topeAlcanzado ?? false}>
       <NavBar displayName={user.displayName} email={user.email} status={user.status} esObservador={esObservador} />
-      <main className="container page">{children}</main>
-      {estado?.activo && <AsistentePanel topeAlcanzado={estado.topeAlcanzado} />}
-    </>
+      <main className="container page page-con-barra">{children}</main>
+      <AsistentePanel />
+    </AsistenteProvider>
   );
 }

@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { leerDecisionesPublicas } from './decisiones';
-import { DIBUJOS, Hexagono } from './Hexagono';
+import { Sacuanjoche } from '@/components/marca/Sacuanjoche';
 import s from './secciones.module.css';
 
 const formatoFecha = new Intl.DateTimeFormat('es-NI', {
@@ -23,10 +23,8 @@ export async function LoQueDecidimos() {
 
         {decisiones.length === 0 ? (
           <div className={s.vacio}>
-            <Hexagono color="amarillo" tamano={56}>
-              {DIBUJOS.voto}
-            </Hexagono>
-            <p>Aquí verás los primeros acuerdos de la colmena</p>
+            <Sacuanjoche variante="icono" tamano={20} />
+            <p>Aquí verás los primeros acuerdos de la comunidad</p>
           </div>
         ) : (
           <ul className={s.tarjetas}>

@@ -61,7 +61,7 @@ export function SolucionesSection({
                 <div key={s.id} className="comment-thread">
                   <p className="font-medium">{s.title}</p>
                   {s.origen === 'asistente' && (
-                    <p className="text-xs text-muted">A partir de una sugerencia del asistente</p>
+                    <p className="text-xs text-muted">A partir de una sugerencia de Guardián</p>
                   )}
                   {s.mergedIntoTitle !== null ? (
                     <p className="text-xs text-muted">Se juntó con «{s.mergedIntoTitle}»</p>

@@ -14,7 +14,7 @@ export function VolverALaColmena({ grupoId, solucionId }: { grupoId: string; sol
   return (
     <div className="mt-2">
       <button type="button" className="btn btn-primary btn-sm" disabled={pending} onClick={() => run(() => llevarALaComunidad(grupoId, solucionId))}>
-        Volver a la colmena: llevar la solución a la comunidad
+        Llevar la solución a todo Nicaragua Decide
       </button>
       <Aviso msg={error} />
     </div>

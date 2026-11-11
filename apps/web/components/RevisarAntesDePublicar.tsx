@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useActionState, useCallback, useEffect, useRef, useState, useTransition, type FormEvent } from 'react';
+import { useActionState, useCallback, useEffect, useRef, useState, useTransition, type FormEvent, type RefObject } from 'react';
 import { MODERACION_CAUSAS, textoParaRevisar, type RevisionTexto, type TipoTexto } from '@decide/shared';
 import { revisarTexto, type ActionResult } from '@/lib/actions';
 
@@ -20,6 +20,7 @@ export function AvisoRevision({
   onUsarSugerencia,
   onPublicarComoEsta,
   onPedirRevision,
+  avisoRef,
 }: {
   revision: RevisionTexto | null;
   enRevision: boolean;
@@ -27,10 +28,17 @@ export function AvisoRevision({
   onUsarSugerencia: (sugerencia: string) => void;
   onPublicarComoEsta: () => void;
   onPedirRevision: () => void;
+  /** Para llevar el foco al aviso de «quedó en revisión». */
+  avisoRef?: RefObject<HTMLElement | null>;
 }) {
   if (enRevision) {
     return (
-      <div className="alert alert-info" role="status">
+      <div
+        className="alert alert-info"
+        role="status"
+        tabIndex={-1}
+        ref={avisoRef as RefObject<HTMLDivElement | null> | undefined}
+      >
         <p>Tu texto quedó en revisión. La mesa lo verá en un máximo de 7 días.</p>
         <p>
           <Link href="/me/revisiones">Mis textos en revisión</Link>
@@ -48,7 +56,7 @@ export function AvisoRevision({
         <p>Esta frase puede ofender y restarle apoyo a tu idea. ¿Quieres decirla de otra forma?</p>
         {sugerencia && (
           <>
-            <p className="text-sm font-medium mt-2">Sugerencia del asistente</p>
+            <p className="text-sm font-medium mt-2">Revisión del asistente de IA</p>
             <p className="text-sm" style={{ whiteSpace: 'pre-wrap' }}>{sugerencia}</p>
           </>
         )}
@@ -74,7 +82,7 @@ export function AvisoRevision({
       {revision.explicacion && <p className="text-sm">{revision.explicacion}</p>}
       {sugerencia && (
         <>
-          <p className="text-sm font-medium mt-2">Sugerencia del asistente</p>
+          <p className="text-sm font-medium mt-2">Revisión del asistente de IA</p>
           <p className="text-sm" style={{ whiteSpace: 'pre-wrap' }}>{sugerencia}</p>
         </>
       )}
@@ -145,7 +153,13 @@ export function useRevisionPrevia(tipo: TipoTexto) {
   }, []);
 
   const aviso = useCallback(
-    (p: { ocupado: boolean; onUsarSugerencia: (s: string) => void; onPublicarComoEsta: () => void; onPedirRevision: () => void }) => (
+    (p: {
+      ocupado: boolean;
+      onUsarSugerencia: (s: string) => void;
+      onPublicarComoEsta: () => void;
+      onPedirRevision: () => void;
+      avisoRef?: RefObject<HTMLElement | null>;
+    }) => (
       <AvisoRevision revision={revision} enRevision={enRevision} {...p} />
     ),
     [revision, enRevision],
@@ -168,6 +182,7 @@ export function useFormConRevision({
   alUsarSugerencia,
   alUsarTitulo,
   reiniciar = true,
+  alVaciar,
   alOk,
 }: {
   tipo: TipoTexto;
@@ -179,6 +194,12 @@ export function useFormConRevision({
   alUsarTitulo?: ((texto: string) => void) | undefined;
   /** Vacía el formulario al publicar (solo para campos sin estado de React). */
   reiniciar?: boolean;
+  /**
+   * Vacía el estado de React del formulario. Se llama al publicar y también cuando el texto
+   * queda en revisión (202), porque en ambos casos el texto ya salió.
+   */
+  alVaciar?: (() => void) | undefined;
+  /** Solo al publicar (no en 202): para cerrar un editor, navegar, etc. */
   alOk?: (() => void) | undefined;
 }) {
   const formRef = useRef<HTMLFormElement>(null);
@@ -187,16 +208,32 @@ export function useFormConRevision({
   const rev = useRevisionPrevia(tipo);
   const { recibir } = rev;
   const enCurso = useRef(false);
+  /** El aviso de éxito o de «quedó en revisión»: recibe el foco al terminar el envío. */
+  const avisoRef = useRef<HTMLElement>(null);
 
   useEffect(() => {
     if (!state) return;
-    if (recibir(state)) return;
+    const recibido = recibir(state);
+    // «En revisión» también significa que el texto ya salió: el formulario se vacía.
+    if ('enRevision' in state) {
+      if (reiniciar) formRef.current?.reset();
+      alVaciar?.();
+      return;
+    }
+    if (recibido) return;
     if ('success' in state) {
       if (reiniciar) formRef.current?.reset();
+      alVaciar?.();
       alOk?.();
+      avisoRef.current?.focus();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state]);
+
+  // El aviso de «en revisión» aparece después de este render, así que se enfoca cuando ya existe.
+  useEffect(() => {
+    if (rev.enRevision) avisoRef.current?.focus();
+  }, [rev.enRevision]);
 
   function lanzar(modo: ModoEnvio) {
     const form = formRef.current;
@@ -264,11 +301,12 @@ export function useFormConRevision({
     onUsarSugerencia: usarSugerencia,
     onPublicarComoEsta: () => lanzar('omitir'),
     onPedirRevision: () => lanzar('pedir'),
+    avisoRef,
   });
 
   // `formAction` va en `action` del formulario: si alguien envía antes de que cargue el JavaScript,
   // React lo manda por POST a la acción del servidor (nunca por GET con el texto en la URL), y la
   // guardia del servidor lo revisa igual. Con JavaScript, onSubmit hace preventDefault y React no
   // ejecuta la acción por su cuenta: se envía solo con `lanzar`, después de revisar.
-  return { formRef, formAction: dispatch, onSubmit, state, ocupado, revisando: rev.revisando, pendiente, aviso };
+  return { formRef, avisoRef, formAction: dispatch, onSubmit, state, ocupado, revisando: rev.revisando, pendiente, aviso };
 }

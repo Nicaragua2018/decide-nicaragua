@@ -1,0 +1,154 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Portada pública</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@500;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#ffffff}
+a{color:#0a3880}a:hover{color:#072a60}
+.nav-link{position:relative;transition:background .2s,color .2s}
+.nav-link::after{content:"";position:absolute;left:14px;right:14px;bottom:5px;height:2px;border-radius:2px;background:#f2b00a;transform:scaleX(0);transform-origin:left;transition:transform .25s ease}
+.nav-link:hover{background:rgba(255,255,255,0.14);color:#ffffff}
+.nav-link:hover::after{transform:scaleX(1)}
+.btn-pill{transition:transform .2s ease,box-shadow .2s ease,background .2s ease}
+.btn-pill:hover{transform:translateY(-2px);box-shadow:0 8px 20px rgba(15,23,42,0.16)}
+.btn-pill:active{transform:translateY(0) scale(.98)}
+.marca{transition:transform .2s ease,box-shadow .2s ease}.marca:hover{transform:translateY(-1px);box-shadow:0 6px 16px rgba(0,0,0,0.18)}
+.card{transition:transform .25s ease,box-shadow .25s ease,border-color .25s ease}
+.card:hover{transform:translateY(-4px);box-shadow:0 16px 32px rgba(10,56,128,0.14);border-color:#0a3880}
+.fade-up{animation:fade-up .6s cubic-bezier(.22,.68,0,1.1) both}
+.d1{animation-delay:.05s}.d2{animation-delay:.15s}.d3{animation-delay:.25s}.d4{animation-delay:.35s}.d5{animation-delay:.45s}.d6{animation-delay:.55s}.d7{animation-delay:.65s}
+@keyframes fade-up{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:translateY(0)}}
+.palabra{display:inline-block;animation:sube .7s cubic-bezier(.2,.7,.2,1) both}
+.palabra-2{animation-delay:.3s}
+@keyframes sube{from{opacity:0;transform:translateY(18px)}to{opacity:1;transform:none}}
+.flor-float{animation:flor-float 14s ease-in-out infinite;transform-box:fill-box;transform-origin:center}
+.flor-float-2{animation:flor-float 18s ease-in-out infinite reverse;transform-box:fill-box;transform-origin:center}
+@keyframes flor-float{0%,100%{transform:translateY(0) rotate(0deg)}50%{transform:translateY(-1.2px) rotate(14deg)}}
+.marco{transition:transform .3s ease,box-shadow .3s ease}.marco:hover{transform:translateY(-3px);box-shadow:0 28px 56px -24px rgba(10,56,128,0.45)}
+.control{transition:background .15s ease,border-color .15s ease}.control:hover{background:#e9eef7;border-color:#0a3880}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style>
+</helmet>
+<div style="width: 100%; min-height: 100%; box-sizing: border-box; font-family: 'Inter', sans-serif; color: #0f172a; background: #ffffff; display: flex; flex-direction: column">
+
+  <!-- Barra azul: solo la marca va en blanco -->
+  <header style="background: #0a3880; box-shadow: 0 2px 14px rgba(10,56,128,0.28); position: sticky; top: 0; z-index: 10">
+    <div style="max-width: 1200px; margin: 0 auto; padding: 0 24px; height: 72px; display: flex; align-items: center; justify-content: space-between; gap: 24px; flex-wrap: wrap">
+      <a href="Portada.dc.html" class="marca" style="display: flex; align-items: center; gap: 10px; text-decoration: none; color: #0f172a; background: #ffffff; padding: 5px 18px 5px 5px; border-radius: 999px; min-height: 44px; box-sizing: border-box">
+        <svg width="34" height="34" viewBox="0 0 34 34" aria-hidden="true"><rect width="34" height="34" rx="10" fill="#0a3880"/><g transform="translate(17 17)" fill="#ffffff"><path d="M0 0C-3.2-2.2-5-6.4-3.6-9.8C-2.6-12.6 1.2-13.2 3-10.8C5-8 3.4-3.2 0 0Z"/><path d="M0 0C-3.2-2.2-5-6.4-3.6-9.8C-2.6-12.6 1.2-13.2 3-10.8C5-8 3.4-3.2 0 0Z" transform="rotate(72)"/><path d="M0 0C-3.2-2.2-5-6.4-3.6-9.8C-2.6-12.6 1.2-13.2 3-10.8C5-8 3.4-3.2 0 0Z" transform="rotate(144)"/><path d="M0 0C-3.2-2.2-5-6.4-3.6-9.8C-2.6-12.6 1.2-13.2 3-10.8C5-8 3.4-3.2 0 0Z" transform="rotate(216)"/><path d="M0 0C-3.2-2.2-5-6.4-3.6-9.8C-2.6-12.6 1.2-13.2 3-10.8C5-8 3.4-3.2 0 0Z" transform="rotate(288)"/></g><circle cx="17" cy="17" r="3.2" fill="#f2b00a"/></svg>
+        <span style="font-family: 'Poppins', sans-serif; font-weight: 600; font-size: 20px; letter-spacing: -0.01em">Nicaragua <span style="color: #0a3880">Decide</span></span>
+      </a>
+      <nav aria-label="Principal" style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap">
+        <a href="Portada.dc.html" class="nav-link" style="display: flex; align-items: center; padding: 10px 14px; border-radius: 999px; font-family: 'Poppins', sans-serif; font-weight: 500; font-size: 15px; color: #ffffff; text-decoration: none">Contacto</a>
+        <a href="Portada.dc.html" class="btn-pill" style="display: flex; align-items: center; gap: 8px; padding: 9px 16px; border-radius: 999px; border: 1.5px solid rgba(255,255,255,0.55); color: #ffffff; text-decoration: none; font-family: 'Poppins', sans-serif; font-weight: 500; font-size: 14px; min-height: 42px; box-sizing: border-box"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 12v7a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-7"/><path d="M16 6l-4-4-4 4"/><path d="M12 2v13"/></svg>Compartir</a>
+        <a href="Main.dc.html" class="btn-pill" style="display: flex; align-items: center; padding: 9px 20px; border-radius: 999px; background: #f2b00a; color: #0f172a; text-decoration: none; font-family: 'Poppins', sans-serif; font-weight: 600; font-size: 14px; min-height: 42px; box-sizing: border-box">Entrar</a>
+      </nav>
+    </div>
+  </header>
+
+  <!-- Bienvenida: texto centrado y el video debajo, como en el celular -->
+  <section style="background: #f4f6fa; position: relative; overflow: hidden; padding: 64px 24px 56px">
+    <svg aria-hidden="true" width="1360" height="520" viewBox="0 0 1360 520" style="position: absolute; left: 50%; top: 0; transform: translateX(-50%); opacity: 0.07; pointer-events: none">
+      <g transform="translate(150 150) scale(11)"><g class="flor-float" fill="#0a3880"><path d="M0 0C-2.6-1.7-4-5-2.9-7.8C-2.1-10 .9-10.5 2.3-8.6C3.9-6.4 2.6-2.5 0 0Z"/><path d="M0 0C-2.6-1.7-4-5-2.9-7.8C-2.1-10 .9-10.5 2.3-8.6C3.9-6.4 2.6-2.5 0 0Z" transform="rotate(72)"/><path d="M0 0C-2.6-1.7-4-5-2.9-7.8C-2.1-10 .9-10.5 2.3-8.6C3.9-6.4 2.6-2.5 0 0Z" transform="rotate(144)"/><path d="M0 0C-2.6-1.7-4-5-2.9-7.8C-2.1-10 .9-10.5 2.3-8.6C3.9-6.4 2.6-2.5 0 0Z" transform="rotate(216)"/><path d="M0 0C-2.6-1.7-4-5-2.9-7.8C-2.1-10 .9-10.5 2.3-8.6C3.9-6.4 2.6-2.5 0 0Z" transform="rotate(288)"/></g></g>
+      <g transform="translate(300 400) scale(6)"><g class="flor-float-2" fill="#f2b00a"><path d="M0 0C-2.6-1.7-4-5-2.9-7.8C-2.1-10 .9-10.5 2.3-8.6C3.9-6.4 2.6-2.5 0 0Z"/><path d="M0 0C-2.6-1.7-4-5-2.9-7.8C-2.1-10 .9-10.5 2.3-8.6C3.9-6.4 2.6-2.5 0 0Z" transform="rotate(72)"/><path d="M0 0C-2.6-1.7-4-5-2.9-7.8C-2.1-10 .9-10.5 2.3-8.6C3.9-6.4 2.6-2.5 0 0Z" transform="rotate(144)"/><path d="M0 0C-2.6-1.7-4-5-2.9-7.8C-2.1-10 .9-10.5 2.3-8.6C3.9-6.4 2.6-2.5 0 0Z" transform="rotate(216)"/><path d="M0 0C-2.6-1.7-4-5-2.9-7.8C-2.1-10 .9-10.5 2.3-8.6C3.9-6.4 2.6-2.5 0 0Z" transform="rotate(288)"/></g></g>
+      <g transform="translate(1200 130) scale(9)"><g class="flor-float-2" fill="#f2b00a"><path d="M0 0C-2.6-1.7-4-5-2.9-7.8C-2.1-10 .9-10.5 2.3-8.6C3.9-6.4 2.6-2.5 0 0Z"/><path d="M0 0C-2.6-1.7-4-5-2.9-7.8C-2.1-10 .9-10.5 2.3-8.6C3.9-6.4 2.6-2.5 0 0Z" transform="rotate(72)"/><path d="M0 0C-2.6-1.7-4-5-2.9-7.8C-2.1-10 .9-10.5 2.3-8.6C3.9-6.4 2.6-2.5 0 0Z" transform="rotate(144)"/><path d="M0 0C-2.6-1.7-4-5-2.9-7.8C-2.1-10 .9-10.5 2.3-8.6C3.9-6.4 2.6-2.5 0 0Z" transform="rotate(216)"/><path d="M0 0C-2.6-1.7-4-5-2.9-7.8C-2.1-10 .9-10.5 2.3-8.6C3.9-6.4 2.6-2.5 0 0Z" transform="rotate(288)"/></g></g>
+      <g transform="translate(1090 400) scale(6.5)"><g class="flor-float" fill="#0a3880"><path d="M0 0C-2.6-1.7-4-5-2.9-7.8C-2.1-10 .9-10.5 2.3-8.6C3.9-6.4 2.6-2.5 0 0Z"/><path d="M0 0C-2.6-1.7-4-5-2.9-7.8C-2.1-10 .9-10.5 2.3-8.6C3.9-6.4 2.6-2.5 0 0Z" transform="rotate(72)"/><path d="M0 0C-2.6-1.7-4-5-2.9-7.8C-2.1-10 .9-10.5 2.3-8.6C3.9-6.4 2.6-2.5 0 0Z" transform="rotate(144)"/><path d="M0 0C-2.6-1.7-4-5-2.9-7.8C-2.1-10 .9-10.5 2.3-8.6C3.9-6.4 2.6-2.5 0 0Z" transform="rotate(216)"/><path d="M0 0C-2.6-1.7-4-5-2.9-7.8C-2.1-10 .9-10.5 2.3-8.6C3.9-6.4 2.6-2.5 0 0Z" transform="rotate(288)"/></g></g>
+    </svg>
+    <div style="max-width: 860px; margin: 0 auto; display: flex; flex-direction: column; align-items: center; text-align: center; gap: 20px; position: relative">
+      <span class="fade-up d1" style="display: inline-flex; align-items: center; gap: 8px; font-family: 'Poppins', sans-serif; font-weight: 600; font-size: 12px; letter-spacing: 0.1em; text-transform: uppercase; color: #0a3880; background: rgba(10,56,128,0.08); padding: 6px 14px; border-radius: 999px">
+        <svg width="12" height="12" viewBox="0 0 24 24" aria-hidden="true"><g transform="translate(12 12)" fill="#f2b00a"><path d="M0 0C-2.6-1.7-4-5-2.9-7.8C-2.1-10 .9-10.5 2.3-8.6C3.9-6.4 2.6-2.5 0 0Z"/><path d="M0 0C-2.6-1.7-4-5-2.9-7.8C-2.1-10 .9-10.5 2.3-8.6C3.9-6.4 2.6-2.5 0 0Z" transform="rotate(72)"/><path d="M0 0C-2.6-1.7-4-5-2.9-7.8C-2.1-10 .9-10.5 2.3-8.6C3.9-6.4 2.6-2.5 0 0Z" transform="rotate(144)"/><path d="M0 0C-2.6-1.7-4-5-2.9-7.8C-2.1-10 .9-10.5 2.3-8.6C3.9-6.4 2.6-2.5 0 0Z" transform="rotate(216)"/><path d="M0 0C-2.6-1.7-4-5-2.9-7.8C-2.1-10 .9-10.5 2.3-8.6C3.9-6.4 2.6-2.5 0 0Z" transform="rotate(288)"/></g><circle cx="12" cy="12" r="2.2" fill="#0a3880"/></svg>
+        Una comunidad democrática y cooperativa
+      </span>
+      <h1 style="font-family: 'Poppins', sans-serif; font-weight: 700; font-size: 76px; line-height: 1; letter-spacing: -0.02em; margin: 0; color: #0f172a">
+        <span class="palabra">Nicaragua</span><br>
+        <span class="palabra palabra-2" style="color: #0a3880">decide.</span>
+      </h1>
+      <p class="fade-up d3" style="font-size: 19px; line-height: 1.55; color: #475569; margin: 0; max-width: 34em">Confianza, comunicación y coordinación entre afines. Sin manipulación y sin el ruido de las redes.</p>
+      <div class="fade-up d4" style="display: flex; gap: 12px; flex-wrap: wrap; justify-content: center; margin-top: 4px">
+        <a href="Main.dc.html" class="btn-pill" style="display: inline-flex; align-items: center; gap: 8px; padding: 14px 26px; border-radius: 999px; background: #0a3880; color: #ffffff; text-decoration: none; font-family: 'Poppins', sans-serif; font-weight: 600; font-size: 16px; min-height: 48px; box-sizing: border-box">Únete a la comunidad <span aria-hidden="true">→</span></a>
+        <a href="Inquietudes.dc.html" class="btn-pill" style="display: inline-flex; align-items: center; padding: 14px 22px; border-radius: 999px; border: 1.5px solid rgba(10,56,128,0.35); color: #0a3880; text-decoration: none; font-family: 'Poppins', sans-serif; font-weight: 500; font-size: 16px; min-height: 48px; box-sizing: border-box; background: #ffffff">Mirar sin registrarse</a>
+      </div>
+
+      <div class="fade-up d5" style="width: 100%; max-width: 560px; margin-top: 28px; display: flex; flex-direction: column; gap: 10px">
+        <div class="marco" style="position: relative; aspect-ratio: 1 / 1; width: 100%; overflow: hidden; border-radius: 20px; background: #ffffff; border: 1px solid rgba(15,23,42,0.08); box-shadow: 0 18px 40px -24px rgba(10,56,128,0.35)">
+          <video autoplay muted loop playsinline preload="metadata" poster="/_blob/a5a2306217e4d5d98ffc40cfa840a7a5" width="1080" height="1080" aria-label="Video sin voz de Nicaragua Decide, en cinco escenas" style="position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; display: block">
+            <source src="/_blob/58029a4e07841550227b0b0f29437904" type="video/mp4">
+          </video>
+        </div>
+        <div style="display: flex; justify-content: flex-end; gap: 8px">
+          <button type="button" class="control" aria-pressed="false" style="display: inline-flex; align-items: center; gap: 6px; min-height: 36px; padding: 6px 12px; font-family: 'Inter', sans-serif; font-size: 13px; font-weight: 600; color: #0f172a; background: #ffffff; border: 1px solid rgba(15,23,42,0.12); border-radius: 999px; cursor: pointer"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 9v6h4l5 4V5L8 9H4z"/><path d="M22 9l-6 6M16 9l6 6"/></svg>Sonido</button>
+          <button type="button" class="control" aria-pressed="false" style="display: inline-flex; align-items: center; gap: 6px; min-height: 36px; padding: 6px 12px; font-family: 'Inter', sans-serif; font-size: 13px; font-weight: 600; color: #0f172a; background: #ffffff; border: 1px solid rgba(15,23,42,0.12); border-radius: 999px; cursor: pointer"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 5v14M15 5v14"/></svg>Pausa</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Cómo funciona -->
+  <section style="background: #ffffff; padding: 56px 24px 64px">
+    <div style="max-width: 1200px; margin: 0 auto; display: flex; flex-direction: column; gap: 24px">
+      <div style="text-align: center; display: flex; flex-direction: column; gap: 8px; align-items: center">
+        <span style="font-family: 'Poppins', sans-serif; font-weight: 600; font-size: 12px; letter-spacing: 0.1em; text-transform: uppercase; color: #0a3880">Cómo funciona</span>
+        <h2 style="font-family: 'Poppins', sans-serif; font-weight: 600; font-size: 32px; line-height: 1.15; margin: 0; color: #0f172a">De la inquietud al resultado, en cinco pasos</h2>
+      </div>
+      <ol style="margin: 0; padding: 0; display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 16px">
+        <li class="card fade-up d1" style="list-style: none; background: #ffffff; border: 1px solid rgba(15,23,42,0.08); border-radius: 16px; padding: 22px 20px; display: flex; flex-direction: column; gap: 12px">
+          <span style="width: 44px; height: 44px; border-radius: 14px; background: #f2b00a; color: #0f172a; display: flex; align-items: center; justify-content: center; font-family: 'Poppins', sans-serif; font-weight: 700; font-size: 18px">1</span>
+          <span style="font-family: 'Poppins', sans-serif; font-weight: 600; font-size: 17px; line-height: 1.25; color: #0f172a">Planteas una inquietud.</span>
+          <span style="font-size: 14px; line-height: 1.55; color: #475569">Algo que tu comunidad necesita o quiere cambiar.</span>
+        </li>
+        <li class="card fade-up d2" style="list-style: none; background: #ffffff; border: 1px solid rgba(15,23,42,0.08); border-radius: 16px; padding: 22px 20px; display: flex; flex-direction: column; gap: 12px">
+          <span style="width: 44px; height: 44px; border-radius: 14px; background: #0a3880; color: #ffffff; display: flex; align-items: center; justify-content: center; font-family: 'Poppins', sans-serif; font-weight: 700; font-size: 18px">2</span>
+          <span style="font-family: 'Poppins', sans-serif; font-weight: 600; font-size: 17px; line-height: 1.25; color: #0f172a">Se debate.</span>
+          <span style="font-size: 14px; line-height: 1.55; color: #475569">Todos opinan y se ve en qué estamos de acuerdo.</span>
+        </li>
+        <li class="card fade-up d3" style="list-style: none; background: #ffffff; border: 1px solid rgba(15,23,42,0.08); border-radius: 16px; padding: 22px 20px; display: flex; flex-direction: column; gap: 12px">
+          <span style="width: 44px; height: 44px; border-radius: 14px; background: #f2b00a; color: #0f172a; display: flex; align-items: center; justify-content: center; font-family: 'Poppins', sans-serif; font-weight: 700; font-size: 18px">3</span>
+          <span style="font-family: 'Poppins', sans-serif; font-weight: 600; font-size: 17px; line-height: 1.25; color: #0f172a">Se vota.</span>
+          <span style="font-size: 14px; line-height: 1.55; color: #475569">Apruebas, rechazas u ordenas las soluciones.</span>
+        </li>
+        <li class="card fade-up d4" style="list-style: none; background: #ffffff; border: 1px solid rgba(15,23,42,0.08); border-radius: 16px; padding: 22px 20px; display: flex; flex-direction: column; gap: 12px">
+          <span style="width: 44px; height: 44px; border-radius: 14px; background: #0a3880; color: #ffffff; display: flex; align-items: center; justify-content: center; font-family: 'Poppins', sans-serif; font-weight: 700; font-size: 18px">4</span>
+          <span style="font-family: 'Poppins', sans-serif; font-weight: 600; font-size: 17px; line-height: 1.25; color: #0f172a">Una comisión lo lleva a cabo.</span>
+          <span style="font-size: 14px; line-height: 1.55; color: #475569">Personas de la comunidad hacen lo decidido y rinden cuentas.</span>
+        </li>
+        <li class="card fade-up d5" style="list-style: none; background: #ffffff; border: 1px solid rgba(15,23,42,0.08); border-radius: 16px; padding: 22px 20px; display: flex; flex-direction: column; gap: 12px">
+          <span style="width: 44px; height: 44px; border-radius: 14px; background: #f2b00a; color: #0f172a; display: flex; align-items: center; justify-content: center; font-family: 'Poppins', sans-serif; font-weight: 700; font-size: 18px">5</span>
+          <span style="font-family: 'Poppins', sans-serif; font-weight: 600; font-size: 17px; line-height: 1.25; color: #0f172a">Todos ven el resultado.</span>
+          <span style="font-size: 14px; line-height: 1.55; color: #475569">Lo aprobado, lo rechazado y las cifras quedan a la vista.</span>
+        </li>
+      </ol>
+    </div>
+  </section>
+
+  <!-- Pie -->
+  <footer style="margin-top: auto; background: #0f172a; color: rgba(255,255,255,0.75); padding: 28px 24px">
+    <div style="max-width: 1200px; margin: 0 auto; display: flex; align-items: center; justify-content: space-between; gap: 24px; flex-wrap: wrap; font-size: 13px">
+      <span style="display: flex; align-items: center; gap: 10px; font-family: 'Poppins', sans-serif; font-weight: 600; font-size: 15px; color: #ffffff"><svg width="34" height="34" viewBox="0 0 34 34" aria-hidden="true"><rect width="34" height="34" rx="10" fill="#0a3880"/><g transform="translate(17 17)" fill="#ffffff"><path d="M0 0C-3.2-2.2-5-6.4-3.6-9.8C-2.6-12.6 1.2-13.2 3-10.8C5-8 3.4-3.2 0 0Z"/><path d="M0 0C-3.2-2.2-5-6.4-3.6-9.8C-2.6-12.6 1.2-13.2 3-10.8C5-8 3.4-3.2 0 0Z" transform="rotate(72)"/><path d="M0 0C-3.2-2.2-5-6.4-3.6-9.8C-2.6-12.6 1.2-13.2 3-10.8C5-8 3.4-3.2 0 0Z" transform="rotate(144)"/><path d="M0 0C-3.2-2.2-5-6.4-3.6-9.8C-2.6-12.6 1.2-13.2 3-10.8C5-8 3.4-3.2 0 0Z" transform="rotate(216)"/><path d="M0 0C-3.2-2.2-5-6.4-3.6-9.8C-2.6-12.6 1.2-13.2 3-10.8C5-8 3.4-3.2 0 0Z" transform="rotate(288)"/></g><circle cx="17" cy="17" r="3.2" fill="#f2b00a"/></svg>Nicaragua Decide</span>
+      <nav aria-label="Pie de página" style="display: flex; gap: 20px; flex-wrap: wrap">
+        <a href="Inquietudes.dc.html" style="color: rgba(255,255,255,0.75); text-decoration: none">Mirar sin registrarse</a>
+        <a href="Portada.dc.html" style="color: rgba(255,255,255,0.75); text-decoration: none">Quiénes nos representan</a>
+        <a href="Portada.dc.html" style="color: rgba(255,255,255,0.75); text-decoration: none">Contacto</a>
+        <a href="Main.dc.html" style="color: rgba(255,255,255,0.75); text-decoration: none">Entrar</a>
+      </nav>
+      <span style="display: flex; align-items: center; gap: 8px">Impulsado por <img src="/_blob/eef205102d2c528135a01bff0c7a93b0" alt="" width="22" height="22" style="border-radius: 6px"> <span style="color: #ffffff; font-weight: 600">OpenCivic Solutions</span></span>
+    </div>
+  </footer>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1360,"height":1760}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {};
+  }
+}
+</script>
+</body>
+</html>

@@ -5,7 +5,7 @@ import { serverFetch } from '@/lib/api';
 import { eventoEtiqueta } from '@/components/elecciones/textos';
 import { ObservacionForm } from './ObservacionForm';
 
-export const metadata: Metadata = { title: 'Observar — Decide Nicaragua' };
+export const metadata: Metadata = { title: 'Observar' };
 export const dynamic = 'force-dynamic';
 
 type VerificacionStat = { nombre: string; invitador: number; segunda: number };

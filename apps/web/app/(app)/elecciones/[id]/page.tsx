@@ -10,7 +10,7 @@ import { cuentaAtras, fechaLarga, puestosTexto, tituloEleccion } from '@/compone
 import { CandidaturaForm } from './CandidaturaForm';
 import { MiCandidatura, OcultarFicha } from './Acciones';
 
-export const metadata: Metadata = { title: 'Elección — Decide Nicaragua' };
+export const metadata: Metadata = { title: 'Elección' };
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 

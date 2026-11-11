@@ -1,10 +1,11 @@
 'use client';
 
+import type { RefObject } from 'react';
 import { createInquietud } from '@/lib/actions';
 import { useFormConRevision } from '@/components/RevisarAntesDePublicar';
 
 export function NewInquietudForm({ groupId }: { groupId: string }) {
-  const { formRef, formAction, onSubmit, state, ocupado, aviso } = useFormConRevision({
+  const { formRef, avisoRef, formAction, onSubmit, state, ocupado, aviso } = useFormConRevision({
     tipo: 'inquietud',
     accion: createInquietud,
     campos: ['title', 'body'],
@@ -31,7 +32,11 @@ export function NewInquietudForm({ groupId }: { groupId: string }) {
       {aviso}
       <button className="btn btn-primary" disabled={ocupado}>Plantear inquietud</button>
       {state && 'error' in state && <p className="alert alert-error">{state.error}</p>}
-      {state && 'success' in state && <p className="alert alert-success">Tu inquietud fue planteada.</p>}
+      {state && 'success' in state && (
+        <p className="alert alert-success" tabIndex={-1} ref={avisoRef as RefObject<HTMLParagraphElement | null>}>
+          Tu inquietud fue planteada.
+        </p>
+      )}
     </form>
   );
 }

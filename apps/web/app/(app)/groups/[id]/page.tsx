@@ -24,7 +24,7 @@ export async function generateMetadata({
   const { id } = await params;
   const res  = await serverFetch(`/api/groups/${id}`);
   const data = (await res.json()) as GroupDetail;
-  return { title: `${data.name} — Decide Nicaragua` };
+  return { title: `${data.name}` };
 }
 
 const PROPOSAL_STATUS_LABEL: Record<ProposalStatus, string> = {

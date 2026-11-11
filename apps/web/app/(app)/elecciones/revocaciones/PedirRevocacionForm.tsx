@@ -21,7 +21,7 @@ export function PedirRevocacionForm({ cargos }: { cargos: CargoPedible[] }) {
     campoSugerencia: 'motivo',
     alUsarSugerencia: (t) => setMotivo(t.trim().slice(0, MOTIVO_REVOCACION_MAX)),
     reiniciar: false,
-    alOk: () => {
+    alVaciar: () => {
       setMotivo('');
       setCargoId('');
     },
