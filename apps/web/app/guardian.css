@@ -85,12 +85,12 @@
 }
 .guardian-burbuja {
   align-self: flex-start; max-width: 90%;
-  background: var(--bg); color: var(--text);
+  background: var(--bg-white); color: var(--text); border: 1px solid var(--border);
   border-radius: 16px 16px 16px 4px; padding: 10px 14px; line-height: 1.5;
 }
 .guardian-burbuja-persona {
   align-self: flex-end; max-width: 85%;
-  background: var(--primary); color: #fff;
+  background: var(--primary-light); color: var(--text);
   border-radius: 16px 16px 4px 16px; padding: 10px 14px; line-height: 1.5;
 }
 .guardian-marca {
@@ -110,13 +110,13 @@
 .guardian-rapida:disabled { opacity: .5; cursor: default; }
 
 .guardian-escribiendo { display: flex; flex-direction: column; gap: 6px; font-size: 0.8125rem; font-weight: 600; color: var(--text-soft); }
-.guardian-escribiendo div { display: flex; gap: 4px; height: 10px; align-items: center; }
-.guardian-escribiendo span {
+.guardian-puntos { display: flex; gap: 4px; height: 10px; align-items: center; }
+.guardian-puntos span {
   display: inline-block; width: 7px; height: 7px; border-radius: 50%;
   background: var(--primary); animation: gd-punto 1.2s infinite;
 }
-.guardian-escribiendo span:nth-child(2) { animation-delay: .2s; }
-.guardian-escribiendo span:nth-child(3) { animation-delay: .4s; }
+.guardian-puntos span:nth-child(2) { animation-delay: .2s; }
+.guardian-puntos span:nth-child(3) { animation-delay: .4s; }
 @keyframes gd-punto { 0%, 80%, 100% { opacity: .25; transform: translateY(0); } 40% { opacity: 1; transform: translateY(-3px); } }
 
 .guardian-pie {

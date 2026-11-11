@@ -121,9 +121,9 @@ export default function AsistentePanel() {
             {topeAlcanzado ? (
               <p className="alert alert-info">{TEXTO_DESCANSA}</p>
             ) : (
-              lineas.length === 0 && (
+              (
                 <>
-                  <div className="guardian-burbuja">
+                  <div className="guardian-burbuja fade-up">
                     <p>{BIENVENIDA}</p>
                   </div>
                   <div className="guardian-rapidas">
@@ -133,10 +133,7 @@ export default function AsistentePanel() {
                         type="button"
                         className="guardian-rapida"
                         disabled={pensando}
-                        onClick={() => {
-                          setTexto(q);
-                          void enviar(q);
-                        }}
+                        onClick={() => void enviar(q)}
                       >
                         {q}
                       </button>
@@ -147,11 +144,11 @@ export default function AsistentePanel() {
             )}
             {lineas.map((l, i) =>
               l.rol === 'persona' ? (
-                <p key={i} className="guardian-burbuja-persona">{l.texto}</p>
+                <p key={i} className="guardian-burbuja-persona fade-up">{l.texto}</p>
               ) : l.aviso ? (
-                <p key={i} className="alert alert-info">{l.texto}</p>
+                <p key={i} className="alert alert-info fade-up">{l.texto}</p>
               ) : (
-                <div key={i} className="guardian-burbuja">
+                <div key={i} className="guardian-burbuja fade-up">
                   <p className="guardian-marca">
                     <Guardian tamano={20} />
                     sugerencia de Guardián
@@ -171,8 +168,8 @@ export default function AsistentePanel() {
             )}
             {pensando && (
               <div className="guardian-escribiendo">
-                <span>Guardián está escribiendo</span>
-                <div aria-hidden="true">
+                <span className="guardian-etiqueta-escribiendo">Guardián está escribiendo</span>
+                <div className="guardian-puntos" aria-hidden="true">
                   <span />
                   <span />
                   <span />
