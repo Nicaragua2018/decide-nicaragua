@@ -1,1 +1,53 @@
 /* Inquietudes (Tarea 7). */
+
+/* Migas */
+.migas { margin-bottom: 1rem; font-size: 0.8125rem; color: var(--text-muted); }
+.migas ol { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 0.25rem 0.5rem; }
+.migas li { display: inline-flex; align-items: center; gap: 0.5rem; }
+.migas a { color: var(--text-muted); text-decoration: none; }
+.migas a:hover { color: var(--primary); text-decoration: underline; }
+.migas [aria-current="page"] { color: var(--text); font-weight: 500; }
+
+/* Cabecera */
+.inq-acciones { display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap; }
+.inq-acciones .btn { min-height: 44px; }
+
+/* Pestañas de comunidad */
+.inq-pestanas { display: flex; flex-wrap: wrap; gap: 0.5rem; margin: 1.25rem 0; }
+.inq-pestana {
+  display: inline-flex; align-items: center; gap: 0.5rem; min-height: 44px; padding: 0.5rem 1rem;
+  border-radius: var(--radius-pill); background: var(--bg-white); color: var(--text-soft);
+  border: 1px solid rgba(15,23,42,0.14); font-size: 0.875rem; font-weight: 500; text-decoration: none;
+  transition: transform .2s ease, background .2s ease, color .2s ease;
+}
+.inq-pestana:hover { transform: translateY(-2px); background: var(--primary-light); text-decoration: none; }
+.inq-pestana-activa, .inq-pestana-activa:hover { background: var(--primary); color: #fff; border-color: var(--primary); }
+.inq-pestana-n { background: rgba(255,255,255,0.2); border-radius: var(--radius-pill); padding: 1px 8px; font-size: 0.75rem; }
+
+/* Lista y tarjetas: una columna */
+.inq-lista { display: flex; flex-direction: column; gap: 0.75rem; }
+.inq-tarjeta { display: flex; gap: 1rem; align-items: flex-start; }
+.inq-cuerpo { display: flex; flex-direction: column; gap: 0.5rem; flex: 1; min-width: 0; }
+.inq-titulo { font-family: var(--font-display); font-weight: 600; font-size: 1.0625rem; line-height: 1.35; color: var(--text); text-decoration: none; overflow-wrap: anywhere; }
+.inq-titulo:hover { color: var(--primary); text-decoration: none; }
+.inq-etiquetas { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; margin: 0; }
+.inq-cuerpo .card-meta { margin: 0; }
+
+/* Botón de apoyo: círculo de 44 px */
+.inq-apoyo-caja { flex-shrink: 0; }
+.inq-apoyo {
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0;
+  width: 44px; height: 44px; padding: 0; border-radius: 50%; cursor: pointer;
+  border: 2px solid rgba(10,56,128,0.25); background: var(--bg-white); color: var(--primary);
+  font-family: var(--font-display); font-weight: 600; line-height: 1;
+  transition: transform .15s ease, background .2s ease, color .2s ease;
+}
+.inq-apoyo-n { font-size: 0.8125rem; }
+.inq-apoyo:hover:not(:disabled) { transform: scale(1.06); background: var(--primary); color: #fff; border-color: var(--primary); }
+.inq-apoyo:active:not(:disabled) { transform: scale(0.95); }
+.inq-apoyo:disabled { opacity: 0.6; cursor: wait; }
+.inq-apoyo-activo, .inq-apoyo-activo:hover:not(:disabled) { background: var(--primary); color: #fff; border-color: var(--primary); }
+
+@media (max-width: 599px) {
+  .inq-tarjeta { gap: 0.75rem; }
+}

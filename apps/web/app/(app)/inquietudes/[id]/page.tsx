@@ -54,7 +54,7 @@ export default async function InquietudPage({ params }: { params: Promise<{ id: 
             )}
             {q.isMember && (
               <div className="mt-2">
-                <SupportButton id={q.id} supported={q.supportedByMe} />
+                <SupportButton id={q.id} supported={q.supportedByMe} count={q.supportCount} />
               </div>
             )}
           </>
