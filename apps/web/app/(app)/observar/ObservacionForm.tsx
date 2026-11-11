@@ -20,7 +20,7 @@ export function ObservacionForm({ auditEventId }: { auditEventId: string }) {
     campoSugerencia: 'texto',
     alUsarSugerencia: (t) => setTexto(t.trim().slice(0, OBSERVACION_MAX)),
     reiniciar: false,
-    alOk: () => setTexto(''),
+    alVaciar: () => setTexto(''),
   });
 
   if (!abierto) {

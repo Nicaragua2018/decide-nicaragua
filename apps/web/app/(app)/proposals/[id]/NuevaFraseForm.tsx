@@ -13,7 +13,7 @@ export function NuevaFraseForm({ proposalId }: { proposalId: string }) {
     campoSugerencia: 'text',
     alUsarSugerencia: setText,
     reiniciar: false,
-    alOk: () => setText(''),
+    alVaciar: () => setText(''),
   });
 
   return (

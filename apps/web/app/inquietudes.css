@@ -24,6 +24,9 @@
 .inq-pestana-activa, .inq-pestana-activa:hover { background: var(--primary); color: #fff; border-color: var(--primary); }
 .inq-pestana-n { background: rgba(255,255,255,0.2); border-radius: var(--radius-pill); padding: 1px 8px; font-size: 0.75rem; }
 
+/* Ancla del formulario: que no quede bajo la barra pegajosa */
+#nueva-inquietud { scroll-margin-top: 88px; }
+
 /* Lista y tarjetas: una columna */
 .inq-lista { display: flex; flex-direction: column; gap: 0.75rem; }
 .inq-tarjeta { display: flex; gap: 1rem; align-items: flex-start; }
@@ -43,6 +46,9 @@
   transition: transform .15s ease, background .2s ease, color .2s ease;
 }
 .inq-apoyo-n { font-size: 0.8125rem; }
+.inq-apoyo-caja-texto { display: flex; flex-wrap: wrap; align-items: center; gap: 0.625rem; }
+.inq-apoyo-caja-texto .alert { flex-basis: 100%; }
+.inq-apoyo-texto { font-family: var(--font-display); font-weight: 600; font-size: 0.9375rem; color: var(--primary); }
 .inq-apoyo:hover:not(:disabled) { transform: scale(1.06); background: var(--primary); color: #fff; border-color: var(--primary); }
 .inq-apoyo:active:not(:disabled) { transform: scale(0.95); }
 .inq-apoyo:disabled { opacity: 0.6; cursor: wait; }

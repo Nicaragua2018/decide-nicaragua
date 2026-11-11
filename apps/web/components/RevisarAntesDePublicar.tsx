@@ -182,6 +182,7 @@ export function useFormConRevision({
   alUsarSugerencia,
   alUsarTitulo,
   reiniciar = true,
+  alVaciar,
   alOk,
 }: {
   tipo: TipoTexto;
@@ -193,6 +194,12 @@ export function useFormConRevision({
   alUsarTitulo?: ((texto: string) => void) | undefined;
   /** Vacía el formulario al publicar (solo para campos sin estado de React). */
   reiniciar?: boolean;
+  /**
+   * Vacía el estado de React del formulario. Se llama al publicar y también cuando el texto
+   * queda en revisión (202), porque en ambos casos el texto ya salió.
+   */
+  alVaciar?: (() => void) | undefined;
+  /** Solo al publicar (no en 202): para cerrar un editor, navegar, etc. */
   alOk?: (() => void) | undefined;
 }) {
   const formRef = useRef<HTMLFormElement>(null);
@@ -210,11 +217,13 @@ export function useFormConRevision({
     // «En revisión» también significa que el texto ya salió: el formulario se vacía.
     if ('enRevision' in state) {
       if (reiniciar) formRef.current?.reset();
+      alVaciar?.();
       return;
     }
     if (recibido) return;
     if ('success' in state) {
       if (reiniciar) formRef.current?.reset();
+      alVaciar?.();
       alOk?.();
       avisoRef.current?.focus();
     }

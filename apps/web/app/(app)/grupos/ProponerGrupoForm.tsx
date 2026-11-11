@@ -22,7 +22,7 @@ export function ProponerGrupoForm({ ambitos }: { ambitos: AmbitoOpcion[] }) {
     alUsarSugerencia: setProposito,
     alUsarTitulo: setName,
     reiniciar: false,
-    alOk: () => {
+    alVaciar: () => {
       setName('');
       setProposito('');
     },
