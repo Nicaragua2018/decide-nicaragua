@@ -2,11 +2,11 @@ import s from './secciones.module.css';
 
 export function TuLugar() {
   return (
-    <section className={`${s.seccion} ${s.seccionPlatino}`} aria-labelledby="tu-lugar-titulo">
+    <section className={`${s.seccion} ${s.seccionNiebla}`} aria-labelledby="tu-lugar-titulo">
       <div className={`${s.interior} ${s.dosColumnas}`}>
         <div>
           <h2 id="tu-lugar-titulo" className={s.titulo}>
-            Tu lugar en la colmena
+            Tu lugar en la comunidad
           </h2>
 
           <ul className={s.puntos}>

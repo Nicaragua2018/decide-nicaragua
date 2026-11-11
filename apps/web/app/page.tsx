@@ -6,10 +6,9 @@ import { TuLugar } from './portada/TuLugar';
 import { LoQueDecidimos } from './portada/LoQueDecidimos';
 import { PorQueConfiar } from './portada/PorQueConfiar';
 import { Pie, QuienesSomos } from './portada/QuienesSomos';
-import { clasesFuentes } from './portada/fuentes';
 import portada from './portada/portada.module.css';
 
-const TITULO = 'Nicaragua decide — una colmena democrática y cooperativa';
+const TITULO = 'Nicaragua decide — una comunidad democrática y cooperativa';
 const DESCRIPCION =
   'Confianza, comunicación y coordinación entre afines. Sin manipulación y sin el ruido de las redes.';
 
@@ -33,7 +32,7 @@ export const metadata: Metadata = {
 
 export default function LandingPage() {
   return (
-    <div className={`${portada.portada} ${clasesFuentes}`}>
+    <div className={portada.portada}>
       <a href="#main-content" className="skip-link">
         Ir al contenido principal
       </a>
