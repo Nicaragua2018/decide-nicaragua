@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { useEffect, useRef, useState, type KeyboardEvent } from 'react';
 import { esRutaInterna } from '@/lib/rutas';
+import { useAsistente } from '@/components/asistente/AsistenteContexto';
 import type { MensajePanel, RespuestaPanel } from '@decide/shared';
 
 const MAX_MENSAJES = 12;
@@ -12,20 +13,19 @@ const TEXTO_ERROR = 'Ahora no pude responder. Intenta de nuevo en un momento.';
 
 type Linea = MensajePanel & { enlaces?: { texto: string; ruta: string }[]; aviso?: boolean };
 
-export default function AsistentePanel({ topeAlcanzado }: { topeAlcanzado: boolean }) {
-  const [abierto, setAbierto] = useState(false);
+export default function AsistentePanel() {
+  const { activo, topeAlcanzado, abierto, cerrar: cerrarContexto } = useAsistente();
   const [lineas, setLineas] = useState<Linea[]>([]);
   const [texto, setTexto] = useState('');
   const [pensando, setPensando] = useState(false);
   const areaRef = useRef<HTMLTextAreaElement>(null);
   const finRef = useRef<HTMLDivElement>(null);
-  const botonRef = useRef<HTMLButtonElement>(null);
   const generacion = useRef(0);
   const estuvoAbierto = useRef(false);
 
   function cerrar() {
     generacion.current += 1; // descarta cualquier respuesta que aún viaje
-    setAbierto(false);
+    cerrarContexto();
     setLineas([]);
     setTexto('');
     setPensando(false);
@@ -36,7 +36,7 @@ export default function AsistentePanel({ topeAlcanzado }: { topeAlcanzado: boole
       estuvoAbierto.current = true;
       areaRef.current?.focus();
     } else if (estuvoAbierto.current) {
-      botonRef.current?.focus();
+      document.querySelector<HTMLElement>('[data-guardian-boton]')?.focus();
     }
   }, [abierto]);
 
@@ -94,13 +94,10 @@ export default function AsistentePanel({ topeAlcanzado }: { topeAlcanzado: boole
     }
   }
 
+  if (!activo) return null;
+
   return (
     <>
-      {!abierto && (
-        <button ref={botonRef} type="button" className="asistente-boton btn btn-primary" aria-label="Pregúntale al asistente" onClick={() => setAbierto(true)}>
-          Pregúntale al asistente
-        </button>
-      )}
       {abierto && (
         <aside className="asistente-panel" role="dialog" aria-modal="true" aria-label="Asistente">
           <div className="asistente-cabecera">
