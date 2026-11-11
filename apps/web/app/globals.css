@@ -1348,14 +1348,6 @@ tr:hover td { background: #F9FAFB; }
   .rank-item       { padding: 0.6rem 0.75rem; }
 }
 
-.al-dia, .crecer { margin-bottom: 1rem; }
-.al-dia-cabecera { display: flex; justify-content: space-between; align-items: center; gap: 1rem; }
-.al-dia-resumen { margin-bottom: 0.75rem; }
-.al-dia-comunidad { font-size: 0.9rem; font-weight: 600; margin: 0.5rem 0 0.25rem; }
-.al-dia-lista { margin: 0 0 0 1.25rem; font-size: 0.9rem; }
-.al-dia-etiqueta { font-size: 0.75rem; color: var(--text-muted); }
-.crecer-listas { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1rem; margin: 0.75rem 0; }
-.crecer-lista { margin: 0.25rem 0 0 1.25rem; font-size: 0.875rem; }
 
 /* ============================================================
    Elecciones y «Quiénes nos representan» (.el-*) — 3C-1
