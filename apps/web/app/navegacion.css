@@ -135,3 +135,6 @@
   .navbar-marca-texto { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
   .nav-item-avatar .nav-menu { max-width: calc(100vw - 32px); }
 }
+
+.navbar-marca-compacta { padding: 5px; }
+.navbar-marca-compacta .navbar-marca-texto { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }

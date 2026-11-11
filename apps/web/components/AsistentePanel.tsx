@@ -36,7 +36,7 @@ export default function AsistentePanel() {
       estuvoAbierto.current = true;
       areaRef.current?.focus();
     } else if (estuvoAbierto.current) {
-      document.querySelector<HTMLElement>('[data-guardian-boton]')?.focus();
+      Array.from(document.querySelectorAll<HTMLElement>('[data-guardian-boton]')).find((b) => b.offsetParent !== null)?.focus();
     }
   }, [abierto]);
 

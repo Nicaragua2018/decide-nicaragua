@@ -1,7 +1,8 @@
 'use client';
 
 import Link from 'next/link';
-import { useEffect, useId, useRef, type KeyboardEvent } from 'react';
+import { useId, useRef, type KeyboardEvent } from 'react';
+import { useMenu } from './useMenu';
 import { opcionesDeAvatar } from '@/lib/navegacion';
 
 interface Props {
@@ -20,14 +21,7 @@ export default function MenuAvatar({ nombre, iniciales, status, abierto, onAlter
   const boton = useRef<HTMLButtonElement>(null);
   const opciones = opcionesDeAvatar({ status });
 
-  useEffect(() => {
-    if (!abierto) return;
-    const alPulsar = (e: PointerEvent) => {
-      if (raiz.current && !raiz.current.contains(e.target as Node)) onCerrar();
-    };
-    document.addEventListener('pointerdown', alPulsar);
-    return () => document.removeEventListener('pointerdown', alPulsar);
-  }, [abierto, onCerrar]);
+  useMenu(abierto, onCerrar, raiz, boton);
 
   function items(): HTMLElement[] {
     return Array.from(raiz.current?.querySelectorAll<HTMLElement>('[role="menuitem"]') ?? []);
@@ -35,12 +29,6 @@ export default function MenuAvatar({ nombre, iniciales, status, abierto, onAlter
 
   function alTeclear(e: KeyboardEvent<HTMLDivElement>) {
     if (!abierto) return;
-    if (e.key === 'Escape') {
-      e.preventDefault();
-      onCerrar();
-      boton.current?.focus();
-      return;
-    }
     if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
     e.preventDefault();
     const lista = items();
