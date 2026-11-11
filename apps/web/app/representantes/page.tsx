@@ -3,10 +3,11 @@ import type { Metadata } from 'next';
 import { CARGO_ETIQUETA, type RepresentantesVista, type RevocacionResumen } from '@decide/shared';
 import { Hexagono } from '@/components/elecciones/Hexagono';
 import { eventoEtiqueta, fechaLarga } from '@/components/elecciones/textos';
+import { Volver } from '@/components/Volver';
 
 export const metadata: Metadata = {
   title: 'Quiénes nos representan',
-  description: 'La mesa, los observadores y quienes coordinan cada comunidad de Decide Nicaragua.',
+  description: 'La mesa, los observadores y quienes coordinan cada comunidad de Nicaragua Decide.',
 };
 
 export const dynamic = 'force-dynamic';
@@ -85,9 +86,10 @@ export default async function RepresentantesPage() {
       <nav className="ln-nav">
         <div className="ln-nav-inner">
           <Link href="/" className="ln-brand" style={{ textDecoration: 'none' }}>
-            Decide <em>Nicaragua</em>
+            Nicaragua <em>Decide</em>
           </Link>
           <div className="ln-nav-actions">
+            <Volver href="/">Inicio</Volver>
             <Link href="/explore" className="ln-nav-link">Modo observador</Link>
             <Link href="/login" className="ln-nav-cta">Entrar</Link>
           </div>
@@ -234,7 +236,7 @@ export default async function RepresentantesPage() {
 
       <footer className="ln-footer">
         <div className="ln-container ln-footer-inner">
-          <span className="ln-brand ln-brand--light">Decide <em>Nicaragua</em></span>
+          <span className="ln-brand ln-brand--light">Nicaragua <em>Decide</em></span>
           <div className="ln-footer-links">
             <Link href="/" className="ln-footer-link">Inicio</Link>
             <Link href="/explore" className="ln-footer-link">Modo observador</Link>

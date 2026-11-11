@@ -11,19 +11,19 @@ export function inviteEmailHtml(params: InviteTemplateParams): string {
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Invitación — Decide Nicaragua</title>
+  <title>Invitación — Nicaragua Decide</title>
 </head>
 <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; max-width: 560px; margin: 40px auto; padding: 0 20px; color: #1a1a1a; background: #fff;">
 
   <h1 style="font-size: 22px; font-weight: 700; color: #1a1a1a; margin-bottom: 4px;">
-    Decide Nicaragua
+    Nicaragua Decide
   </h1>
   <p style="font-size: 14px; color: #666; margin-top: 0; margin-bottom: 32px;">
     Plataforma de participación democrática verificable
   </p>
 
   <p style="font-size: 16px; line-height: 1.6;">
-    Has sido invitado/a a participar en <strong>Decide Nicaragua</strong>, una plataforma
+    Has sido invitado/a a participar en <strong>Nicaragua Decide</strong>, una plataforma
     de participación democrática para ciudadanos nicaragüenses.
   </p>
 
@@ -58,7 +58,7 @@ export function inviteEmailHtml(params: InviteTemplateParams): string {
 
   <p style="font-size: 12px; color: #aaa;">
     Si no esperabas esta invitación, puedes ignorar este mensaje de forma segura.<br>
-    Decide Nicaragua — Participación democrática verificable.
+    Nicaragua Decide — Participación democrática verificable.
   </p>
 
 </body>
@@ -68,9 +68,9 @@ export function inviteEmailHtml(params: InviteTemplateParams): string {
 export function inviteEmailText(params: InviteTemplateParams): string {
   const { inviteUrl, expiresInHours } = params;
   return [
-    'Decide Nicaragua — Invitación',
+    'Nicaragua Decide — Invitación',
     '',
-    'Has sido invitado/a a participar en Decide Nicaragua.',
+    'Has sido invitado/a a participar en Nicaragua Decide.',
     '',
     `Para completar tu registro, visita el siguiente enlace (expira en ${expiresInHours.toString()} horas):`,
     inviteUrl,

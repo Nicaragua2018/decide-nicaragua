@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { use, useActionState } from 'react';
 import { createDraw } from '@/lib/actions';
+import { Volver } from '@/components/Volver';
 
 export default function NewSortitionPage({
   params,
@@ -15,9 +16,7 @@ export default function NewSortitionPage({
   return (
     <>
       <div className="page-header">
-        <Link href={`/groups/${id}?tab=sortition`} className="text-sm text-muted">
-          ← Volver al grupo
-        </Link>
+        <Volver href={`/groups/${id}?tab=sortition`}>Volver al grupo</Volver>
         <h1 className="page-title mt-2">Nuevo sorteo verificable</h1>
       </div>
 

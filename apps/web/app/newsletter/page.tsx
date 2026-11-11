@@ -1,11 +1,12 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { NewsletterForm } from './NewsletterForm';
+import { Volver } from '@/components/Volver';
 
 export const metadata: Metadata = {
   title: 'Boletín',
   description:
-    'Suscríbete al boletín de Decide Nicaragua y mantente informado sobre la plataforma y la participación democrática nicaragüense.',
+    'Suscríbete al boletín de Nicaragua Decide y mantente informado sobre la plataforma y la participación democrática nicaragüense.',
 };
 
 export default function NewsletterPage() {
@@ -15,9 +16,10 @@ export default function NewsletterPage() {
       <nav className="ln-nav">
         <div className="ln-nav-inner">
           <Link href="/" className="ln-brand" style={{ textDecoration: 'none' }}>
-            Decide <em>Nicaragua</em>
+            Nicaragua <em>Decide</em>
           </Link>
           <div className="ln-nav-actions">
+            <Volver href="/">Inicio</Volver>
             <Link href="/login" className="ln-nav-cta">Iniciar sesión</Link>
           </div>
         </div>

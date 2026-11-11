@@ -5,6 +5,7 @@ import VoteForm from '@/components/VoteForm';
 import { ConfirmForm } from '@/components/ConfirmForm';
 import { updateElectionStatusDirect, tallyElection } from '@/lib/actions';
 import type { ElectionDetail, ElectionResultResponse, ElectionStatus } from '@decide/shared';
+import { Volver } from '@/components/Volver';
 
 const STATUS_LABEL: Record<ElectionStatus, string> = {
   draft: 'Borrador', open: 'Abierta', tallied: 'Contada', cancelled: 'Cancelada',
@@ -49,9 +50,7 @@ export default async function ElectionPage({
   return (
     <>
       <div className="page-header">
-        <Link href={`/groups/${election.groupId}?tab=elections`} className="text-sm text-muted">
-          ← Volver al grupo
-        </Link>
+        <Volver href={`/groups/${election.groupId}?tab=elections`}>Volver al grupo</Volver>
         <div className="flex justify-between items-center mt-2">
           <h1 className="page-title">{election.title}</h1>
           <span className={`badge badge-${election.status}`}>

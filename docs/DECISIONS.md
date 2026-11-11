@@ -1,4 +1,4 @@
-# DECISIONS.md — Decide Nicaragua
+# DECISIONS.md — Nicaragua Decide
 
 > Registro de decisiones técnicas (ADR: Architecture Decision Records).
 > Formato: ID, Fecha, Estado, Contexto, Decisión, Consecuencias.

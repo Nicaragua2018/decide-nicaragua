@@ -17,6 +17,7 @@ import {
   RenovacionButton,
   SorteoVerificable,
 } from './ComisionForms';
+import { Volver } from '@/components/Volver';
 
 export const metadata: Metadata = { title: 'Grupo de trabajo' };
 
@@ -174,7 +175,7 @@ export default async function GrupoPage({ params }: { params: Promise<{ id: stri
   return (
     <>
       <div className="page-header">
-        <Link href="/grupos" className="text-sm text-muted">← Grupos de trabajo</Link>
+        <Volver href="/grupos">Grupos de trabajo</Volver>
         <div className="flex justify-between items-center mt-2">
           <h1 className="page-title">{g.name}</h1>
           <span className="badge badge-open">{estadoGrupo(g)}</span>

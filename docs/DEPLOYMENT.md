@@ -47,7 +47,7 @@ API_PORT=4000
 
 RESEND_API_KEY=<tu-resend-api-key>
 EMAIL_FROM=noreply@nicaraguadecide.org
-EMAIL_FROM_NAME=Decide Nicaragua
+EMAIL_FROM_NAME=Nicaragua Decide
 
 IP_HASH_SALT=<sal-aleatorio-32-bytes>
 

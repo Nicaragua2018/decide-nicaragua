@@ -1,4 +1,4 @@
-// Decide Nicaragua — Schema de Prisma
+// Nicaragua Decide — Schema de Prisma
 // Fuente de verdad de la base de datos.
 // Cambios requieren migración explícita: pnpm db:migrate
 

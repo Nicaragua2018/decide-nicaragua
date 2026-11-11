@@ -4,6 +4,7 @@ import { ProposalStatus } from '@decide/shared';
 import type { ForumDetail, SignalCounts } from '@decide/shared';
 import { NewTopicForm } from './NewTopicForm';
 import { MarcaAsistente } from '@/components/SugerenciaAsistente';
+import { Volver } from '@/components/Volver';
 
 const STATUS_LABEL: Record<ProposalStatus, string> = {
   [ProposalStatus.draft]:    'Borrador',
@@ -36,7 +37,7 @@ export default async function ForoPage({ params }: { params: Promise<{ id: strin
   return (
     <>
       <div className="page-header">
-        <Link href="/foros" className="text-sm text-muted">← Volver a los foros</Link>
+        <Volver href="/foros">Volver a los foros</Volver>
         <p className="card-meta mt-2">{forum.groupName}</p>
         <h1 className="page-title">{forum.title}</h1>
         {forum.description && <p className="page-sub">{forum.description}</p>}

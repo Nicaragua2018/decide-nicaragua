@@ -9,6 +9,7 @@ import { INQUIETUD_STATUS_BADGE, INQUIETUD_STATUS_LABEL, formatDate } from '../s
 import { MarcaAsistente } from '@/components/SugerenciaAsistente';
 import { UmbralSeccion } from '@/components/SugerenciasSecciones';
 import { OrganizerActions } from './OrganizerActions';
+import { Volver } from '@/components/Volver';
 
 export const metadata: Metadata = { title: 'Inquietud' };
 
@@ -23,9 +24,7 @@ export default async function InquietudPage({ params }: { params: Promise<{ id: 
     <>
       <div className="page-header">
         {q.isMember && (
-          <Link href={`/inquietudes?groupId=${q.groupId}`} className="text-sm text-muted">
-            ← Volver a las inquietudes
-          </Link>
+          <Volver href={`/inquietudes?groupId=${q.groupId}`}>Volver a las inquietudes</Volver>
         )}
         <div className="flex justify-between items-center mt-2">
           <h1 className="page-title">{q.hidden ? 'Inquietud oculta por la moderación' : q.title}</h1>

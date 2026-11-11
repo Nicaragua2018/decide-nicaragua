@@ -58,7 +58,7 @@ function LoginForm() {
   return (
     <div className="auth-page">
       <div className="auth-card">
-        <h1 className="auth-title">Decide Nicaragua</h1>
+        <h1 className="auth-title">Nicaragua Decide</h1>
         <p className="auth-sub">Inicia sesión con tu cuenta</p>
 
         {error && <div className="alert alert-error">{error}</div>}

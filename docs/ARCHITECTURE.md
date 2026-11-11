@@ -1,4 +1,4 @@
-# ARCHITECTURE.md — Decide Nicaragua
+# ARCHITECTURE.md — Nicaragua Decide
 
 > Documento vivo. Actualizar cuando cambie la arquitectura del sistema.
 > Última actualización: 2026-03-21
@@ -7,7 +7,7 @@
 
 ## Visión general
 
-Decide Nicaragua es una plataforma de participación democrática verificable para ciudadanos nicaragüenses. La arquitectura está diseñada para:
+Nicaragua Decide es una plataforma de participación democrática verificable para ciudadanos nicaragüenses. La arquitectura está diseñada para:
 
 1. **Legitimidad**: resultados verificables independientemente.
 2. **Seguridad**: protección de datos personales, resistencia a actores adversariales.

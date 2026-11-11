@@ -68,7 +68,7 @@ Sustituir los valores de `:root` por los de Global Constraints (mismos nombres; 
 
 - [ ] **Step 4: Fuentes e importaciones en `app/layout.tsx`**
 
-Cargar `Poppins({ weight: ['500','600','700'], variable: '--font-display-poppins' })` e `Inter({ weight: ['400','500','600'], variable: '--font-sans' })`; mantener `Cormorant_Garamond` (`--font-serif`, la usan `/explore`, `/representantes`, `/newsletter`); quitar `DM_Sans`. Importar `./globals.css`, `./navegacion.css`, `./guardian.css`, `./inicio.css`, `./inquietudes.css` en ese orden. Cambiar `title.default` y `template` a «Nicaragua Decide» (hoy dicen «Decide Nicaragua»).
+Cargar `Poppins({ weight: ['500','600','700'], variable: '--font-display-poppins' })` e `Inter({ weight: ['400','500','600'], variable: '--font-sans' })`; mantener `Cormorant_Garamond` (`--font-serif`, la usan `/explore`, `/representantes`, `/newsletter`); quitar `DM_Sans`. Importar `./globals.css`, `./navegacion.css`, `./guardian.css`, `./inicio.css`, `./inquietudes.css` en ese orden. Cambiar `title.default` y `template` a «Nicaragua Decide» (hoy dicen «Nicaragua Decide»).
 
 - [ ] **Step 5: `Sacuanjoche.tsx`, `Guardian.tsx` y el logo**
 

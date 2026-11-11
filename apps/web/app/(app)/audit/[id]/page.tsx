@@ -1,7 +1,7 @@
-import Link from 'next/link';
 import type { Metadata } from 'next';
 import { serverFetch } from '@/lib/api';
 import type { AuditEventSummary } from '@decide/shared';
+import { Volver } from '@/components/Volver';
 
 export const metadata: Metadata = { title: 'Detalle de evento' };
 
@@ -19,7 +19,7 @@ export default async function AuditEventPage({
   return (
     <>
       <div className="page-header">
-        <Link href="/audit" className="text-sm text-muted">← Volver al registro</Link>
+        <Volver href="/audit">Volver al registro</Volver>
         <h1 className="page-title mt-2">Evento de auditoría</h1>
       </div>
 

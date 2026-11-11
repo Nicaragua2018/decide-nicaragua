@@ -1,5 +1,5 @@
 # =============================================================
-# Decide Nicaragua — API Dockerfile
+# Nicaragua Decide — API Dockerfile
 # Contexto de build: raíz del monorepo
 #   docker build -f apps/api/Dockerfile -t decide-api .
 # =============================================================

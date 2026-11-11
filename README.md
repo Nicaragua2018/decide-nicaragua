@@ -1,8 +1,8 @@
-# Decide Nicaragua
+# Nicaragua Decide
 
 **Plataforma de participación democrática verificable para ciudadanos nicaragüenses en el exilio.**
 
-Decide Nicaragua es un MVP de infraestructura digital para debate estructurado, votación verificable y sortition auditable. Está diseñado para organizaciones civiles que requieren confianza, transparencia y protección de datos personales en entornos políticos adversos.
+Nicaragua Decide es un MVP de infraestructura digital para debate estructurado, votación verificable y sortition auditable. Está diseñado para organizaciones civiles que requieren confianza, transparencia y protección de datos personales en entornos políticos adversos.
 
 ---
 

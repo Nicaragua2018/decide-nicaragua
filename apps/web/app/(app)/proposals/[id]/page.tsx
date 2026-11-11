@@ -12,6 +12,7 @@ import { updateProposalStatusDirect } from '@/lib/actions';
 import { EntrarSalir } from '../../grupos/[id]/EntrarSalir';
 import { ProposalStatus } from '@decide/shared';
 import type { DecisionTemaResponse, GrupoTrabajoDetail, ProposalDetail, SignalCounts } from '@decide/shared';
+import { Volver } from '@/components/Volver';
 
 const STATUS_LABEL: Record<ProposalStatus, string> = {
   [ProposalStatus.draft]:    'Borrador',
@@ -122,16 +123,9 @@ export default async function ProposalPage({
     <>
       {/* Cabecera */}
       <div className="page-header">
-        <Link href={`/groups/${proposal.groupId}?tab=proposals`} className="text-sm text-muted">
-          ← Volver al grupo
-        </Link>
+        <Volver href={`/groups/${proposal.groupId}?tab=proposals`}>Volver al grupo</Volver>
         {proposal.forumId && (
-          <>
-            {' · '}
-            <Link href={`/foros/${proposal.forumId}`} className="text-sm text-muted">
-              Volver al foro
-            </Link>
-          </>
+          <Volver href={`/foros/${proposal.forumId}`}>Volver al foro</Volver>
         )}
         <div className="flex justify-between items-center mt-2">
           <h1 className="page-title">{proposal.title}</h1>
