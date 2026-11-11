@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Inicio en el teléfono</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@500;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#ffffff}
+a{color:#0a3880}a:hover{color:#072a60}
+.btn-pill{transition:transform .2s ease,box-shadow .2s ease}
+.btn-pill:hover{transform:translateY(-2px);box-shadow:0 8px 20px rgba(15,23,42,0.16)}
+.btn-pill:active{transform:translateY(0) scale(.98)}
+.marca{transition:transform .2s ease,box-shadow .2s ease}.marca:hover{transform:translateY(-1px);box-shadow:0 6px 16px rgba(0,0,0,0.18)}
+.card{transition:transform .2s ease,box-shadow .2s ease,border-color .2s ease}
+.card:hover{transform:translateY(-2px);box-shadow:0 10px 24px rgba(10,56,128,0.12);border-color:#0a3880}
+.arrow{transition:transform .2s ease}.card:hover .arrow{transform:translateX(4px)}
+.tab{transition:transform .2s,background .2s,color .2s}.tab:hover{transform:translateY(-2px);background:rgba(10,56,128,0.08);color:#0a3880}
+.fade-up{animation:fade-up .6s cubic-bezier(.22,.68,0,1.1) both}
+.d1{animation-delay:.05s}.d2{animation-delay:.15s}.d3{animation-delay:.25s}.d4{animation-delay:.35s}.d5{animation-delay:.45s}.d6{animation-delay:.55s}.d7{animation-delay:.65s}
+@keyframes fade-up{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:translateY(0)}}
+.gd{overflow:visible}
+.gd-body,.gd-tail,.gd-eyes{transform-box:fill-box}
+.gd-body{transform-origin:center;animation:gd-bob 2.6s ease-in-out infinite}
+.gd-tail{transform-origin:top left;animation:gd-tail 2.6s ease-in-out infinite}
+.gd-eyes{transform-origin:center;animation:gd-blink 4.5s infinite}
+.gd-btn:hover .gd-body{animation:gd-hop .5s ease-out}
+.gd-ring::before{content:"";position:absolute;inset:-6px;border-radius:50%;border:2px solid rgba(242,176,10,.7);animation:ring 2.2s ease-out infinite}
+@keyframes gd-bob{0%,100%{transform:translateY(0)}50%{transform:translateY(-1.5px)}}
+@keyframes gd-tail{0%,100%{transform:rotate(-6deg)}50%{transform:rotate(6deg)}}
+@keyframes gd-blink{0%,90%,100%{transform:scaleY(1)}94%{transform:scaleY(.1)}}
+@keyframes gd-hop{0%{transform:translateY(0)}40%{transform:translateY(-5px)}100%{transform:translateY(0)}}
+@keyframes ring{0%{transform:scale(.85);opacity:.9}100%{transform:scale(1.35);opacity:0}}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style>
+</helmet>
+<div style="width: 390px; height: 844px; box-sizing: border-box; font-family: 'Inter', sans-serif; color: #0f172a; background: #ffffff; display: flex; flex-direction: column; overflow: hidden; position: relative">
+
+  <!-- Cabecera -->
+  <header style="display: flex; align-items: center; justify-content: space-between; padding: 54px 16px 12px; background: #0a3880; box-shadow: 0 2px 14px rgba(10,56,128,0.28)">
+    <a href="Main.dc.html" class="marca" style="display: flex; align-items: center; gap: 8px; text-decoration: none; color: #0f172a; background: #ffffff; padding: 4px 14px 4px 4px; border-radius: 999px; min-height: 40px; box-sizing: border-box">
+      <svg width="28" height="28" viewBox="0 0 34 34" aria-hidden="true"><rect width="34" height="34" rx="10" fill="#0a3880"/><g transform="translate(17 17)" fill="#ffffff"><path d="M0 0C-3.2-2.2-5-6.4-3.6-9.8C-2.6-12.6 1.2-13.2 3-10.8C5-8 3.4-3.2 0 0Z"/><path d="M0 0C-3.2-2.2-5-6.4-3.6-9.8C-2.6-12.6 1.2-13.2 3-10.8C5-8 3.4-3.2 0 0Z" transform="rotate(72)"/><path d="M0 0C-3.2-2.2-5-6.4-3.6-9.8C-2.6-12.6 1.2-13.2 3-10.8C5-8 3.4-3.2 0 0Z" transform="rotate(144)"/><path d="M0 0C-3.2-2.2-5-6.4-3.6-9.8C-2.6-12.6 1.2-13.2 3-10.8C5-8 3.4-3.2 0 0Z" transform="rotate(216)"/><path d="M0 0C-3.2-2.2-5-6.4-3.6-9.8C-2.6-12.6 1.2-13.2 3-10.8C5-8 3.4-3.2 0 0Z" transform="rotate(288)"/></g><circle cx="17" cy="17" r="3.2" fill="#f2b00a"/></svg>
+      <span style="font-family: 'Poppins', sans-serif; font-weight: 600; font-size: 17px">Nicaragua <span style="color: #0a3880">Decide</span></span>
+    </a>
+    <button type="button" class="btn-pill" aria-label="Menú de Carlos" style="width: 40px; height: 40px; border-radius: 50%; border: 2px solid rgba(255,255,255,0.6); background: rgba(255,255,255,0.14); color: #ffffff; font-family: 'Poppins', sans-serif; font-weight: 600; font-size: 13px; cursor: pointer">CR</button>
+  </header>
+
+  <!-- Contenido desplazable -->
+  <main style="flex: 1; overflow: hidden; display: flex; flex-direction: column; gap: 16px; padding: 20px 20px 0; background: #f4f6fa">
+    <span class="fade-up d1" style="display: inline-flex; align-self: flex-start; align-items: center; gap: 6px; font-family: 'Poppins', sans-serif; font-weight: 600; font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; color: #0a3880; background: rgba(10,56,128,0.08); padding: 5px 12px; border-radius: 999px"><svg width="10" height="10" viewBox="0 0 24 24" aria-hidden="true"><g transform="translate(12 12)" fill="#f2b00a"><path d="M0 0C-2.6-1.7-4-5-2.9-7.8C-2.1-10 .9-10.5 2.3-8.6C3.9-6.4 2.6-2.5 0 0Z"/><path d="M0 0C-2.6-1.7-4-5-2.9-7.8C-2.1-10 .9-10.5 2.3-8.6C3.9-6.4 2.6-2.5 0 0Z" transform="rotate(72)"/><path d="M0 0C-2.6-1.7-4-5-2.9-7.8C-2.1-10 .9-10.5 2.3-8.6C3.9-6.4 2.6-2.5 0 0Z" transform="rotate(144)"/><path d="M0 0C-2.6-1.7-4-5-2.9-7.8C-2.1-10 .9-10.5 2.3-8.6C3.9-6.4 2.6-2.5 0 0Z" transform="rotate(216)"/><path d="M0 0C-2.6-1.7-4-5-2.9-7.8C-2.1-10 .9-10.5 2.3-8.6C3.9-6.4 2.6-2.5 0 0Z" transform="rotate(288)"/></g><circle cx="12" cy="12" r="2.2" fill="#0a3880"/></svg>Exilio y diáspora</span>
+    <h1 class="fade-up d2" style="margin: 0; font-family: 'Poppins', sans-serif; font-weight: 700; font-size: 26px; line-height: 1.2; letter-spacing: -0.02em; color: #0a3880">Hola, Carlos. La comunidad ya tiene sus primeras 12 preguntas.</h1>
+
+    <div class="fade-up d3" style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px">
+      <div style="background: #ffffff; border: 1px solid rgba(15,23,42,0.08); border-radius: 14px; padding: 12px; display: flex; flex-direction: column; gap: 2px"><span style="font-family: 'Poppins', sans-serif; font-weight: 700; font-size: 22px; color: #0a3880; line-height: 1">1</span><span style="font-size: 11px; color: #475569">miembro</span></div>
+      <div style="background: #ffffff; border: 1px solid rgba(15,23,42,0.08); border-radius: 14px; padding: 12px; display: flex; flex-direction: column; gap: 2px"><span style="font-family: 'Poppins', sans-serif; font-weight: 700; font-size: 22px; color: #0a3880; line-height: 1">12</span><span style="font-size: 11px; color: #475569">preguntas</span></div>
+      <div style="background: #ffffff; border: 1px solid rgba(15,23,42,0.08); border-radius: 14px; padding: 12px; display: flex; flex-direction: column; gap: 2px"><span style="font-family: 'Poppins', sans-serif; font-weight: 700; font-size: 22px; color: #0a3880; line-height: 1">0</span><span style="font-size: 11px; color: #475569">elecciones</span></div>
+    </div>
+
+    <h2 class="fade-up d3" style="margin: 6px 0 0; font-family: 'Poppins', sans-serif; font-weight: 600; font-size: 16px; color: #0f172a">Lo que toca ahora</h2>
+
+    <a href="Main.dc.html" class="card fade-up d4" style="display: flex; align-items: center; gap: 14px; background: #ffffff; border: 1px solid rgba(15,23,42,0.08); border-radius: 16px; padding: 14px 16px; text-decoration: none; color: inherit; min-height: 64px">
+      <span style="width: 40px; height: 40px; border-radius: 12px; background: rgba(10,56,128,0.08); display: flex; align-items: center; justify-content: center; color: #0a3880; flex-shrink: 0"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="19" y1="8" x2="19" y2="14"/><line x1="22" y1="11" x2="16" y2="11"/></svg></span>
+      <span style="display: flex; flex-direction: column; gap: 2px; flex: 1"><span style="font-family: 'Poppins', sans-serif; font-weight: 600; font-size: 15px">Sumar a los primeros miembros</span><span style="font-size: 12px; color: #64748b">Invitar por correo</span></span>
+      <svg class="arrow" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg>
+    </a>
+
+    <a href="Inquietudes.dc.html" class="card fade-up d5" style="display: flex; align-items: center; gap: 14px; background: #0a3880; border: 1px solid #0a3880; border-radius: 16px; padding: 14px 16px; text-decoration: none; color: #ffffff; min-height: 64px">
+      <span style="width: 40px; height: 40px; border-radius: 12px; background: rgba(255,255,255,0.12); display: flex; align-items: center; justify-content: center; color: #f2b00a; flex-shrink: 0"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></span>
+      <span style="display: flex; flex-direction: column; gap: 2px; flex: 1"><span style="font-family: 'Poppins', sans-serif; font-weight: 600; font-size: 15px">Las 12 primeras preguntas</span><span style="font-size: 12px; color: rgba(255,255,255,0.75)">Ver y apoyar</span></span>
+      <svg class="arrow" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#f2b00a" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg>
+    </a>
+
+    <a href="Main.dc.html" class="card fade-up d6" style="display: flex; align-items: center; gap: 14px; background: #ffffff; border: 1px solid rgba(15,23,42,0.08); border-radius: 16px; padding: 14px 16px; text-decoration: none; color: inherit; min-height: 64px">
+      <span style="width: 40px; height: 40px; border-radius: 12px; background: rgba(10,56,128,0.08); display: flex; align-items: center; justify-content: center; color: #0a3880; flex-shrink: 0"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><path d="m9 11 3 3L22 4"/></svg></span>
+      <span style="display: flex; flex-direction: column; gap: 2px; flex: 1"><span style="font-family: 'Poppins', sans-serif; font-weight: 600; font-size: 15px">El camino a la elección</span><span style="font-size: 12px; color: #64748b">Preparar la primera campaña</span></span>
+      <svg class="arrow" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg>
+    </a>
+
+    <a href="Main.dc.html" class="card fade-up d7" style="display: flex; align-items: center; gap: 14px; background: #ffffff; border: 1px solid rgba(15,23,42,0.08); border-radius: 16px; padding: 14px 16px; text-decoration: none; color: inherit; min-height: 64px">
+      <span style="width: 40px; height: 40px; border-radius: 12px; background: rgba(242,176,10,0.16); display: flex; align-items: center; justify-content: center; color: #0a3880; flex-shrink: 0"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><g transform="translate(12 12)"><path d="M0 0C-2.6-1.7-4-5-2.9-7.8C-2.1-10 .9-10.5 2.3-8.6C3.9-6.4 2.6-2.5 0 0Z"/><path d="M0 0C-2.6-1.7-4-5-2.9-7.8C-2.1-10 .9-10.5 2.3-8.6C3.9-6.4 2.6-2.5 0 0Z" transform="rotate(72)"/><path d="M0 0C-2.6-1.7-4-5-2.9-7.8C-2.1-10 .9-10.5 2.3-8.6C3.9-6.4 2.6-2.5 0 0Z" transform="rotate(144)"/><path d="M0 0C-2.6-1.7-4-5-2.9-7.8C-2.1-10 .9-10.5 2.3-8.6C3.9-6.4 2.6-2.5 0 0Z" transform="rotate(216)"/><path d="M0 0C-2.6-1.7-4-5-2.9-7.8C-2.1-10 .9-10.5 2.3-8.6C3.9-6.4 2.6-2.5 0 0Z" transform="rotate(288)"/></g><circle cx="12" cy="12" r="2"/></svg></span>
+      <span style="display: flex; flex-direction: column; gap: 2px; flex: 1"><span style="font-family: 'Poppins', sans-serif; font-weight: 600; font-size: 15px">El mapa de la comunidad</span><span style="font-size: 12px; color: #64748b">Managua · Florida · y más</span></span>
+      <svg class="arrow" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg>
+    </a>
+
+    <div class="fade-up d7" style="display: flex; gap: 12px; align-items: flex-start; background: #fff8e1; border: 1px solid rgba(242,176,10,0.45); border-radius: 16px; padding: 14px 16px">
+      <span style="width: 42px; height: 42px; border-radius: 50%; background: #ffffff; border: 2px solid #f2b00a; display: flex; align-items: center; justify-content: center; flex-shrink: 0"><svg class="gd" width="32" height="32" viewBox="0 0 64 64" aria-hidden="true"><g class="gd-body"><g class="gd-tail"><path d="M34 50 L46 60" stroke="#1F6FB2" stroke-width="3" stroke-linecap="round" fill="none"/><path d="M31 52 L40 61" stroke="#1F6FB2" stroke-width="3" stroke-linecap="round" fill="none"/><ellipse cx="47.5" cy="61" rx="3.4" ry="2.3" fill="#27B5A5" transform="rotate(40 47.5 61)"/><ellipse cx="41.5" cy="62" rx="3" ry="2" fill="#27B5A5" transform="rotate(48 41.5 62)"/></g><ellipse cx="30" cy="40" rx="15" ry="13" fill="#E58A2D"/><path d="M17 36 C13 43 16 51 25 51 C22 45 22 39 27 33 Z" fill="#1F6FB2"/><circle cx="30" cy="22" r="14" fill="#27B5A5"/><path d="M17 19 Q30 3 43 19 Q30 13 17 19 Z" fill="#1E9A8C"/><path d="M16 22 Q30 16 44 22 Q30 30 16 22 Z" fill="#0F172A"/><g class="gd-eyes"><circle cx="24" cy="22" r="4.6" fill="#ffffff"/><circle cx="36" cy="22" r="4.6" fill="#ffffff"/><circle cx="24.8" cy="22.5" r="2.6" fill="#0F172A"/><circle cx="36.8" cy="22.5" r="2.6" fill="#0F172A"/><circle cx="25.8" cy="21.4" r="0.9" fill="#ffffff"/><circle cx="37.8" cy="21.4" r="0.9" fill="#ffffff"/></g><circle cx="19.5" cy="28" r="2" fill="#F2B00A" opacity="0.7"/><circle cx="40.5" cy="28" r="2" fill="#F2B00A" opacity="0.7"/><path d="M27 28.5 L30 33.5 L33 28.5 Z" fill="#1E293B"/></g></svg></span>
+      <div style="display: flex; flex-direction: column; gap: 4px"><span style="font-family: 'Poppins', sans-serif; font-weight: 600; font-size: 13px; color: #0f172a">Guardián · desde tu última visita</span><span style="font-size: 13px; line-height: 1.5; color: #1b2a4a">Hay un debate nuevo en Exilio y diáspora. Nadie ha opinado todavía.</span></div>
+    </div>
+  </main>
+
+  <!-- Botón flotante de Guardián -->
+  <a href="Inquietudes.dc.html" class="btn-pill gd-btn gd-ring" aria-label="Pregúntale a Guardián" style="position: absolute; right: 16px; bottom: 96px; width: 60px; height: 60px; border-radius: 50%; background: #f2b00a; display: flex; align-items: center; justify-content: center; box-shadow: 0 10px 24px rgba(242,176,10,0.45); text-decoration: none">
+    <svg class="gd" width="44" height="44" viewBox="0 0 64 64" aria-hidden="true"><g class="gd-body"><g class="gd-tail"><path d="M34 50 L46 60" stroke="#1F6FB2" stroke-width="3" stroke-linecap="round" fill="none"/><path d="M31 52 L40 61" stroke="#1F6FB2" stroke-width="3" stroke-linecap="round" fill="none"/><ellipse cx="47.5" cy="61" rx="3.4" ry="2.3" fill="#27B5A5" transform="rotate(40 47.5 61)"/><ellipse cx="41.5" cy="62" rx="3" ry="2" fill="#27B5A5" transform="rotate(48 41.5 62)"/></g><ellipse cx="30" cy="40" rx="15" ry="13" fill="#E58A2D"/><path d="M17 36 C13 43 16 51 25 51 C22 45 22 39 27 33 Z" fill="#1F6FB2"/><circle cx="30" cy="22" r="14" fill="#27B5A5"/><path d="M17 19 Q30 3 43 19 Q30 13 17 19 Z" fill="#1E9A8C"/><path d="M16 22 Q30 16 44 22 Q30 30 16 22 Z" fill="#0F172A"/><g class="gd-eyes"><circle cx="24" cy="22" r="4.6" fill="#ffffff"/><circle cx="36" cy="22" r="4.6" fill="#ffffff"/><circle cx="24.8" cy="22.5" r="2.6" fill="#0F172A"/><circle cx="36.8" cy="22.5" r="2.6" fill="#0F172A"/><circle cx="25.8" cy="21.4" r="0.9" fill="#ffffff"/><circle cx="37.8" cy="21.4" r="0.9" fill="#ffffff"/></g><circle cx="19.5" cy="28" r="2" fill="#F2B00A" opacity="0.7"/><circle cx="40.5" cy="28" r="2" fill="#F2B00A" opacity="0.7"/><path d="M27 28.5 L30 33.5 L33 28.5 Z" fill="#1E293B"/></g></svg>
+  </a>
+
+  <!-- Barra inferior: los tres bloques -->
+  <nav aria-label="Principal" style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); border-top: 1px solid rgba(15,23,42,0.08); background: #ffffff; padding: 8px 8px 24px">
+    <a href="Inquietudes.dc.html" class="tab" style="display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 8px 4px; border-radius: 12px; text-decoration: none; color: #0a3880; background: rgba(10,56,128,0.08); min-height: 52px"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg><span style="font-family: 'Poppins', sans-serif; font-weight: 600; font-size: 11px">Participar</span></a>
+    <a href="Main.dc.html" class="tab" style="display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 8px 4px; border-radius: 12px; text-decoration: none; color: #475569; min-height: 52px"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><g transform="translate(12 12)"><path d="M0 0C-2.6-1.7-4-5-2.9-7.8C-2.1-10 .9-10.5 2.3-8.6C3.9-6.4 2.6-2.5 0 0Z"/><path d="M0 0C-2.6-1.7-4-5-2.9-7.8C-2.1-10 .9-10.5 2.3-8.6C3.9-6.4 2.6-2.5 0 0Z" transform="rotate(72)"/><path d="M0 0C-2.6-1.7-4-5-2.9-7.8C-2.1-10 .9-10.5 2.3-8.6C3.9-6.4 2.6-2.5 0 0Z" transform="rotate(144)"/><path d="M0 0C-2.6-1.7-4-5-2.9-7.8C-2.1-10 .9-10.5 2.3-8.6C3.9-6.4 2.6-2.5 0 0Z" transform="rotate(216)"/><path d="M0 0C-2.6-1.7-4-5-2.9-7.8C-2.1-10 .9-10.5 2.3-8.6C3.9-6.4 2.6-2.5 0 0Z" transform="rotate(288)"/></g><circle cx="12" cy="12" r="2"/></svg><span style="font-family: 'Poppins', sans-serif; font-weight: 500; font-size: 11px">Comunidad</span></a>
+    <a href="Navegacion.dc.html" class="tab" style="display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 8px 4px; border-radius: 12px; text-decoration: none; color: #475569; min-height: 52px"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="m9 12 2 2 4-4"/></svg><span style="font-family: 'Poppins', sans-serif; font-weight: 500; font-size: 11px">Transparencia</span></a>
+  </nav>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {};
+  }
+}
+</script>
+</body>
+</html>

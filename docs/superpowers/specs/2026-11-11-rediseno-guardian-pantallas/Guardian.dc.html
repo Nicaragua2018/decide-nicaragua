@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Guardián, la mascota</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@500;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#ffffff}
+a{color:#0a3880}a:hover{color:#072a60}
+.gd{overflow:visible}
+.gd-body,.gd-tail,.gd-eyes{transform-box:fill-box}
+.gd-body{transform-origin:center;animation:gd-bob 2.6s ease-in-out infinite}
+.gd-tail{transform-origin:top left;animation:gd-tail 2.6s ease-in-out infinite}
+.gd-eyes{transform-origin:center;animation:gd-blink 4.5s infinite}
+.gd-btn:hover .gd-body{animation:gd-hop .5s ease-out}
+.btn-pill{transition:transform .2s ease,box-shadow .2s ease}
+.btn-pill:hover{transform:translateY(-2px);box-shadow:0 8px 20px rgba(15,23,42,0.16)}
+.btn-pill:active{transform:translateY(0) scale(.98)}
+.gd-ring{position:relative}
+.gd-ring::before{content:"";position:absolute;inset:-6px;border-radius:50%;border:2px solid rgba(242,176,10,.7);animation:ring 2.2s ease-out infinite}
+.dots span{display:inline-block;width:7px;height:7px;border-radius:50%;background:#0a3880;animation:dot 1.2s infinite}
+.dots span:nth-child(2){animation-delay:.2s}.dots span:nth-child(3){animation-delay:.4s}
+@keyframes gd-bob{0%,100%{transform:translateY(0)}50%{transform:translateY(-1.5px)}}
+@keyframes gd-tail{0%,100%{transform:rotate(-6deg)}50%{transform:rotate(6deg)}}
+@keyframes gd-blink{0%,90%,100%{transform:scaleY(1)}94%{transform:scaleY(.1)}}
+@keyframes gd-hop{0%{transform:translateY(0)}40%{transform:translateY(-5px)}100%{transform:translateY(0)}}
+@keyframes ring{0%{transform:scale(.85);opacity:.9}100%{transform:scale(1.35);opacity:0}}
+@keyframes dot{0%,80%,100%{transform:translateY(0);opacity:.5}40%{transform:translateY(-4px);opacity:1}}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style>
+</helmet>
+<div style="width: 890px; height: 620px; box-sizing: border-box; font-family: 'Inter', sans-serif; color: #0f172a; background: #ffffff; display: flex; gap: 32px; padding: 40px">
+
+  <!-- Guardián en grande -->
+  <div style="flex: 0 0 300px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px; background: #f4f6fa; border-radius: 24px; padding: 24px">
+    <svg class="gd" width="220" height="220" viewBox="0 0 64 64" role="img" aria-label="Guardián, el guardabarranco de Nicaragua Decide">
+      <g class="gd-body">
+        <g class="gd-tail">
+          <path d="M34 50 L46 60" stroke="#1F6FB2" stroke-width="3" stroke-linecap="round" fill="none"/>
+          <path d="M31 52 L40 61" stroke="#1F6FB2" stroke-width="3" stroke-linecap="round" fill="none"/>
+          <ellipse cx="47.5" cy="61" rx="3.4" ry="2.3" fill="#27B5A5" transform="rotate(40 47.5 61)"/>
+          <ellipse cx="41.5" cy="62" rx="3" ry="2" fill="#27B5A5" transform="rotate(48 41.5 62)"/>
+        </g>
+        <ellipse cx="30" cy="40" rx="15" ry="13" fill="#E58A2D"/>
+        <path d="M17 36 C13 43 16 51 25 51 C22 45 22 39 27 33 Z" fill="#1F6FB2"/>
+        <circle cx="30" cy="22" r="14" fill="#27B5A5"/>
+        <path d="M17 19 Q30 3 43 19 Q30 13 17 19 Z" fill="#1E9A8C"/>
+        <path d="M16 22 Q30 16 44 22 Q30 30 16 22 Z" fill="#0F172A"/>
+        <g class="gd-eyes">
+          <circle cx="24" cy="22" r="4.6" fill="#ffffff"/>
+          <circle cx="36" cy="22" r="4.6" fill="#ffffff"/>
+          <circle cx="24.8" cy="22.5" r="2.6" fill="#0F172A"/>
+          <circle cx="36.8" cy="22.5" r="2.6" fill="#0F172A"/>
+          <circle cx="25.8" cy="21.4" r="0.9" fill="#ffffff"/>
+          <circle cx="37.8" cy="21.4" r="0.9" fill="#ffffff"/>
+        </g>
+        <circle cx="19.5" cy="28" r="2" fill="#F2B00A" opacity="0.7"/>
+        <circle cx="40.5" cy="28" r="2" fill="#F2B00A" opacity="0.7"/>
+        <path d="M27 28.5 L30 33.5 L33 28.5 Z" fill="#1E293B"/>
+      </g>
+    </svg>
+    <span style="font-family: 'Poppins', sans-serif; font-weight: 700; font-size: 28px; color: #0a3880; letter-spacing: -0.02em">Guardián</span>
+    <span style="font-size: 13px; color: #475569; text-align: center; line-height: 1.5">El guardabarranco, ave nacional de Nicaragua. Asistente de la comunidad: resume, sugiere y revisa. No vota ni decide.</span>
+  </div>
+
+  <!-- Usos y paleta -->
+  <div style="flex: 1; display: flex; flex-direction: column; gap: 20px; min-width: 0">
+    <div style="display: flex; flex-direction: column; gap: 6px">
+      <span style="font-family: 'Poppins', sans-serif; font-weight: 600; font-size: 12px; letter-spacing: 0.1em; text-transform: uppercase; color: #0a3880">Semianimada</span>
+      <p style="margin: 0; font-size: 14px; line-height: 1.55; color: #475569">Parpadea cada pocos segundos, se mece suavemente y mueve la cola. Al pasar el ratón por su botón da un saltito. Si la persona pidió menos movimiento en su dispositivo, se queda quieta.</p>
+    </div>
+
+    <div style="display: flex; flex-direction: column; gap: 10px">
+      <span style="font-family: 'Poppins', sans-serif; font-weight: 600; font-size: 12px; letter-spacing: 0.1em; text-transform: uppercase; color: #0a3880">Dónde aparece</span>
+      <div style="display: flex; gap: 14px; align-items: center; flex-wrap: wrap">
+        <a href="Main.dc.html" class="btn-pill gd-btn" style="display: flex; align-items: center; gap: 8px; padding: 6px 16px 6px 6px; border-radius: 999px; background: #f2b00a; color: #0f172a; text-decoration: none; font-family: 'Poppins', sans-serif; font-weight: 600; font-size: 14px; min-height: 44px">
+          <span style="width: 34px; height: 34px; border-radius: 50%; background: #ffffff; display: flex; align-items: center; justify-content: center"><svg class="gd" width="28" height="28" viewBox="0 0 64 64" aria-hidden="true"><g class="gd-body"><g class="gd-tail"><path d="M34 50 L46 60" stroke="#1F6FB2" stroke-width="3" stroke-linecap="round" fill="none"/><path d="M31 52 L40 61" stroke="#1F6FB2" stroke-width="3" stroke-linecap="round" fill="none"/><ellipse cx="47.5" cy="61" rx="3.4" ry="2.3" fill="#27B5A5" transform="rotate(40 47.5 61)"/><ellipse cx="41.5" cy="62" rx="3" ry="2" fill="#27B5A5" transform="rotate(48 41.5 62)"/></g><ellipse cx="30" cy="40" rx="15" ry="13" fill="#E58A2D"/><path d="M17 36 C13 43 16 51 25 51 C22 45 22 39 27 33 Z" fill="#1F6FB2"/><circle cx="30" cy="22" r="14" fill="#27B5A5"/><path d="M17 19 Q30 3 43 19 Q30 13 17 19 Z" fill="#1E9A8C"/><path d="M16 22 Q30 16 44 22 Q30 30 16 22 Z" fill="#0F172A"/><g class="gd-eyes"><circle cx="24" cy="22" r="4.6" fill="#ffffff"/><circle cx="36" cy="22" r="4.6" fill="#ffffff"/><circle cx="24.8" cy="22.5" r="2.6" fill="#0F172A"/><circle cx="36.8" cy="22.5" r="2.6" fill="#0F172A"/><circle cx="25.8" cy="21.4" r="0.9" fill="#ffffff"/><circle cx="37.8" cy="21.4" r="0.9" fill="#ffffff"/></g><circle cx="19.5" cy="28" r="2" fill="#F2B00A" opacity="0.7"/><circle cx="40.5" cy="28" r="2" fill="#F2B00A" opacity="0.7"/><path d="M27 28.5 L30 33.5 L33 28.5 Z" fill="#1E293B"/></g></svg></span>
+          Pregúntale a Guardián
+        </a>
+        <span style="font-size: 12px; color: #64748b">en la barra</span>
+        <a href="Movil.dc.html" class="btn-pill gd-btn gd-ring" aria-label="Pregúntale a Guardián" style="width: 60px; height: 60px; border-radius: 50%; background: #f2b00a; display: flex; align-items: center; justify-content: center; box-shadow: 0 10px 24px rgba(242,176,10,0.45); text-decoration: none">
+          <svg class="gd" width="44" height="44" viewBox="0 0 64 64" aria-hidden="true"><g class="gd-body"><g class="gd-tail"><path d="M34 50 L46 60" stroke="#1F6FB2" stroke-width="3" stroke-linecap="round" fill="none"/><path d="M31 52 L40 61" stroke="#1F6FB2" stroke-width="3" stroke-linecap="round" fill="none"/><ellipse cx="47.5" cy="61" rx="3.4" ry="2.3" fill="#27B5A5" transform="rotate(40 47.5 61)"/><ellipse cx="41.5" cy="62" rx="3" ry="2" fill="#27B5A5" transform="rotate(48 41.5 62)"/></g><ellipse cx="30" cy="40" rx="15" ry="13" fill="#E58A2D"/><path d="M17 36 C13 43 16 51 25 51 C22 45 22 39 27 33 Z" fill="#1F6FB2"/><circle cx="30" cy="22" r="14" fill="#27B5A5"/><path d="M17 19 Q30 3 43 19 Q30 13 17 19 Z" fill="#1E9A8C"/><path d="M16 22 Q30 16 44 22 Q30 30 16 22 Z" fill="#0F172A"/><g class="gd-eyes"><circle cx="24" cy="22" r="4.6" fill="#ffffff"/><circle cx="36" cy="22" r="4.6" fill="#ffffff"/><circle cx="24.8" cy="22.5" r="2.6" fill="#0F172A"/><circle cx="36.8" cy="22.5" r="2.6" fill="#0F172A"/><circle cx="25.8" cy="21.4" r="0.9" fill="#ffffff"/><circle cx="37.8" cy="21.4" r="0.9" fill="#ffffff"/></g><circle cx="19.5" cy="28" r="2" fill="#F2B00A" opacity="0.7"/><circle cx="40.5" cy="28" r="2" fill="#F2B00A" opacity="0.7"/><path d="M27 28.5 L30 33.5 L33 28.5 Z" fill="#1E293B"/></g></svg>
+        </a>
+        <span style="font-size: 12px; color: #64748b">flotante en el móvil</span>
+      </div>
+      <div style="display: flex; gap: 12px; align-items: flex-start; background: #f4f6fa; border-radius: 16px; padding: 12px 14px; max-width: 420px">
+        <svg class="gd" width="40" height="40" viewBox="0 0 64 64" aria-hidden="true" style="flex-shrink: 0"><g class="gd-body"><g class="gd-tail"><path d="M34 50 L46 60" stroke="#1F6FB2" stroke-width="3" stroke-linecap="round" fill="none"/><path d="M31 52 L40 61" stroke="#1F6FB2" stroke-width="3" stroke-linecap="round" fill="none"/><ellipse cx="47.5" cy="61" rx="3.4" ry="2.3" fill="#27B5A5" transform="rotate(40 47.5 61)"/><ellipse cx="41.5" cy="62" rx="3" ry="2" fill="#27B5A5" transform="rotate(48 41.5 62)"/></g><ellipse cx="30" cy="40" rx="15" ry="13" fill="#E58A2D"/><path d="M17 36 C13 43 16 51 25 51 C22 45 22 39 27 33 Z" fill="#1F6FB2"/><circle cx="30" cy="22" r="14" fill="#27B5A5"/><path d="M17 19 Q30 3 43 19 Q30 13 17 19 Z" fill="#1E9A8C"/><path d="M16 22 Q30 16 44 22 Q30 30 16 22 Z" fill="#0F172A"/><g class="gd-eyes"><circle cx="24" cy="22" r="4.6" fill="#ffffff"/><circle cx="36" cy="22" r="4.6" fill="#ffffff"/><circle cx="24.8" cy="22.5" r="2.6" fill="#0F172A"/><circle cx="36.8" cy="22.5" r="2.6" fill="#0F172A"/><circle cx="25.8" cy="21.4" r="0.9" fill="#ffffff"/><circle cx="37.8" cy="21.4" r="0.9" fill="#ffffff"/></g><circle cx="19.5" cy="28" r="2" fill="#F2B00A" opacity="0.7"/><circle cx="40.5" cy="28" r="2" fill="#F2B00A" opacity="0.7"/><path d="M27 28.5 L30 33.5 L33 28.5 Z" fill="#1E293B"/></g></svg>
+        <div style="display: flex; flex-direction: column; gap: 6px"><span style="font-family: 'Poppins', sans-serif; font-weight: 600; font-size: 13px">Guardián está escribiendo</span><span class="dots" style="display: flex; gap: 4px; height: 10px; align-items: center"><span></span><span></span><span></span></span></div>
+      </div>
+    </div>
+
+    <div style="display: flex; flex-direction: column; gap: 10px">
+      <span style="font-family: 'Poppins', sans-serif; font-weight: 600; font-size: 12px; letter-spacing: 0.1em; text-transform: uppercase; color: #0a3880">Colores del guardabarranco</span>
+      <div style="display: flex; gap: 10px; flex-wrap: wrap">
+        <span style="display: flex; align-items: center; gap: 8px; font-size: 12px; color: #475569"><span style="width: 26px; height: 26px; border-radius: 8px; background: #27B5A5"></span>turquesa</span>
+        <span style="display: flex; align-items: center; gap: 8px; font-size: 12px; color: #475569"><span style="width: 26px; height: 26px; border-radius: 8px; background: #1F6FB2"></span>azul del ala</span>
+        <span style="display: flex; align-items: center; gap: 8px; font-size: 12px; color: #475569"><span style="width: 26px; height: 26px; border-radius: 8px; background: #E58A2D"></span>pecho</span>
+        <span style="display: flex; align-items: center; gap: 8px; font-size: 12px; color: #475569"><span style="width: 26px; height: 26px; border-radius: 8px; background: #0F172A"></span>antifaz</span>
+        <span style="display: flex; align-items: center; gap: 8px; font-size: 12px; color: #475569"><span style="width: 26px; height: 26px; border-radius: 8px; background: #F2B00A"></span>mejillas (amarillo miel)</span>
+      </div>
+    </div>
+
+    <div style="display: flex; flex-direction: column; gap: 10px">
+      <span style="font-family: 'Poppins', sans-serif; font-weight: 600; font-size: 12px; letter-spacing: 0.1em; text-transform: uppercase; color: #0a3880">La sacuanjoche sustituye al hexágono</span>
+      <div style="display: flex; align-items: center; gap: 18px; flex-wrap: wrap">
+        <span style="display: flex; align-items: center; gap: 8px; font-size: 12px; color: #475569"><svg width="44" height="44" viewBox="0 0 34 34" aria-hidden="true"><rect width="34" height="34" rx="10" fill="#0a3880"/><g transform="translate(17 17)" fill="#ffffff"><path d="M0 0C-3.2-2.2-5-6.4-3.6-9.8C-2.6-12.6 1.2-13.2 3-10.8C5-8 3.4-3.2 0 0Z"/><path d="M0 0C-3.2-2.2-5-6.4-3.6-9.8C-2.6-12.6 1.2-13.2 3-10.8C5-8 3.4-3.2 0 0Z" transform="rotate(72)"/><path d="M0 0C-3.2-2.2-5-6.4-3.6-9.8C-2.6-12.6 1.2-13.2 3-10.8C5-8 3.4-3.2 0 0Z" transform="rotate(144)"/><path d="M0 0C-3.2-2.2-5-6.4-3.6-9.8C-2.6-12.6 1.2-13.2 3-10.8C5-8 3.4-3.2 0 0Z" transform="rotate(216)"/><path d="M0 0C-3.2-2.2-5-6.4-3.6-9.8C-2.6-12.6 1.2-13.2 3-10.8C5-8 3.4-3.2 0 0Z" transform="rotate(288)"/></g><circle cx="17" cy="17" r="3.2" fill="#f2b00a"/></svg>logo</span>
+        <span style="display: flex; align-items: center; gap: 8px; font-size: 12px; color: #475569"><svg width="28" height="28" viewBox="0 0 24 24" aria-hidden="true"><g transform="translate(12 12)" fill="#f2b00a"><path d="M0 0C-2.6-1.7-4-5-2.9-7.8C-2.1-10 .9-10.5 2.3-8.6C3.9-6.4 2.6-2.5 0 0Z"/><path d="M0 0C-2.6-1.7-4-5-2.9-7.8C-2.1-10 .9-10.5 2.3-8.6C3.9-6.4 2.6-2.5 0 0Z" transform="rotate(72)"/><path d="M0 0C-2.6-1.7-4-5-2.9-7.8C-2.1-10 .9-10.5 2.3-8.6C3.9-6.4 2.6-2.5 0 0Z" transform="rotate(144)"/><path d="M0 0C-2.6-1.7-4-5-2.9-7.8C-2.1-10 .9-10.5 2.3-8.6C3.9-6.4 2.6-2.5 0 0Z" transform="rotate(216)"/><path d="M0 0C-2.6-1.7-4-5-2.9-7.8C-2.1-10 .9-10.5 2.3-8.6C3.9-6.4 2.6-2.5 0 0Z" transform="rotate(288)"/></g><circle cx="12" cy="12" r="2.2" fill="#0a3880"/></svg>comunidad activa</span>
+        <span style="display: flex; align-items: center; gap: 8px; font-size: 12px; color: #475569"><svg width="28" height="28" viewBox="0 0 24 24" aria-hidden="true"><g transform="translate(12 12)" fill="none" stroke="#94a3b8" stroke-width="1.8" stroke-linejoin="round"><path d="M0 0C-2.6-1.7-4-5-2.9-7.8C-2.1-10 .9-10.5 2.3-8.6C3.9-6.4 2.6-2.5 0 0Z"/><path d="M0 0C-2.6-1.7-4-5-2.9-7.8C-2.1-10 .9-10.5 2.3-8.6C3.9-6.4 2.6-2.5 0 0Z" transform="rotate(72)"/><path d="M0 0C-2.6-1.7-4-5-2.9-7.8C-2.1-10 .9-10.5 2.3-8.6C3.9-6.4 2.6-2.5 0 0Z" transform="rotate(144)"/><path d="M0 0C-2.6-1.7-4-5-2.9-7.8C-2.1-10 .9-10.5 2.3-8.6C3.9-6.4 2.6-2.5 0 0Z" transform="rotate(216)"/><path d="M0 0C-2.6-1.7-4-5-2.9-7.8C-2.1-10 .9-10.5 2.3-8.6C3.9-6.4 2.6-2.5 0 0Z" transform="rotate(288)"/></g><circle cx="12" cy="12" r="1.6" fill="#94a3b8"/></svg>comunidad aún sin miembros</span>
+        <span style="font-size: 12px; color: #475569; max-width: 360px">Cinco pétalos blancos y centro amarillo miel, como la flor nacional. En el logo va sobre azul cívico; como icono toma el color del lugar donde aparece.</span>
+      </div>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":890,"height":760}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {};
+  }
+}
+</script>
+</body>
+</html>

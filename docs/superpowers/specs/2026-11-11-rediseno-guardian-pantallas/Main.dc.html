@@ -1,0 +1,208 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Inicio: mesa de la comunidad</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@500;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#ffffff}
+a{color:#0a3880}a:hover{color:#072a60}
+.nav-link{position:relative;transition:background .2s,color .2s}
+.nav-link::after{content:"";position:absolute;left:16px;right:16px;bottom:5px;height:2px;border-radius:2px;background:#f2b00a;transform:scaleX(0);transform-origin:left;transition:transform .25s ease}
+.nav-link:hover{background:rgba(255,255,255,0.14);color:#ffffff}
+.nav-link:hover::after{transform:scaleX(1)}
+.btn-pill{transition:transform .2s ease,box-shadow .2s ease,background .2s ease}
+.btn-pill:hover{transform:translateY(-2px);box-shadow:0 8px 20px rgba(15,23,42,0.16)}
+.btn-pill:active{transform:translateY(0) scale(.98)}
+.avatar-btn{transition:transform .2s,border-color .2s}
+.avatar-btn:hover{transform:scale(1.06);border-color:#f2b00a}
+.marca{transition:transform .2s ease,box-shadow .2s ease}.marca:hover{transform:translateY(-1px);box-shadow:0 6px 16px rgba(0,0,0,0.18)}
+.card{transition:transform .25s ease,box-shadow .25s ease,border-color .25s ease}
+.card:hover{transform:translateY(-4px);box-shadow:0 16px 32px rgba(10,56,128,0.14);border-color:#0a3880}
+.arrow{transition:transform .2s ease}.card:hover .arrow{transform:translateX(4px)}
+.row{transition:transform .2s ease,background .2s ease}
+.row:hover{transform:translateX(4px);background:#e9eef7}
+.fade-up{animation:fade-up .6s cubic-bezier(.22,.68,0,1.1) both}
+.d1{animation-delay:.05s}.d2{animation-delay:.15s}.d3{animation-delay:.25s}.d4{animation-delay:.35s}.d5{animation-delay:.45s}.d6{animation-delay:.55s}
+@keyframes fade-up{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:translateY(0)}}
+.flor-float{animation:flor-float 14s ease-in-out infinite;transform-box:fill-box;transform-origin:center}
+.flor-float-2{animation:flor-float 18s ease-in-out infinite reverse;transform-box:fill-box;transform-origin:center}
+@keyframes flor-float{0%,100%{transform:translateY(0) rotate(0deg)}50%{transform:translateY(-1.2px) rotate(14deg)}}
+.gd{overflow:visible}
+.gd-body,.gd-tail,.gd-eyes{transform-box:fill-box}
+.gd-body{transform-origin:center;animation:gd-bob 2.6s ease-in-out infinite}
+.gd-tail{transform-origin:top left;animation:gd-tail 2.6s ease-in-out infinite}
+.gd-eyes{transform-origin:center;animation:gd-blink 4.5s infinite}
+.gd-btn:hover .gd-body{animation:gd-hop .5s ease-out}
+@keyframes gd-bob{0%,100%{transform:translateY(0)}50%{transform:translateY(-1.5px)}}
+@keyframes gd-tail{0%,100%{transform:rotate(-6deg)}50%{transform:rotate(6deg)}}
+@keyframes gd-blink{0%,90%,100%{transform:scaleY(1)}94%{transform:scaleY(.1)}}
+@keyframes gd-hop{0%{transform:translateY(0)}40%{transform:translateY(-5px)}100%{transform:translateY(0)}}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style>
+</helmet>
+<div style="width: 100%; min-height: 100%; box-sizing: border-box; font-family: 'Inter', sans-serif; color: #0f172a; background: #ffffff; display: flex; flex-direction: column">
+
+  <!-- Barra de navegación -->
+  <header style="background: #0a3880; box-shadow: 0 2px 14px rgba(10,56,128,0.28); position: sticky; top: 0; z-index: 10">
+    <div style="max-width: 1200px; margin: 0 auto; padding: 0 24px; height: 72px; display: flex; align-items: center; justify-content: space-between; gap: 24px; flex-wrap: wrap">
+      <a href="Main.dc.html" class="marca" style="display: flex; align-items: center; gap: 10px; text-decoration: none; color: #0f172a; background: #ffffff; padding: 5px 18px 5px 5px; border-radius: 999px; min-height: 44px; box-sizing: border-box">
+        <svg width="34" height="34" viewBox="0 0 34 34" aria-hidden="true"><rect width="34" height="34" rx="10" fill="#0a3880"/><g transform="translate(17 17)" fill="#ffffff"><path d="M0 0C-3.2-2.2-5-6.4-3.6-9.8C-2.6-12.6 1.2-13.2 3-10.8C5-8 3.4-3.2 0 0Z"/><path d="M0 0C-3.2-2.2-5-6.4-3.6-9.8C-2.6-12.6 1.2-13.2 3-10.8C5-8 3.4-3.2 0 0Z" transform="rotate(72)"/><path d="M0 0C-3.2-2.2-5-6.4-3.6-9.8C-2.6-12.6 1.2-13.2 3-10.8C5-8 3.4-3.2 0 0Z" transform="rotate(144)"/><path d="M0 0C-3.2-2.2-5-6.4-3.6-9.8C-2.6-12.6 1.2-13.2 3-10.8C5-8 3.4-3.2 0 0Z" transform="rotate(216)"/><path d="M0 0C-3.2-2.2-5-6.4-3.6-9.8C-2.6-12.6 1.2-13.2 3-10.8C5-8 3.4-3.2 0 0Z" transform="rotate(288)"/></g><circle cx="17" cy="17" r="3.2" fill="#f2b00a"/></svg>
+        <span style="font-family: 'Poppins', sans-serif; font-weight: 600; font-size: 20px; letter-spacing: -0.01em">Nicaragua <span style="color: #0a3880">Decide</span></span>
+      </a>
+      <nav aria-label="Principal" style="display: flex; align-items: center; gap: 4px; flex-wrap: wrap">
+        <a href="Navegacion.dc.html" class="nav-link" style="display: flex; align-items: center; gap: 6px; padding: 10px 16px; border-radius: 999px; font-family: 'Poppins', sans-serif; font-weight: 500; font-size: 15px; color: #ffffff; text-decoration: none; background: rgba(255,255,255,0.16)">Participar <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></a>
+        <a href="Navegacion.dc.html" class="nav-link" style="display: flex; align-items: center; gap: 6px; padding: 10px 16px; border-radius: 999px; font-family: 'Poppins', sans-serif; font-weight: 500; font-size: 15px; color: #ffffff; text-decoration: none">Comunidad <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></a>
+        <a href="Navegacion.dc.html" class="nav-link" style="display: flex; align-items: center; gap: 6px; padding: 10px 16px; border-radius: 999px; font-family: 'Poppins', sans-serif; font-weight: 500; font-size: 15px; color: #ffffff; text-decoration: none">Transparencia <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></a>
+      </nav>
+      <div style="display: flex; align-items: center; gap: 12px">
+        <a href="Inquietudes.dc.html" class="btn-pill gd-btn" style="display: flex; align-items: center; gap: 8px; padding: 6px 16px 6px 6px; border-radius: 999px; background: #f2b00a; color: #0f172a; text-decoration: none; font-family: 'Poppins', sans-serif; font-weight: 600; font-size: 14px; min-height: 44px">
+          <span style="width: 34px; height: 34px; border-radius: 50%; background: #ffffff; display: flex; align-items: center; justify-content: center"><svg class="gd" width="28" height="28" viewBox="0 0 64 64" aria-hidden="true"><g class="gd-body"><g class="gd-tail"><path d="M34 50 L46 60" stroke="#1F6FB2" stroke-width="3" stroke-linecap="round" fill="none"/><path d="M31 52 L40 61" stroke="#1F6FB2" stroke-width="3" stroke-linecap="round" fill="none"/><ellipse cx="47.5" cy="61" rx="3.4" ry="2.3" fill="#27B5A5" transform="rotate(40 47.5 61)"/><ellipse cx="41.5" cy="62" rx="3" ry="2" fill="#27B5A5" transform="rotate(48 41.5 62)"/></g><ellipse cx="30" cy="40" rx="15" ry="13" fill="#E58A2D"/><path d="M17 36 C13 43 16 51 25 51 C22 45 22 39 27 33 Z" fill="#1F6FB2"/><circle cx="30" cy="22" r="14" fill="#27B5A5"/><path d="M17 19 Q30 3 43 19 Q30 13 17 19 Z" fill="#1E9A8C"/><path d="M16 22 Q30 16 44 22 Q30 30 16 22 Z" fill="#0F172A"/><g class="gd-eyes"><circle cx="24" cy="22" r="4.6" fill="#ffffff"/><circle cx="36" cy="22" r="4.6" fill="#ffffff"/><circle cx="24.8" cy="22.5" r="2.6" fill="#0F172A"/><circle cx="36.8" cy="22.5" r="2.6" fill="#0F172A"/><circle cx="25.8" cy="21.4" r="0.9" fill="#ffffff"/><circle cx="37.8" cy="21.4" r="0.9" fill="#ffffff"/></g><circle cx="19.5" cy="28" r="2" fill="#F2B00A" opacity="0.7"/><circle cx="40.5" cy="28" r="2" fill="#F2B00A" opacity="0.7"/><path d="M27 28.5 L30 33.5 L33 28.5 Z" fill="#1E293B"/></g></svg></span>
+          Pregúntale a Guardián
+        </a>
+        <button type="button" class="avatar-btn" aria-label="Menú de Carlos: Mi perfil, Admin, Salir" style="width: 44px; height: 44px; border-radius: 50%; border: 2px solid rgba(255,255,255,0.6); background: rgba(255,255,255,0.14); color: #ffffff; font-family: 'Poppins', sans-serif; font-weight: 600; font-size: 14px; cursor: pointer">CR</button>
+      </div>
+    </div>
+  </header>
+
+  <!-- Bienvenida -->
+  <section style="background: #f4f6fa; border-bottom: 1px solid rgba(15,23,42,0.06); position: relative; overflow: hidden">
+    <svg aria-hidden="true" width="520" height="360" viewBox="0 0 520 360" style="position: absolute; right: -60px; top: -40px; opacity: 0.08; pointer-events: none">
+      <g transform="translate(300 136) scale(11)"><g class="flor-float" fill="#0a3880"><path d="M0 0C-2.6-1.7-4-5-2.9-7.8C-2.1-10 .9-10.5 2.3-8.6C3.9-6.4 2.6-2.5 0 0Z"/><path d="M0 0C-2.6-1.7-4-5-2.9-7.8C-2.1-10 .9-10.5 2.3-8.6C3.9-6.4 2.6-2.5 0 0Z" transform="rotate(72)"/><path d="M0 0C-2.6-1.7-4-5-2.9-7.8C-2.1-10 .9-10.5 2.3-8.6C3.9-6.4 2.6-2.5 0 0Z" transform="rotate(144)"/><path d="M0 0C-2.6-1.7-4-5-2.9-7.8C-2.1-10 .9-10.5 2.3-8.6C3.9-6.4 2.6-2.5 0 0Z" transform="rotate(216)"/><path d="M0 0C-2.6-1.7-4-5-2.9-7.8C-2.1-10 .9-10.5 2.3-8.6C3.9-6.4 2.6-2.5 0 0Z" transform="rotate(288)"/></g></g>
+      <g transform="translate(440 230) scale(7.5)"><g class="flor-float-2" fill="#f2b00a"><path d="M0 0C-2.6-1.7-4-5-2.9-7.8C-2.1-10 .9-10.5 2.3-8.6C3.9-6.4 2.6-2.5 0 0Z"/><path d="M0 0C-2.6-1.7-4-5-2.9-7.8C-2.1-10 .9-10.5 2.3-8.6C3.9-6.4 2.6-2.5 0 0Z" transform="rotate(72)"/><path d="M0 0C-2.6-1.7-4-5-2.9-7.8C-2.1-10 .9-10.5 2.3-8.6C3.9-6.4 2.6-2.5 0 0Z" transform="rotate(144)"/><path d="M0 0C-2.6-1.7-4-5-2.9-7.8C-2.1-10 .9-10.5 2.3-8.6C3.9-6.4 2.6-2.5 0 0Z" transform="rotate(216)"/><path d="M0 0C-2.6-1.7-4-5-2.9-7.8C-2.1-10 .9-10.5 2.3-8.6C3.9-6.4 2.6-2.5 0 0Z" transform="rotate(288)"/></g></g>
+      <g transform="translate(120 278) scale(5.5)"><g class="flor-float" fill="#0a3880"><path d="M0 0C-2.6-1.7-4-5-2.9-7.8C-2.1-10 .9-10.5 2.3-8.6C3.9-6.4 2.6-2.5 0 0Z"/><path d="M0 0C-2.6-1.7-4-5-2.9-7.8C-2.1-10 .9-10.5 2.3-8.6C3.9-6.4 2.6-2.5 0 0Z" transform="rotate(72)"/><path d="M0 0C-2.6-1.7-4-5-2.9-7.8C-2.1-10 .9-10.5 2.3-8.6C3.9-6.4 2.6-2.5 0 0Z" transform="rotate(144)"/><path d="M0 0C-2.6-1.7-4-5-2.9-7.8C-2.1-10 .9-10.5 2.3-8.6C3.9-6.4 2.6-2.5 0 0Z" transform="rotate(216)"/><path d="M0 0C-2.6-1.7-4-5-2.9-7.8C-2.1-10 .9-10.5 2.3-8.6C3.9-6.4 2.6-2.5 0 0Z" transform="rotate(288)"/></g></g>
+    </svg>
+    <div style="max-width: 1200px; margin: 0 auto; padding: 56px 24px 48px; display: flex; justify-content: space-between; align-items: flex-end; gap: 40px; flex-wrap: wrap; position: relative">
+      <div style="max-width: 680px; display: flex; flex-direction: column; gap: 18px">
+        <span class="fade-up d1" style="display: inline-flex; align-self: flex-start; align-items: center; gap: 8px; font-family: 'Poppins', sans-serif; font-weight: 600; font-size: 12px; letter-spacing: 0.1em; text-transform: uppercase; color: #0a3880; background: rgba(10,56,128,0.08); padding: 6px 14px; border-radius: 999px">
+          <svg width="12" height="12" viewBox="0 0 24 24" aria-hidden="true"><g transform="translate(12 12)" fill="#f2b00a"><path d="M0 0C-2.6-1.7-4-5-2.9-7.8C-2.1-10 .9-10.5 2.3-8.6C3.9-6.4 2.6-2.5 0 0Z"/><path d="M0 0C-2.6-1.7-4-5-2.9-7.8C-2.1-10 .9-10.5 2.3-8.6C3.9-6.4 2.6-2.5 0 0Z" transform="rotate(72)"/><path d="M0 0C-2.6-1.7-4-5-2.9-7.8C-2.1-10 .9-10.5 2.3-8.6C3.9-6.4 2.6-2.5 0 0Z" transform="rotate(144)"/><path d="M0 0C-2.6-1.7-4-5-2.9-7.8C-2.1-10 .9-10.5 2.3-8.6C3.9-6.4 2.6-2.5 0 0Z" transform="rotate(216)"/><path d="M0 0C-2.6-1.7-4-5-2.9-7.8C-2.1-10 .9-10.5 2.3-8.6C3.9-6.4 2.6-2.5 0 0Z" transform="rotate(288)"/></g><circle cx="12" cy="12" r="2.2" fill="#0a3880"/></svg>
+          Comunidad Exilio y diáspora
+        </span>
+        <h1 class="fade-up d2" style="margin: 0; font-family: 'Poppins', sans-serif; font-weight: 700; font-size: 44px; line-height: 1.12; letter-spacing: -0.02em; color: #0a3880">Hola, Carlos. La comunidad ya tiene sus primeras 12 preguntas.</h1>
+        <p class="fade-up d3" style="margin: 0; font-size: 17px; line-height: 1.6; color: #1b2a4a; max-width: 560px">Aquí nos organizamos, debatimos y decidimos en comunidad. Invita a las primeras personas, apoya las preguntas que importan y abre el camino hacia la primera elección.</p>
+      </div>
+      <div style="display: flex; gap: 12px; flex-wrap: wrap">
+        <div class="fade-up d3" style="background: #ffffff; border: 1px solid rgba(15,23,42,0.08); border-radius: 16px; padding: 16px 20px; min-width: 132px; display: flex; flex-direction: column; gap: 4px">
+          <span style="font-family: 'Poppins', sans-serif; font-weight: 700; font-size: 30px; color: #0a3880; line-height: 1">1</span>
+          <span style="font-size: 13px; color: #475569">miembro verificado</span>
+        </div>
+        <div class="fade-up d4" style="background: #ffffff; border: 1px solid rgba(15,23,42,0.08); border-radius: 16px; padding: 16px 20px; min-width: 132px; display: flex; flex-direction: column; gap: 4px">
+          <span style="font-family: 'Poppins', sans-serif; font-weight: 700; font-size: 30px; color: #0a3880; line-height: 1">12</span>
+          <span style="font-size: 13px; color: #475569">preguntas abiertas</span>
+        </div>
+        <div class="fade-up d5" style="background: #ffffff; border: 1px solid rgba(15,23,42,0.08); border-radius: 16px; padding: 16px 20px; min-width: 132px; display: flex; flex-direction: column; gap: 4px">
+          <span style="font-family: 'Poppins', sans-serif; font-weight: 700; font-size: 30px; color: #0a3880; line-height: 1">0</span>
+          <span style="font-size: 13px; color: #475569">elecciones</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Las cuatro tarjetas de la mesa -->
+  <section style="max-width: 1200px; width: 100%; margin: 0 auto; box-sizing: border-box; padding: 48px 24px 8px">
+    <div style="display: flex; align-items: baseline; justify-content: space-between; gap: 16px; margin-bottom: 20px; flex-wrap: wrap">
+      <h2 style="margin: 0; font-family: 'Poppins', sans-serif; font-weight: 600; font-size: 22px; color: #0f172a">Lo que toca ahora</h2>
+      <span style="font-size: 14px; color: #64748b">Cuatro pasos para que la comunidad arranque</span>
+    </div>
+    <div style="display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 20px">
+
+      <a href="Main.dc.html" class="card fade-up d2" style="display: flex; flex-direction: column; gap: 14px; background: #ffffff; border: 1px solid rgba(15,23,42,0.08); border-radius: 16px; padding: 24px; text-decoration: none; color: inherit; box-shadow: 0 1px 2px rgba(15,23,42,0.04); min-height: 236px">
+        <span style="width: 44px; height: 44px; border-radius: 12px; background: rgba(10,56,128,0.08); display: flex; align-items: center; justify-content: center; color: #0a3880"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="19" y1="8" x2="19" y2="14"/><line x1="22" y1="11" x2="16" y2="11"/></svg></span>
+        <span style="font-family: 'Poppins', sans-serif; font-weight: 600; font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; color: #f2b00a">Paso 1</span>
+        <span style="font-family: 'Poppins', sans-serif; font-weight: 600; font-size: 18px; color: #0f172a; line-height: 1.3">Sumar a los primeros miembros</span>
+        <span style="font-size: 14px; line-height: 1.55; color: #475569; flex: 1">Invita por correo a nicaragüenses dentro y fuera del país. Cada persona verificada entra a su comunidad de origen y de acogida.</span>
+        <span style="display: inline-flex; align-items: center; gap: 6px; font-family: 'Poppins', sans-serif; font-weight: 600; font-size: 14px; color: #0a3880">Invitar <svg class="arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></span>
+      </a>
+
+      <a href="Inquietudes.dc.html" class="card fade-up d3" style="display: flex; flex-direction: column; gap: 14px; background: #0a3880; border: 1px solid #0a3880; border-radius: 16px; padding: 24px; text-decoration: none; color: #ffffff; box-shadow: 0 8px 24px rgba(10,56,128,0.18); min-height: 236px">
+        <span style="width: 44px; height: 44px; border-radius: 12px; background: rgba(255,255,255,0.12); display: flex; align-items: center; justify-content: center; color: #f2b00a"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></span>
+        <span style="font-family: 'Poppins', sans-serif; font-weight: 600; font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; color: #f2b00a">Paso 2</span>
+        <span style="font-family: 'Poppins', sans-serif; font-weight: 600; font-size: 18px; color: #ffffff; line-height: 1.3">Las 12 primeras preguntas</span>
+        <span style="font-size: 14px; line-height: 1.55; color: rgba(255,255,255,0.82); flex: 1">Guardián sembró 12 inquietudes para empezar la conversación. Apoya las que importan; las más apoyadas pasan a debate.</span>
+        <span style="display: inline-flex; align-items: center; gap: 6px; font-family: 'Poppins', sans-serif; font-weight: 600; font-size: 14px; color: #f2b00a">Ver y apoyar <svg class="arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></span>
+      </a>
+
+      <a href="Main.dc.html" class="card fade-up d4" style="display: flex; flex-direction: column; gap: 14px; background: #ffffff; border: 1px solid rgba(15,23,42,0.08); border-radius: 16px; padding: 24px; text-decoration: none; color: inherit; box-shadow: 0 1px 2px rgba(15,23,42,0.04); min-height: 236px">
+        <span style="width: 44px; height: 44px; border-radius: 12px; background: rgba(10,56,128,0.08); display: flex; align-items: center; justify-content: center; color: #0a3880"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><path d="m9 11 3 3L22 4"/></svg></span>
+        <span style="font-family: 'Poppins', sans-serif; font-weight: 600; font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; color: #f2b00a">Paso 3</span>
+        <span style="font-family: 'Poppins', sans-serif; font-weight: 600; font-size: 18px; color: #0f172a; line-height: 1.3">El camino a la elección</span>
+        <span style="font-size: 14px; line-height: 1.55; color: #475569; flex: 1">Crea la primera campaña electoral de Exilio y diáspora: cargos, fechas y reglas claras, con sorteo de observadores.</span>
+        <span style="display: inline-flex; align-items: center; gap: 6px; font-family: 'Poppins', sans-serif; font-weight: 600; font-size: 14px; color: #0a3880">Preparar campaña <svg class="arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></span>
+      </a>
+
+      <a href="Main.dc.html" class="card fade-up d5" style="display: flex; flex-direction: column; gap: 14px; background: #ffffff; border: 1px solid rgba(15,23,42,0.08); border-radius: 16px; padding: 24px; text-decoration: none; color: inherit; box-shadow: 0 1px 2px rgba(15,23,42,0.04); min-height: 236px">
+        <span style="width: 44px; height: 44px; border-radius: 12px; background: rgba(242,176,10,0.16); display: flex; align-items: center; justify-content: center; color: #0a3880"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><g transform="translate(12 12)"><path d="M0 0C-2.6-1.7-4-5-2.9-7.8C-2.1-10 .9-10.5 2.3-8.6C3.9-6.4 2.6-2.5 0 0Z"/><path d="M0 0C-2.6-1.7-4-5-2.9-7.8C-2.1-10 .9-10.5 2.3-8.6C3.9-6.4 2.6-2.5 0 0Z" transform="rotate(72)"/><path d="M0 0C-2.6-1.7-4-5-2.9-7.8C-2.1-10 .9-10.5 2.3-8.6C3.9-6.4 2.6-2.5 0 0Z" transform="rotate(144)"/><path d="M0 0C-2.6-1.7-4-5-2.9-7.8C-2.1-10 .9-10.5 2.3-8.6C3.9-6.4 2.6-2.5 0 0Z" transform="rotate(216)"/><path d="M0 0C-2.6-1.7-4-5-2.9-7.8C-2.1-10 .9-10.5 2.3-8.6C3.9-6.4 2.6-2.5 0 0Z" transform="rotate(288)"/></g><circle cx="12" cy="12" r="2"/></svg></span>
+        <span style="font-family: 'Poppins', sans-serif; font-weight: 600; font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; color: #f2b00a">Paso 4</span>
+        <span style="font-family: 'Poppins', sans-serif; font-weight: 600; font-size: 18px; color: #0f172a; line-height: 1.3">El mapa de la comunidad</span>
+        <span style="font-size: 14px; line-height: 1.55; color: #475569; flex: 1">Mira cómo crece la comunidad por territorio de origen y por lugar de acogida: Managua, Miami, San José, Madrid…</span>
+        <span style="display: inline-flex; align-items: center; gap: 6px; font-family: 'Poppins', sans-serif; font-weight: 600; font-size: 14px; color: #0a3880">Ver comunidades <svg class="arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></span>
+      </a>
+    </div>
+  </section>
+
+  <!-- Guardián: desde tu última visita + mapa de la comunidad -->
+  <section style="max-width: 1200px; width: 100%; margin: 0 auto; box-sizing: border-box; padding: 40px 24px 56px; display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 24px">
+
+    <div class="fade-up d5" style="grid-column: span 5; display: flex; flex-direction: column; gap: 16px; background: #fff8e1; border: 1px solid rgba(242,176,10,0.45); border-radius: 16px; padding: 24px">
+      <div style="display: flex; align-items: center; gap: 12px">
+        <span style="width: 56px; height: 56px; border-radius: 50%; background: #ffffff; border: 2px solid #f2b00a; display: flex; align-items: center; justify-content: center"><svg class="gd" width="44" height="44" viewBox="0 0 64 64" role="img" aria-label="Guardián, el asistente de la comunidad"><g class="gd-body"><g class="gd-tail"><path d="M34 50 L46 60" stroke="#1F6FB2" stroke-width="3" stroke-linecap="round" fill="none"/><path d="M31 52 L40 61" stroke="#1F6FB2" stroke-width="3" stroke-linecap="round" fill="none"/><ellipse cx="47.5" cy="61" rx="3.4" ry="2.3" fill="#27B5A5" transform="rotate(40 47.5 61)"/><ellipse cx="41.5" cy="62" rx="3" ry="2" fill="#27B5A5" transform="rotate(48 41.5 62)"/></g><ellipse cx="30" cy="40" rx="15" ry="13" fill="#E58A2D"/><path d="M17 36 C13 43 16 51 25 51 C22 45 22 39 27 33 Z" fill="#1F6FB2"/><circle cx="30" cy="22" r="14" fill="#27B5A5"/><path d="M17 19 Q30 3 43 19 Q30 13 17 19 Z" fill="#1E9A8C"/><path d="M16 22 Q30 16 44 22 Q30 30 16 22 Z" fill="#0F172A"/><g class="gd-eyes"><circle cx="24" cy="22" r="4.6" fill="#ffffff"/><circle cx="36" cy="22" r="4.6" fill="#ffffff"/><circle cx="24.8" cy="22.5" r="2.6" fill="#0F172A"/><circle cx="36.8" cy="22.5" r="2.6" fill="#0F172A"/><circle cx="25.8" cy="21.4" r="0.9" fill="#ffffff"/><circle cx="37.8" cy="21.4" r="0.9" fill="#ffffff"/></g><circle cx="19.5" cy="28" r="2" fill="#F2B00A" opacity="0.7"/><circle cx="40.5" cy="28" r="2" fill="#F2B00A" opacity="0.7"/><path d="M27 28.5 L30 33.5 L33 28.5 Z" fill="#1E293B"/></g></svg></span>
+        <div style="display: flex; flex-direction: column; gap: 2px">
+          <span style="font-family: 'Poppins', sans-serif; font-weight: 600; font-size: 16px; color: #0f172a">Guardián</span>
+          <span style="font-size: 12px; color: #92400e; font-weight: 500; letter-spacing: 0.06em; text-transform: uppercase">Desde tu última visita</span>
+        </div>
+      </div>
+      <p style="margin: 0; font-size: 15px; line-height: 1.6; color: #1b2a4a">Hay un debate nuevo en <strong>Exilio y diáspora</strong>: «Precio de la canasta básica y remesas». Todavía nadie ha opinado; tu voz puede abrirlo.</p>
+      <div style="display: flex; gap: 10px; flex-wrap: wrap">
+        <a href="Inquietudes.dc.html" class="btn-pill" style="display: inline-flex; align-items: center; padding: 10px 18px; border-radius: 999px; background: #0a3880; color: #ffffff; text-decoration: none; font-family: 'Poppins', sans-serif; font-weight: 600; font-size: 14px; min-height: 44px">Ir al debate</a>
+        <a href="Inquietudes.dc.html" class="btn-pill" style="display: inline-flex; align-items: center; padding: 10px 18px; border-radius: 999px; background: transparent; color: #0a3880; border: 2px solid rgba(10,56,128,0.2); text-decoration: none; font-family: 'Poppins', sans-serif; font-weight: 600; font-size: 14px; min-height: 44px">Preguntar a Guardián</a>
+      </div>
+      <span style="font-size: 12px; color: #64748b">Guardián nunca decide ni vota. Resume, sugiere y revisa; las decisiones son de la comunidad.</span>
+    </div>
+
+    <div class="fade-up d6" style="grid-column: span 7; display: flex; flex-direction: column; gap: 16px; background: #ffffff; border: 1px solid rgba(15,23,42,0.08); border-radius: 16px; padding: 24px">
+      <div style="display: flex; align-items: baseline; justify-content: space-between; gap: 12px; flex-wrap: wrap">
+        <h2 style="margin: 0; font-family: 'Poppins', sans-serif; font-weight: 600; font-size: 18px; color: #0f172a">Mapa de la comunidad</h2>
+        <a href="Main.dc.html" style="font-size: 14px; font-weight: 500">Ver todas las comunidades</a>
+      </div>
+      <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px">
+        <div style="display: flex; flex-direction: column; gap: 10px">
+          <span style="font-family: 'Poppins', sans-serif; font-weight: 600; font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; color: #64748b">Territorio de origen</span>
+          <a href="Main.dc.html" class="row" style="display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 12px 14px; border-radius: 12px; background: #f4f6fa; text-decoration: none; color: #0f172a; min-height: 44px"><span style="display: flex; align-items: center; gap: 10px; font-weight: 500; font-size: 15px"><svg width="14" height="14" viewBox="0 0 24 24" aria-hidden="true"><g transform="translate(12 12)" fill="#0a3880"><path d="M0 0C-2.6-1.7-4-5-2.9-7.8C-2.1-10 .9-10.5 2.3-8.6C3.9-6.4 2.6-2.5 0 0Z"/><path d="M0 0C-2.6-1.7-4-5-2.9-7.8C-2.1-10 .9-10.5 2.3-8.6C3.9-6.4 2.6-2.5 0 0Z" transform="rotate(72)"/><path d="M0 0C-2.6-1.7-4-5-2.9-7.8C-2.1-10 .9-10.5 2.3-8.6C3.9-6.4 2.6-2.5 0 0Z" transform="rotate(144)"/><path d="M0 0C-2.6-1.7-4-5-2.9-7.8C-2.1-10 .9-10.5 2.3-8.6C3.9-6.4 2.6-2.5 0 0Z" transform="rotate(216)"/><path d="M0 0C-2.6-1.7-4-5-2.9-7.8C-2.1-10 .9-10.5 2.3-8.6C3.9-6.4 2.6-2.5 0 0Z" transform="rotate(288)"/></g><circle cx="12" cy="12" r="2.2" fill="#f2b00a"/></svg>Managua</span><span style="font-size: 13px; color: #0a3880; font-weight: 600">1 miembro</span></a>
+          <a href="Main.dc.html" class="row" style="display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 12px 14px; border-radius: 12px; background: #ffffff; border: 1px dashed rgba(15,23,42,0.15); text-decoration: none; color: #0f172a; min-height: 44px"><span style="display: flex; align-items: center; gap: 10px; font-weight: 500; font-size: 15px; color: #64748b"><svg width="14" height="14" viewBox="0 0 24 24" aria-hidden="true"><g transform="translate(12 12)" fill="none" stroke="#94a3b8" stroke-width="1.8" stroke-linejoin="round"><path d="M0 0C-2.6-1.7-4-5-2.9-7.8C-2.1-10 .9-10.5 2.3-8.6C3.9-6.4 2.6-2.5 0 0Z"/><path d="M0 0C-2.6-1.7-4-5-2.9-7.8C-2.1-10 .9-10.5 2.3-8.6C3.9-6.4 2.6-2.5 0 0Z" transform="rotate(72)"/><path d="M0 0C-2.6-1.7-4-5-2.9-7.8C-2.1-10 .9-10.5 2.3-8.6C3.9-6.4 2.6-2.5 0 0Z" transform="rotate(144)"/><path d="M0 0C-2.6-1.7-4-5-2.9-7.8C-2.1-10 .9-10.5 2.3-8.6C3.9-6.4 2.6-2.5 0 0Z" transform="rotate(216)"/><path d="M0 0C-2.6-1.7-4-5-2.9-7.8C-2.1-10 .9-10.5 2.3-8.6C3.9-6.4 2.6-2.5 0 0Z" transform="rotate(288)"/></g><circle cx="12" cy="12" r="1.6" fill="#94a3b8"/></svg>León</span><span style="font-size: 13px; color: #64748b">aún sin miembros</span></a>
+          <a href="Main.dc.html" class="row" style="display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 12px 14px; border-radius: 12px; background: #ffffff; border: 1px dashed rgba(15,23,42,0.15); text-decoration: none; color: #0f172a; min-height: 44px"><span style="display: flex; align-items: center; gap: 10px; font-weight: 500; font-size: 15px; color: #64748b"><svg width="14" height="14" viewBox="0 0 24 24" aria-hidden="true"><g transform="translate(12 12)" fill="none" stroke="#94a3b8" stroke-width="1.8" stroke-linejoin="round"><path d="M0 0C-2.6-1.7-4-5-2.9-7.8C-2.1-10 .9-10.5 2.3-8.6C3.9-6.4 2.6-2.5 0 0Z"/><path d="M0 0C-2.6-1.7-4-5-2.9-7.8C-2.1-10 .9-10.5 2.3-8.6C3.9-6.4 2.6-2.5 0 0Z" transform="rotate(72)"/><path d="M0 0C-2.6-1.7-4-5-2.9-7.8C-2.1-10 .9-10.5 2.3-8.6C3.9-6.4 2.6-2.5 0 0Z" transform="rotate(144)"/><path d="M0 0C-2.6-1.7-4-5-2.9-7.8C-2.1-10 .9-10.5 2.3-8.6C3.9-6.4 2.6-2.5 0 0Z" transform="rotate(216)"/><path d="M0 0C-2.6-1.7-4-5-2.9-7.8C-2.1-10 .9-10.5 2.3-8.6C3.9-6.4 2.6-2.5 0 0Z" transform="rotate(288)"/></g><circle cx="12" cy="12" r="1.6" fill="#94a3b8"/></svg>Matagalpa</span><span style="font-size: 13px; color: #64748b">aún sin miembros</span></a>
+        </div>
+        <div style="display: flex; flex-direction: column; gap: 10px">
+          <span style="font-family: 'Poppins', sans-serif; font-weight: 600; font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; color: #64748b">Lugar de acogida</span>
+          <a href="Main.dc.html" class="row" style="display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 12px 14px; border-radius: 12px; background: #f4f6fa; text-decoration: none; color: #0f172a; min-height: 44px"><span style="display: flex; align-items: center; gap: 10px; font-weight: 500; font-size: 15px"><svg width="14" height="14" viewBox="0 0 24 24" aria-hidden="true"><g transform="translate(12 12)" fill="#f2b00a"><path d="M0 0C-2.6-1.7-4-5-2.9-7.8C-2.1-10 .9-10.5 2.3-8.6C3.9-6.4 2.6-2.5 0 0Z"/><path d="M0 0C-2.6-1.7-4-5-2.9-7.8C-2.1-10 .9-10.5 2.3-8.6C3.9-6.4 2.6-2.5 0 0Z" transform="rotate(72)"/><path d="M0 0C-2.6-1.7-4-5-2.9-7.8C-2.1-10 .9-10.5 2.3-8.6C3.9-6.4 2.6-2.5 0 0Z" transform="rotate(144)"/><path d="M0 0C-2.6-1.7-4-5-2.9-7.8C-2.1-10 .9-10.5 2.3-8.6C3.9-6.4 2.6-2.5 0 0Z" transform="rotate(216)"/><path d="M0 0C-2.6-1.7-4-5-2.9-7.8C-2.1-10 .9-10.5 2.3-8.6C3.9-6.4 2.6-2.5 0 0Z" transform="rotate(288)"/></g><circle cx="12" cy="12" r="2.2" fill="#0a3880"/></svg>Estados Unidos · Florida</span><span style="font-size: 13px; color: #0a3880; font-weight: 600">1 miembro</span></a>
+          <a href="Main.dc.html" class="row" style="display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 12px 14px; border-radius: 12px; background: #ffffff; border: 1px dashed rgba(15,23,42,0.15); text-decoration: none; color: #0f172a; min-height: 44px"><span style="display: flex; align-items: center; gap: 10px; font-weight: 500; font-size: 15px; color: #64748b"><svg width="14" height="14" viewBox="0 0 24 24" aria-hidden="true"><g transform="translate(12 12)" fill="none" stroke="#94a3b8" stroke-width="1.8" stroke-linejoin="round"><path d="M0 0C-2.6-1.7-4-5-2.9-7.8C-2.1-10 .9-10.5 2.3-8.6C3.9-6.4 2.6-2.5 0 0Z"/><path d="M0 0C-2.6-1.7-4-5-2.9-7.8C-2.1-10 .9-10.5 2.3-8.6C3.9-6.4 2.6-2.5 0 0Z" transform="rotate(72)"/><path d="M0 0C-2.6-1.7-4-5-2.9-7.8C-2.1-10 .9-10.5 2.3-8.6C3.9-6.4 2.6-2.5 0 0Z" transform="rotate(144)"/><path d="M0 0C-2.6-1.7-4-5-2.9-7.8C-2.1-10 .9-10.5 2.3-8.6C3.9-6.4 2.6-2.5 0 0Z" transform="rotate(216)"/><path d="M0 0C-2.6-1.7-4-5-2.9-7.8C-2.1-10 .9-10.5 2.3-8.6C3.9-6.4 2.6-2.5 0 0Z" transform="rotate(288)"/></g><circle cx="12" cy="12" r="1.6" fill="#94a3b8"/></svg>Costa Rica</span><span style="font-size: 13px; color: #64748b">aún sin miembros</span></a>
+          <a href="Main.dc.html" class="row" style="display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 12px 14px; border-radius: 12px; background: #ffffff; border: 1px dashed rgba(15,23,42,0.15); text-decoration: none; color: #0f172a; min-height: 44px"><span style="display: flex; align-items: center; gap: 10px; font-weight: 500; font-size: 15px; color: #64748b"><svg width="14" height="14" viewBox="0 0 24 24" aria-hidden="true"><g transform="translate(12 12)" fill="none" stroke="#94a3b8" stroke-width="1.8" stroke-linejoin="round"><path d="M0 0C-2.6-1.7-4-5-2.9-7.8C-2.1-10 .9-10.5 2.3-8.6C3.9-6.4 2.6-2.5 0 0Z"/><path d="M0 0C-2.6-1.7-4-5-2.9-7.8C-2.1-10 .9-10.5 2.3-8.6C3.9-6.4 2.6-2.5 0 0Z" transform="rotate(72)"/><path d="M0 0C-2.6-1.7-4-5-2.9-7.8C-2.1-10 .9-10.5 2.3-8.6C3.9-6.4 2.6-2.5 0 0Z" transform="rotate(144)"/><path d="M0 0C-2.6-1.7-4-5-2.9-7.8C-2.1-10 .9-10.5 2.3-8.6C3.9-6.4 2.6-2.5 0 0Z" transform="rotate(216)"/><path d="M0 0C-2.6-1.7-4-5-2.9-7.8C-2.1-10 .9-10.5 2.3-8.6C3.9-6.4 2.6-2.5 0 0Z" transform="rotate(288)"/></g><circle cx="12" cy="12" r="1.6" fill="#94a3b8"/></svg>España</span><span style="font-size: 13px; color: #64748b">aún sin miembros</span></a>
+        </div>
+      </div>
+      <span style="font-size: 13px; color: #64748b">Cada persona verificada entra sola a su comunidad de origen y a la de acogida, además de Exilio y diáspora.</span>
+    </div>
+  </section>
+
+  <!-- Pie -->
+  <footer style="margin-top: auto; border-top: 1px solid rgba(15,23,42,0.08); background: #f4f6fa">
+    <div style="max-width: 1200px; margin: 0 auto; padding: 20px 24px; display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; font-size: 13px; color: #64748b">
+      <span style="display: flex; align-items: center; gap: 8px"><img src="/_blob/eef205102d2c528135a01bff0c7a93b0" alt="" style="width: 22px; height: 22px; object-fit: contain">Impulsado por OpenCivic Solutions</span>
+      <span style="display: flex; gap: 18px"><a href="Navegacion.dc.html" style="text-decoration: none">Reglas</a><a href="Navegacion.dc.html" style="text-decoration: none">Verificaciones</a><a href="Navegacion.dc.html" style="text-decoration: none">Auditoría</a></span>
+    </div>
+  </footer>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1360,"height":1560}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {};
+  }
+}
+</script>
+</body>
+</html>

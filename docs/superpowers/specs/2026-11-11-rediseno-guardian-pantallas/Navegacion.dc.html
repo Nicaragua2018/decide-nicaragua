@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Navegación: los tres bloques</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@500;600;700&amp;family=Inter:wght@400;500;600&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#f4f6fa}
+a{color:#0a3880}a:hover{color:#072a60}
+.nav-link{position:relative;transition:background .2s,color .2s}
+.nav-link::after{content:"";position:absolute;left:16px;right:16px;bottom:5px;height:2px;border-radius:2px;background:#f2b00a;transform:scaleX(0);transform-origin:left;transition:transform .25s ease}
+.nav-link:hover{background:rgba(255,255,255,0.14);color:#ffffff}
+.nav-link:hover::after{transform:scaleX(1)}
+.btn-pill{transition:transform .2s ease,box-shadow .2s ease,background .2s ease}
+.btn-pill:hover{transform:translateY(-2px);box-shadow:0 8px 20px rgba(15,23,42,0.16)}
+.btn-pill:active{transform:translateY(0) scale(.98)}
+.avatar-btn{transition:transform .2s,border-color .2s}
+.avatar-btn:hover{transform:scale(1.06);border-color:#f2b00a}
+.marca{transition:transform .2s ease,box-shadow .2s ease}.marca:hover{transform:translateY(-1px);box-shadow:0 6px 16px rgba(0,0,0,0.18)}
+.menu{animation:menu-in .35s cubic-bezier(.22,.68,0,1.1) both}
+.m1{animation-delay:.05s}.m2{animation-delay:.12s}.m3{animation-delay:.19s}.m4{animation-delay:.26s}
+@keyframes menu-in{from{opacity:0;transform:translateY(-10px)}to{opacity:1;transform:translateY(0)}}
+.item{transition:transform .2s,background .2s}
+.item:hover{transform:translateX(4px);background:#e9eef7}
+.item-dark:hover{background:rgba(255,255,255,0.1)}
+.gd{overflow:visible}
+.gd-body,.gd-tail,.gd-eyes{transform-box:fill-box}
+.gd-body{transform-origin:center;animation:gd-bob 2.6s ease-in-out infinite}
+.gd-tail{transform-origin:top left;animation:gd-tail 2.6s ease-in-out infinite}
+.gd-eyes{transform-origin:center;animation:gd-blink 4.5s infinite}
+.gd-btn:hover .gd-body{animation:gd-hop .5s ease-out}
+@keyframes gd-bob{0%,100%{transform:translateY(0)}50%{transform:translateY(-1.5px)}}
+@keyframes gd-tail{0%,100%{transform:rotate(-6deg)}50%{transform:rotate(6deg)}}
+@keyframes gd-blink{0%,90%,100%{transform:scaleY(1)}94%{transform:scaleY(.1)}}
+@keyframes gd-hop{0%{transform:translateY(0)}40%{transform:translateY(-5px)}100%{transform:translateY(0)}}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style>
+</helmet>
+<div style="width: 100%; min-height: 100%; box-sizing: border-box; font-family: 'Inter', sans-serif; color: #0f172a; background: #f4f6fa; display: flex; flex-direction: column">
+
+  <!-- Barra con el bloque Participar abierto -->
+  <header style="background: #0a3880; box-shadow: 0 2px 14px rgba(10,56,128,0.28)">
+    <div style="max-width: 1200px; margin: 0 auto; padding: 0 24px; height: 72px; display: flex; align-items: center; justify-content: space-between; gap: 24px; flex-wrap: wrap">
+      <a href="Main.dc.html" class="marca" style="display: flex; align-items: center; gap: 10px; text-decoration: none; color: #0f172a; background: #ffffff; padding: 5px 18px 5px 5px; border-radius: 999px; min-height: 44px; box-sizing: border-box">
+        <svg width="34" height="34" viewBox="0 0 34 34" aria-hidden="true"><rect width="34" height="34" rx="10" fill="#0a3880"></rect><g transform="translate(17 17)" fill="#ffffff"><path d="M0 0C-3.2-2.2-5-6.4-3.6-9.8C-2.6-12.6 1.2-13.2 3-10.8C5-8 3.4-3.2 0 0Z"></path><path d="M0 0C-3.2-2.2-5-6.4-3.6-9.8C-2.6-12.6 1.2-13.2 3-10.8C5-8 3.4-3.2 0 0Z" transform="rotate(72)"></path><path d="M0 0C-3.2-2.2-5-6.4-3.6-9.8C-2.6-12.6 1.2-13.2 3-10.8C5-8 3.4-3.2 0 0Z" transform="rotate(144)"></path><path d="M0 0C-3.2-2.2-5-6.4-3.6-9.8C-2.6-12.6 1.2-13.2 3-10.8C5-8 3.4-3.2 0 0Z" transform="rotate(216)"></path><path d="M0 0C-3.2-2.2-5-6.4-3.6-9.8C-2.6-12.6 1.2-13.2 3-10.8C5-8 3.4-3.2 0 0Z" transform="rotate(288)"></path></g><circle cx="17" cy="17" r="3.2" fill="#f2b00a"></circle></svg>
+        <span style="font-family: 'Poppins', sans-serif; font-weight: 600; font-size: 20px; letter-spacing: -0.01em">Nicaragua <span style="color: #0a3880">Decide</span></span>
+      </a>
+      <nav aria-label="Principal" style="display: flex; align-items: center; gap: 4px; flex-wrap: wrap">
+        <a href="Navegacion.dc.html" class="nav-link" style="display: flex; align-items: center; gap: 6px; padding: 10px 16px; border-radius: 999px; font-family: 'Poppins', sans-serif; font-weight: 500; font-size: 15px; color: #ffffff; text-decoration: none; background: rgba(255,255,255,0.16)">Participar <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m18 15-6-6-6 6"></path></svg></a>
+        <a href="Navegacion.dc.html" class="nav-link" style="display: flex; align-items: center; gap: 6px; padding: 10px 16px; border-radius: 999px; font-family: 'Poppins', sans-serif; font-weight: 500; font-size: 15px; color: #ffffff; text-decoration: none">Comunidad <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"></path></svg></a>
+        <a href="Navegacion.dc.html" class="nav-link" style="display: flex; align-items: center; gap: 6px; padding: 10px 16px; border-radius: 999px; font-family: 'Poppins', sans-serif; font-weight: 500; font-size: 15px; color: #ffffff; text-decoration: none">Transparencia <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"></path></svg></a>
+      </nav>
+      <div style="display: flex; align-items: center; gap: 12px">
+        <a href="Inquietudes.dc.html" class="btn-pill gd-btn" style="display: flex; align-items: center; gap: 8px; padding: 6px 16px 6px 6px; border-radius: 999px; background: #f2b00a; color: #0f172a; text-decoration: none; font-family: 'Poppins', sans-serif; font-weight: 600; font-size: 14px; min-height: 44px">
+          <span style="width: 34px; height: 34px; border-radius: 50%; background: #ffffff; display: flex; align-items: center; justify-content: center"><svg class="gd" width="28" height="28" viewBox="0 0 64 64" aria-hidden="true"><g class="gd-body"><g class="gd-tail"><path d="M34 50 L46 60" stroke="#1F6FB2" stroke-width="3" stroke-linecap="round" fill="none"></path><path d="M31 52 L40 61" stroke="#1F6FB2" stroke-width="3" stroke-linecap="round" fill="none"></path><ellipse cx="47.5" cy="61" rx="3.4" ry="2.3" fill="#27B5A5" transform="rotate(40 47.5 61)"></ellipse><ellipse cx="41.5" cy="62" rx="3" ry="2" fill="#27B5A5" transform="rotate(48 41.5 62)"></ellipse></g><ellipse cx="30" cy="40" rx="15" ry="13" fill="#E58A2D"></ellipse><path d="M17 36 C13 43 16 51 25 51 C22 45 22 39 27 33 Z" fill="#1F6FB2"></path><circle cx="30" cy="22" r="14" fill="#27B5A5"></circle><path d="M17 19 Q30 3 43 19 Q30 13 17 19 Z" fill="#1E9A8C"></path><path d="M16 22 Q30 16 44 22 Q30 30 16 22 Z" fill="#0F172A"></path><g class="gd-eyes"><circle cx="24" cy="22" r="4.6" fill="#ffffff"></circle><circle cx="36" cy="22" r="4.6" fill="#ffffff"></circle><circle cx="24.8" cy="22.5" r="2.6" fill="#0F172A"></circle><circle cx="36.8" cy="22.5" r="2.6" fill="#0F172A"></circle><circle cx="25.8" cy="21.4" r="0.9" fill="#ffffff"></circle><circle cx="37.8" cy="21.4" r="0.9" fill="#ffffff"></circle></g><circle cx="19.5" cy="28" r="2" fill="#F2B00A" opacity="0.7"></circle><circle cx="40.5" cy="28" r="2" fill="#F2B00A" opacity="0.7"></circle><path d="M27 28.5 L30 33.5 L33 28.5 Z" fill="#1E293B"></path></g></svg></span>
+          Pregúntale a Guardián
+        </a>
+        <button type="button" class="avatar-btn" aria-label="Menú de Carlos" style="width: 44px; height: 44px; border-radius: 50%; border: 2px solid rgba(255,255,255,0.6); background: rgba(255,255,255,0.14); color: #ffffff; font-family: 'Poppins', sans-serif; font-weight: 600; font-size: 14px; cursor: pointer">CR</button>
+      </div>
+    </div>
+  </header>
+
+  <!-- Los tres bloques desplegados, lado a lado, más el menú del avatar -->
+  <section style="max-width: 1200px; width: 100%; margin: 0 auto; box-sizing: border-box; padding: 32px 24px 40px; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 20px">
+
+    <div class="menu m1" style="display: flex; flex-direction: column; gap: 6px; background: #ffffff; border: 2px solid #0a3880; border-radius: 16px; padding: 20px; box-shadow: 0 12px 32px rgba(10,56,128,0.14)">
+      <span style="font-family: 'Poppins', sans-serif; font-weight: 600; font-size: 12px; letter-spacing: 0.1em; text-transform: uppercase; color: #0a3880; margin-bottom: 8px">Participar</span>
+      <a href="Inquietudes.dc.html" class="item" style="display: flex; flex-direction: column; gap: 2px; padding: 10px 12px; border-radius: 10px; text-decoration: none; color: #0f172a; background: #f4f6fa; min-height: 44px"><span style="font-weight: 600; font-size: 15px">Inquietudes</span><span style="font-size: 12px; color: #64748b">Las preguntas que la comunidad apoya</span></a>
+      <a href="Navegacion.dc.html" class="item" style="display: flex; flex-direction: column; gap: 2px; padding: 10px 12px; border-radius: 10px; text-decoration: none; color: #0f172a; min-height: 44px"><span style="font-weight: 600; font-size: 15px">Foros</span><span style="font-size: 12px; color: #64748b">Debates abiertos por tema</span></a>
+      <a href="Navegacion.dc.html" class="item" style="display: flex; flex-direction: column; gap: 2px; padding: 10px 12px; border-radius: 10px; text-decoration: none; color: #0f172a; min-height: 44px"><span style="font-weight: 600; font-size: 15px">Decisiones</span><span style="font-size: 12px; color: #64748b">Votaciones, consensos y resultados</span></a>
+      <a href="Navegacion.dc.html" class="item" style="display: flex; flex-direction: column; gap: 2px; padding: 10px 12px; border-radius: 10px; text-decoration: none; color: #0f172a; min-height: 44px"><span style="font-weight: 600; font-size: 15px">Grupos de trabajo</span><span style="font-size: 12px; color: #64748b">Comisiones que llevan una decisión a la práctica</span></a>
+    </div>
+
+    <div class="menu m2" style="display: flex; flex-direction: column; gap: 6px; background: #ffffff; border: 1px solid rgba(15,23,42,0.1); border-radius: 16px; padding: 20px">
+      <span style="font-family: 'Poppins', sans-serif; font-weight: 600; font-size: 12px; letter-spacing: 0.1em; text-transform: uppercase; color: #0a3880; margin-bottom: 8px">Comunidad</span>
+      <a href="Main.dc.html" class="item" style="display: flex; flex-direction: column; gap: 2px; padding: 10px 12px; border-radius: 10px; text-decoration: none; color: #0f172a; min-height: 44px"><span style="font-weight: 600; font-size: 15px">Mis comunidades</span><span style="font-size: 12px; color: #64748b">Exilio y diáspora, origen y acogida</span></a>
+      <a href="Navegacion.dc.html" class="item" style="display: flex; flex-direction: column; gap: 2px; padding: 10px 12px; border-radius: 10px; text-decoration: none; color: #0f172a; min-height: 44px"><span style="font-weight: 600; font-size: 15px">Elecciones</span><span style="font-size: 12px; color: #64748b">Campañas, candidaturas y sorteos</span></a>
+      <a href="Main.dc.html" class="item" style="display: flex; flex-direction: column; gap: 2px; padding: 10px 12px; border-radius: 10px; text-decoration: none; color: #0f172a; min-height: 44px"><span style="font-weight: 600; font-size: 15px">Mesa</span><span style="font-size: 12px; color: #64748b">Lo que toca ahora para que la comunidad arranque</span></a>
+      <a href="Navegacion.dc.html" class="item" style="display: flex; flex-direction: column; gap: 2px; padding: 10px 12px; border-radius: 10px; text-decoration: none; color: #0f172a; min-height: 44px"><span style="font-weight: 600; font-size: 15px">Observar <span style="font-size: 11px; font-weight: 600; color: #92400e; background: #fff8e1; border-radius: 999px; padding: 2px 8px; margin-left: 6px">solo observadores</span></span><span style="font-size: 12px; color: #64748b">Aparece solo si tienes el cargo</span></a>
+    </div>
+
+    <div class="menu m3" style="display: flex; flex-direction: column; gap: 6px; background: #ffffff; border: 1px solid rgba(15,23,42,0.1); border-radius: 16px; padding: 20px">
+      <span style="font-family: 'Poppins', sans-serif; font-weight: 600; font-size: 12px; letter-spacing: 0.1em; text-transform: uppercase; color: #0a3880; margin-bottom: 8px">Transparencia</span>
+      <a href="Navegacion.dc.html" class="item" style="display: flex; flex-direction: column; gap: 2px; padding: 10px 12px; border-radius: 10px; text-decoration: none; color: #0f172a; min-height: 44px"><span style="font-weight: 600; font-size: 15px">Reglas</span><span style="font-size: 12px; color: #64748b">Cómo funciona la plataforma, en claro</span></a>
+      <a href="Navegacion.dc.html" class="item" style="display: flex; flex-direction: column; gap: 2px; padding: 10px 12px; border-radius: 10px; text-decoration: none; color: #0f172a; min-height: 44px"><span style="font-weight: 600; font-size: 15px">Verificaciones</span><span style="font-size: 12px; color: #64748b">Quién está verificado y cómo</span></a>
+      <a href="Navegacion.dc.html" class="item" style="display: flex; flex-direction: column; gap: 2px; padding: 10px 12px; border-radius: 10px; text-decoration: none; color: #0f172a; min-height: 44px"><span style="font-weight: 600; font-size: 15px">Auditoría</span><span style="font-size: 12px; color: #64748b">Registro público de cada acción</span></a>
+    </div>
+
+    <div class="menu m4" style="display: flex; flex-direction: column; gap: 6px; border-radius: 16px; padding: 20px; color: #ffffff; background-color: #64748b">
+      <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 8px">
+        <span style="width: 36px; height: 36px; border-radius: 50%; background: #f2b00a; color: #0f172a; font-family: 'Poppins', sans-serif; font-weight: 600; font-size: 13px; display: flex; align-items: center; justify-content: center">CR</span>
+        <div style="display: flex; flex-direction: column"><span style="font-weight: 600; font-size: 14px">Carlos Robleto</span><span style="font-size: 12px; color: rgba(255,255,255,0.6)">Menú del avatar</span></div>
+      </div>
+      <a href="Navegacion.dc.html" class="item item-dark" style="padding: 10px 12px; border-radius: 10px; text-decoration: none; color: #ffffff; font-weight: 500; font-size: 15px; min-height: 44px; display: flex; align-items: center">Mi perfil</a>
+      <a href="Navegacion.dc.html" class="item item-dark" style="padding: 10px 12px; border-radius: 10px; text-decoration: none; color: #ffffff; font-weight: 500; font-size: 15px; min-height: 44px; display: flex; align-items: center; justify-content: space-between">Administración <span style="font-size: 11px; font-weight: 600; color: #0f172a; background: #f2b00a; border-radius: 999px; padding: 2px 8px">admin</span></a>
+      <a href="Navegacion.dc.html" class="item item-dark" style="padding: 10px 12px; border-radius: 10px; text-decoration: none; color: rgba(255,255,255,0.75); font-weight: 500; font-size: 15px; min-height: 44px; display: flex; align-items: center; border-top: 1px solid rgba(255,255,255,0.12); margin-top: 6px">Salir</a>
+    </div>
+  </section>
+
+  <section style="max-width: 1200px; width: 100%; margin: 0 auto; box-sizing: border-box; padding: 0 24px 36px; display: flex; gap: 24px; flex-wrap: wrap; font-size: 14px; color: #475569">
+    <div style="flex: 1 1 320px; display: flex; gap: 12px; align-items: flex-start"><span style="width: 28px; height: 28px; border-radius: 50%; background: #0a3880; color: #fff; font-family: 'Poppins', sans-serif; font-weight: 600; font-size: 13px; display: flex; align-items: center; justify-content: center; flex-shrink: 0">13</span><span><strong style="color: #0f172a">Antes:</strong> trece enlaces en fila (Grupos, Foros, Inquietudes, Decisiones, Elecciones, Observar, Grupos de trabajo, Reglas, Verificaciones, Auditoría, Mesa, Admin, Mi perfil).</span></div>
+    <div style="flex: 1 1 320px; display: flex; gap: 12px; align-items: flex-start"><span style="width: 28px; height: 28px; border-radius: 50%; background: #f2b00a; color: #0f172a; font-family: 'Poppins', sans-serif; font-weight: 600; font-size: 13px; display: flex; align-items: center; justify-content: center; flex-shrink: 0">3</span><span><strong style="color: #0f172a">Ahora:</strong> tres bloques con sentido (participar, comunidad, transparencia), Guardián siempre a la vista y lo personal dentro del avatar. Los menús se despliegan con una animación corta y cada opción se desliza al pasar el ratón.</span></div>
+  </section>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1360,"height":620}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {};
+  }
+}
+</script>
+</body>
+</html>
