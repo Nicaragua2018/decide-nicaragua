@@ -34,25 +34,30 @@ export default async function MapaComunidad({ groups }: { groups: GroupSummary[]
   const columna = (titulo: string, lista: GroupSummary[]) => (
     <div className="mapa-columna">
       <h3 className="mapa-subtitulo">{titulo}</h3>
-      {lista.length === 0 ? (
-        <p className="mapa-vacio">Aún sin grupos.</p>
-      ) : (
-        <ul className="mapa-lista">
-          {lista.map((g) => (
-            <Fila key={g.id} g={g} n={n.get(g.id) ?? null} />
-          ))}
-        </ul>
-      )}
+      <ul className="mapa-lista">
+        {lista.map((g) => (
+          <Fila key={g.id} g={g} n={n.get(g.id) ?? null} />
+        ))}
+      </ul>
     </div>
   );
 
   return (
     <section id="mapa" className="card mapa" aria-labelledby="mapa-titulo">
       <h2 id="mapa-titulo" className="inicio-h2">El mapa de la comunidad</h2>
-      <div className="mapa-columnas">
-        {columna('Territorio de origen', origen)}
-        {columna('Lugar de acogida', acogida)}
-      </div>
+      {groups.length === 0 ? (
+        <div className="mapa-vacio-bloque">
+          <p className="mapa-vacio">Aún no tienes comunidades asignadas</p>
+          <Link href="/me" className="btn btn-primary">
+            Completar mi perfil
+          </Link>
+        </div>
+      ) : (
+        <div className="mapa-columnas">
+          {columna('Territorio de origen', origen)}
+          {columna('Lugar de acogida', acogida)}
+        </div>
+      )}
       {otras.length > 0 && (
         <div className="mapa-otras">
           <h3 className="mapa-subtitulo">Mis comunidades</h3>

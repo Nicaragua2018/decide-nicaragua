@@ -38,7 +38,6 @@ type Paso = {
   enlace: string;
   href: string;
   icono: ReactNode;
-  amarillo?: boolean;
 };
 
 export default function PasosMesa({ paso, puedeInvitar }: { paso: 1 | 2 | 3 | 4; puedeInvitar: boolean }) {
@@ -90,7 +89,6 @@ export default function PasosMesa({ paso, puedeInvitar }: { paso: 1 | 2 | 3 | 4;
       enlace: 'Ver comunidades',
       href: '#mapa',
       icono: <Sacuanjoche variante="contorno" tamano={22} />,
-      amarillo: true,
     },
   ];
 
@@ -110,7 +108,7 @@ export default function PasosMesa({ paso, puedeInvitar }: { paso: 1 | 2 | 3 | 4;
                 className={`card card-enlace inicio-paso${activo ? ' paso-activo' : ''}`}
                 aria-current={activo ? 'step' : undefined}
               >
-                <span className={`inicio-paso-icono${p.amarillo ? ' amarillo' : ''}`}>{p.icono}</span>
+                <span className="inicio-paso-icono">{p.icono}</span>
                 <span className="inicio-paso-num">Paso {p.n}</span>
                 <span className="inicio-paso-titulo">{p.titulo}</span>
                 <span className="inicio-paso-texto">{p.texto}</span>
