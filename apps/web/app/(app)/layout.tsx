@@ -31,7 +31,7 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
   return (
     <AsistenteProvider activo={estado?.activo ?? false} topeAlcanzado={estado?.topeAlcanzado ?? false}>
       <NavBar displayName={user.displayName} email={user.email} status={user.status} esObservador={esObservador} />
-      <main className="container page">{children}</main>
+      <main className="container page page-con-barra">{children}</main>
       <AsistentePanel />
     </AsistenteProvider>
   );

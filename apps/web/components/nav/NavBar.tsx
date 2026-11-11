@@ -7,6 +7,8 @@ import Marca from './Marca';
 import MenuBloque from './MenuBloque';
 import MenuAvatar from './MenuAvatar';
 import BotonGuardian from './BotonGuardian';
+import BarraInferior from './BarraInferior';
+import GuardianFlotante from './GuardianFlotante';
 
 interface NavBarProps {
   displayName: string | null;
@@ -36,6 +38,7 @@ export default function NavBar({ displayName, email, status, esObservador = fals
   }
 
   return (
+    <>
     <header className="navbar">
       <div className="navbar-inner">
         <Marca enlace="/dashboard" />
@@ -65,5 +68,8 @@ export default function NavBar({ displayName, email, status, esObservador = fals
         </div>
       </div>
     </header>
+    <BarraInferior bloques={bloques} activo={activo} onAbrir={cerrar} />
+    <GuardianFlotante />
+    </>
   );
 }
