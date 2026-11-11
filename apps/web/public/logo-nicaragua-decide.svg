@@ -1,14 +1,13 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 240" width="240" height="240" role="img" aria-label="Nicaragua Decide: urna con la palabra VOTO, cuya V es una marca de verificación">
-  <!-- Papeleta entrando por la ranura -->
-  <rect x="88" y="22" width="64" height="70" rx="6" fill="#FFFFFF" stroke="#0B3D91" stroke-width="5" transform="rotate(-6 120 57)"/>
-  <path d="M100 50 l12 12 l22 -24" fill="none" stroke="#0067C6" stroke-width="7" stroke-linecap="round" stroke-linejoin="round" transform="rotate(-6 120 57)"/>
-  <!-- Tapa con ranura -->
-  <path d="M40 92 L200 92 L216 112 L24 112 Z" fill="#0B3D91"/>
-  <rect x="76" y="98" width="88" height="8" rx="4" fill="#06264F"/>
-  <!-- Cuerpo de la urna -->
-  <rect x="32" y="112" width="176" height="104" rx="10" fill="#0067C6"/>
-  <rect x="32" y="112" width="176" height="14" fill="#0B3D91" opacity="0.35"/>
-  <!-- VOTO: la V es una marca de verificación -->
-  <path d="M56 165 L70 184 L94 148" fill="none" stroke="#F2C230" stroke-width="10" stroke-linecap="round" stroke-linejoin="round"/>
-  <text x="96" y="185" font-family="Poppins, 'Segoe UI', Arial, sans-serif" font-weight="700" font-size="44" fill="#FFFFFF" letter-spacing="1">OTO</text>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 34 34" width="34" height="34" role="img" aria-label="Nicaragua Decide">
+  <rect width="34" height="34" rx="10" fill="#0a3880"/>
+  <g transform="translate(17 17)">
+    <g fill="#ffffff">
+      <path d="M0 0C-3.2-2.2-5-6.4-3.6-9.8C-2.6-12.6 1.2-13.2 3-10.8C5-8 3.4-3.2 0 0Z"/>
+      <path d="M0 0C-3.2-2.2-5-6.4-3.6-9.8C-2.6-12.6 1.2-13.2 3-10.8C5-8 3.4-3.2 0 0Z" transform="rotate(72)"/>
+      <path d="M0 0C-3.2-2.2-5-6.4-3.6-9.8C-2.6-12.6 1.2-13.2 3-10.8C5-8 3.4-3.2 0 0Z" transform="rotate(144)"/>
+      <path d="M0 0C-3.2-2.2-5-6.4-3.6-9.8C-2.6-12.6 1.2-13.2 3-10.8C5-8 3.4-3.2 0 0Z" transform="rotate(216)"/>
+      <path d="M0 0C-3.2-2.2-5-6.4-3.6-9.8C-2.6-12.6 1.2-13.2 3-10.8C5-8 3.4-3.2 0 0Z" transform="rotate(288)"/>
+    </g>
+    <circle r="3.2" fill="#f2b00a"/>
+  </g>
 </svg>
