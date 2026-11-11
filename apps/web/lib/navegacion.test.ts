@@ -5,18 +5,18 @@ describe('bloquesDeNavegacion', () => {
   it('persona verificada y observadora ve los tres bloques con las once opciones', () => {
     const b = bloquesDeNavegacion({ status: 'verified_citizen', esObservador: true });
     expect(b.map((x) => x.id)).toEqual(['participar', 'comunidad', 'transparencia']);
-    expect(b[0].opciones.map((o) => o.ruta)).toEqual(['/inquietudes', '/foros', '/decisiones', '/grupos']);
-    expect(b[1].opciones.map((o) => o.ruta)).toEqual(['/dashboard', '/elecciones', '/admin/mesa', '/observar']);
-    expect(b[2].opciones.map((o) => o.ruta)).toEqual(['/reglas', '/verificaciones', '/audit']);
+    expect(b[0]!.opciones.map((o) => o.ruta)).toEqual(['/inquietudes', '/foros', '/decisiones', '/grupos']);
+    expect(b[1]!.opciones.map((o) => o.ruta)).toEqual(['/dashboard', '/elecciones', '/admin/mesa', '/observar']);
+    expect(b[2]!.opciones.map((o) => o.ruta)).toEqual(['/reglas', '/verificaciones', '/audit']);
   });
   it('persona sin verificar no ve Participar ni Elecciones ni Mesa ni Observar', () => {
     const b = bloquesDeNavegacion({ status: 'pending_verification', esObservador: false });
     expect(b.map((x) => x.id)).toEqual(['comunidad', 'transparencia']);
-    expect(b[0].opciones.map((o) => o.ruta)).toEqual(['/dashboard']);
+    expect(b[0]!.opciones.map((o) => o.ruta)).toEqual(['/dashboard']);
   });
   it('Observar solo con el cargo', () => {
     const b = bloquesDeNavegacion({ status: 'verified_citizen', esObservador: false });
-    expect(b[1].opciones.map((o) => o.ruta)).not.toContain('/observar');
+    expect(b[1]!.opciones.map((o) => o.ruta)).not.toContain('/observar');
   });
 });
 
