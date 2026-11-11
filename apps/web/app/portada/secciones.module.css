@@ -576,13 +576,28 @@
   color: rgba(255, 255, 255, 0.75);
 }
 
-.pie a {
+.pieEnlaces a,
+.creditos a {
   color: rgba(255, 255, 255, 0.85);
   text-underline-offset: 3px;
 }
 
-.pie a:hover {
+.pieEnlaces a:hover,
+.creditos a:hover {
   color: var(--pt-blanco);
+}
+
+/* La marca del pie conserva su texto también en celular (hay espacio). */
+.pie :global(.navbar-marca) {
+  padding: 5px 18px 5px 5px;
+}
+
+.pie :global(.navbar-marca-texto) {
+  position: static;
+  width: auto;
+  height: auto;
+  overflow: visible;
+  clip-path: none;
 }
 
 .pieArriba {
