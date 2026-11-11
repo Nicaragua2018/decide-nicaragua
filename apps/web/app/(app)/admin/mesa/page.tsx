@@ -25,7 +25,7 @@ function descripcionCambioRegla(a: BoardActionSummary): string {
   } catch {
     // regla desconocida: se muestra la clave y el valor tal cual
   }
-  return `Cambiar la regla de la colmena «${label}» a ${conSuUnidad}`;
+  return `Cambiar la regla general «${label}» a ${conSuUnidad}`;
 }
 
 export default async function MesaPage() {

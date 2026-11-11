@@ -876,21 +876,6 @@ tr:hover td { background: #F9FAFB; }
    App interior — mejoras de UX (navbar, dashboard, pipeline)
    ============================================================ */
 
-/* ── NavBar: estado activo + avatar ─────────────────────────── */
-.navbar-link-active {
-  color: var(--primary);
-  font-weight: 600;
-}
-.navbar-avatar {
-  width: 30px; height: 30px;
-  border-radius: 50%;
-  background: var(--primary-light);
-  color: var(--primary);
-  font-size: 0.72rem; font-weight: 700;
-  display: flex; align-items: center; justify-content: center;
-  flex-shrink: 0; letter-spacing: 0.02em;
-}
-
 /* ── Breadcrumb ─────────────────────────────────────────────── */
 .breadcrumb {
   display: flex; align-items: center; gap: 0.4rem;
@@ -1363,22 +1348,6 @@ tr:hover td { background: #F9FAFB; }
   .rank-item       { padding: 0.6rem 0.75rem; }
 }
 
-/* Asistente: panel lateral y tarjetas */
-.marca-asistente { font-size: 0.75rem; font-weight: 500; color: var(--text-muted); margin-bottom: 0.25rem; }
-.asistente-boton { position: fixed; right: 1rem; bottom: 1rem; z-index: 40; box-shadow: var(--shadow); }
-.asistente-panel {
-  position: fixed; top: 0; right: 0; bottom: 0; z-index: 50;
-  width: 100%; background: var(--bg-white); border-left: 1px solid var(--border);
-  box-shadow: var(--shadow); display: flex; flex-direction: column;
-}
-@media (min-width: 640px) { .asistente-panel { width: 380px; } }
-.asistente-cabecera { display: flex; justify-content: space-between; align-items: center; padding: 0.75rem 1rem; border-bottom: 1px solid var(--border); }
-.asistente-mensajes { flex: 1; overflow-y: auto; padding: 1rem; display: flex; flex-direction: column; gap: 0.75rem; font-size: 0.9rem; }
-.asistente-msg { padding: 0.5rem 0.75rem; border-radius: var(--radius); }
-.asistente-msg-persona { background: var(--primary-light); align-self: flex-end; max-width: 90%; }
-.asistente-msg-asistente { background: var(--bg); }
-.asistente-enlaces { margin: 0.5rem 0 0 1rem; }
-.asistente-pie { padding: 0.75rem 1rem; border-top: 1px solid var(--border); display: flex; flex-direction: column; gap: 0.5rem; }
 .al-dia, .crecer { margin-bottom: 1rem; }
 .al-dia-cabecera { display: flex; justify-content: space-between; align-items: center; gap: 1rem; }
 .al-dia-resumen { margin-bottom: 0.75rem; }
@@ -1387,13 +1356,6 @@ tr:hover td { background: #F9FAFB; }
 .al-dia-etiqueta { font-size: 0.75rem; color: var(--text-muted); }
 .crecer-listas { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1rem; margin: 0.75rem 0; }
 .crecer-lista { margin: 0.25rem 0 0 1.25rem; font-size: 0.875rem; }
-
-/* ─── Sugerencias del asistente ─── */
-.sugerencia-asistente { border-left: 4px solid var(--primary, #2563eb); background: var(--bg-white); }
-.sugerencia-asistente-etiqueta { font-size: 0.75rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-muted); margin-bottom: 0.25rem; }
-.sugerencia-asistente blockquote { margin: 0.25rem 0 0.25rem 0.5rem; padding-left: 0.75rem; border-left: 2px solid var(--border); font-size: 0.9rem; color: var(--text-muted); }
-.sugerencia-asistente-grupo { margin-top: 0.75rem; }
-.badge-asistente { background: transparent; border: 1px dashed var(--text-muted); color: var(--text-muted); font-size: 0.7rem; }
 
 /* ============================================================
    Elecciones y «Quiénes nos representan» (.el-*) — 3C-1

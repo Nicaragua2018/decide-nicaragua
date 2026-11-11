@@ -42,7 +42,7 @@ export default function CrecerCard({
       <h2 id="crecer-titulo" className="card-title">
         {faltan === 1 ? 'Falta 1 persona' : `Faltan ${faltan} personas`} para {activa ? 'llegar a 20' : 'activar la comunidad'}
       </h2>
-      {deAsistente && <p className="marca-asistente">sugerencia del asistente</p>}
+      {deAsistente && <p className="marca-guardian">sugerencia de Guardián</p>}
       <p>{texto}</p>
       <div className="crecer-listas">
         <div>

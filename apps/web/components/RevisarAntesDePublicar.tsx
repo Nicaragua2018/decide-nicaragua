@@ -48,7 +48,7 @@ export function AvisoRevision({
         <p>Esta frase puede ofender y restarle apoyo a tu idea. ¿Quieres decirla de otra forma?</p>
         {sugerencia && (
           <>
-            <p className="text-sm font-medium mt-2">Sugerencia del asistente</p>
+            <p className="text-sm font-medium mt-2">Revisión del asistente de IA</p>
             <p className="text-sm" style={{ whiteSpace: 'pre-wrap' }}>{sugerencia}</p>
           </>
         )}
@@ -74,7 +74,7 @@ export function AvisoRevision({
       {revision.explicacion && <p className="text-sm">{revision.explicacion}</p>}
       {sugerencia && (
         <>
-          <p className="text-sm font-medium mt-2">Sugerencia del asistente</p>
+          <p className="text-sm font-medium mt-2">Revisión del asistente de IA</p>
           <p className="text-sm" style={{ whiteSpace: 'pre-wrap' }}>{sugerencia}</p>
         </>
       )}

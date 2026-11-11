@@ -1,5 +1,5 @@
 /**
- * Hexágono de la colmena con iniciales (o un número, o ✓). Sin fotos: todas las personas se ven igual.
+ * Círculo con iniciales (o un número, o ✓). Sin fotos: todas las personas se ven igual.
  * Es decorativo: el nombre siempre va escrito al lado.
  */
 export type HexVariante = 'oro' | 'azul' | 'claro' | 'punteado';
@@ -27,8 +27,6 @@ export function Hexagono({
   variante?: HexVariante;
   tamano?: number;
 }) {
-  // Hexágono con punta arriba en un cuadro de 100 × 100.
-  const puntos = '50,3 93,27 93,73 50,97 7,73 7,27';
   const largo = texto.length;
   const fuente = largo <= 1 ? 42 : largo === 2 ? 34 : 26;
   return (
@@ -40,13 +38,14 @@ export function Hexagono({
       focusable="false"
       className="el-hex"
     >
-      <polygon
-        points={puntos}
+      <circle
+        cx="50"
+        cy="50"
+        r="45"
         fill={RELLENO[variante]}
         stroke="#1B2A4A"
         strokeWidth={variante === 'punteado' ? 3 : 4}
         strokeDasharray={variante === 'punteado' ? '8 6' : undefined}
-        strokeLinejoin="round"
       />
       <text
         x="50"
