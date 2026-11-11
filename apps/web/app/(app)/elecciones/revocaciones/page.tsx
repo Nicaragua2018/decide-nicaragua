@@ -6,7 +6,7 @@ import { fechaLarga } from '@/components/elecciones/textos';
 import { ApoyoBoton } from './ApoyoBoton';
 import { PedirRevocacionForm, type CargoPedible } from './PedirRevocacionForm';
 
-export const metadata: Metadata = { title: 'Pedir la revocación de un cargo — Decide Nicaragua' };
+export const metadata: Metadata = { title: 'Pedir la revocación de un cargo' };
 export const dynamic = 'force-dynamic';
 
 const API_URL = process.env.API_URL ?? 'http://localhost:4000';

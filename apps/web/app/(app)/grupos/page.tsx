@@ -4,7 +4,7 @@ import type { ComunidadTipo, GruposAmbitoResponse, RuleView } from '@decide/shar
 import { GrupoCard } from './GrupoCard';
 import { ProponerGrupoForm, type AmbitoOpcion } from './ProponerGrupoForm';
 
-export const metadata: Metadata = { title: 'Grupos de trabajo — Decide Nicaragua' };
+export const metadata: Metadata = { title: 'Grupos de trabajo' };
 
 const ENCABEZADO: Record<ComunidadTipo, string> = {
   origen: 'Tu territorio de origen',

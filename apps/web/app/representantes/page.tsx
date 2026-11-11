@@ -5,7 +5,7 @@ import { Hexagono } from '@/components/elecciones/Hexagono';
 import { eventoEtiqueta, fechaLarga } from '@/components/elecciones/textos';
 
 export const metadata: Metadata = {
-  title: 'Quiénes nos representan — Decide Nicaragua',
+  title: 'Quiénes nos representan',
   description: 'La mesa, los observadores y quienes coordinan cada comunidad de Decide Nicaragua.',
 };
 

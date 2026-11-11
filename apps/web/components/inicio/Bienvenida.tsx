@@ -21,7 +21,8 @@ function fraseDelMomento(preguntas: number | null): string {
   if (preguntas === null) return 'Esta es la mesa de tu comunidad.';
   if (preguntas === 0) return 'Todavía no hay preguntas abiertas: plantea la primera.';
   if (preguntas === 1) return 'La comunidad ya tiene su primera pregunta.';
-  return `La comunidad ya tiene sus primeras ${preguntas} preguntas.`;
+  if (preguntas <= 20) return `La comunidad ya tiene sus primeras ${preguntas} preguntas.`;
+  return `La comunidad tiene ${preguntas} preguntas abiertas.`;
 }
 
 export default function Bienvenida({

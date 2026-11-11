@@ -5,7 +5,7 @@ import { GENERAL_GROUP_SLUG } from '@decide/shared';
 import type { CambioReglaView, GroupListResponse, RuleView } from '@decide/shared';
 import { ProponerCambio } from './ProponerCambio';
 
-export const metadata: Metadata = { title: 'Reglas — Decide Nicaragua' };
+export const metadata: Metadata = { title: 'Reglas' };
 
 const UNIT_LABEL: Record<string, string> = {
   personas: 'personas',

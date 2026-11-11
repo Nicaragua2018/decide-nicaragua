@@ -7,7 +7,7 @@ import { Migas } from '@/components/Migas';
 import { PestanasComunidad } from './PestanasComunidad';
 import { TarjetaInquietud } from './TarjetaInquietud';
 
-export const metadata: Metadata = { title: 'Inquietudes — Decide Nicaragua' };
+export const metadata: Metadata = { title: 'Inquietudes' };
 
 export default async function InquietudesPage({
   searchParams,

@@ -3,7 +3,7 @@ import Link from 'next/link';
 import { NewsletterForm } from './NewsletterForm';
 
 export const metadata: Metadata = {
-  title: 'Boletín — Decide Nicaragua',
+  title: 'Boletín',
   description:
     'Suscríbete al boletín de Decide Nicaragua y mantente informado sobre la plataforma y la participación democrática nicaragüense.',
 };

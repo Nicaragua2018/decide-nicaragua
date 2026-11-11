@@ -6,7 +6,7 @@ import { MisCargos } from './MisCargos';
 import { LineaDeTiempo } from '@/components/elecciones/LineaDeTiempo';
 import { cuentaAtras, puestosTexto, tituloEleccion } from '@/components/elecciones/textos';
 
-export const metadata: Metadata = { title: 'Elecciones — Decide Nicaragua' };
+export const metadata: Metadata = { title: 'Elecciones' };
 
 const MOTIVO: Record<EleccionResumen['motivo'], string> = {
   primera: 'Primera elección',

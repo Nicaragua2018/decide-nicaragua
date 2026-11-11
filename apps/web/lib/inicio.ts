@@ -1,4 +1,4 @@
-import type { GroupSummary } from '@decide/shared';
+import type { EleccionResumen, GroupSummary } from '@decide/shared';
 
 export type Cifras = {
   miembros: number | null;
@@ -17,6 +17,14 @@ export function pasoQueToca(c: Cifras): 1 | 2 | 3 | 4 {
   if (c.preguntas === 0) return 2;
   if ((c.elecciones ?? 0) === 0) return 3;
   return 4;
+}
+
+/** Elecciones de una comunidad que aún no están contadas (las que la lista llama «de tu comunidad»). */
+export function contarEleccionesEnCurso(
+  elecciones: Pick<EleccionResumen, 'ambito' | 'fase'>[],
+  ambitoId: string,
+): number {
+  return elecciones.filter((e) => e.ambito.id === ambitoId && e.fase !== 'contada').length;
 }
 
 /** La comunidad principal: el primer grupo `custom`; si no hay, el primero; si no hay grupos, null. */

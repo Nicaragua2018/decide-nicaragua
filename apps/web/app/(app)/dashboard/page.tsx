@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import { Suspense } from 'react';
 import { serverFetch } from '@/lib/api';
-import { comunidadPrincipal, pasoQueToca, type Cifras as CifrasDatos } from '@/lib/inicio';
+import { comunidadPrincipal, contarEleccionesEnCurso, pasoQueToca, type Cifras as CifrasDatos } from '@/lib/inicio';
 import Bienvenida from '@/components/inicio/Bienvenida';
 import Cifras from '@/components/inicio/Cifras';
 import PasosMesa from '@/components/inicio/PasosMesa';
@@ -16,7 +16,7 @@ import type {
   VerificationStatus,
 } from '@decide/shared';
 
-export const metadata: Metadata = { title: 'Inicio — Decide Nicaragua' };
+export const metadata: Metadata = { title: 'Inicio' };
 
 /** Una llamada que falla (red o estado no 2xx) devuelve null: la cifra se omite, no se inventa. */
 async function leer<T>(ruta: string): Promise<T | null> {
@@ -84,7 +84,7 @@ export default async function DashboardPage() {
         miembros: detalle?.memberCount ?? null,
         activada: detalle?.activated ?? null,
         preguntas: inquietudes ? inquietudes.filter((i) => !i.hidden).length : null,
-        elecciones: elecciones ? elecciones.filter((e) => e.fase !== 'contada').length : null,
+        elecciones: elecciones ? contarEleccionesEnCurso(elecciones, principal.id) : null,
       }
     : { miembros: null, preguntas: null, elecciones: null, activada: null };
 
@@ -108,7 +108,7 @@ export default async function DashboardPage() {
           </Suspense>
         </div>
         <div className="inicio-mapa fade-up d7">
-          <MapaComunidad groups={groups} />
+          <MapaComunidad groups={groupsData ? groups : null} />
         </div>
       </div>
     </div>

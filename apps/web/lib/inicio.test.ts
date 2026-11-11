@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { agruparGrupos, comunidadPrincipal, pasoQueToca } from './inicio';
+import { agruparGrupos, comunidadPrincipal, contarEleccionesEnCurso, pasoQueToca } from './inicio';
 const g = (id: string, type: any) => ({ id, name: id, slug: id, type, description: null });
 
 describe('pasoQueToca', () => {
@@ -22,4 +22,11 @@ describe('agruparGrupos', () => {
     expect(r.acogida.map((x) => x.id)).toEqual(['f']);
     expect(r.otras.map((x) => x.id)).toEqual(['e', 't']);
   });
+});
+
+describe('contarEleccionesEnCurso', () => {
+  const e = (ambitoId: string, fase: string) => ({ ambito: { id: ambitoId, nombre: ambitoId }, fase }) as any;
+  it('cuenta solo las de la comunidad indicada y que no estén contadas', () =>
+    expect(contarEleccionesEnCurso([e('a', 'votacion'), e('b', 'votacion'), e('a', 'contada'), e('a', 'candidaturas')], 'a')).toBe(2));
+  it('sin elecciones de esa comunidad → 0', () => expect(contarEleccionesEnCurso([e('b', 'votacion')], 'a')).toBe(0));
 });

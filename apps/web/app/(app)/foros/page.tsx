@@ -5,7 +5,7 @@ import { GENERAL_GROUP_NAME } from '@decide/shared';
 import type { ForumSummary } from '@decide/shared';
 import { NewForumForm } from './NewForumForm';
 
-export const metadata: Metadata = { title: 'Foros — Decide Nicaragua' };
+export const metadata: Metadata = { title: 'Foros' };
 
 export default async function ForosPage() {
   const [forumsRes, boardRes] = await Promise.all([

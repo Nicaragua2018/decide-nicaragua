@@ -25,8 +25,9 @@ function Fila({ g, n }: { g: GroupSummary; n: number | null }) {
   );
 }
 
-export default async function MapaComunidad({ groups }: { groups: GroupSummary[] }) {
-  const { origen, acogida, otras } = agruparGrupos(groups);
+/** `groups` es null cuando /api/groups falló: se avisa del fallo en vez de decir que no hay comunidades. */
+export default async function MapaComunidad({ groups }: { groups: GroupSummary[] | null }) {
+  const { origen, acogida, otras } = agruparGrupos(groups ?? []);
   const territoriales = [...origen, ...acogida];
   const conteos = await Promise.all(territoriales.map((g) => miembrosDe(g.id)));
   const n = new Map(territoriales.map((g, i) => [g.id, conteos[i] ?? null]));
@@ -45,7 +46,9 @@ export default async function MapaComunidad({ groups }: { groups: GroupSummary[]
   return (
     <section id="mapa" className="card mapa" aria-labelledby="mapa-titulo">
       <h2 id="mapa-titulo" className="inicio-h2">El mapa de la comunidad</h2>
-      {groups.length === 0 ? (
+      {groups === null ? (
+        <p className="mapa-vacio">No se pudieron cargar tus comunidades. Intenta de nuevo en un momento.</p>
+      ) : groups.length === 0 ? (
         <div className="mapa-vacio-bloque">
           <p className="mapa-vacio">Aún no tienes comunidades asignadas</p>
           <Link href="/me" className="btn btn-primary">
