@@ -71,7 +71,7 @@ export function Pie() {
         <div className={s.pieArriba}>
           <Marca enlace="/" />
           <nav className={s.pieEnlaces} aria-label="Pie de página">
-            <Link href="/explore">Mirar sin registrarse</Link>
+            <Link href="/explore">Cómo funciona</Link>
             <Link href="/representantes">Quiénes nos representan</Link>
             <a href="#contacto">Contacto</a>
             <Link href="/login">Entrar</Link>

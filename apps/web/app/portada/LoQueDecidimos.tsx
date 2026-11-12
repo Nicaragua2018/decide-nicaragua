@@ -47,7 +47,7 @@ export async function LoQueDecidimos() {
 
         <div className={s.enlaces}>
           <Link href="/explore" className={s.botonSecundario}>
-            Mirar sin registrarse
+            Cómo funciona
           </Link>
           <Link href="/representantes" className={s.botonSecundario}>
             Quiénes nos representan

@@ -58,7 +58,7 @@ export function Hero() {
             Únete a la comunidad <span aria-hidden="true">→</span>
           </Link>
           <Link href="/explore" className={styles.botonSecundario}>
-            Mirar sin registrarse
+            Cómo funciona
           </Link>
         </div>
 

@@ -90,7 +90,7 @@ export default async function RepresentantesPage() {
           </Link>
           <div className="ln-nav-actions">
             <Volver href="/">Inicio</Volver>
-            <Link href="/explore" className="ln-nav-link">Modo observador</Link>
+            <Link href="/explore" className="ln-nav-link">Cómo funciona</Link>
             <Link href="/login" className="ln-nav-cta">Entrar</Link>
           </div>
         </div>
@@ -239,7 +239,7 @@ export default async function RepresentantesPage() {
           <span className="ln-brand ln-brand--light">Nicaragua <em>Decide</em></span>
           <div className="ln-footer-links">
             <Link href="/" className="ln-footer-link">Inicio</Link>
-            <Link href="/explore" className="ln-footer-link">Modo observador</Link>
+            <Link href="/explore" className="ln-footer-link">Cómo funciona</Link>
             <Link href="/login" className="ln-footer-link">Registrarme</Link>
           </div>
           <span className="ln-footer-copy">Código abierto · Auditable · Sin ánimo de lucro</span>
