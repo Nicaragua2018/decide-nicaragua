@@ -3,9 +3,9 @@ import type { Metadata } from 'next';
 import { Volver } from '@/components/Volver';
 
 export const metadata: Metadata = {
-  title: 'Modo observador',
+  title: 'Cómo funciona',
   description:
-    'Explora la actividad pública de Nicaragua Decide sin necesidad de cuenta: propuestas, elecciones, sorticiones y auditoría.',
+    'Cómo funciona Nicaragua Decide por dentro: propuestas, elecciones, sorteos y auditoría. El contenido es privado y solo lo ven los miembros.',
 };
 
 export default function ExplorePage() {
@@ -29,22 +29,22 @@ export default function ExplorePage() {
 
       {/* ── Observer banner ─────────────────────────────────────── */}
       <div className="ex-banner">
-        <span className="ex-badge">Solo lectura</span>
-        Exploras como observador — puedes ver pero no participar.
+        <span className="ex-badge">Privado</span>
+        Lo que se publica dentro de la plataforma solo lo ven los miembros, para proteger a quien participa.
         <Link href="/login" className="ex-banner-link">Registrarme para participar →</Link>
       </div>
 
       {/* ── Header ──────────────────────────────────────────────── */}
       <header className="ex-header">
         <div className="ln-container">
-          <span className="ln-label">Modo observador</span>
+          <span className="ln-label">Cómo funciona</span>
           <h1 className="ex-title">
-            Lo que puedes<br /><em>ver aquí.</em>
+            Cómo funciona<br /><em>por dentro.</em>
           </h1>
           <p className="ex-subtitle">
-            La plataforma publica propuestas activas, resultados de elecciones,
-            sorticiones verificables y el registro de auditoría — sin necesidad de cuenta.
-            Para deliberar, votar o ser seleccionado, necesitas registrarte.
+            Aquí te explicamos qué hacen los miembros: proponer, debatir, votar, sortear y
+            revisar la auditoría. Ese contenido es privado y solo se ve con una cuenta,
+            porque protege a quien participa. Para entrar, necesitas registrarte.
           </p>
           <Link href="/login" className="ln-btn-primary" style={{ marginTop: '0.5rem' }}>
             Quiero participar
@@ -149,7 +149,7 @@ export default function ExplorePage() {
                 </ul>
                 <div className="ex-phase-badge">
                   <span className="ex-phase-dot" />
-                  Plataforma en fase inicial · Contenido público próximamente
+                  Solo para miembros
                 </div>
               </div>
 
@@ -157,7 +157,7 @@ export default function ExplorePage() {
               <div className="ex-preview">
                 <div className="ex-preview-header">
                   <span className="ex-preview-title">{s.label}</span>
-                  <span className="ex-preview-lock">Modo observador</span>
+                  <span className="ex-preview-lock">Privado</span>
                 </div>
                 <div className="ex-preview-body">
                   {s.preview.map((row, j) => (
@@ -172,7 +172,7 @@ export default function ExplorePage() {
                     </div>
                   ))}
                   <div className="ex-preview-overlay">
-                    <span>Disponible cuando haya contenido público</span>
+                    <span>Visible solo para miembros</span>
                   </div>
                 </div>
               </div>
@@ -242,9 +242,9 @@ const sections = [
     id:    'proposals',
     num:   '01',
     label: 'Propuestas',
-    desc:  'Las propuestas de deliberación que los grupos han publicado. Puedes leer el cuerpo completo, ver las señales de la comunidad (apoya / neutral / objeta) y leer los comentarios — sin poder señalar ni comentar.',
-    canSee:   ['Leer propuestas completas', 'Ver señales de la comunidad', 'Leer comentarios y debates'],
-    cannotDo: ['Enviar señal de posición', 'Comentar o responder'],
+    desc:  'Las propuestas que los grupos ponen a debate. Los miembros leen el texto completo, dicen si apoyan, se mantienen neutrales u objetan, y comentan.',
+    canSee:   ['Leer propuestas completas', 'Dar su posición: apoya, neutral u objeta', 'Comentar y debatir'],
+    cannotDo: ['Nada se publica fuera de la plataforma'],
     preview: [
       { titleW: '72%', metaW: '45%', status: 'open',   statusLabel: 'Abierta' },
       { titleW: '60%', metaW: '38%', status: 'open',   statusLabel: 'Abierta' },
@@ -255,9 +255,9 @@ const sections = [
     id:    'elections',
     num:   '02',
     label: 'Elecciones',
-    desc:  'Elecciones con método Condorcet-Schulze. Puedes ver los candidatos, el período de votación y los resultados completos (matrices de preferencia) una vez contadas — sin poder emitir papeleta.',
-    canSee:   ['Ver candidatos y descripción', 'Leer resultados con matrices', 'Ver la semilla pública del conteo'],
-    cannotDo: ['Emitir o actualizar papeleta'],
+    desc:  'Elecciones con el método Condorcet-Schulze. Los miembros ven las candidaturas, votan en secreto y, al cerrar, revisan los resultados completos con sus matrices de preferencia.',
+    canSee:   ['Ver candidaturas y descripción', 'Votar en secreto', 'Revisar resultados y matrices'],
+    cannotDo: ['Nadie ve cómo votó cada persona'],
     preview: [
       { titleW: '65%', metaW: '48%', status: 'open',    statusLabel: 'Votando' },
       { titleW: '55%', metaW: '40%', status: 'tallied', statusLabel: 'Contada' },
@@ -267,9 +267,9 @@ const sections = [
     id:    'sortition',
     num:   '03',
     label: 'Sortición',
-    desc:  'Sorteos de representantes usando Fisher-Yates con semilla SHA-256 pública. Puedes ver el pool, los seleccionados y verificar el resultado de forma independiente usando la semilla publicada.',
-    canSee:   ['Ver sorteos ejecutados y pendientes', 'Ver semilla pública de verificación', 'Replicar el resultado de forma independiente'],
-    cannotDo: ['Inscribirse como candidato al pool'],
+    desc:  'Sorteos de representantes con el método Fisher-Yates y una semilla SHA-256. Los miembros ven quiénes entraron al sorteo y quiénes salieron, y pueden repetir el cálculo con la semilla para comprobarlo.',
+    canSee:   ['Ver sorteos hechos y pendientes', 'Ver la semilla de verificación', 'Repetir el resultado por su cuenta'],
+    cannotDo: ['Nadie puede elegir el resultado a mano'],
     preview: [
       { titleW: '68%', metaW: '50%', status: 'completed', statusLabel: 'Ejecutado' },
       { titleW: '58%', metaW: '42%', status: 'pending',   statusLabel: 'Pendiente' },
@@ -279,9 +279,9 @@ const sections = [
     id:    'audit',
     num:   '04',
     label: 'Auditoría',
-    desc:  'Registro append-only de todos los eventos críticos: invitaciones, logins, propuestas creadas, votos emitidos, sorteos ejecutados. Cada evento incluye un hash de integridad verificable.',
-    canSee:   ['Ver eventos ordenados por fecha', 'Ver tipo de acción y recurso afectado', 'Verificar hashes de integridad'],
-    cannotDo: ['Ver datos personales de los actores'],
+    desc:  'Un registro que solo crece y nunca se borra: invitaciones, entradas, propuestas, votos emitidos y sorteos. Cada evento lleva una huella de integridad que los miembros pueden verificar.',
+    canSee:   ['Ver los eventos por fecha', 'Ver qué se hizo y sobre qué', 'Verificar las huellas de integridad'],
+    cannotDo: ['Nunca muestra correos ni el sentido de un voto'],
     preview: [
       { titleW: '55%', metaW: '62%', status: 'verified', statusLabel: 'Verificado' },
       { titleW: '60%', metaW: '55%', status: 'verified', statusLabel: 'Verificado' },
