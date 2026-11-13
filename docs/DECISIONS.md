@@ -792,6 +792,29 @@ El plan 3C-2 completa a 3C-1: cómo se deja, se pide dejar o se pierde un cargo,
 
 ---
 
+## ADR-030: Rediseño, nombre y contenido privado (2026-11-11)
+**Fecha:** 2026-11-11
+**Estado:** Aceptado
+
+### Contexto
+La barra tenía 13 enlaces y la app no tenía una identidad propia. Carlos aprobó un rediseño (spec `docs/superpowers/specs/2026-11-11-rediseno-navegacion-guardian-design.md`). Al revisarlo en producción pidió dos cosas más: el nombre correcto en todas partes y flechas de volver que se vean. También preguntó por qué la página pública no mostraba las propuestas ni las doce preguntas.
+
+### Decisión
+- **Navegación en 3 bloques.** La barra pasa a 3 menús desplegables, el menú del avatar y el botón de Guardián. Quién ve cada enlace no cambia. En celular hay barra inferior y botón flotante. Todas las animaciones se apagan con «reducir movimiento».
+- **Guardián.** El asistente se llama Guardián (un guardabarranco) donde ayuda a la persona. Donde controla o rinde cuentas sigue llamándose «el asistente de IA».
+- **Sin «colmena» en la interfaz.** Dentro de la app se dice «Nicaragua Decide» o «general»; en la portada, «comunidad». El video de la portada sigue con Honey (Carlos lo aceptó).
+- **El nombre es «Nicaragua Decide»**, nunca «Decide Nicaragua», en textos, correos, comentarios y documentación (PR #27).
+- **Volver.** Los enlaces para regresar usan el componente `Volver`: una pastilla azul con flecha. Las páginas públicas tienen un botón «Inicio».
+- **El contenido es privado.** Propuestas, inquietudes, comentarios y las doce preguntas solo se ven con sesión. La API no tiene ninguna lectura pública, y así se queda para proteger a quien participa. La página `/explore` pasa a llamarse «Cómo funciona»: explica lo que hacen los miembros y lo que nunca se publica, sin prometer contenido público (PR #28).
+
+### Consecuencias
+- Quien visita sin cuenta no puede comprobar la actividad real; solo lee cómo funciona.
+- Si un día se abre contenido al público, hará falta una decisión nueva: qué se muestra, cómo se ocultan los autores y que nunca salga quién apoyó o votó.
+- El remitente de los correos sale de `EMAIL_FROM_NAME`; si el `.env` del servidor aún dice «Decide Nicaragua», hay que cambiarlo allí.
+- Falta la revisión visual de Carlos en 1360, 768, 390 y 320 px con «reducir movimiento».
+
+---
+
 ## Decisiones pendientes
 
 | ID | Pregunta | Prioridad |

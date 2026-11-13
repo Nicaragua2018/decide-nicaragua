@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # =============================================================
-# Decide Nicaragua - VPS deployment script
+# Nicaragua Decide - VPS deployment script
 #
 # Usage:
 #   bash deploy.sh

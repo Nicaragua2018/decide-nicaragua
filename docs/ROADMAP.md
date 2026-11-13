@@ -1,6 +1,6 @@
 # ROADMAP.md — Nicaragua Decide
 
-> Última actualización: 2026-11-06
+> Última actualización: 2026-11-13
 
 ---
 
@@ -13,6 +13,19 @@ Construir la infraestructura digital de participación democrática más confiab
 ## Estado actual: MVP completo
 
 El repositorio contiene un MVP funcional con Fases 0–7 implementadas y 155 tests pasando en el backend.
+
+---
+
+## Rediseño y nombre (2026-11-11): COMPLETO
+
+Nueva identidad y navegación más simple (ADR-030):
+
+- [x] Barra en 3 bloques, menú del avatar y botón de Guardián; barra inferior en celular
+- [x] Inicio como «mesa de la comunidad» e inquietudes con pestañas y tarjetas
+- [x] Guardián donde ayuda el asistente; sin «colmena» en la interfaz
+- [x] «Nicaragua Decide» en todas partes y flechas de volver en pastilla azul
+- [x] `/explore` pasa a «Cómo funciona»; el contenido sigue solo para miembros
+- [ ] Revisión visual de Carlos en computadora y celular
 
 ---
 
