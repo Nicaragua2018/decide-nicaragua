@@ -20,7 +20,7 @@ En el panel de Hostinger, busca la sección **DNS Zone** o **Gestor de DNS** y a
 
 ## 2. Preparar el archivo de entorno en el VPS
 
-En el directorio del proyecto en el VPS, crea o revisa `env.production`.
+En el directorio del proyecto en el VPS, crea o revisa `.env`.
 
 Debe contener al menos estos valores:
 
@@ -60,30 +60,37 @@ TRAEFIK_DASHBOARD_PASSWORD=admin:$$apr1$$<tu-hash-htpasswd>
 Si ya existe `.env.example`, puedes copiarlo y editarlo:
 
 ```bash
-cp .env.example env.production
-nano env.production
+cp .env.example .env
+nano .env
 ```
 
-> Si `env.production` ya existe, puedes usar `nano env.production` para revisar y actualizar los valores.
+> Si `.env` ya existe, puedes usar `nano .env` para revisar y actualizar los valores.
 
 ## 3. Desplegar la app
 
-Desde el directorio del repositorio en el VPS, ejecuta:
+El proyecto vive en `/docker/decide-nicaragua` y el archivo de entorno es `.env`, que `deploy.sh` usa por defecto.
+`deploy.sh` no descarga el código nuevo: primero hay que hacer `git pull`.
 
 ```bash
-bash deploy.sh --env-file env.production
+cd /docker/decide-nicaragua
+git pull
+bash deploy.sh
 ```
+
+Si la construcción de la web termina con «Build failed because of webpack errors» y el mismo código ya se había construido bien, lo más probable es que fallara un momento la descarga de las fuentes de Google (`next/font/google`). Basta con repetir `bash deploy.sh`. Mientras la construcción falla, la versión anterior sigue en marcha: `deploy.sh` solo apaga los servicios después de construir.
+
+Con `TRAEFIK_MODO=compartido`, los avisos `WARN` sobre `TRAEFIK_ACME_EMAIL` y `TRAEFIK_DASHBOARD_PASSWORD` son normales y no afectan.
 
 Si quieres solo reiniciar sin reconstruir imágenes:
 
 ```bash
-bash deploy.sh --env-file env.production --no-build
+bash deploy.sh --no-build
 ```
 
 Si necesitas crear el administrador inicial después de desplegar:
 
 ```bash
-bash deploy.sh --env-file env.production --no-build --seed-admin
+bash deploy.sh --no-build --seed-admin
 ```
 
 ## 4. Verificar que el dominio funcione
@@ -107,39 +114,39 @@ dig +short traefik.nicaraguadecide.org
 Y luego, tras el despliegue:
 
 ```bash
-docker compose --env-file env.production logs -f traefik api web
+docker compose --env-file .env logs -f traefik api web
 ```
 
 ## 6. Asistente de IA: clave y examen
 
 El asistente está apagado por defecto (ADR-025). Para encenderlo:
 
-1. Añadir la clave a `env.production` sin que se vea en pantalla ni quede en el historial:
+1. Añadir la clave a `.env` sin que se vea en pantalla ni quede en el historial:
 
    ```bash
    read -rs -p "Pega la clave de Anthropic y pulsa Enter: " CLAVE; echo
-   printf 'ANTHROPIC_API_KEY=%s\nASISTENTE_ACTIVO=false\n' "$CLAVE" >> env.production
+   printf 'ANTHROPIC_API_KEY=%s\nASISTENTE_ACTIVO=false\n' "$CLAVE" >> .env
    unset CLAVE
-   chmod 600 env.production
+   chmod 600 .env
    ```
 
-   Si `env.production` ya tenía esas líneas, hay que borrar las viejas con `nano env.production`.
+   Si `.env` ya tenía esas líneas, hay que borrar las viejas con `nano .env`.
 
 2. Correr el examen. Usa una imagen de prueba con el código fuente y no toca la API en marcha:
 
    ```bash
    docker build -f apps/api/Dockerfile --target builder -t decide-api-examen .
-   docker run --rm --network decide_network --env-file env.production \
+   docker run --rm --network decide_network --env-file .env \
      -e ASISTENTE_ACTIVO=true decide-api-examen \
      pnpm --filter @decide/api asistente:examen
    ```
 
    Tiene que terminar sin fallos. Un caso que falla se repite dos veces más y aprueba si acierta 2 de 3 (regla decidida el 2026-11-10); la lista «Casos repetidos» lo muestra. El gasto de la corrida cuenta para el tope del mes.
 
-3. Solo si el examen aprueba completo: cambiar `ASISTENTE_ACTIVO=false` por `ASISTENTE_ACTIVO=true` en `env.production` y reiniciar:
+3. Solo si el examen aprueba completo: cambiar `ASISTENTE_ACTIVO=false` por `ASISTENTE_ACTIVO=true` en `.env` y reiniciar:
 
    ```bash
-   bash deploy.sh --env-file env.production --no-build
+   bash deploy.sh --no-build
    ```
 
    Para apagarlo, volver a `false` y reiniciar igual.
@@ -156,6 +163,6 @@ En el VPS `srv2047035` (`179.236.66.237`) ya corre el Traefik de OpenCivic Solut
 
 ## Notas finales
 
-- El archivo `env.production` contiene secretos y no debe compartirse públicamente.
+- El archivo `.env` contiene secretos y no debe compartirse públicamente.
 - Si tu DNS todavía no se ha propagado, espera 5-10 minutos tras guardar los registros.
 - Si tienes dudas en Hostinger, busca la opción de **Editar registros DNS** y agrega los A records exactamente como aparecen arriba.

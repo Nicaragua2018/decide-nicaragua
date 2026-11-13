@@ -1,7 +1,7 @@
 # CLAUDE.md
 
 ## Proyecto
-Este repositorio contiene la construcción de la plataforma “Decide Nicaragua”, una infraestructura digital para participación democrática verificable, transparencia organizativa y toma de decisiones auditables para ciudadanos nicaragüenses, iniciando con miembros en el exilio.
+Este repositorio contiene la construcción de la plataforma “Nicaragua Decide”, una infraestructura digital para participación democrática verificable, transparencia organizativa y toma de decisiones auditables para ciudadanos nicaragüenses, iniciando con miembros en el exilio.
 
 ## Principios permanentes
 - Prioridad a seguridad, privacidad y trazabilidad.

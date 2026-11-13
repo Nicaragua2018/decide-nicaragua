@@ -140,8 +140,11 @@ git commit -m "feat: initial database migration"
 ### Actualizaciones
 
 ```bash
+git pull
 ./deploy.sh
 ```
+
+`deploy.sh` no descarga el código nuevo; por eso va primero `git pull`. Más detalles en [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
 
 `deploy.sh` valida variables de entorno, construye imágenes Docker, ejecuta `prisma migrate deploy` y reinicia los servicios con health checks.
 

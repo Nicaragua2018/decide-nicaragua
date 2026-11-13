@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # =============================================================
-# Decide Nicaragua — Generación de la migración inicial
+# Nicaragua Decide — Generación de la migración inicial
 #
 # Uso (ejecutar desde la raíz del monorepo, UNA VEZ antes del
 # primer despliegue):
