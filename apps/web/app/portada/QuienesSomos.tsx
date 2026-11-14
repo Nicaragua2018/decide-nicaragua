@@ -3,7 +3,7 @@ import Link from 'next/link';
 import Marca from '@/components/nav/Marca';
 import { NewsletterForm } from '../newsletter/NewsletterForm';
 import { CAMBIOS_FOTOS, CREDITOS } from './creditos';
-import { CORREO_CONTACTO } from './contacto';
+import { CORREO_CONTACTO, WHATSAPP_URL, WHATSAPP_VISIBLE } from './contacto';
 import { CopiarCorreo } from './CopiarCorreo';
 import s from './secciones.module.css';
 
@@ -54,10 +54,14 @@ export function QuienesSomos() {
           <div id="contacto" className={s.caja}>
             <h3 className={s.subtitulo}>Contacto</h3>
             <p className={s.cajaTexto}>
-              ¿Tienes dudas o quieres colaborar? Deja un mensaje, te responderemos pronto:{' '}
-              <strong>{CORREO_CONTACTO}</strong>
+              ¿Tienes dudas o quieres colaborar? Deja un mensaje, te responderemos pronto: por
+              WhatsApp al <strong>{WHATSAPP_VISIBLE}</strong> o por correo a{' '}
+              <strong>{CORREO_CONTACTO}</strong>.
             </p>
             <div className={s.botonesContacto}>
+              <a href={WHATSAPP_URL} target="_blank" rel="noopener noreferrer" className={s.botonPrincipal}>
+                Escríbenos por WhatsApp
+              </a>
               <CopiarCorreo correo={CORREO_CONTACTO} />
             </div>
           </div>

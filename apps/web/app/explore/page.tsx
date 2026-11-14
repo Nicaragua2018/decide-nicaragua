@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import type { Metadata } from 'next';
 import { Volver } from '@/components/Volver';
+import { CORREO_CONTACTO, WHATSAPP_URL, WHATSAPP_VISIBLE } from '../portada/contacto';
 
 export const metadata: Metadata = {
   title: 'Cómo funciona',
@@ -194,9 +195,15 @@ export default function ExplorePage() {
             </p>
           </div>
           <div className="ex-contact-cta">
-            <a href="mailto:admin@nicaraguadecide.org" className="ex-contact-email">
-              admin@nicaraguadecide.org
+            <a href={`mailto:${CORREO_CONTACTO}`} className="ex-contact-email">
+              {CORREO_CONTACTO}
             </a>
+            <p className="ex-contact-note">
+              WhatsApp:{' '}
+              <a href={WHATSAPP_URL} target="_blank" rel="noopener noreferrer" style={{ color: 'rgba(255,255,255,0.75)' }}>
+                {WHATSAPP_VISIBLE}
+              </a>
+            </p>
             <div style={{ marginTop: '1.5rem', display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
               <Link href="/login" className="ln-btn-white" style={{ fontSize: '0.875rem', padding: '0.7rem 1.5rem' }}>
                 Registrarme

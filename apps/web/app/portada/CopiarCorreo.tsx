@@ -20,7 +20,7 @@ export function CopiarCorreo({ correo }: { correo: string }) {
   }
 
   return (
-    <button type="button" onClick={copiar} className={`${s.botonPrincipal} ${s.botonCopiar}`}>
+    <button type="button" onClick={copiar} className={`${s.botonSecundario} ${s.botonCopiar}`}>
       <span aria-live="polite">
         {estado === 'copiado' ? '¡Copiado!' : estado === 'error' ? `Copia: ${correo}` : 'Copiar correo'}
       </span>
