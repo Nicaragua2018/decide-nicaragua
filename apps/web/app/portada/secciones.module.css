@@ -375,6 +375,17 @@
   border-color: var(--pt-azul-hover);
 }
 
+.botonCopiar {
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.botonesContacto {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
 .botonSecundario:focus-visible,
 .botonPrincipal:focus-visible,
 .enlaceTexto:focus-visible {

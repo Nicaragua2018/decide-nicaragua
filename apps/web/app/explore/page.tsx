@@ -197,12 +197,6 @@ export default function ExplorePage() {
             <a href="mailto:admin@nicaraguadecide.org" className="ex-contact-email">
               admin@nicaraguadecide.org
             </a>
-            <p className="ex-contact-note">
-              También puedes escribir a{' '}
-              <a href="mailto:decidenicaragua@gmail.com" style={{ color: 'rgba(255,255,255,0.55)' }}>
-                decidenicaragua@gmail.com
-              </a>
-            </p>
             <div style={{ marginTop: '1.5rem', display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
               <Link href="/login" className="ln-btn-white" style={{ fontSize: '0.875rem', padding: '0.7rem 1.5rem' }}>
                 Registrarme

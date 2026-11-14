@@ -3,9 +3,9 @@ import Link from 'next/link';
 import Marca from '@/components/nav/Marca';
 import { NewsletterForm } from '../newsletter/NewsletterForm';
 import { CAMBIOS_FOTOS, CREDITOS } from './creditos';
+import { CORREO_CONTACTO } from './contacto';
+import { CopiarCorreo } from './CopiarCorreo';
 import s from './secciones.module.css';
-
-const CORREO = 'decidenicaragua@gmail.com';
 
 export function QuienesSomos() {
   return (
@@ -53,10 +53,15 @@ export function QuienesSomos() {
 
           <div id="contacto" className={s.caja}>
             <h3 className={s.subtitulo}>Contacto</h3>
-            <p className={s.cajaTexto}>¿Tienes dudas o quieres colaborar? Escríbenos a {CORREO}.</p>
-            <a href={`mailto:${CORREO}`} className={s.botonPrincipal}>
-              Escribirnos
-            </a>
+            <p className={s.cajaTexto}>
+              ¿Tienes dudas o quieres colaborar? Escríbenos a <strong>{CORREO_CONTACTO}</strong>.
+            </p>
+            <div className={s.botonesContacto}>
+              <a href={`mailto:${CORREO_CONTACTO}`} className={s.botonPrincipal}>
+                Escribirnos
+              </a>
+              <CopiarCorreo correo={CORREO_CONTACTO} />
+            </div>
           </div>
         </div>
       </div>
