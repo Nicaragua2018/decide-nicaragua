@@ -363,6 +363,35 @@ Foros, propuestas formales, consensos públicos y moderación (ADR-017):
 - [ ] Visualización gráfica de resultados Condorcet
 - [ ] Notificaciones in-app básicas
 
+### Iteración 12 — Próxima versión: contacto, privacidad y criptografía (sugerencias)
+
+Ideas que Carlos pidió dejar anotadas el 2026-11-13 para una versión futura. Todavía no están diseñadas ni aprobadas; cada una necesita su propio diseño antes de construirse. La pregunta que guía todas es: **¿qué le pasa a quien participa si el régimen consigue el servidor, la base de datos o un infiltrado dentro de la comunidad?**
+
+**Contacto**
+
+- [ ] **Formulario de contacto en la web** que envíe el mensaje a admin@nicaraguadecide.org con Resend, sin pedir cuenta. Protecciones: límite de envíos por huella de IP (nunca la IP real), campo trampa contra robots, tamaño máximo y nada guardado en la base de datos salvo lo imprescindible.
+- [ ] **Botón de WhatsApp** con un número dedicado al proyecto (no personal), que más adelante podrá atender un agente. El número queda público en la web y en el repositorio.
+
+**Llaves y pruebas criptográficas**
+
+- [ ] **Llaves en el dispositivo (passkeys/WebAuthn)** para entrar sin contraseña: la llave privada nunca sale del teléfono o la computadora de la persona.
+- [ ] **Firmas** de votos, propuestas y avales con la llave de cada persona, para que nadie (tampoco el servidor) pueda inventar o alterar una acción en su nombre.
+- [ ] **Registro de auditoría encadenado**: cada evento lleva el hash del anterior, y la raíz se publica periódicamente con sello de tiempo (en la línea del reporte canónico del Hash Republic Protocol), para que cualquier alteración se note.
+- [ ] **Resultados firmados y exportables** (amplía la Iteración 10): papeletas en un árbol de Merkle para que cada persona compruebe que su voto se contó sin revelar cuál fue.
+
+**Pruebas de conocimiento cero**
+
+- [ ] **Demostrar membresía sin revelar identidad**: probar «soy miembro verificado de esta comunidad» sin decir quién soy (al estilo de Semaphore).
+- [ ] **Un voto por persona sin enlazar el voto con la persona**: un «anulador» criptográfico impide votar dos veces sin que el servidor sepa quién votó qué.
+- [ ] **Apoyos anónimos verificables** para inquietudes y revocaciones, hoy secretos solo por diseño del servidor.
+
+**Privacidad y seguridad**
+
+- [ ] **Cifrado de extremo a extremo** para los espacios sensibles (comisiones, mesa), de modo que el servidor guarde solo texto cifrado.
+- [ ] **Cifrado en reposo de los datos personales** (ya listado en la Iteración 9) con llaves fuera del servidor.
+- [ ] **Acceso por Tor** (servicio .onion) para quien no puede arriesgarse a que su conexión se vea; hoy figura «fuera del alcance».
+- [ ] **Revisión externa de seguridad** antes de activar cualquiera de estas piezas con personas reales.
+
 ---
 
 ## Fuera del alcance (por ahora)
