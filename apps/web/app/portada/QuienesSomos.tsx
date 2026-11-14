@@ -54,12 +54,10 @@ export function QuienesSomos() {
           <div id="contacto" className={s.caja}>
             <h3 className={s.subtitulo}>Contacto</h3>
             <p className={s.cajaTexto}>
-              ¿Tienes dudas o quieres colaborar? Escríbenos a <strong>{CORREO_CONTACTO}</strong>.
+              ¿Tienes dudas o quieres colaborar? Deja un mensaje, te responderemos pronto:{' '}
+              <strong>{CORREO_CONTACTO}</strong>
             </p>
             <div className={s.botonesContacto}>
-              <a href={`mailto:${CORREO_CONTACTO}`} className={s.botonPrincipal}>
-                Escribirnos
-              </a>
               <CopiarCorreo correo={CORREO_CONTACTO} />
             </div>
           </div>
