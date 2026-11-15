@@ -13,7 +13,7 @@ const API_URL = process.env.API_URL ?? 'http://localhost:4000';
  */
 export type ActionResult =
   | { error: string }
-  | { success: true; devInviteUrl?: string; estado?: string }
+  | { success: true; inviteUrl?: string; devInviteUrl?: string; estado?: string }
   | { revision: RevisionTexto }
   | { enRevision: true };
 
@@ -336,8 +336,12 @@ export async function inviteUser(
   });
 
   if (!res.ok) return { error: await parseError(res) };
-  const data = await res.json() as { devInviteUrl?: string };
-  return { success: true, ...(data.devInviteUrl ? { devInviteUrl: data.devInviteUrl } : {}) };
+  const data = await res.json() as { inviteUrl?: string; devInviteUrl?: string };
+  return {
+    success: true,
+    ...(data.inviteUrl ? { inviteUrl: data.inviteUrl } : {}),
+    ...(data.devInviteUrl ? { devInviteUrl: data.devInviteUrl } : {}),
+  };
 }
 
 export async function updateUserStatus(

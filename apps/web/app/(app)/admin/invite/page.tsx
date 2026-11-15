@@ -4,6 +4,7 @@ import { useActionState } from 'react';
 import { inviteUser } from '@/lib/actions';
 import type { ActionResult } from '@/lib/actions';
 import { Volver } from '@/components/Volver';
+import CompartirInvitacion from '@/components/CompartirInvitacion';
 
 const initialState: ActionResult | null = null;
 
@@ -16,13 +17,14 @@ export default function AdminInvitePage() {
         <div>
           <h1 className="page-title">Invitar usuario</h1>
           <p className="page-sub">
-            Se enviará un email con el enlace de activación de cuenta.
+            Se enviará un correo con el enlace de activación. Después podrás enviar la misma
+            invitación por WhatsApp, con el mensaje y el video.
           </p>
         </div>
         <Volver href="/admin/users">Usuarios</Volver>
       </div>
 
-      <div className="card" style={{ maxWidth: 480 }}>
+      <div className="card" style={{ maxWidth: 640 }}>
         {state && 'success' in state && (
           <div className="alert alert-success mb-4">
             Invitación creada.{' '}
@@ -39,6 +41,10 @@ export default function AdminInvitePage() {
               {state.devInviteUrl}
             </code>
           </div>
+        )}
+
+        {state && 'success' in state && state.inviteUrl && (
+          <CompartirInvitacion enlace={state.inviteUrl} />
         )}
 
         <form action={formAction}>

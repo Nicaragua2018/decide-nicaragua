@@ -3,7 +3,10 @@
 // Los enlaces llevan «https://» para que cualquier aplicación los vuelva pulsables.
 export const ENLACE_INVITACION = 'https://nicaraguadecide.org';
 
-export const TEXTO_INVITACION = `🐝 ¿Qué nos enseña una colmena sobre la democracia?
+// Video de invitación (la presentación narrada con el agradecimiento a RENACER).
+export const VIDEO_INVITACION = '/portada/invitacion.mp4';
+
+const CUERPO = `🐝 ¿Qué nos enseña una colmena sobre la democracia?
 
 Cada primavera, cuando una colmena crece, miles de abejas tienen que decidir algo de vida o muerte: dónde construir su nuevo hogar. Y lo más sorprendente es que no lo decide la reina. Nadie da órdenes.
 
@@ -35,14 +38,33 @@ Funciona como el enjambre:
 🔐 ¿Cómo se entra?
 En una colmena, la confianza se construye abeja por abeja. Aquí también. Estamos empezando, así que en esta fase inicial el equipo fundador verifica personalmente a los primeros miembros, uno a uno. Cuando la comunidad crezca, cada miembro verificado podrá invitar y avalar a quienes conoce, sin depender de nadie en el centro.
 
-Los primeros que entren son como las primeras exploradoras: abren el camino para que el resto del enjambre llegue.
+Los primeros que entren son como las primeras exploradoras: abren el camino para que el resto del enjambre llegue.`;
 
-👉 Mira el video y regístrate en ${ENLACE_INVITACION} con el botón «Únete a la comunidad». Te contactaremos para completar tu verificación.
-
-🤝 Gracias a RENACER, un grupo de nicaragüenses en el exilio que apoya este proyecto.
+const DESPEDIDA = `🤝 Gracias a RENACER, un grupo de nicaragüenses en el exilio que apoya este proyecto.
 
 La legitimidad no se declara. Se construye juntos, como una colmena.
 
 Impulsado por OpenCivic Solutions · https://opencivicsolutions.org
 
 #NicaraguaDecide #Nicaragua #Diáspora #Democracia #LaColmena #TecnologíaCívica`;
+
+/** Invitación pública: manda a registrarse en el sitio. */
+export const TEXTO_INVITACION = `${CUERPO}
+
+👉 Mira el video y regístrate en ${ENLACE_INVITACION} con el botón «Únete a la comunidad». Te contactaremos para completar tu verificación.
+
+${DESPEDIDA}`;
+
+/** Invitación personal: el mismo texto, con el enlace de activación de una persona. */
+export function mensajeInvitacionPersonal(enlace: string, horas: number): string {
+  const dias = Math.floor(horas / 24);
+  const plazo = dias >= 2 && horas % 24 === 0 ? `${dias} días` : `${horas} horas`;
+  return `${CUERPO}
+
+👉 Esta es tu invitación personal. Mira el video y crea tu cuenta con este enlace:
+${enlace}
+
+El enlace es solo para ti: no lo reenvíes. Vence en ${plazo}.
+
+${DESPEDIDA}`;
+}
