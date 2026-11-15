@@ -38,9 +38,10 @@ export const metadata: Metadata = {
   },
   description:
     'Plataforma de participación democrática verificable para ciudadanos nicaragüenses.',
+  // Por defecto nada se ofrece a los buscadores; solo la portada lo cambia (app/page.tsx).
   robots: {
-    index: true,
-    follow: true,
+    index: false,
+    follow: false,
   },
 };
 

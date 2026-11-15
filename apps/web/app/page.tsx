@@ -16,6 +16,8 @@ export const metadata: Metadata = {
   // «absolute»: sin la coletilla «| Nicaragua Decide» que añade el layout.
   title: { absolute: TITULO },
   description: DESCRIPCION,
+  // La portada es la única página que los buscadores pueden mostrar.
+  robots: { index: true, follow: true },
   openGraph: {
     title: TITULO,
     description: DESCRIPCION,
