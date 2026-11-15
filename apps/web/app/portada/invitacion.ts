@@ -27,8 +27,9 @@ Funciona como el enjambre:
 🐝 Inquietudes: cualquiera plantea lo que preocupa a su comunidad, como una exploradora que trae una opción.
 🐝 Apoyo: cuando una inquietud reúne suficiente respaldo, se abre el debate.
 🐝 Foros: por territorio de origen, por lugar donde vives y para toda la diáspora.
-🐝 Decisiones visibles para todos, incluso las rechazadas.
-🐝 Auditoría pública: cada acción queda registrada y se puede verificar.
+🐝 Decisiones a la vista de todos los miembros, incluso las rechazadas.
+🐝 Auditoría abierta a los miembros: cada acción queda registrada y se puede verificar.
+🐝 Privacidad: lo que se publica dentro solo lo ven los miembros, para proteger a quien participa.
 🐝 Guardián, un asistente de IA que te orienta, pero nunca decide. Como en la colmena, la decisión es de todos.
 
 🔐 ¿Cómo se entra?
@@ -36,7 +37,9 @@ En una colmena, la confianza se construye abeja por abeja. Aquí también. Estam
 
 Los primeros que entren son como las primeras exploradoras: abren el camino para que el resto del enjambre llegue.
 
-👉 Mira el video y regístrate en ${ENLACE_INVITACION} (botón «Únete a la comunidad»). Te contactaremos para completar tu verificación.
+👉 Entra a ${ENLACE_INVITACION}, mira el video de la portada y regístrate con el botón «Únete a la comunidad». Te contactaremos para completar tu verificación.
+
+🤝 Gracias a RENACER, un grupo de nicaragüenses en el exilio que apoya este proyecto.
 
 La legitimidad no se declara. Se construye juntos, como una colmena.
 
