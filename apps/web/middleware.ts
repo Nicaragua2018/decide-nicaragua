@@ -11,6 +11,8 @@ const PUBLIC_EXACT = new Set([
   '/renacer.jpg',
   // Imagen para redes de la portada (los robots de las redes no tienen sesión).
   '/opengraph-image.jpg',
+  // Los buscadores piden este archivo sin sesión.
+  '/robots.txt',
 ]);
 const PUBLIC_PREFIXES = ['/login', '/invite', '/explore/', '/api/', '/portada/'];
 

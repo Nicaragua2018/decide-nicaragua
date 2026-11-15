@@ -39,8 +39,8 @@ export const metadata: Metadata = {
   description:
     'Plataforma de participación democrática verificable para ciudadanos nicaragüenses.',
   robots: {
-    index: false,
-    follow: false,
+    index: true,
+    follow: true,
   },
 };
 
