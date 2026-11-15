@@ -1,5 +1,5 @@
 // Texto que copia el botón «Compartir» de la portada: la invitación a registrarse,
-// lista para pegar en WhatsApp o en redes. Lo escribió Carlos Robleto (2026-11-15).
+// lista para pegar en WhatsApp o en redes junto con el video de invitación. Lo escribió Carlos Robleto (2026-11-15).
 // Los enlaces llevan «https://» para que cualquier aplicación los vuelva pulsables.
 export const ENLACE_INVITACION = 'https://nicaraguadecide.org';
 
@@ -37,7 +37,7 @@ En una colmena, la confianza se construye abeja por abeja. Aquí también. Estam
 
 Los primeros que entren son como las primeras exploradoras: abren el camino para que el resto del enjambre llegue.
 
-👉 Entra a ${ENLACE_INVITACION}, mira el video de la portada y regístrate con el botón «Únete a la comunidad». Te contactaremos para completar tu verificación.
+👉 Mira el video y regístrate en ${ENLACE_INVITACION} con el botón «Únete a la comunidad». Te contactaremos para completar tu verificación.
 
 🤝 Gracias a RENACER, un grupo de nicaragüenses en el exilio que apoya este proyecto.
 

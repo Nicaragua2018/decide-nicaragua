@@ -6,7 +6,7 @@ import { ENLACE_INVITACION, TEXTO_INVITACION } from '../app/portada/invitacion';
 describe('texto de invitación', () => {
   it('lleva el enlace completo al sitio, pulsable en cualquier aplicación', () => {
     expect(ENLACE_INVITACION).toBe('https://nicaraguadecide.org');
-    expect(TEXTO_INVITACION).toContain(`Entra a ${ENLACE_INVITACION},`);
+    expect(TEXTO_INVITACION).toContain(`regístrate en ${ENLACE_INVITACION} con`);
   });
 
   it('nombra el botón de la portada tal como está escrito allí', () => {
