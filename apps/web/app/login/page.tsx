@@ -1,15 +1,27 @@
 'use client';
 
-import { Suspense, useState } from 'react';
+import { Suspense, useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
+import { anotarRenovacion, destinoSeguro, reanudarSesion } from '@/lib/sesion';
 
 function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const nextPath = searchParams.get('next') ?? '/dashboard';
+  const nextPath = destinoSeguro(searchParams.get('next'));
 
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+
+  // Si la sesión guardada sigue vigente (dura 30 días), no hace falta la contraseña.
+  useEffect(() => {
+    let montado = true;
+    void reanudarSesion().then((abierta) => {
+      if (abierta && montado) window.location.replace(nextPath);
+    });
+    return () => {
+      montado = false;
+    };
+  }, [nextPath]);
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -33,6 +45,7 @@ function LoginForm() {
         } catch {
           // sin almacenamiento: no hay nada que borrar
         }
+        anotarRenovacion();
         router.push(nextPath);
         router.refresh();
       } else {

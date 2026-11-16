@@ -4,6 +4,7 @@ import { serverFetch } from '@/lib/api';
 import NavBar from '@/components/nav/NavBar';
 import { AsistenteProvider } from '@/components/asistente/AsistenteContexto';
 import AsistentePanel from '@/components/AsistentePanel';
+import SesionViva from '@/components/SesionViva';
 import type { AuthResponse, MiCargoVista } from '@decide/shared';
 
 export default async function AppLayout({ children }: { children: ReactNode }) {
@@ -33,6 +34,7 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
       <NavBar displayName={user.displayName} email={user.email} status={user.status} esObservador={esObservador} />
       <main className="container page page-con-barra">{children}</main>
       <AsistentePanel />
+      <SesionViva />
     </AsistenteProvider>
   );
 }
