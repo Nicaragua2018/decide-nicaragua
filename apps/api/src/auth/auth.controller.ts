@@ -104,12 +104,15 @@ export class AuthController {
     @Body() dto: InviteUserDto,
     @CurrentUser() actor: JwtPayload,
     @Req() req: Request,
-  ): Promise<{ message: string; devInviteUrl?: string }> {
+  ): Promise<{ message: string; inviteUrl: string; devInviteUrl?: string }> {
     const { inviteUrl } = await this.authService.inviteUser(dto, actor.sub, extractIp(req));
     const isProduction = this.config.get<string>('NODE_ENV') === 'production';
     return {
       message: 'Invitation sent successfully',
-      // Solo exponer la URL fuera de producción (para demos y desarrollo)
+      // Quien invita recibe el enlace para poder enviarlo también por WhatsApp.
+      // Es el mismo enlace del correo: un solo uso y con vencimiento.
+      inviteUrl,
+      // Fuera de producción el correo puede no salir; la web lo avisa con este campo.
       ...(!isProduction && { devInviteUrl: inviteUrl }),
     };
   }

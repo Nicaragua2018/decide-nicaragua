@@ -1,9 +1,10 @@
 'use client';
 
 import { useState } from 'react';
+import { TEXTO_INVITACION } from '../portada/invitacion';
 
-const SHARE_TEXT =
-  'Puedes seguir las decisiones de la comunidad nicaragüense desde cualquier lugar del mundo: https://nicaraguadecide.org — Invitación a observadores y auditorías.';
+// El botón copia la invitación completa, con el enlace al sitio.
+const SHARE_TEXT = TEXTO_INVITACION;
 
 interface ShareButtonProps {
   variant?: 'nav' | 'hero' | 'light';
@@ -41,7 +42,7 @@ export function ShareButton({ variant = 'hero' }: ShareButtonProps) {
       type="button"
       onClick={handleClick}
       className={`${base}${variantClass}${copiedClass}`}
-      aria-label="Copiar enlace de invitación"
+      aria-label="Copiar la invitación con el enlace al sitio"
     >
       {copied ? '✓ Copiado' : '↗ Compartir'}
     </button>
