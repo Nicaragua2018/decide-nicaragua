@@ -74,20 +74,28 @@ export class AuthService {
     dto: InviteUserDto,
     actorId: string,
     ip: string,
-  ): Promise<{ inviteUrl: string }> {
+  ): Promise<{ inviteUrl: string; emailEnviado: boolean }> {
     const existing = await this.prisma.user.findUnique({
       where: { email: dto.email },
     });
 
-    if (existing) {
+    const esAdministrador = await this.prisma.boardSeat.findFirst({
+      where: { role: 'administrador', profile: { userId: actorId } },
+    });
+
+    // Una invitación que nadie aceptó todavía se puede volver a enviar: quien la hizo
+    // (o el administrador) recibe un enlace nuevo y el anterior deja de servir.
+    const reenvio =
+      existing !== null &&
+      (existing.status as string) === (AccountStatus.invited as string) &&
+      (existing.invitedById === actorId || esAdministrador !== null);
+
+    if (existing && !reenvio) {
       // No revelar si el email existe o no — mismo mensaje genérico
       throw new ConflictException('An account with this email already exists');
     }
 
-    const esAdministrador = await this.prisma.boardSeat.findFirst({
-      where: { role: 'administrador', profile: { userId: actorId } },
-    });
-    if (!esAdministrador) {
+    if (!esAdministrador && !reenvio) {
       // Una invitación vencida ya no está pendiente: no bloquea invitar a otra persona.
       const pendientes = await this.prisma.user.count({
         where: {
@@ -112,28 +120,33 @@ export class AuthService {
       Date.now() + INVITE_TOKEN_TTL_HOURS * 60 * 60 * 1000,
     );
 
-    const user = await this.prisma.user.create({
-      data: {
-        email: dto.email,
-        status: AccountStatus.invited as string as never,
-        invitedById: actorId,
-        inviteToken,
-        inviteExpiresAt,
-      },
-    });
+    const user =
+      existing && reenvio
+        ? await this.prisma.user.update({
+            where: { id: existing.id },
+            data: { inviteToken, inviteExpiresAt },
+          })
+        : await this.prisma.user.create({
+            data: {
+              email: dto.email,
+              status: AccountStatus.invited as string as never,
+              invitedById: actorId,
+              inviteToken,
+              inviteExpiresAt,
+            },
+          });
 
     const appUrl = this.config.getOrThrow<string>('APP_URL');
     const inviteUrl = `${appUrl}/invite/${inviteToken}`;
-    const isProduction = this.config.get<string>('NODE_ENV') === 'production';
 
+    // Si el correo falla, la invitación sigue siendo válida: quien invita recibe el
+    // enlace y lo puede enviar por WhatsApp. El enlace no se escribe en el registro.
+    let emailEnviado = true;
     try {
       await this.email.sendInvite({ to: dto.email, inviteUrl });
     } catch (err: unknown) {
-      if (isProduction) throw err;
-      // En desarrollo: loguear prominentemente para uso manual
-      this.logger.warn(
-        `[DEV] Email no enviado. Link de invitación manual:\n  ${inviteUrl}`,
-      );
+      emailEnviado = false;
+      this.logger.error('Invite created but the email could not be sent', err);
     }
 
     void this.audit
@@ -142,11 +155,11 @@ export class AuthService {
         action: 'user.invited',
         resource: `user:${user.id}`,
         ip,
-        metadata: { invitedEmail: dto.email },
+        metadata: { invitedEmail: dto.email, emailEnviado, reenvio },
       })
       .catch((err: unknown) => this.logger.error('Audit log failed', err));
 
-    return { inviteUrl };
+    return { inviteUrl, emailEnviado };
   }
 
   // ─── Aceptar invitación ─────────────────────────────────────────────────────
