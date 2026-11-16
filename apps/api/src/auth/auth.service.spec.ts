@@ -228,6 +228,60 @@ describe('AuthService', () => {
       expect(emailMock.sendInvite).not.toHaveBeenCalled();
     });
 
+    it('si el correo falla, la invitación queda creada y avisa que no salió', async () => {
+      configMock.get.mockImplementation((key: string) => (key === 'NODE_ENV' ? 'production' : undefined));
+      prismaMock.user.findUnique.mockResolvedValue(null);
+      prismaMock.user.create.mockResolvedValue({ ...invitedUser, email: dto.email });
+      emailMock.sendInvite.mockRejectedValue(new Error('Email delivery failed'));
+
+      const result = await service.inviteUser(dto, USER_ID, ip);
+
+      expect(result.emailEnviado).toBe(false);
+      expect(result.inviteUrl).toContain('/invite/');
+    });
+
+    it('avisa que el correo salió cuando no hay fallo', async () => {
+      prismaMock.user.findUnique.mockResolvedValue(null);
+      prismaMock.user.create.mockResolvedValue({ ...invitedUser, email: dto.email });
+
+      expect((await service.inviteUser(dto, USER_ID, ip)).emailEnviado).toBe(true);
+    });
+
+    it('volver a invitar un correo que aún no aceptó renueva el enlace sin crear otra cuenta', async () => {
+      prismaMock.user.findUnique.mockResolvedValue({ ...invitedUser, email: dto.email, invitedById: 'actor-id' });
+      prismaMock.boardSeat.findFirst.mockResolvedValue(null);
+      prismaMock.user.count.mockResolvedValue(5);
+      prismaMock.user.update.mockResolvedValue({ ...invitedUser, email: dto.email });
+
+      const result = await service.inviteUser(dto, 'actor-id', ip);
+
+      expect(prismaMock.user.create).not.toHaveBeenCalled();
+      const arg = (prismaMock.user.update.mock.calls[0] as [{ where: { id: string }; data: { inviteToken: string; inviteExpiresAt: Date } }])[0];
+      expect(arg.where.id).toBe(USER_ID);
+      expect(arg.data.inviteToken).not.toBe(INVITE_TOKEN);
+      expect(arg.data.inviteExpiresAt.getTime()).toBeGreaterThan(Date.now());
+      expect(result.inviteUrl).toContain(arg.data.inviteToken);
+      expect(emailMock.sendInvite).toHaveBeenCalledOnce();
+    });
+
+    it('no deja reenviar la invitación que hizo otra persona', async () => {
+      prismaMock.user.findUnique.mockResolvedValue({ ...invitedUser, email: dto.email, invitedById: 'otra-persona' });
+      prismaMock.boardSeat.findFirst.mockResolvedValue(null);
+
+      await expect(service.inviteUser(dto, 'actor-id', ip)).rejects.toThrow(ConflictException);
+      expect(prismaMock.user.update).not.toHaveBeenCalled();
+      expect(emailMock.sendInvite).not.toHaveBeenCalled();
+    });
+
+    it('el administrador puede reenviar cualquier invitación sin aceptar', async () => {
+      prismaMock.user.findUnique.mockResolvedValue({ ...invitedUser, email: dto.email, invitedById: 'otra-persona' });
+      prismaMock.boardSeat.findFirst.mockResolvedValue({ role: 'administrador' });
+      prismaMock.user.update.mockResolvedValue({ ...invitedUser, email: dto.email });
+
+      await service.inviteUser(dto, 'admin-id', ip);
+      expect(prismaMock.user.update).toHaveBeenCalledOnce();
+    });
+
     it('rechaza si el miembro ya tiene 5 invitaciones pendientes', async () => {
       prismaMock.user.findUnique.mockResolvedValue(null);
       prismaMock.boardSeat.findFirst.mockResolvedValue(null);

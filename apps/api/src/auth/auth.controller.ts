@@ -104,11 +104,13 @@ export class AuthController {
     @Body() dto: InviteUserDto,
     @CurrentUser() actor: JwtPayload,
     @Req() req: Request,
-  ): Promise<{ message: string; inviteUrl: string; devInviteUrl?: string }> {
-    const { inviteUrl } = await this.authService.inviteUser(dto, actor.sub, extractIp(req));
+  ): Promise<{ message: string; inviteUrl: string; emailEnviado: boolean; devInviteUrl?: string }> {
+    const { inviteUrl, emailEnviado } = await this.authService.inviteUser(dto, actor.sub, extractIp(req));
     const isProduction = this.config.get<string>('NODE_ENV') === 'production';
     return {
-      message: 'Invitation sent successfully',
+      message: emailEnviado ? 'Invitation sent successfully' : 'Invitation created, email not sent',
+      // Si el correo no salió, la web lo avisa y ofrece enviar el enlace por WhatsApp.
+      emailEnviado,
       // Quien invita recibe el enlace para poder enviarlo también por WhatsApp.
       // Es el mismo enlace del correo: un solo uso y con vencimiento.
       inviteUrl,
