@@ -13,7 +13,7 @@ const API_URL = process.env.API_URL ?? 'http://localhost:4000';
  */
 export type ActionResult =
   | { error: string }
-  | { success: true; inviteUrl?: string; devInviteUrl?: string; emailEnviado?: boolean; estado?: string }
+  | { success: true; inviteUrl?: string; devInviteUrl?: string; emailEnviado?: boolean; invitado?: string; estado?: string }
   | { revision: RevisionTexto }
   | { enRevision: true };
 
@@ -330,15 +330,17 @@ export async function inviteUser(
   _prev: ActionResult | null,
   formData: FormData,
 ): Promise<ActionResult> {
+  const email = String(formData.get('email') ?? '').trim();
   const res = await actionFetch('/api/auth/invite', {
     method: 'POST',
-    body: JSON.stringify({ email: formData.get('email') }),
+    body: JSON.stringify({ email }),
   });
 
   if (!res.ok) return { error: await parseError(res) };
   const data = await res.json() as { inviteUrl?: string; devInviteUrl?: string; emailEnviado?: boolean };
   return {
     success: true,
+    invitado: email,
     ...(data.emailEnviado === false ? { emailEnviado: false } : {}),
     ...(data.inviteUrl ? { inviteUrl: data.inviteUrl } : {}),
     ...(data.devInviteUrl ? { devInviteUrl: data.devInviteUrl } : {}),

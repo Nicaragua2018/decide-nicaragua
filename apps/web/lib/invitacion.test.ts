@@ -36,6 +36,19 @@ describe('texto de invitación', () => {
   });
 });
 
+describe('pantalla «Invitar usuario»', () => {
+  const pagina = readFileSync(join(__dirname, '../app/(app)/admin/invite/page.tsx'), 'utf8');
+
+  it('el formulario va arriba y el resultado debajo, para invitar a la siguiente persona sin buscarlo', () => {
+    expect(pagina.indexOf('<form action={formAction}>')).toBeLessThan(pagina.indexOf('<CompartirInvitacion'));
+  });
+
+  it('cada invitación estrena su mensaje y dice para quién es', () => {
+    expect(pagina).toContain('key={state.inviteUrl}');
+    expect(pagina).toContain('para={state.invitado}');
+  });
+});
+
 describe('invitación personal (WhatsApp)', () => {
   const enlace = 'https://nicaraguadecide.org/invite/abc-123';
   const m = mensajeInvitacionPersonal(enlace, 72);

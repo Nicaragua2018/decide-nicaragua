@@ -10,7 +10,7 @@ const NOMBRE_VIDEO = 'Nicaragua-Decide-invitacion.mp4';
  * Tras crear una invitación: el mensaje con el enlace personal, listo para
  * enviarlo por WhatsApp. En el teléfono puede salir junto con el video.
  */
-export default function CompartirInvitacion({ enlace }: { enlace: string }) {
+export default function CompartirInvitacion({ enlace, para }: { enlace: string; para?: string | undefined }) {
   const [mensaje, setMensaje] = useState(() => mensajeInvitacionPersonal(enlace, INVITE_TOKEN_TTL_HOURS));
   const [aviso, setAviso] = useState('');
   const [puedeCompartir, setPuedeCompartir] = useState(false);
@@ -62,7 +62,9 @@ export default function CompartirInvitacion({ enlace }: { enlace: string }) {
 
   return (
     <section className="mb-4" aria-labelledby="compartir-invitacion">
-      <h2 id="compartir-invitacion" className="card-title">Enviarla también por WhatsApp</h2>
+      <h2 id="compartir-invitacion" className="card-title">
+        Enviarla también por WhatsApp{para ? ` a ${para}` : ''}
+      </h2>
       <p className="form-hint mb-1">
         Este mensaje lleva el enlace personal de la persona invitada. Es de un solo uso: envíalo solo a ella.
       </p>
