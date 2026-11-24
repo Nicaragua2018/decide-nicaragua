@@ -11,7 +11,7 @@ const BLOQUES: { id: BloqueId; titulo: string }[] = [
   { id: 'transparencia', titulo: 'Transparencia' },
 ];
 
-// Tabla del spec §5.2 (orden y textos exactos).
+// Tabla del spec §5.2 (orden y textos exactos), salvo Verificaciones (ver nota abajo).
 const OPCIONES: Entrada[] = [
   { bloque: 'participar', titulo: 'Inquietudes', ruta: '/inquietudes', ayuda: 'Las preguntas que la comunidad apoya', requiere: 'verificado' },
   { bloque: 'participar', titulo: 'Foros', ruta: '/foros', ayuda: 'Debates abiertos por tema', requiere: 'verificado' },
@@ -20,9 +20,11 @@ const OPCIONES: Entrada[] = [
   { bloque: 'comunidad', titulo: 'Mis comunidades', ruta: '/dashboard', ayuda: 'Exilio y diáspora, origen y acogida', requiere: null },
   { bloque: 'comunidad', titulo: 'Elecciones', ruta: '/elecciones', ayuda: 'Campañas, candidaturas y sorteos', requiere: 'verificado' },
   { bloque: 'comunidad', titulo: 'Mesa', ruta: '/admin/mesa', ayuda: 'Lo que toca ahora para que la comunidad arranque', requiere: 'verificado' },
+  // Va en Comunidad y no en Transparencia: es una tarea privada (confirmar a quien conoces),
+  // no una lista pública de personas verificadas.
+  { bloque: 'comunidad', titulo: 'Verificaciones', ruta: '/verificaciones', ayuda: 'Personas que esperan tu confirmación', requiere: 'verificado' },
   { bloque: 'comunidad', titulo: 'Observar', ruta: '/observar', ayuda: 'Aparece solo si tienes el cargo', requiere: 'observador' },
   { bloque: 'transparencia', titulo: 'Reglas', ruta: '/reglas', ayuda: 'Cómo funciona la plataforma, en claro', requiere: null },
-  { bloque: 'transparencia', titulo: 'Verificaciones', ruta: '/verificaciones', ayuda: 'Quién está verificado y cómo', requiere: null },
   { bloque: 'transparencia', titulo: 'Auditoría', ruta: '/audit', ayuda: 'Registro público de cada acción', requiere: null },
 ];
 
