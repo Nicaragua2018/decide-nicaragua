@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ChatGuardianService, GUARDIAN_FALLO, GUARDIAN_LIMITE, GUARDIAN_NO_DISPONIBLE } from './chat-guardian.service';
 
-const QUIEN = { userId: 'u', profileId: 'p', status: 'verified_citizen' as const };
+const QUIEN = 'p';
 
 function montar() {
   const prisma = { chatMessage: { create: vi.fn().mockResolvedValue({}) } };

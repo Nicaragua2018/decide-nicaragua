@@ -23,7 +23,7 @@ function buildPrisma() {
     inquietud: { findUnique: vi.fn(), update: vi.fn() },
     frase: { findUnique: vi.fn(), update: vi.fn() },
     comisionInforme: { findUnique: vi.fn(), findMany: vi.fn().mockResolvedValue([]), update: vi.fn() },
-    chatMessage: { findUnique: vi.fn(), update: vi.fn() },
+    chatMessage: { findUnique: vi.fn(), update: vi.fn(), updateMany: vi.fn().mockResolvedValue({ count: 1 }) },
     solucion: { findUnique: vi.fn(), findMany: vi.fn().mockResolvedValue([]), update: vi.fn(), count: vi.fn(), create: vi.fn() },
     election: { create: vi.fn(), findUnique: vi.fn(), update: vi.fn() },
     electionResult: { findUnique: vi.fn() },
@@ -1072,7 +1072,7 @@ describe('ForumsService', () => {
         prisma.chatMessage.update.mockResolvedValue({});
         prisma.moderationAction.update.mockResolvedValue({});
         await service.resolveAppeal(YO, 'ma1', true, 'ip');
-        expect(prisma.chatMessage.update).toHaveBeenCalledWith({ where: { id: 'c1' }, data: { hidden: false } });
+        expect(prisma.chatMessage.updateMany).toHaveBeenCalledWith({ where: { id: 'c1' }, data: { hidden: false } });
         prisma.moderationAction.findMany.mockResolvedValue([
           { id: 'ma1', target: 'mensaje', targetId: 'c1', reason: '', appealText: 'No', appealedAt: new Date(), createdAt: new Date() },
         ]);

@@ -489,6 +489,8 @@ export async function hideContent(_prev: ActionResult | null, formData: FormData
   if (!res.ok) return { error: await parseError(res) };
   const body = (await res.json().catch(() => ({}))) as { estado?: string };
   revalidateContent(formData);
+  // Un mensaje de chat se oculta desde la sala o desde los avisos de la mesa.
+  if (formData.get('target') === 'mensaje') revalidatePath('/admin/mesa');
   return body.estado ? { success: true, estado: body.estado } : { success: true };
 }
 

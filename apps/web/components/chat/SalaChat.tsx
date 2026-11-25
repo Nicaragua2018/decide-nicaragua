@@ -65,7 +65,7 @@ function Mensaje({
     setOcupado(true);
     const r = await avisarMensajeChat(m.id);
     setOcupado(false);
-    setAviso('error' in r ? r.error : 'Avisaste a la coordinación.');
+    setAviso('error' in r ? r.error : 'Aviso enviado. Lo verán la coordinación de la comunidad y la mesa directiva.');
   };
 
   return (
@@ -77,7 +77,7 @@ function Mensaje({
         <p className="chat-cab">
           <span className="chat-autor">{esGuardian ? 'Guardián · asistente de IA' : m.autor}</span>
           {m.tipo === 'pregunta_guardian' && <span className="badge badge-asistente">Pregunta a Guardián</span>}
-          <time className="chat-hora" dateTime={m.createdAt}>
+          <time className="chat-hora" dateTime={m.createdAt} suppressHydrationWarning>
             {horaDe(m.createdAt)}
           </time>
         </p>
@@ -139,12 +139,19 @@ export default function SalaChat({ groupId, inicial }: { groupId: string; inicia
   const [enviando, setEnviando] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [cargandoAnteriores, setCargandoAnteriores] = useState(false);
+  /** La sala dejó de responder para esta persona (p. ej. ya no es miembro): se dice, no se calla. */
+  const [cerrada, setCerrada] = useState<string | null>(null);
 
   const lista = useRef<HTMLOListElement>(null);
   const alFinal = useRef(true);
   const mensajesRef = useRef(mensajes);
   const vueltas = useRef(0);
   const consultando = useRef(false);
+  /** Hubo un pedido de recarga mientras otra consulta estaba en camino: se hace al terminar. */
+  const recargaPendiente = useRef(false);
+  /** «Ver anteriores» ya llegó al principio de la sala. */
+  const sinMasAnteriores = useRef(false);
+  const fallos = useRef(0);
   mensajesRef.current = mensajes;
 
   const irAlFinal = useCallback(() => {
@@ -159,18 +166,36 @@ export default function SalaChat({ groupId, inicial }: { groupId: string; inicia
 
   const consultar = useCallback(
     async (completa: boolean) => {
-      if (consultando.current) return;
+      if (consultando.current) {
+        if (completa) recargaPendiente.current = true;
+        return;
+      }
       consultando.current = true;
       try {
         const ultimo = mensajesRef.current[mensajesRef.current.length - 1];
-        const r = await leerChat(groupId, !completa && ultimo ? { despues: ultimo.id } : undefined);
-        if ('error' in r) return;
-        setMensajes((act) => (completa || !ultimo ? reemplazarRecientes(act, r.mensajes) : fusionar(act, r.mensajes)));
-        if (completa || !ultimo) setHayAnteriores((h) => h || r.hayAnteriores);
+        const entera = completa || !ultimo;
+        const r = await leerChat(groupId, entera ? undefined : { despues: ultimo.id });
+        if ('error' in r) {
+          // Un fallo suelto (red) se deja pasar; si se repite, se avisa en vez de mostrar una sala congelada.
+          fallos.current += 1;
+          if (fallos.current >= 2) {
+            setCerrada(r.error);
+            setEsperando(false);
+          }
+          return;
+        }
+        fallos.current = 0;
+        setCerrada(null);
+        setMensajes((act) => (entera ? reemplazarRecientes(act, r.mensajes) : fusionar(act, r.mensajes)));
+        if (entera && !sinMasAnteriores.current) setHayAnteriores((h) => h || r.hayAnteriores);
         setPuedoModerar(r.puedoModerar);
         setEsperando(r.esperandoGuardian);
       } finally {
         consultando.current = false;
+        if (recargaPendiente.current) {
+          recargaPendiente.current = false;
+          void consultar(true);
+        }
       }
     },
     [groupId],
@@ -236,6 +261,7 @@ export default function SalaChat({ groupId, inicial }: { groupId: string; inicia
     }
     alFinal.current = false;
     setMensajes((act) => fusionar(r.mensajes, act));
+    sinMasAnteriores.current = !r.hayAnteriores;
     setHayAnteriores(r.hayAnteriores);
     // Mantiene a la vista el mensaje que la persona estaba leyendo.
     requestAnimationFrame(() => {
@@ -311,6 +337,11 @@ export default function SalaChat({ groupId, inicial }: { groupId: string; inicia
         {error && (
           <p className="alert alert-error" role="alert">
             {error}
+          </p>
+        )}
+        {cerrada && (
+          <p className="alert alert-warning" role="alert">
+            El chat dejó de actualizarse: {cerrada}
           </p>
         )}
         <p className="chat-ayuda">

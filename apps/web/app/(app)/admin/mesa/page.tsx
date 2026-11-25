@@ -1,10 +1,11 @@
 import type { Metadata } from 'next';
 import { conUnidad, ruleDefinition } from '@decide/shared';
-import type { TextoEnRevisionView } from '@decide/shared';
+import type { ChatAvisoMesa, TextoEnRevisionView } from '@decide/shared';
 import type { ReactivacionPendiente } from '@decide/shared';
 import type { BoardActionSummary, BoardSeatSummary, ModeracionPorConfirmar, ModerationAppeal, PausaApeladaItem, UserListResponse } from '@decide/shared';
 import { serverFetch } from '@/lib/api';
 import { AppealsList } from './AppealsList';
+import { AvisosChat } from './AvisosChat';
 import { PausasApeladas } from './PausasApeladas';
 import { PorConfirmarList } from './PorConfirmarList';
 import { RevisionesList } from './RevisionesList';
@@ -29,7 +30,7 @@ function descripcionCambioRegla(a: BoardActionSummary): string {
 }
 
 export default async function MesaPage() {
-  const [seatsRes, meRes, actionsRes, usersRes, appealsRes, porConfirmarRes, pausasRes, estadoRes, revisionesRes, reactivacionesRes] = await Promise.all([
+  const [seatsRes, meRes, actionsRes, usersRes, appealsRes, porConfirmarRes, pausasRes, estadoRes, revisionesRes, reactivacionesRes, avisosChatRes] = await Promise.all([
     serverFetch('/api/board/seats'),
     serverFetch('/api/board/me'),
     serverFetch('/api/board/actions'),
@@ -40,6 +41,7 @@ export default async function MesaPage() {
     serverFetch('/api/asistente/estado'),
     serverFetch('/api/asistente/revisiones'),
     serverFetch('/api/board/reactivaciones'),
+    serverFetch('/api/chat/avisos'),
   ]);
   const seats = seatsRes.ok ? ((await seatsRes.json()) as BoardSeatSummary[]) : [];
   const me = meRes.ok ? ((await meRes.json()) as { role: string | null }) : { role: null };
@@ -158,6 +160,15 @@ export default async function MesaPage() {
       <section className="mt-2">
         <h2 className="section-title">Textos en revisión</h2>
         <RevisionesList items={revisiones.revisiones} mesaSuficiente={revisiones.mesaSuficiente} />
+      </section>
+
+      <section className="mt-2">
+        <h2 className="section-title">Avisos del chat</h2>
+        <p className="card-meta">
+          Mensajes de los chats de las comunidades de los que avisó algún miembro. Se muestran sin nombre. Si
+          rompen las normas, ocúltalos con su causa; quien lo escribió puede apelar.
+        </p>
+        <AvisosChat avisos={avisosChatRes.ok ? ((await avisosChatRes.json()) as ChatAvisoMesa[]) : []} />
       </section>
 
       <section className="mt-2">

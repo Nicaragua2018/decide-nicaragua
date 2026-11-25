@@ -96,9 +96,9 @@ Cada comunidad (el territorio de origen, el lugar de acogida y el nivel general)
 
 - Es para conversar: avisar, preguntar y compartir información. Lo que haya que decidir va por inquietudes [g2], debates y votaciones [g3].
 - Solo admite texto y enlaces, hasta 1000 caracteres por mensaje. No hay mensajes privados, fotos, notas de voz ni archivos.
-- Cada persona puede eliminar sus propios mensajes. Cualquier miembro puede avisar a la coordinación de un mensaje; la coordinación de la comunidad o la mesa pueden ocultarlo con una causa, y quien lo escribió puede apelar.
+- Cada persona puede eliminar sus propios mensajes. Cualquier miembro puede avisar de un mensaje: el aviso lo ven la coordinación de la comunidad y la mesa, que pueden ocultarlo con una causa; quien lo escribió puede apelar.
 - Los mensajes se borran solos cuando vence el plazo de la regla «Días que se conservan los mensajes del chat» (se ve y se cambia en Reglas [g5]). Lo que deba quedar se lleva a un foro o a una decisión.
-- El asistente responde en la sala solo cuando alguien lo llama: con el botón «Preguntar a Guardián» o empezando el mensaje con @Guardián. Recibe solo ese mensaje, no el resto de la sala, y su respuesta la ve toda la sala. Cada llamada cuenta en las preguntas diarias de la persona.
+- El asistente responde en la sala solo cuando alguien lo llama: con el botón «Preguntar a Guardián» o empezando el mensaje con @Guardián. Recibe solo ese mensaje, no el resto de la sala, y su respuesta la ve toda la sala. En la sala no sabe nada de quien lo llama: para preguntas sobre la situación propia está el botón «Pregúntale a Guardián», que es privado. Cada llamada cuenta en las preguntas diarias de la persona.
 
 ## La privacidad
 

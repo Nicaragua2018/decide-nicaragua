@@ -118,6 +118,18 @@ Los mensajes de una sala **se borran solos a los 90 días** (texto y fila). Es u
 - **Quien sale de la comunidad o queda suspendido:** sus mensajes anteriores siguen visibles hasta que venzan. Si se elimina el perfil, `authorProfileId` pasa a nulo y el mensaje se muestra como «Miembro que ya no está».
 - **`chat.conservacion_dias`:** entrada nueva de nivel `colmena` en `RULE_DEFINITIONS`, conectada, con el mismo procedimiento de cambio que las demás reglas generales.
 
+## 10c. Cambios tras la revisión del código (2026-11-25)
+
+Una revisión independiente del código encontró fallos que cambian lo dicho arriba. Vale lo de esta sección.
+
+- **Guardián en la sala no sabe nada de quien lo llama (cambia §8).** El panel privado usa el estado de la persona (sus comunidades, sus plazos) y busca en todo lo que ella puede leer. En la sala la respuesta es pública: con ese material Guardián podría contar a la comunidad de origen dónde vive la persona, o citar un debate de otra comunidad o de una iniciativa reservada. En la sala recibe solo el mensaje y la guía de la plataforma, y sus enlaces son solo a páginas generales. Si le preguntan por la situación propia o por algo concreto que está pasando, remite al botón «Pregúntale a Guardián», que es privado.
+- **La auditoría del chat no lleva persona ni IP (cambia §9).** La auditoría la lee cualquier miembro verificado: con el nombre sería un registro de quién escribe en cada territorio y a qué hora. Se registra solo el hecho y la comunidad.
+- **Eliminar lo propio no exige seguir en la comunidad (cambia §4).** Quien salió o quedó suspendido puede retirar lo que escribió.
+- **Los avisos llegan también a la mesa (cambia §4 y §7).** Hoy casi ninguna comunidad tiene coordinación y la mesa no lee las salas: un aviso no llegaría a nadie. La mesa ve en su página los mensajes de los que avisó algún miembro, sin nombre, y puede ocultarlos. Es la única lectura del chat fuera de la sala y solo alcanza a mensajes señalados.
+- **Los límites de envío son por persona (cambia §5).** El límite general del API es por IP y la web llama desde una sola, así que sería compartido por todos. El chat no usa ese límite: exige sesión y membresía en cada llamada y limita a 10 mensajes y 10 avisos por persona y minuto.
+- **La limpieza se lleva también lo que cita al mensaje (cambia §6):** el detalle de la moderación y el texto de la apelación de los mensajes borrados, y las marcas de lectura igual de viejas. Las marcas de lectura y los avisos se borran con el perfil o la comunidad.
+- **Un mensaje oculto sin apelar se borra al vencer el plazo:** pasado ese tiempo ya no se puede apelar.
+
 ## 11. Qué queda a quien construye
 
 - Nombres exactos de rutas del API y de componentes, siguiendo los módulos `forums` y `asistente`.

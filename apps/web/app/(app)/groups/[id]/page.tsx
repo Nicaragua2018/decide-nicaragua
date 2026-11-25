@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { redirect } from 'next/navigation';
 import type { Metadata } from 'next';
 import { serverFetch } from '@/lib/api';
 import { Suspense } from 'react';
@@ -87,6 +88,9 @@ export default async function GroupPage({
         ? serverFetch(`/api/voting/groups/${id}/elections`)
         : serverFetch(`/api/sortition/groups/${id}/draws`),
   ]);
+
+  // Sin sala (un grupo de trabajo) y sin pestaña pedida: se abre en Propuestas, como siempre.
+  if (tab === 'chat' && pedida === undefined && contentRes.status === 404) redirect(`/groups/${id}?tab=proposals`);
 
   const group       = (await groupRes.json()) as GroupDetail;
   const contentData = contentRes.ok ? await contentRes.json() : null;

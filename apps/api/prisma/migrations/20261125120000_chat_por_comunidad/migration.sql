@@ -44,3 +44,6 @@ CREATE INDEX "chat_messages_createdAt_idx" ON "chat_messages"("createdAt");
 ALTER TABLE "chat_messages" ADD CONSTRAINT "chat_messages_groupId_fkey" FOREIGN KEY ("groupId") REFERENCES "groups"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 ALTER TABLE "chat_messages" ADD CONSTRAINT "chat_messages_authorProfileId_fkey" FOREIGN KEY ("authorProfileId") REFERENCES "profiles"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 ALTER TABLE "chat_avisos" ADD CONSTRAINT "chat_avisos_messageId_fkey" FOREIGN KEY ("messageId") REFERENCES "chat_messages"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE "chat_lecturas" ADD CONSTRAINT "chat_lecturas_groupId_fkey" FOREIGN KEY ("groupId") REFERENCES "groups"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE "chat_lecturas" ADD CONSTRAINT "chat_lecturas_profileId_fkey" FOREIGN KEY ("profileId") REFERENCES "profiles"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE "chat_avisos" ADD CONSTRAINT "chat_avisos_profileId_fkey" FOREIGN KEY ("profileId") REFERENCES "profiles"("id") ON DELETE CASCADE ON UPDATE CASCADE;

@@ -1020,7 +1020,8 @@ export class ForumsService {
     } else if (target === 'informe') {
       await tx.comisionInforme.update({ where: { id: targetId }, data: { hidden: false } });
     } else if (target === 'mensaje') {
-      await tx.chatMessage.update({ where: { id: targetId }, data: { hidden: false } });
+      // updateMany: si la limpieza por plazo ya borró el mensaje, la apelación se cierra igual.
+      await tx.chatMessage.updateMany({ where: { id: targetId }, data: { hidden: false } });
     } else {
       await tx.proposalComment.update({ where: { id: targetId }, data: { hidden: false } });
     }

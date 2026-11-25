@@ -287,6 +287,8 @@ model Profile {
   forumsCreated         Forum[]                   @relation("ForumCreator")
   moderationsDone       ModerationAction[]        @relation("Moderator")
   chatMensajes          ChatMessage[]             @relation("ChatAutor")
+  chatLecturas          ChatLectura[]             @relation("ChatLector")
+  chatAvisos            ChatAviso[]               @relation("ChatAvisador")
   textosEnRevision      TextoEnRevision[]
   inquietudes           Inquietud[]
   inquietudApoyos       InquietudApoyo[]
@@ -377,6 +379,7 @@ model Group {
 
   memberships    GroupMembership[]
   chatMensajes   ChatMessage[]
+  chatLecturas   ChatLectura[]
   proposals      Proposal[]
   elections      Election[]
   sortitionDraws SortitionDraw[]
@@ -874,7 +877,9 @@ model ChatMessage {
 /// Hasta cuándo leyó cada persona la sala de cada comunidad (para «mensajes nuevos»).
 model ChatLectura {
   groupId    String   @db.Uuid
+  group      Group    @relation(fields: [groupId], references: [id], onDelete: Cascade)
   profileId  String   @db.Uuid
+  profile    Profile  @relation("ChatLector", fields: [profileId], references: [id], onDelete: Cascade)
   lastReadAt DateTime @db.Timestamptz
 
   @@id([groupId, profileId])
@@ -886,6 +891,7 @@ model ChatAviso {
   messageId String      @db.Uuid
   message   ChatMessage @relation(fields: [messageId], references: [id], onDelete: Cascade)
   profileId String      @db.Uuid
+  profile   Profile     @relation("ChatAvisador", fields: [profileId], references: [id], onDelete: Cascade)
   createdAt DateTime    @default(now()) @db.Timestamptz
 
   @@id([messageId, profileId])

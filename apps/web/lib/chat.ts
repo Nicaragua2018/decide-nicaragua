@@ -14,15 +14,17 @@ export function fusionar(actuales: ChatMensajeVista[], nuevos: ChatMensajeVista[
 }
 
 /**
- * Al volver a cargar la página reciente: se quedan los mensajes más viejos que esa página (cargados
- * con «Ver anteriores») y, de ahí en adelante, solo lo que la página trae. Así desaparece de la
- * pantalla lo que ya no existe en el servidor.
+ * Al volver a cargar la página reciente: dentro del tramo que la página cubre, solo vale lo que
+ * ella trae (así desaparece de la pantalla lo que ya no existe en el servidor). Se conserva lo más
+ * viejo (cargado con «Ver anteriores») y lo más nuevo que la página: un mensaje que la persona
+ * acaba de enviar mientras la consulta estaba en camino no debe desaparecer.
  */
 export function reemplazarRecientes(actuales: ChatMensajeVista[], pagina: ChatMensajeVista[]): ChatMensajeVista[] {
   const primero = pagina[0];
-  if (!primero) return [];
+  const ultimo = pagina[pagina.length - 1];
+  if (!primero || !ultimo) return [];
   return fusionar(
-    actuales.filter((m) => m.createdAt < primero.createdAt),
+    actuales.filter((m) => m.createdAt < primero.createdAt || m.createdAt > ultimo.createdAt),
     pagina,
   );
 }

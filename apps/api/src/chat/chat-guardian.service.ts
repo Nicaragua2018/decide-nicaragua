@@ -1,5 +1,4 @@
 import { Injectable, Logger } from '@nestjs/common';
-import type { AccountStatus } from '@prisma/client';
 import { PanelService, type RespuestaSala } from '../asistente/panel.service';
 import { PrismaService } from '../prisma/prisma.service';
 
@@ -31,12 +30,12 @@ export class ChatGuardianService {
   async responder(
     groupId: string,
     preguntaId: string,
-    quien: { userId: string; profileId: string; status: AccountStatus },
+    profileId: string,
     texto: string,
   ): Promise<void> {
     let r: RespuestaSala;
     try {
-      r = await this.panel.responderEnSala(quien, texto);
+      r = await this.panel.responderEnSala(profileId, texto);
     } catch (err) {
       this.logger.error(`Guardián falló en la sala: ${err instanceof Error ? err.name : 'error'}`);
       r = { tipo: 'fallo' };

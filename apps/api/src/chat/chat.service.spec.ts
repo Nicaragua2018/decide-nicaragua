@@ -1,9 +1,9 @@
-import { BadRequestException, ForbiddenException, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, HttpException, NotFoundException } from '@nestjs/common';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { ChatService, type Quien } from './chat.service';
+import { ChatService, MUY_RAPIDO, type Quien } from './chat.service';
 
 const G = '11111111-1111-4111-8111-111111111111';
-const YO: Quien = { userId: 'u-yo', profileId: 'p-yo', status: 'verified_citizen' };
+const YO: Quien = { userId: 'u-yo', profileId: 'p-yo' };
 
 function fila(over: Record<string, unknown> = {}) {
   return {
@@ -35,21 +35,25 @@ function montar() {
       update: vi.fn().mockResolvedValue({}),
       count: vi.fn().mockResolvedValue(0),
       groupBy: vi.fn().mockResolvedValue([]),
-      deleteMany: vi.fn().mockResolvedValue({ count: 3 }),
+      deleteMany: vi.fn().mockResolvedValue({ count: 0 }),
     },
-    chatLectura: { upsert: vi.fn().mockResolvedValue({}), findMany: vi.fn().mockResolvedValue([]) },
+    chatLectura: {
+      upsert: vi.fn().mockResolvedValue({}),
+      findMany: vi.fn().mockResolvedValue([]),
+      deleteMany: vi.fn().mockResolvedValue({ count: 0 }),
+    },
     chatAviso: { upsert: vi.fn().mockResolvedValue({}) },
     groupMembership: { findMany: vi.fn().mockResolvedValue([]) },
-    moderationAction: { findMany: vi.fn().mockResolvedValue([]) },
+    moderationAction: { findMany: vi.fn().mockResolvedValue([]), updateMany: vi.fn().mockResolvedValue({ count: 0 }) },
+    $transaction: vi.fn(),
   };
-  const access = {
-    isParticipant: vi.fn().mockResolvedValue(true),
-    rastro: vi.fn().mockResolvedValue({ reservado: false, quien: { actorId: 'u-yo', ip: '1.2.3.4' } }),
-  };
-  const forums = { canModerate: vi.fn().mockResolvedValue(false) };
+  prisma.$transaction.mockImplementation((fn: (tx: unknown) => unknown) => fn(prisma));
+  const access = { isParticipant: vi.fn().mockResolvedValue(true) };
+  const forums = { canModerate: vi.fn().mockResolvedValue(false), esMesa: vi.fn().mockResolvedValue(false) };
   const audit = { log: vi.fn().mockResolvedValue(undefined) };
   const rules = { getInt: vi.fn().mockResolvedValue(90) };
   const guardian = { responder: vi.fn().mockResolvedValue(undefined) };
+  const redis = { contar: vi.fn().mockResolvedValue(1) };
   const service = new ChatService(
     prisma as never,
     access as never,
@@ -57,8 +61,9 @@ function montar() {
     audit as never,
     rules as never,
     guardian as never,
+    redis as never,
   );
-  return { service, prisma, access, forums, audit, rules, guardian };
+  return { service, prisma, access, forums, audit, rules, guardian, redis };
 }
 
 describe('ChatService', () => {
@@ -81,7 +86,7 @@ describe('ChatService', () => {
       await expect(t.service.requerirSala(G, YO)).rejects.toThrow(ForbiddenException);
     });
     it.each(['suspended', 'pending_verification', 'invited', 'observer', 'rejected'])(
-      'con membresía pero cuenta %s no entra, diga lo que diga el token',
+      'con membresía pero cuenta %s no entra: el estado se lee de la base',
       async (status) => {
         t.prisma.profile.findUnique.mockResolvedValue({ user: { status } });
         await expect(t.service.requerirSala(G, YO)).rejects.toThrow(ForbiddenException);
@@ -90,6 +95,7 @@ describe('ChatService', () => {
     it('la mesa sin membresía no lee: moderar no da acceso', async () => {
       t.access.isParticipant.mockResolvedValue(false);
       t.forums.canModerate.mockResolvedValue(true);
+      t.forums.esMesa.mockResolvedValue(true);
       await expect(t.service.listar(G, YO)).rejects.toThrow(ForbiddenException);
       expect(t.prisma.chatMessage.findMany).not.toHaveBeenCalled();
     });
@@ -100,49 +106,62 @@ describe('ChatService', () => {
 
   describe('publicar', () => {
     it('rechaza el texto vacío y el de más de 1000 caracteres', async () => {
-      await expect(t.service.publicar(G, YO, '   ', false, 'ip')).rejects.toThrow(BadRequestException);
-      await expect(t.service.publicar(G, YO, 'a'.repeat(1001), false, 'ip')).rejects.toThrow(BadRequestException);
+      await expect(t.service.publicar(G, YO, '   ', false)).rejects.toThrow(BadRequestException);
+      await expect(t.service.publicar(G, YO, 'a'.repeat(1001), false)).rejects.toThrow(BadRequestException);
       expect(t.prisma.chatMessage.create).not.toHaveBeenCalled();
     });
     it('guarda el texto recortado como mensaje de miembro', async () => {
-      const m = await t.service.publicar(G, YO, '  hola a todos  ', false, 'ip');
+      const m = await t.service.publicar(G, YO, '  hola a todos  ', false);
       const data = (t.prisma.chatMessage.create.mock.calls[0] as [{ data: Record<string, unknown> }])[0].data;
       expect(data).toMatchObject({ groupId: G, authorProfileId: 'p-yo', kind: 'miembro', body: 'hola a todos' });
       expect(m).toMatchObject({ tipo: 'miembro', autor: 'Ana Pérez', iniciales: 'AP', esMio: true, estado: 'visible' });
       expect(t.guardian.responder).not.toHaveBeenCalled();
     });
-    it('la auditoría registra el hecho, nunca el texto', async () => {
-      await t.service.publicar(G, YO, 'un secreto', false, '1.2.3.4');
+    it('la auditoría registra solo el hecho y la comunidad: sin texto, sin persona y sin IP', async () => {
+      await t.service.publicar(G, YO, 'un secreto', false);
       await vi.waitFor(() => expect(t.audit.log).toHaveBeenCalledOnce());
       const evento = (t.audit.log.mock.calls[0] as [Record<string, unknown>])[0];
-      expect(evento).toEqual({ actorId: 'u-yo', ip: '1.2.3.4', action: 'chat.message_added', resource: `group:${G}` });
-      expect(JSON.stringify(evento)).not.toContain('secreto');
+      expect(evento).toEqual({ action: 'chat.message_added', resource: `group:${G}` });
+    });
+    it('el límite es por persona: el mensaje 11 del minuto da 429 y no se guarda', async () => {
+      t.redis.contar.mockResolvedValue(11);
+      const intento = t.service.publicar(G, YO, 'hola', false);
+      await expect(intento).rejects.toThrow(HttpException);
+      await expect(intento).rejects.toMatchObject({ status: 429, message: MUY_RAPIDO });
+      expect(t.prisma.chatMessage.create).not.toHaveBeenCalled();
+      expect((t.redis.contar.mock.calls[0] as [string])[0]).toMatch(/^chat:envio:[0-9a-f]{64}:\d+$/);
+    });
+    it('si Redis falla, se permite publicar', async () => {
+      t.redis.contar.mockRejectedValue(new Error('redis'));
+      await expect(t.service.publicar(G, YO, 'hola', false)).resolves.toMatchObject({ tipo: 'miembro' });
     });
     it('una mención a Guardián en medio del texto no lo llama', async () => {
-      await t.service.publicar(G, YO, 'hola @Guardián', false, 'ip');
+      await t.service.publicar(G, YO, 'hola @Guardián', false);
       expect((t.prisma.chatMessage.create.mock.calls[0] as [{ data: { kind: string } }])[0].data.kind).toBe('miembro');
       expect(t.guardian.responder).not.toHaveBeenCalled();
     });
     it('empezar con @guardian lo llama una vez y solo con ese mensaje', async () => {
-      await t.service.publicar(G, YO, '@guardian ¿cómo invito?', false, 'ip');
+      await t.service.publicar(G, YO, '@guardian ¿cómo invito?', false);
       expect((t.prisma.chatMessage.create.mock.calls[0] as [{ data: { kind: string } }])[0].data.kind).toBe('pregunta_guardian');
       expect(t.guardian.responder).toHaveBeenCalledOnce();
-      expect(t.guardian.responder).toHaveBeenCalledWith(G, 'm1', YO, '@guardian ¿cómo invito?');
+      expect(t.guardian.responder).toHaveBeenCalledWith(G, 'm1', 'p-yo', '@guardian ¿cómo invito?');
     });
     it('el botón «Preguntar a Guardián» lo llama aunque el texto no lo nombre', async () => {
-      await t.service.publicar(G, YO, '¿cómo propongo una regla?', true, 'ip');
-      expect(t.guardian.responder).toHaveBeenCalledWith(G, 'm1', YO, '¿cómo propongo una regla?');
+      await t.service.publicar(G, YO, '¿cómo propongo una regla?', true);
+      expect(t.guardian.responder).toHaveBeenCalledWith(G, 'm1', 'p-yo', '¿cómo propongo una regla?');
     });
   });
 
   describe('listar', () => {
+    const fecha = new Date('2026-11-25T10:00:00Z');
+
     it('trae los 50 más recientes en orden ascendente y marca la lectura', async () => {
       const filas = Array.from({ length: 51 }, (_, i) =>
         fila({ id: `m${(51 - i).toString()}`, createdAt: new Date(Date.UTC(2026, 10, 25, 10, 0, 51 - i)) }),
       );
       t.prisma.chatMessage.findMany.mockResolvedValue(filas);
       const p = await t.service.listar(G, YO);
-      const arg = (t.prisma.chatMessage.findMany.mock.calls[0] as [{ take: number; orderBy: unknown; where: unknown }])[0];
+      const arg = (t.prisma.chatMessage.findMany.mock.calls[0] as [{ take: number; where: unknown }])[0];
       expect(arg.take).toBe(51);
       expect(arg.where).toEqual({ groupId: G });
       expect(p.mensajes).toHaveLength(50);
@@ -151,22 +170,25 @@ describe('ChatService', () => {
       expect(p.mensajes[49]!.id).toBe('m51');
       expect(t.prisma.chatLectura.upsert).toHaveBeenCalledOnce();
     });
-    it('con «despues» solo trae lo posterior a ese mensaje', async () => {
-      const fecha = new Date('2026-11-25T10:00:00Z');
-      t.prisma.chatMessage.findFirst.mockResolvedValueOnce({ createdAt: fecha });
+    it('con «despues» trae lo posterior, y desempata por id si comparten instante', async () => {
+      t.prisma.chatMessage.findFirst.mockResolvedValueOnce({ id: 'm1', createdAt: fecha });
       await t.service.listar(G, YO, { despues: 'm1' });
-      const arg = (t.prisma.chatMessage.findMany.mock.calls[0] as [{ where: unknown }])[0];
-      expect(arg.where).toEqual({ groupId: G, createdAt: { gt: fecha } });
+      expect((t.prisma.chatMessage.findMany.mock.calls[0] as [{ where: unknown }])[0].where).toEqual({
+        groupId: G,
+        OR: [{ createdAt: { gt: fecha } }, { createdAt: fecha, id: { gt: 'm1' } }],
+      });
     });
-    it('con «antes» trae lo anterior', async () => {
-      const fecha = new Date('2026-11-25T10:00:00Z');
-      t.prisma.chatMessage.findFirst.mockResolvedValueOnce({ createdAt: fecha });
+    it('con «antes» trae lo anterior, con el mismo desempate', async () => {
+      t.prisma.chatMessage.findFirst.mockResolvedValueOnce({ id: 'm1', createdAt: fecha });
       await t.service.listar(G, YO, { antes: 'm1' });
-      const arg = (t.prisma.chatMessage.findMany.mock.calls[0] as [{ where: unknown }])[0];
-      expect(arg.where).toEqual({ groupId: G, createdAt: { lt: fecha } });
+      expect((t.prisma.chatMessage.findMany.mock.calls[0] as [{ where: unknown }])[0].where).toEqual({
+        groupId: G,
+        OR: [{ createdAt: { lt: fecha } }, { createdAt: fecha, id: { lt: 'm1' } }],
+      });
     });
-    it('un cursor de un mensaje que ya no existe carga la página reciente', async () => {
-      await t.service.listar(G, YO, { despues: 'borrado' });
+    it('el cursor se busca dentro de la misma sala: un id de otra comunidad no sirve de ancla', async () => {
+      await t.service.listar(G, YO, { despues: 'de-otra-sala' });
+      expect((t.prisma.chatMessage.findFirst.mock.calls[0] as [{ where: unknown }])[0].where).toEqual({ id: 'de-otra-sala', groupId: G });
       expect((t.prisma.chatMessage.findMany.mock.calls[0] as [{ where: unknown }])[0].where).toEqual({ groupId: G });
     });
     it('no muestra el texto de un mensaje oculto ni de uno eliminado', async () => {
@@ -186,12 +208,22 @@ describe('ChatService', () => {
       t.forums.canModerate.mockResolvedValue(true);
       expect((await t.service.listar(G, YO)).mensajes[0]!.avisos).toBe(2);
     });
-    it('un mensaje de Guardián no lleva autor y trae sus enlaces internos', async () => {
+    it('un mensaje de Guardián no lleva autor y solo trae enlaces internos', async () => {
       t.prisma.chatMessage.findMany.mockResolvedValue([
-        fila({ kind: 'guardian', authorProfileId: null, author: null, enlaces: [{ texto: 'Reglas', ruta: '/reglas' }, { texto: 'malo', ruta: 'https://x.org' }] }),
+        fila({
+          kind: 'guardian',
+          authorProfileId: null,
+          author: null,
+          enlaces: [
+            { texto: 'Reglas', ruta: '/reglas' },
+            { texto: 'fuera', ruta: 'https://x.org' },
+            { texto: 'doble barra', ruta: '//x.org' },
+          ],
+        }),
       ]);
       const m = (await t.service.listar(G, YO)).mensajes[0]!;
-      expect(m).toMatchObject({ tipo: 'guardian', autor: null, esMio: false, enlaces: [{ texto: 'Reglas', ruta: '/reglas' }] });
+      expect(m).toMatchObject({ tipo: 'guardian', autor: null, esMio: false });
+      expect(m.enlaces).toEqual([{ texto: 'Reglas', ruta: '/reglas' }]);
     });
     it('un mensaje de alguien cuyo perfil ya no existe se muestra sin nombre propio', async () => {
       t.prisma.chatMessage.findMany.mockResolvedValue([fila({ authorProfileId: null, author: null })]);
@@ -209,7 +241,10 @@ describe('ChatService', () => {
         targetId: { in: ['mio'] },
         status: 'oculto',
       });
-      expect(p.mensajes.map((m) => [m.id, m.apelacionId])).toEqual([['ajeno', null], ['mio', 'ma1']]);
+      expect(p.mensajes.map((m) => [m.id, m.apelacionId])).toEqual([
+        ['ajeno', null],
+        ['mio', 'ma1'],
+      ]);
     });
     it('avisa que Guardián está por responder mientras su pregunta reciente no tiene respuesta', async () => {
       t.prisma.chatMessage.findFirst.mockResolvedValue({ id: 'q1' });
@@ -222,32 +257,63 @@ describe('ChatService', () => {
   describe('borrar y avisar', () => {
     it('no se puede eliminar el mensaje de otra persona', async () => {
       t.prisma.chatMessage.findUnique.mockResolvedValue({ groupId: G, authorProfileId: 'p-otra', deletedAt: null });
-      await expect(t.service.borrarPropio('m1', YO, 'ip')).rejects.toThrow(ForbiddenException);
+      await expect(t.service.borrarPropio('m1', YO)).rejects.toThrow(ForbiddenException);
       expect(t.prisma.chatMessage.update).not.toHaveBeenCalled();
     });
-    it('eliminar lo propio borra el texto de la base', async () => {
+    it('eliminar lo propio borra el texto de la base y se audita sin nombre', async () => {
       t.prisma.chatMessage.findUnique.mockResolvedValue({ groupId: G, authorProfileId: 'p-yo', deletedAt: null });
-      await t.service.borrarPropio('m1', YO, 'ip');
+      await t.service.borrarPropio('m1', YO);
       const arg = (t.prisma.chatMessage.update.mock.calls[0] as [{ data: { body: unknown; deletedAt: unknown } }])[0];
       expect(arg.data.body).toBeNull();
       expect(arg.data.deletedAt).toBeInstanceOf(Date);
+      await vi.waitFor(() => expect(t.audit.log).toHaveBeenCalledWith({ action: 'chat.message_deleted', resource: `group:${G}` }));
+    });
+    it('quien salió de la comunidad o fue suspendido aún puede retirar lo que escribió', async () => {
+      t.prisma.chatMessage.findUnique.mockResolvedValue({ groupId: G, authorProfileId: 'p-yo', deletedAt: null });
+      t.access.isParticipant.mockResolvedValue(false);
+      t.prisma.profile.findUnique.mockResolvedValue({ user: { status: 'suspended' } });
+      await expect(t.service.borrarPropio('m1', YO)).resolves.toBeUndefined();
+      expect(t.prisma.chatMessage.update).toHaveBeenCalledOnce();
     });
     it('un mensaje que no existe da 404', async () => {
       t.prisma.chatMessage.findUnique.mockResolvedValue(null);
-      await expect(t.service.borrarPropio('m1', YO, 'ip')).rejects.toThrow(NotFoundException);
+      await expect(t.service.borrarPropio('m1', YO)).rejects.toThrow(NotFoundException);
       await expect(t.service.avisar('m1', YO)).rejects.toThrow(NotFoundException);
     });
-    it('avisar dos veces no falla ni duplica', async () => {
+    it('avisar guarda un solo aviso por persona y mensaje: repetirlo no cambia nada', async () => {
       t.prisma.chatMessage.findUnique.mockResolvedValue({ groupId: G, deletedAt: null });
       await t.service.avisar('m1', YO);
-      await t.service.avisar('m1', YO);
-      expect(t.prisma.chatAviso.upsert).toHaveBeenCalledTimes(2);
-      expect((t.prisma.chatAviso.upsert.mock.calls[0] as [{ update: unknown }])[0].update).toEqual({});
+      expect(t.prisma.chatAviso.upsert).toHaveBeenCalledWith({
+        where: { messageId_profileId: { messageId: 'm1', profileId: 'p-yo' } },
+        create: { messageId: 'm1', profileId: 'p-yo' },
+        update: {},
+      });
     });
     it('quien no es de la comunidad no puede avisar', async () => {
       t.prisma.chatMessage.findUnique.mockResolvedValue({ groupId: G, deletedAt: null });
       t.access.isParticipant.mockResolvedValue(false);
       await expect(t.service.avisar('m1', YO)).rejects.toThrow(ForbiddenException);
+    });
+  });
+
+  describe('avisos para la mesa', () => {
+    it('quien no es de la mesa no los ve', async () => {
+      await expect(t.service.avisosParaMesa(YO)).rejects.toThrow(ForbiddenException);
+      expect(t.prisma.chatMessage.findMany).not.toHaveBeenCalled();
+    });
+    it('la mesa ve solo mensajes señalados y aún visibles, sin nombres', async () => {
+      t.forums.esMesa.mockResolvedValue(true);
+      t.prisma.chatMessage.findMany.mockResolvedValue([
+        { id: 'm1', body: 'un insulto', createdAt: new Date('2026-11-25T10:00:00Z'), group: { id: G, name: 'Masaya' }, _count: { avisos: 3 } },
+      ]);
+      const r = await t.service.avisosParaMesa(YO);
+      const arg = (t.prisma.chatMessage.findMany.mock.calls[0] as [{ where: unknown; select: Record<string, unknown> }])[0];
+      expect(arg.where).toEqual({ hidden: false, deletedAt: null, body: { not: null }, avisos: { some: {} } });
+      expect(Object.keys(arg.select)).not.toContain('author');
+      expect(Object.keys(arg.select)).not.toContain('authorProfileId');
+      expect(r).toEqual([
+        { id: 'm1', texto: 'un insulto', comunidad: 'Masaya', groupId: G, avisos: 3, createdAt: '2026-11-25T10:00:00.000Z' },
+      ]);
     });
   });
 
@@ -281,15 +347,20 @@ describe('ChatService', () => {
 
   describe('limpiar', () => {
     const ahora = new Date('2026-11-25T00:00:00Z');
+    const vencidosWhere = () =>
+      (t.prisma.chatMessage.findMany.mock.calls[0] as [{ where: { createdAt: { lt: Date }; id: unknown } }])[0].where;
+
     it.each([
       [90, '2026-08-27T00:00:00.000Z'],
       [30, '2026-10-26T00:00:00.000Z'],
     ])('con la regla en %i días borra lo anterior a %s', async (dias, limite) => {
       t.rules.getInt.mockResolvedValue(dias);
-      expect(await t.service.limpiar(ahora)).toBe(3);
+      t.prisma.chatMessage.findMany.mockResolvedValueOnce([{ id: 'v1' }, { id: 'v2' }]);
+      t.prisma.chatMessage.deleteMany.mockResolvedValue({ count: 2 });
+      expect(await t.service.limpiar(ahora)).toBe(2);
       expect(t.rules.getInt).toHaveBeenCalledWith('chat.conservacion_dias', null);
-      const where = (t.prisma.chatMessage.deleteMany.mock.calls[0] as [{ where: { createdAt: { lt: Date } } }])[0].where;
-      expect(where.createdAt.lt.toISOString()).toBe(limite);
+      expect(vencidosWhere().createdAt.lt.toISOString()).toBe(limite);
+      expect(t.prisma.chatMessage.deleteMany).toHaveBeenCalledWith({ where: { id: { in: ['v1', 'v2'] } } });
     });
     it('no borra un mensaje con una apelación o solicitud sin resolver', async () => {
       t.prisma.moderationAction.findMany.mockResolvedValue([{ targetId: 'm-apelado' }]);
@@ -298,8 +369,32 @@ describe('ChatService', () => {
         target: 'mensaje',
         status: { in: ['apelado', 'pendiente', 'provisional'] },
       });
-      const where = (t.prisma.chatMessage.deleteMany.mock.calls[0] as [{ where: { id: unknown } }])[0].where;
-      expect(where.id).toEqual({ notIn: ['m-apelado'] });
+      expect(vencidosWhere().id).toEqual({ notIn: ['m-apelado'] });
+      expect(t.prisma.chatMessage.deleteMany).not.toHaveBeenCalled();
+    });
+    it('leer las apelaciones abiertas y borrar ocurren en la misma transacción', async () => {
+      t.prisma.chatMessage.findMany.mockResolvedValueOnce([{ id: 'v1' }]);
+      t.prisma.chatMessage.deleteMany.mockResolvedValue({ count: 1 });
+      await t.service.limpiar(ahora);
+      expect(t.prisma.$transaction).toHaveBeenCalledOnce();
+    });
+    it('con el mensaje se va lo que lo cita en la moderación y las lecturas igual de viejas', async () => {
+      t.prisma.chatMessage.findMany.mockResolvedValueOnce([{ id: 'v1' }]);
+      t.prisma.chatMessage.deleteMany.mockResolvedValue({ count: 1 });
+      await t.service.limpiar(ahora);
+      expect(t.prisma.moderationAction.updateMany).toHaveBeenCalledWith({
+        where: { target: 'mensaje', targetId: { in: ['v1'] } },
+        data: { reason: '', appealText: null },
+      });
+      const where = (t.prisma.chatLectura.deleteMany.mock.calls[0] as [{ where: { lastReadAt: { lt: Date } } }])[0].where;
+      expect(where.lastReadAt.lt.toISOString()).toBe('2026-08-27T00:00:00.000Z');
+    });
+    it('sigue por tandas mientras queden vencidos', async () => {
+      const tanda = Array.from({ length: 500 }, (_, i) => ({ id: `v${i.toString()}` }));
+      t.prisma.chatMessage.findMany.mockResolvedValueOnce(tanda).mockResolvedValueOnce([{ id: 'ultimo' }]);
+      t.prisma.chatMessage.deleteMany.mockResolvedValueOnce({ count: 500 }).mockResolvedValueOnce({ count: 1 });
+      expect(await t.service.limpiar(ahora)).toBe(501);
+      expect(t.prisma.$transaction).toHaveBeenCalledTimes(2);
     });
   });
 });

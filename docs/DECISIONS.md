@@ -826,6 +826,10 @@ Los primeros miembros necesitan un lugar para hablar dentro de la plataforma. Lo
 - **Solo texto y enlaces**, hasta 1000 caracteres. Sin mensajes privados, archivos, avisos al correo ni cifrado de extremo a extremo.
 - **Sin WebSocket.** La web consulta cada 10 segundos mientras la pestaña está a la vista. Con 200 personas alcanza.
 - **Guardián solo recibe el mensaje que lo llama.** `ChatGuardianService` no lee la sala: no tiene forma de enviar otros mensajes a la IA. La llamada cuenta en el límite diario existente; apagado o sin presupuesto no consume cupo. Su respuesta se guarda como mensaje de la sala.
+- **En la sala Guardián no sabe nada de quien lo llama.** No recibe el estado de la persona ni busca en lo que ella puede leer, como sí hace el panel privado: su respuesta es pública y podría contar dónde vive la persona o citar contenido de otra comunidad o de una iniciativa reservada. Para lo personal remite al panel.
+- **La auditoría del chat no lleva persona ni IP.** La lee cualquier miembro verificado; con el nombre sería un registro de quién escribe en cada territorio y cuándo.
+- **Los avisos llegan a la coordinación y a la mesa.** La mesa ve en su página, sin nombres, los mensajes de los que avisó algún miembro. Es su única lectura del chat fuera de sus propias comunidades.
+- **Límites por persona, no por IP.** El chat queda fuera del límite general (la web llama al API desde una sola IP) y limita a 10 mensajes y 10 avisos por persona y minuto.
 - **Guardián orienta hacia adentro y hacia afuera.** Dice dónde se hace algo en la plataforma y, si el pedido se sale de su propósito (documentos compartidos, carpetas, videollamadas), sugiere tipos de herramienta y opciones conocidas, sin direcciones web.
 
 Tres decisiones aprobadas por Carlos el 2026-11-25:
@@ -836,7 +840,8 @@ Tres decisiones aprobadas por Carlos el 2026-11-25:
 
 ### Consecuencias
 - Un mensaje dañino puede estar a la vista hasta que alguien con cargo lo oculte. Con pocos miembros y sin coordinadores elegidos, quien modera es la mesa.
-- La auditoría registra que se publicó o eliminó un mensaje (`chat.message_added`, `chat.message_deleted`), nunca el texto.
+- La auditoría registra que se publicó o eliminó un mensaje (`chat.message_added`, `chat.message_deleted`) y en qué comunidad: nunca el texto ni quién.
+- **Pendiente aparte:** el límite general del API (100 por minuto) se aplica por IP, y las acciones del servidor de la web llegan todas desde la IP del contenedor web: hoy ese límite es compartido por todas las personas. Conviene reenviar la IP del cliente desde la web o limitar por sesión.
 - Quien administra el servidor puede leer técnicamente los mensajes mientras existan.
 - Un mensaje nuevo tarda hasta 10 segundos en aparecerle a los demás.
 - Fotos, notas de voz, archivos y avisos quedan para después. Las herramientas de trabajo colaborativo (carpetas, documentos compartidos) son un proyecto aparte.

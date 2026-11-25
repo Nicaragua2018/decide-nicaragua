@@ -35,6 +35,9 @@ export type ChatPagina = {
 
 export type ChatNovedades = { groupId: string; nuevos: boolean }[];
 
+/** Un mensaje del que avisó algún miembro, como lo ve la mesa: sin nombres. */
+export type ChatAvisoMesa = { id: string; texto: string; comunidad: string; groupId: string; avisos: number; createdAt: string };
+
 /**
  * true si el texto empieza llamando a Guardián: «@Guardián», «@guardian», con o sin tilde y sin
  * distinguir mayúsculas. Una mención en medio del texto no cuenta.

@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { NEGATIVA_PRIVACIDAD, PanelService, TAREA_PANEL, TAREA_SALA } from './panel.service';
 
-const USUARIO = { userId: 'u1', profileId: 'p1', status: 'verified_citizen' as never };
+const USUARIO = 'p1';
 const PREGUNTA = '@Guardián ¿dónde podemos escribir un documento entre varios?';
 const ESTADO = { cuenta: 'verified_citizen', verificacion: null, comunidades: [], invitaciones: { pendientes: 0, maximo: 5 }, plazos: [] };
 
@@ -68,7 +68,26 @@ describe('PanelService.responderEnSala (Guardián en el chat de una comunidad)',
     redis.contar.mockResolvedValue(31);
     expect(await service.responderEnSala(USUARIO, PREGUNTA)).toEqual({ tipo: 'limite' });
     expect(asistente.pedir).not.toHaveBeenCalled();
+  });
+
+  it('no usa el estado de la persona ni busca en lo que ella puede leer: la respuesta es pública en la sala', async () => {
+    contexto.estado.mockResolvedValue({
+      ...ESTADO,
+      comunidades: [{ nombre: 'Costa Rica', tipo: 'acogida' }],
+      plazos: [{ que: 'Responder la inquietud', comunidad: 'Costa Rica', vence: '2026-11-30', ruta: '/inquietudes/abc' }],
+    });
+    contexto.buscar.mockResolvedValue([
+      { clase: 'tema', titulo: 'Debate reservado', extracto: 'x', comunidad: 'Costa Rica', estado: 'abierta', ruta: '/proposals/secreto' },
+    ]);
+    asistente.pedir.mockResolvedValue({ respuesta: 'Mira esto.', enlaces: [{ ref: 'r1', texto: 'Debate reservado' }] });
+    const r = await service.responderEnSala(USUARIO, '@Guardián ¿en qué comunidades estoy y qué debates hay?');
+    expect(contexto.estado).not.toHaveBeenCalled();
     expect(contexto.buscar).not.toHaveBeenCalled();
+    const material = (asistente.pedir.mock.calls[0] as [{ material: string }])[0].material;
+    expect(material).not.toContain('Costa Rica');
+    expect(material).not.toContain('Debate reservado');
+    // Sin material no hay referencias rN: un enlace a contenido de otra comunidad no puede salir.
+    expect(r).toEqual({ tipo: 'respuesta', texto: 'Mira esto.', enlaces: [] });
   });
 
   it('si la IA no responde, es un fallo (no un texto de reintento del panel)', async () => {
@@ -98,5 +117,7 @@ describe('PanelService.responderEnSala (Guardián en el chat de una comunidad)',
     expect(TAREA_SALA).toContain('No escribas direcciones web');
     expect(TAREA_SALA).toContain("motivo: 'privacidad'");
     expect(TAREA_SALA).toContain('No resumes la sala');
+    expect(TAREA_SALA).toContain('no sabes nada de la persona que te llama');
+    expect(TAREA_SALA).toContain('en privado');
   });
 });

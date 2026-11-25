@@ -40,6 +40,10 @@ describe('reemplazarRecientes', () => {
     const r = reemplazarRecientes(actuales, [m('a', 10), m('b', 12), m('c', 13)]);
     expect(r.map((x) => x.id)).toEqual(['viejo', 'a', 'b', 'c']);
   });
+  it('un mensaje recién enviado, más nuevo que la página en camino, no desaparece', () => {
+    const r = reemplazarRecientes([m('a', 10), m('recien', 20)], [m('a', 10), m('b', 12)]);
+    expect(r.map((x) => x.id)).toEqual(['a', 'b', 'recien']);
+  });
   it('una sala que quedó vacía se vacía', () => {
     expect(reemplazarRecientes([m('a', 1)], [])).toEqual([]);
   });

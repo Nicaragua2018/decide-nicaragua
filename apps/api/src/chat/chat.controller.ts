@@ -1,10 +1,8 @@
-import { Body, Controller, Delete, ForbiddenException, Get, HttpCode, Param, ParseUUIDPipe, Post, Query, Req, UseGuards } from '@nestjs/common';
-import type { Request } from 'express';
-import { Throttle } from '@nestjs/throttler';
-import type { ChatMensajeVista, ChatNovedades, ChatPagina, JwtPayload } from '@decide/shared';
+import { Body, Controller, Delete, ForbiddenException, Get, HttpCode, Param, ParseUUIDPipe, Post, Query, UseGuards } from '@nestjs/common';
+import { SkipThrottle } from '@nestjs/throttler';
+import type { ChatAvisoMesa, ChatMensajeVista, ChatNovedades, ChatPagina, JwtPayload } from '@decide/shared';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
-import { extractIp } from '../common/utils/ip.util';
 import { ChatService, type Quien } from './chat.service';
 import { PublicarDto } from './dto/publicar.dto';
 
@@ -12,20 +10,32 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-
 /** Un cursor que no es un id se ignora: la sala carga la página reciente. */
 const cursor = (v: unknown): string | undefined => (typeof v === 'string' && UUID.test(v) ? v : undefined);
 
+/**
+ * El límite general es por IP, y la web llama al API desde una sola: con la sala consultando cada
+ * 10 segundos, unas pocas pestañas abiertas lo agotarían para todos. Aquí se exige sesión y
+ * membresía en cada llamada, y escribir se limita por persona (ChatService.frenar).
+ */
 @Controller('chat')
 @UseGuards(JwtAuthGuard)
+@SkipThrottle()
 export class ChatController {
   constructor(private readonly chat: ChatService) {}
 
   private quien(user: JwtPayload): Quien {
     if (!user.profileId) throw new ForbiddenException('Perfil requerido');
-    return { userId: user.sub, profileId: user.profileId, status: user.status as Quien['status'] };
+    return { userId: user.sub, profileId: user.profileId };
   }
 
   // Antes de ':groupId' para que no la capture.
   @Get('novedades')
   async novedades(@CurrentUser() user: JwtPayload): Promise<ChatNovedades> {
     return this.chat.novedades(this.quien(user));
+  }
+
+  /** Mensajes de los que algún miembro avisó, para la mesa. Antes de ':groupId'. */
+  @Get('avisos')
+  async avisos(@CurrentUser() user: JwtPayload): Promise<ChatAvisoMesa[]> {
+    return this.chat.avisosParaMesa(this.quien(user));
   }
 
   @Get(':groupId')
@@ -41,26 +51,23 @@ export class ChatController {
   }
 
   @Post(':groupId')
-  @Throttle({ default: { limit: 10, ttl: 60_000 } })
   async publicar(
     @Param('groupId', ParseUUIDPipe) groupId: string,
     @Body() dto: PublicarDto,
     @CurrentUser() user: JwtPayload,
-    @Req() req: Request,
   ): Promise<ChatMensajeVista> {
-    return this.chat.publicar(groupId, this.quien(user), dto.texto, dto.llamarGuardian === true, extractIp(req));
+    return this.chat.publicar(groupId, this.quien(user), dto.texto, dto.llamarGuardian === true);
   }
 
   @Delete('mensajes/:id')
   @HttpCode(200)
-  async borrar(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() user: JwtPayload, @Req() req: Request): Promise<{ ok: true }> {
-    await this.chat.borrarPropio(id, this.quien(user), extractIp(req));
+  async borrar(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() user: JwtPayload): Promise<{ ok: true }> {
+    await this.chat.borrarPropio(id, this.quien(user));
     return { ok: true };
   }
 
   @Post('mensajes/:id/avisar')
   @HttpCode(200)
-  @Throttle({ default: { limit: 10, ttl: 60_000 } })
   async avisar(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() user: JwtPayload): Promise<{ ok: true }> {
     await this.chat.avisar(id, this.quien(user));
     return { ok: true };
