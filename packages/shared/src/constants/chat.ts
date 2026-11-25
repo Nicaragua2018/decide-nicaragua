@@ -21,6 +21,8 @@ export type ChatMensajeVista = {
   esMio: boolean;
   /** Cuántas personas avisaron de este mensaje; solo para quien puede moderar. */
   avisos: number | null;
+  /** Si el mensaje es mío, está oculto y aún no apelé: el id de la moderación, para apelar. */
+  apelacionId: string | null;
   createdAt: string;
 };
 

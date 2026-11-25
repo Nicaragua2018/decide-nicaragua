@@ -12,6 +12,7 @@ const TIPO: Record<ModeracionPorConfirmar['target'], string> = {
   frase: 'Frase',
   solucion: 'Solución',
   informe: 'Informe',
+  mensaje: 'Mensaje de chat',
   // Solo las pide el asistente (revisión posterior): hacen falta 2 firmas de la mesa.
   candidatura: 'Ficha de candidatura',
   revocacion: 'Motivo de un pedido de revocación',

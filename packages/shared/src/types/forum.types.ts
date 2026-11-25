@@ -40,7 +40,7 @@ export interface PublicConsensus {
 /** Apelación pendiente, para la cola de la mesa. */
 export interface ModerationAppeal {
   id: string;
-  target: 'tema' | 'respuesta' | 'inquietud' | 'frase' | 'solucion' | 'informe';
+  target: 'tema' | 'respuesta' | 'inquietud' | 'frase' | 'solucion' | 'informe' | 'mensaje';
   targetId: string;
   reason: string;
   /** Null en las moderaciones anteriores a las causas cerradas. */
@@ -54,7 +54,7 @@ export interface ModerationAppeal {
 export interface ModeracionPorConfirmar {
   id: string;
   /** Las tres últimas (fichas, pedidos de revocación, observaciones) solo las pide el asistente. */
-  target: 'tema' | 'respuesta' | 'inquietud' | 'frase' | 'solucion' | 'informe' | 'candidatura' | 'revocacion' | 'observacion';
+  target: 'tema' | 'respuesta' | 'inquietud' | 'frase' | 'solucion' | 'informe' | 'mensaje' | 'candidatura' | 'revocacion' | 'observacion';
   targetId: string;
   causa: ModeracionCausaValue;
   /** Detalle opcional de quien la pidió ('' si no escribió nada). */

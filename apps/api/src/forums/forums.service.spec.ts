@@ -23,6 +23,7 @@ function buildPrisma() {
     inquietud: { findUnique: vi.fn(), update: vi.fn() },
     frase: { findUnique: vi.fn(), update: vi.fn() },
     comisionInforme: { findUnique: vi.fn(), findMany: vi.fn().mockResolvedValue([]), update: vi.fn() },
+    chatMessage: { findUnique: vi.fn(), update: vi.fn() },
     solucion: { findUnique: vi.fn(), findMany: vi.fn().mockResolvedValue([]), update: vi.fn(), count: vi.fn(), create: vi.fn() },
     election: { create: vi.fn(), findUnique: vi.fn(), update: vi.fn() },
     electionResult: { findUnique: vi.fn() },
@@ -1023,6 +1024,63 @@ describe('ForumsService', () => {
 
       it('el DTO de moderación acepta informe', async () => {
         const dto = plainToInstance(ModerateDto, { target: 'informe', targetId: '11111111-1111-4111-8111-111111111111', causa: 'insultos_amenazas' });
+        expect(await validate(dto)).toHaveLength(0);
+      });
+    });
+
+    describe('mensajes del chat', () => {
+      const msg = (over: Record<string, unknown> = {}) => ({
+        id: 'c1', groupId: 'g1', authorProfileId: 'p-autora', body: 'Un insulto', hidden: false, deletedAt: null, ...over,
+      });
+      const ocultar = () => service.hide(YO, { target: 'mensaje', targetId: 'c1', causa: 'insultos_amenazas' }, 'ip');
+
+      it('la coordinación de la comunidad oculta un mensaje al instante, con una sola firma', async () => {
+        prisma.group.findUnique.mockResolvedValue({ type: 'territorial_origin', parentGroupId: null });
+        prisma.cargo.findFirst.mockResolvedValue({ id: 'cargo1' });
+        prisma.chatMessage.findUnique.mockResolvedValue(msg());
+        prisma.chatMessage.update.mockResolvedValue({});
+        prisma.moderationAction.create.mockResolvedValue({ id: 'ma1' });
+        expect(await ocultar()).toEqual({ id: 'ma1', estado: 'oculto' });
+        expect(prisma.chatMessage.update).toHaveBeenCalledWith({ where: { id: 'c1' }, data: { hidden: true } });
+        expect(prisma.moderationAction.create).toHaveBeenCalledWith({
+          data: expect.objectContaining({ target: 'mensaje', targetId: 'c1', status: 'oculto', venceAt: null }),
+        });
+        expect(prisma.proposalComment.update).not.toHaveBeenCalled();
+      });
+
+      it('un miembro sin cargo no puede ocultar', async () => {
+        prisma.group.findUnique.mockResolvedValue({ type: 'territorial_origin', parentGroupId: null });
+        prisma.chatMessage.findUnique.mockResolvedValue(msg());
+        await expect(ocultar()).rejects.toThrow(ForbiddenException);
+        expect(prisma.chatMessage.update).not.toHaveBeenCalled();
+      });
+
+      it('un mensaje eliminado o inexistente da 404; uno ya oculto, 409', async () => {
+        board.roleOf.mockResolvedValue('administrador');
+        prisma.chatMessage.findUnique.mockResolvedValue(msg({ deletedAt: new Date(), body: null }));
+        await expect(ocultar()).rejects.toThrow('Mensaje no encontrado');
+        prisma.chatMessage.findUnique.mockResolvedValue(null);
+        await expect(ocultar()).rejects.toThrow(NotFoundException);
+        prisma.chatMessage.findUnique.mockResolvedValue(msg({ hidden: true }));
+        await expect(ocultar()).rejects.toThrow(ConflictException);
+      });
+
+      it('restaurar tras la apelación lo vuelve visible; la mesa ve su texto', async () => {
+        board.roleOf.mockResolvedValue('secretario');
+        prisma.chatMessage.findUnique.mockResolvedValue(msg({ hidden: true }));
+        prisma.moderationAction.findUnique.mockResolvedValue({ id: 'ma1', target: 'mensaje', targetId: 'c1', status: 'apelado', reason: '' });
+        prisma.chatMessage.update.mockResolvedValue({});
+        prisma.moderationAction.update.mockResolvedValue({});
+        await service.resolveAppeal(YO, 'ma1', true, 'ip');
+        expect(prisma.chatMessage.update).toHaveBeenCalledWith({ where: { id: 'c1' }, data: { hidden: false } });
+        prisma.moderationAction.findMany.mockResolvedValue([
+          { id: 'ma1', target: 'mensaje', targetId: 'c1', reason: '', appealText: 'No', appealedAt: new Date(), createdAt: new Date() },
+        ]);
+        expect((await service.listAppeals(YO))[0]).toMatchObject({ target: 'mensaje', originalText: 'Un insulto' });
+      });
+
+      it('el DTO de moderación acepta mensaje', async () => {
+        const dto = plainToInstance(ModerateDto, { target: 'mensaje', targetId: '11111111-1111-4111-8111-111111111111', causa: 'spam' });
         expect(await validate(dto)).toHaveLength(0);
       });
     });

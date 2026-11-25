@@ -33,7 +33,7 @@ const DIA_MS = 86_400_000;
 /** Título que toma la votación de un tema oculto, para que no repita el título del tema. */
 const HIDDEN_VOTE_TITLE = 'Votación de un tema oculto';
 
-type ModTarget = 'tema' | 'respuesta' | 'inquietud' | 'frase' | 'solucion' | 'informe';
+type ModTarget = 'tema' | 'respuesta' | 'inquietud' | 'frase' | 'solucion' | 'informe' | 'mensaje';
 
 /**
  * Contenido de las elecciones (3C) que solo llega aquí como solicitud del asistente (revisión
@@ -80,7 +80,8 @@ function checkTarget(target: string): ModTarget {
     target === 'inquietud' ||
     target === 'frase' ||
     target === 'solucion' ||
-    target === 'informe'
+    target === 'informe' ||
+    target === 'mensaje'
   ) {
     return target;
   }
@@ -435,6 +436,12 @@ export class ForumsService {
       if (!inf) throw new NotFoundException('Informe no encontrado');
       if (inf.hidden) throw new ConflictException('Este contenido ya está oculto.');
       groupId = inf.grupoId;
+    } else if (target === 'mensaje') {
+      // Mensaje del chat de una comunidad: se modera como una respuesta de foro, con una sola firma.
+      const m = await this.prisma.chatMessage.findUnique({ where: { id: dto.targetId } });
+      if (!m || m.deletedAt) throw new NotFoundException('Mensaje no encontrado');
+      if (m.hidden) throw new ConflictException('Este contenido ya está oculto.');
+      groupId = m.groupId;
     } else {
       const c = await this.prisma.proposalComment.findUnique({
         where: { id: dto.targetId },
@@ -896,6 +903,7 @@ export class ForumsService {
     if (target === 'solucion') return true;
     // Los informes de comisión, como frases y respuestas, se ocultan con una sola firma.
     if (target === 'informe') return false;
+    if (target === 'mensaje') return false;
     if (target !== 'tema') return false;
     return (await this.bloquearTemaTx(tx, targetId))?.kind === 'propuesta';
   }
@@ -988,6 +996,8 @@ export class ForumsService {
       await tx.solucion.update({ where: { id: targetId }, data: { hidden: true } });
     } else if (target === 'informe') {
       await tx.comisionInforme.update({ where: { id: targetId }, data: { hidden: true } });
+    } else if (target === 'mensaje') {
+      await tx.chatMessage.update({ where: { id: targetId }, data: { hidden: true } });
     } else {
       await tx.proposalComment.update({ where: { id: targetId }, data: { hidden: true } });
     }
@@ -1009,6 +1019,8 @@ export class ForumsService {
       await tx.solucion.update({ where: { id: targetId }, data: { hidden: false } });
     } else if (target === 'informe') {
       await tx.comisionInforme.update({ where: { id: targetId }, data: { hidden: false } });
+    } else if (target === 'mensaje') {
+      await tx.chatMessage.update({ where: { id: targetId }, data: { hidden: false } });
     } else {
       await tx.proposalComment.update({ where: { id: targetId }, data: { hidden: false } });
     }
@@ -1086,6 +1098,7 @@ export class ForumsService {
     else if (target === 'frase') fila = await this.prisma.frase.findUnique(where);
     else if (target === 'solucion') fila = await this.prisma.solucion.findUnique(where);
     else if (target === 'informe') fila = await this.prisma.comisionInforme.findUnique(where);
+    else if (target === 'mensaje') fila = await this.prisma.chatMessage.findUnique(where);
     else fila = await this.prisma.proposalComment.findUnique(where);
     return fila ? fila.hidden : null;
   }
@@ -1334,6 +1347,11 @@ export class ForumsService {
       const inf = await this.prisma.comisionInforme.findUnique({ where: { id } });
       return inf ? { authorProfileId: inf.autorProfileId, groupId: inf.grupoId } : null;
     }
+    if (target === 'mensaje') {
+      // Los mensajes de Guardián y del sistema no tienen autor: nadie los apela.
+      const m = await this.prisma.chatMessage.findUnique({ where: { id } });
+      return m ? { authorProfileId: m.authorProfileId, groupId: m.groupId } : null;
+    }
     const c = await this.prisma.proposalComment.findUnique({
       where: { id },
       include: { proposal: { select: { groupId: true } } },
@@ -1359,6 +1377,9 @@ export class ForumsService {
     }
     if (target === 'informe') {
       return (await this.prisma.comisionInforme.findUnique({ where: { id } }))?.texto ?? '';
+    }
+    if (target === 'mensaje') {
+      return (await this.prisma.chatMessage.findUnique({ where: { id } }))?.body ?? '';
     }
     return (await this.prisma.proposalComment.findUnique({ where: { id } }))?.body ?? '';
   }
