@@ -90,6 +90,16 @@ La crítica política con argumentos, contra cualquier gobierno, partido o perso
 
 Las personas que escriben pueden ver sus textos en revisión en su página [g8].
 
+## El chat de cada comunidad
+
+Cada comunidad (el territorio de origen, el lugar de acogida y el nivel general) tiene una sala de chat. Se entra desde la portada [g1], tocando la comunidad en el mapa: el chat es su primera pestaña. Solo la leen y escriben los miembros verificados de esa comunidad; nadie más, tampoco la mesa ni los observadores por su cargo.
+
+- Es para conversar: avisar, preguntar y compartir información. Lo que haya que decidir va por inquietudes [g2], debates y votaciones [g3].
+- Solo admite texto y enlaces, hasta 1000 caracteres por mensaje. No hay mensajes privados, fotos, notas de voz ni archivos.
+- Cada persona puede eliminar sus propios mensajes. Cualquier miembro puede avisar a la coordinación de un mensaje; la coordinación de la comunidad o la mesa pueden ocultarlo con una causa, y quien lo escribió puede apelar.
+- Los mensajes se borran solos cuando vence el plazo de la regla «Días que se conservan los mensajes del chat» (se ve y se cambia en Reglas [g5]). Lo que deba quedar se lleva a un foro o a una decisión.
+- El asistente responde en la sala solo cuando alguien lo llama: con el botón «Preguntar a Guardián» o empezando el mensaje con @Guardián. Recibe solo ese mensaje, no el resto de la sala, y su respuesta la ve toda la sala. Cada llamada cuenta en las preguntas diarias de la persona.
+
 ## La privacidad
 
 El voto es secreto: nadie puede ver la papeleta de otra persona, no se muestra ninguna cifra antes del conteo, los resultados no llevan nombres y las papeletas no se auditan. Los grupos de opinión, los apoyos y las iniciativas de un grupo tampoco revelan quién es quién. El asistente tampoco puede saberlo ni se lo dicen: a él nunca llegan nombres, correos ni identificadores de personas. La página de la persona [g6] muestra su propio estado.
@@ -112,5 +122,6 @@ El asistente no hace estas cosas:
 - No dice quién escribió, apoyó o votó algo.
 - No inventa datos: si no los tiene en el material, lo dice.
 - No avisa por correo ni por teléfono: todo se ve al entrar a la plataforma.
+- No lee las salas de chat: solo ve el mensaje de quien lo llama.
 
 Si la persona pregunta algo que esta guía y el material no cubren, el asistente dice que no lo sabe y sugiere preguntar en el foro de su comunidad [g9] o a la mesa.

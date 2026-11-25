@@ -29,6 +29,22 @@ Nueva identidad y navegación más simple (ADR-030):
 
 ---
 
+## Chat por comunidad (2026-11-25): CONSTRUIDO, falta verlo en el navegador
+
+Una sala de chat por comunidad, dentro de la plataforma (ADR-031):
+
+- [x] Sala por territorio de origen, lugar de acogida y nivel general; solo sus miembros verificados
+- [x] Texto y enlaces, 50 mensajes recientes y «Ver anteriores»; la web consulta cada 10 segundos
+- [x] Eliminar lo propio, avisar a la coordinación y ocultar con el mecanismo de los foros (apelable)
+- [x] Guardián responde solo cuando lo llaman y solo recibe ese mensaje; cuenta en el límite diario
+- [x] Los mensajes se borran al vencer la regla `chat.conservacion_dias` (90 días)
+- [x] Aviso «Mensajes nuevos» en el mapa de la portada
+- [ ] Comprobación en el navegador (1360, 390 y 320 px) y con el asistente encendido en el servidor
+
+**Después:** fotos, notas de voz y archivos; avisos de mensajes nuevos; proyecto aparte de trabajo colaborativo (carpetas y documentos compartidos), con los grupos de WhatsApp de RENACER como referencia.
+
+---
+
 ## Primeros 200 — Plan 1 (base): COMPLETO
 
 Base del diseño «Primeros 200» entregada en las tareas 1 a 9:
