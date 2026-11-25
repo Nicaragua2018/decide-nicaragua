@@ -41,3 +41,4 @@ export * from './rules.js';
 export * from './moderacion.js';
 export * from './asistente.js';
 export * from './elecciones.js';
+export * from './chat.js';
