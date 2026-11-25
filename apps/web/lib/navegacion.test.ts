@@ -6,17 +6,27 @@ describe('bloquesDeNavegacion', () => {
     const b = bloquesDeNavegacion({ status: 'verified_citizen', esObservador: true });
     expect(b.map((x) => x.id)).toEqual(['participar', 'comunidad', 'transparencia']);
     expect(b[0]!.opciones.map((o) => o.ruta)).toEqual(['/inquietudes', '/foros', '/decisiones', '/grupos']);
-    expect(b[1]!.opciones.map((o) => o.ruta)).toEqual(['/dashboard', '/elecciones', '/admin/mesa', '/observar']);
-    expect(b[2]!.opciones.map((o) => o.ruta)).toEqual(['/reglas', '/verificaciones', '/audit']);
+    expect(b[1]!.opciones.map((o) => o.ruta)).toEqual(['/dashboard', '/elecciones', '/admin/mesa', '/verificaciones', '/observar']);
+    expect(b[2]!.opciones.map((o) => o.ruta)).toEqual(['/reglas', '/audit']);
   });
   it('persona sin verificar no ve Participar ni Elecciones ni Mesa ni Observar', () => {
     const b = bloquesDeNavegacion({ status: 'pending_verification', esObservador: false });
     expect(b.map((x) => x.id)).toEqual(['comunidad', 'transparencia']);
     expect(b[0]!.opciones.map((o) => o.ruta)).toEqual(['/dashboard']);
+    expect(b[1]!.opciones.map((o) => o.ruta)).toEqual(['/reglas', '/audit']);
   });
   it('Observar solo con el cargo', () => {
     const b = bloquesDeNavegacion({ status: 'verified_citizen', esObservador: false });
     expect(b[1]!.opciones.map((o) => o.ruta)).not.toContain('/observar');
+  });
+});
+
+describe('Verificaciones', () => {
+  it('es una tarea privada de Comunidad, no una lista pública de Transparencia', () => {
+    const b = bloquesDeNavegacion({ status: 'verified_citizen', esObservador: false });
+    const v = b[1]!.opciones.find((o) => o.ruta === '/verificaciones');
+    expect(v?.ayuda).toBe('Personas que esperan tu confirmación');
+    expect(b[2]!.opciones.map((o) => o.ruta)).not.toContain('/verificaciones');
   });
 });
 

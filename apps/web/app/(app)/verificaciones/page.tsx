@@ -15,7 +15,7 @@ export default async function VerificacionesPage() {
         <h1 className="page-title">Verificaciones</h1>
         <p className="page-sub">
           Personas que esperan una confirmación tuya. Confirma solo si las conoces: tu nombre queda registrado
-          como referencia.
+          como referencia. Aquí se ve el nombre, nunca el correo.
         </p>
       </div>
       {pending.length === 0 ? (
