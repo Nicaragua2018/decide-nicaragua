@@ -123,3 +123,9 @@
   .inicio-hero { flex-direction: row; justify-content: space-between; align-items: flex-end; gap: 2.5rem; }
   .inicio-cifras { grid-template-columns: repeat(3, minmax(132px, auto)); gap: 0.75rem; }
 }
+
+/* Aviso de mensajes nuevos en el chat de una comunidad. */
+.fila-mapa-nuevo {
+  font-size: 0.72rem; font-weight: 600; white-space: nowrap; padding: 0.1rem 0.5rem;
+  border-radius: var(--radius-pill); background: var(--accent-light); border: 1px solid var(--accent); color: var(--text-soft);
+}

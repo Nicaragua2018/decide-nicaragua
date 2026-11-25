@@ -4,7 +4,9 @@ import { serverFetch } from '@/lib/api';
 import { Suspense } from 'react';
 import CrecerSeccion from '@/components/CrecerSeccion';
 import { MarcaAsistente } from '@/components/SugerenciaAsistente';
+import SalaChat from '@/components/chat/SalaChat';
 import type {
+  ChatPagina,
   GroupDetail,
   ProposalListResponse,
   ElectionListResponse,
@@ -15,6 +17,9 @@ import type {
 } from '@decide/shared';
 
 type Tab = 'proposals' | 'elections' | 'sortition';
+/** El chat es la primera pestaña de una comunidad; los grupos de trabajo no tienen sala. */
+type Pestana = 'chat' | Tab;
+const esTab = (t: string): t is Tab => t === 'proposals' || t === 'elections' || t === 'sortition';
 
 export async function generateMetadata({
   params,
@@ -66,14 +71,17 @@ export default async function GroupPage({
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ tab?: Tab }>;
+  searchParams: Promise<{ tab?: string }>;
 }) {
-  const { id }               = await params;
-  const { tab = 'proposals' } = await searchParams;
+  const { id }  = await params;
+  const pedida  = (await searchParams).tab;
+  const tab: Pestana = pedida !== undefined && esTab(pedida) ? pedida : 'chat';
 
   const [groupRes, contentRes] = await Promise.all([
     serverFetch(`/api/groups/${id}`),
-    tab === 'proposals'
+    tab === 'chat'
+      ? serverFetch(`/api/chat/${id}`)
+      : tab === 'proposals'
       ? serverFetch(`/api/deliberation/groups/${id}/proposals`)
       : tab === 'elections'
         ? serverFetch(`/api/voting/groups/${id}/elections`)
@@ -82,7 +90,12 @@ export default async function GroupPage({
 
   const group       = (await groupRes.json()) as GroupDetail;
   const contentData = contentRes.ok ? await contentRes.json() : null;
-  const meta        = TAB_META[tab];
+  const meta        = tab === 'chat' ? null : TAB_META[tab];
+  // Por qué no hay chat: el API lo dice (no eres miembro verificado, o es un grupo de trabajo).
+  const sinChat =
+    tab === 'chat' && !contentRes.ok
+      ? (((await contentRes.json().catch(() => null)) as { message?: string } | null)?.message ?? 'No se pudo cargar el chat. Intenta de nuevo.')
+      : null;
 
   return (
     <>
@@ -102,9 +115,11 @@ export default async function GroupPage({
             {group.description ? ` · ${group.description}` : ''}
           </p>
         </div>
-        <Link href={meta.href(id)} className="btn btn-primary">
-          {meta.cta}
-        </Link>
+        {meta && (
+          <Link href={meta.href(id)} className="btn btn-primary">
+            {meta.cta}
+          </Link>
+        )}
       </div>
 
       <Suspense fallback={null}>
@@ -113,6 +128,9 @@ export default async function GroupPage({
 
       {/* ── Tabs ────────────────────────────────────────────────── */}
       <nav className="tab-nav" aria-label="Secciones del grupo">
+        <Link href={`/groups/${id}?tab=chat`} className={`tab-link${tab === 'chat' ? ' tab-link-active' : ''}`}>
+          Chat
+        </Link>
         {(Object.keys(TAB_META) as Tab[]).map((t) => (
           <Link
             key={t}
@@ -124,7 +142,10 @@ export default async function GroupPage({
         ))}
       </nav>
 
-      {!contentData && (
+      {tab === 'chat' && sinChat && <p className="empty-state">{sinChat}</p>}
+      {tab === 'chat' && contentData && <SalaChat groupId={id} inicial={contentData as ChatPagina} />}
+
+      {tab !== 'chat' && !contentData && (
         <p className="empty-state">Error cargando datos. Intenta de nuevo.</p>
       )}
 

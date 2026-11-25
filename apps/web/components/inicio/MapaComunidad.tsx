@@ -2,7 +2,7 @@ import Link from 'next/link';
 import { serverFetch } from '@/lib/api';
 import { agruparGrupos } from '@/lib/inicio';
 import { Sacuanjoche } from '@/components/marca/Sacuanjoche';
-import type { GroupDetail, GroupSummary } from '@decide/shared';
+import type { ChatNovedades, GroupDetail, GroupSummary } from '@decide/shared';
 
 async function miembrosDe(id: string): Promise<number | null> {
   try {
@@ -13,12 +13,24 @@ async function miembrosDe(id: string): Promise<number | null> {
   }
 }
 
-function Fila({ g, n }: { g: GroupSummary; n: number | null }) {
+/** En qué comunidades hay mensajes nuevos en el chat. Si falla, no se muestra ningún aviso. */
+async function chatsConNovedad(): Promise<Set<string>> {
+  try {
+    const res = await serverFetch('/api/chat/novedades');
+    if (!res.ok) return new Set();
+    return new Set(((await res.json()) as ChatNovedades).filter((x) => x.nuevos).map((x) => x.groupId));
+  } catch {
+    return new Set();
+  }
+}
+
+function Fila({ g, n, nuevo }: { g: GroupSummary; n: number | null; nuevo: boolean }) {
   return (
     <li>
       <Link href={`/groups/${g.id}`} className="fila-mapa">
         <Sacuanjoche variante={n !== null && n > 0 ? 'icono' : 'contorno'} tamano={22} />
         <span className="fila-mapa-nombre">{g.name}</span>
+        {nuevo && <span className="fila-mapa-nuevo">Mensajes nuevos</span>}
         {n !== null && <span className="fila-mapa-n">{n === 1 ? '1 miembro' : `${n} miembros`}</span>}
       </Link>
     </li>
@@ -29,7 +41,7 @@ function Fila({ g, n }: { g: GroupSummary; n: number | null }) {
 export default async function MapaComunidad({ groups }: { groups: GroupSummary[] | null }) {
   const { origen, acogida, otras } = agruparGrupos(groups ?? []);
   const territoriales = [...origen, ...acogida];
-  const conteos = await Promise.all(territoriales.map((g) => miembrosDe(g.id)));
+  const [conteos, nuevos] = await Promise.all([Promise.all(territoriales.map((g) => miembrosDe(g.id))), chatsConNovedad()]);
   const n = new Map(territoriales.map((g, i) => [g.id, conteos[i] ?? null]));
 
   const columna = (titulo: string, lista: GroupSummary[]) => (
@@ -37,7 +49,7 @@ export default async function MapaComunidad({ groups }: { groups: GroupSummary[]
       <h3 className="mapa-subtitulo">{titulo}</h3>
       <ul className="mapa-lista">
         {lista.map((g) => (
-          <Fila key={g.id} g={g} n={n.get(g.id) ?? null} />
+          <Fila key={g.id} g={g} n={n.get(g.id) ?? null} nuevo={nuevos.has(g.id)} />
         ))}
       </ul>
     </div>
@@ -66,7 +78,7 @@ export default async function MapaComunidad({ groups }: { groups: GroupSummary[]
           <h3 className="mapa-subtitulo">Mis comunidades</h3>
           <ul className="mapa-lista">
             {otras.map((g) => (
-              <Fila key={g.id} g={g} n={null} />
+              <Fila key={g.id} g={g} n={null} nuevo={nuevos.has(g.id)} />
             ))}
           </ul>
         </div>
