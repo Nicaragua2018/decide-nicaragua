@@ -3,8 +3,8 @@ import { IsIn, IsOptional, IsString, IsUUID, MaxLength } from 'class-validator';
 import { MODERACION_CAUSAS, type ModeracionCausaValue } from '@decide/shared';
 
 export class ModerateDto {
-  @IsIn(['tema', 'respuesta', 'inquietud', 'frase', 'solucion', 'informe'])
-  target!: 'tema' | 'respuesta' | 'inquietud' | 'frase' | 'solucion' | 'informe';
+  @IsIn(['tema', 'respuesta', 'inquietud', 'frase', 'solucion', 'informe', 'mensaje'])
+  target!: 'tema' | 'respuesta' | 'inquietud' | 'frase' | 'solucion' | 'informe' | 'mensaje';
 
   @IsUUID('4')
   targetId!: string;

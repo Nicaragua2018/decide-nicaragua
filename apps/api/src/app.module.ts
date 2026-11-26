@@ -16,6 +16,7 @@ import { UsersModule } from './users/users.module';
 import { BoardModule } from './board/board.module';
 import { VerificationModule } from './verification/verification.module';
 import { ForumsModule } from './forums/forums.module';
+import { ChatModule } from './chat/chat.module';
 import { NewsletterModule } from './newsletter/newsletter.module';
 import { RulesModule } from './rules/rules.module';
 import { CambiosReglaModule } from './rules/cambios-regla.module';
@@ -60,6 +61,7 @@ import { AsistenteModule } from './asistente/asistente.module';
     BoardModule,
     VerificationModule,
     ForumsModule,
+    ChatModule,
     NewsletterModule,
     RulesModule,
     CambiosReglaModule,

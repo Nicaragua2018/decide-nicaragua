@@ -3,7 +3,7 @@
 import { cookies } from 'next/headers';
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
-import { COMPROMISOS_MAX, MODERACION_CAUSAS, type CasoSuspension, type RevisionTexto, type TipoTexto } from '@decide/shared';
+import { COMPROMISOS_MAX, MODERACION_CAUSAS, type CasoSuspension, type ChatMensajeVista, type ChatPagina, type RevisionTexto, type TipoTexto } from '@decide/shared';
 
 const API_URL = process.env.API_URL ?? 'http://localhost:4000';
 
@@ -489,6 +489,8 @@ export async function hideContent(_prev: ActionResult | null, formData: FormData
   if (!res.ok) return { error: await parseError(res) };
   const body = (await res.json().catch(() => ({}))) as { estado?: string };
   revalidateContent(formData);
+  // Un mensaje de chat se oculta desde la sala o desde los avisos de la mesa.
+  if (formData.get('target') === 'mensaje') revalidatePath('/admin/mesa');
   return body.estado ? { success: true, estado: body.estado } : { success: true };
 }
 
@@ -1092,5 +1094,59 @@ export async function dejarObservacion(auditEventId: string, _prev: ActionResult
   if (!res.ok) return { error: await parseError(res) };
   revalidatePath('/observar');
   revalidatePath('/representantes');
+  return { success: true };
+}
+
+// ─── Chat por comunidad ────────────────────────────────────────────────────
+
+/** Lee la sala: sin cursor, los mensajes recientes; con `despues`, solo los nuevos; con `antes`, los anteriores. */
+export async function leerChat(
+  groupId: string,
+  cursor?: { antes?: string; despues?: string },
+): Promise<ChatPagina | { error: string }> {
+  if (!isUuid(groupId)) return { error: 'Solicitud no válida.' };
+  const q = new URLSearchParams();
+  if (isUuid(cursor?.antes)) q.set('antes', cursor.antes);
+  if (isUuid(cursor?.despues)) q.set('despues', cursor.despues);
+  const cola = q.size > 0 ? `?${q.toString()}` : '';
+  try {
+    const res = await actionFetch(`/api/chat/${groupId}${cola}`);
+    if (!res.ok) return { error: await parseError(res) };
+    return (await res.json()) as ChatPagina;
+  } catch {
+    return { error: 'No se pudo cargar el chat. Intenta de nuevo.' };
+  }
+}
+
+export async function enviarChat(
+  groupId: string,
+  texto: string,
+  llamarGuardian: boolean,
+): Promise<ChatMensajeVista | { error: string }> {
+  if (!isUuid(groupId)) return { error: 'Solicitud no válida.' };
+  try {
+    const res = await actionFetch(`/api/chat/${groupId}`, {
+      method: 'POST',
+      body: JSON.stringify({ texto, llamarGuardian }),
+    });
+    if (res.status === 429) return { error: 'Vas muy rápido. Espera un momento antes de enviar otro mensaje.' };
+    if (!res.ok) return { error: await parseError(res) };
+    return (await res.json()) as ChatMensajeVista;
+  } catch {
+    return { error: 'No se pudo enviar. Revisa tu conexión e intenta de nuevo.' };
+  }
+}
+
+export async function borrarMensajeChat(id: string): Promise<ActionResult> {
+  if (!isUuid(id)) return INVALID;
+  const res = await actionFetch(`/api/chat/mensajes/${id}`, { method: 'DELETE' });
+  if (!res.ok) return { error: await parseError(res) };
+  return { success: true };
+}
+
+export async function avisarMensajeChat(id: string): Promise<ActionResult> {
+  if (!isUuid(id)) return INVALID;
+  const res = await actionFetch(`/api/chat/mensajes/${id}/avisar`, { method: 'POST' });
+  if (!res.ok) return { error: await parseError(res) };
   return { success: true };
 }

@@ -815,6 +815,39 @@ La barra tenía 13 enlaces y la app no tenía una identidad propia. Carlos aprob
 
 ---
 
+## ADR-031: Chat por comunidad (2026-11-25)
+
+### Contexto
+Los primeros miembros necesitan un lugar para hablar dentro de la plataforma. Los grupos de WhatsApp de RENACER (uno por territorio de origen y por lugar de acogida) cumplen esa función, pero muestran el teléfono de cada persona a todo el grupo y quedan fuera de la plataforma. Carlos decidió que el chat va dentro de Nicaragua Decide, que todos los miembros de la comunidad pueden escribir y que Guardián asiste en las salas solo cuando lo llaman (spec `docs/superpowers/specs/2026-11-25-chat-por-comunidad-design.md`).
+
+### Decisión
+- **Una sala por comunidad.** La sala es la comunidad (`territorial_origin`, `territorial_residence` y el nivel general); no hay tabla de salas. Existe desde el primer miembro. Los grupos de trabajo no tienen sala: ya tienen su foro.
+- **Solo miembros verificados de la comunidad.** Ni la mesa ni los observadores leen por su cargo. El estado de la cuenta se lee de la base en cada lectura, no del token.
+- **Solo texto y enlaces**, hasta 1000 caracteres. Sin mensajes privados, archivos, avisos al correo ni cifrado de extremo a extremo.
+- **Sin WebSocket.** La web consulta cada 10 segundos mientras la pestaña está a la vista. Con 200 personas alcanza.
+- **Guardián solo recibe el mensaje que lo llama.** `ChatGuardianService` no lee la sala: no tiene forma de enviar otros mensajes a la IA. La llamada cuenta en el límite diario existente; apagado o sin presupuesto no consume cupo. Su respuesta se guarda como mensaje de la sala.
+- **En la sala Guardián no sabe nada de quien lo llama.** No recibe el estado de la persona ni busca en lo que ella puede leer, como sí hace el panel privado: su respuesta es pública y podría contar dónde vive la persona o citar contenido de otra comunidad o de una iniciativa reservada. Para lo personal remite al panel.
+- **La auditoría del chat no lleva persona ni IP.** La lee cualquier miembro verificado; con el nombre sería un registro de quién escribe en cada territorio y cuándo.
+- **Los avisos llegan a la coordinación y a la mesa.** La mesa ve en su página, sin nombres, los mensajes de los que avisó algún miembro. Es su única lectura del chat fuera de sus propias comunidades.
+- **Límites por persona, no por IP.** El chat queda fuera del límite general (la web llama al API desde una sola IP) y limita a 10 mensajes y 10 avisos por persona y minuto.
+- **Guardián orienta hacia adentro y hacia afuera.** Dice dónde se hace algo en la plataforma y, si el pedido se sale de su propósito (documentos compartidos, carpetas, videollamadas), sugiere tipos de herramienta y opciones conocidas, sin direcciones web.
+
+Tres decisiones aprobadas por Carlos el 2026-11-25:
+
+1. **Los mensajes se borran a los 90 días**, regla general votable `chat.conservacion_dias` (30 a 365). Un mensaje con una solicitud de moderación o una apelación sin resolver espera a que se resuelva.
+2. **El chat no pasa por la revisión previa de la IA**, a diferencia de los foros: costaría una llamada por mensaje y lo haría lento. Se modera después: la coordinación de la comunidad o la mesa ocultan con una causa cerrada (mismo mecanismo de los foros, destino `mensaje`, una sola firma, apelable), y cualquier miembro puede avisar de un mensaje.
+3. **El texto se guarda sin cifrar en el servidor**, como los foros.
+
+### Consecuencias
+- Un mensaje dañino puede estar a la vista hasta que alguien con cargo lo oculte. Con pocos miembros y sin coordinadores elegidos, quien modera es la mesa.
+- La auditoría registra que se publicó o eliminó un mensaje (`chat.message_added`, `chat.message_deleted`) y en qué comunidad: nunca el texto ni quién.
+- **Pendiente aparte:** el límite general del API (100 por minuto) se aplica por IP, y las acciones del servidor de la web llegan todas desde la IP del contenedor web: hoy ese límite es compartido por todas las personas. Conviene reenviar la IP del cliente desde la web o limitar por sesión.
+- Quien administra el servidor puede leer técnicamente los mensajes mientras existan.
+- Un mensaje nuevo tarda hasta 10 segundos en aparecerle a los demás.
+- Fotos, notas de voz, archivos y avisos quedan para después. Las herramientas de trabajo colaborativo (carpetas, documentos compartidos) son un proyecto aparte.
+
+---
+
 ## Decisiones pendientes
 
 | ID | Pregunta | Prioridad |

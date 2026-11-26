@@ -70,6 +70,7 @@ export const RULE_DEFINITIONS: readonly RuleDefinition[] = [
   int('cargos.periodo_coordinadores_meses', 'colmena', 'Duración del cargo de coordinación (meses)', 6, 3, 12, 'meses'),
   int('eleccion.plazo_candidaturas_dias', 'colmena', 'Plazo para presentar candidaturas (días)', 7, 3, 30, 'dias'),
   int('eleccion.plazo_votacion_dias', 'colmena', 'Plazo de votación de una elección (días)', 7, 3, 30, 'dias'),
+  int('chat.conservacion_dias', 'colmena', 'Días que se conservan los mensajes del chat (días)', 90, 30, 365, 'dias'),
 ];
 
 export function ruleDefinition(key: string): RuleDefinition {

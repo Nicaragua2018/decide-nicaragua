@@ -4,7 +4,7 @@ import { useActionState, useState } from 'react';
 import { MODERACION_CAUSAS } from '@decide/shared';
 import { hideContent, type ActionResult } from '@/lib/actions';
 
-type Objetivo = 'tema' | 'respuesta' | 'inquietud' | 'frase' | 'solucion' | 'informe';
+type Objetivo = 'tema' | 'respuesta' | 'inquietud' | 'frase' | 'solucion' | 'informe' | 'mensaje';
 
 const MENSAJE_ESTADO: Record<string, string> = {
   oculto: 'Contenido ocultado.',

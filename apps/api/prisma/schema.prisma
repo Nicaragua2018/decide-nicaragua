@@ -86,6 +86,14 @@ enum ModerationTarget {
   candidatura
   revocacion
   observacion
+  mensaje
+}
+
+enum ChatTipo {
+  miembro
+  pregunta_guardian
+  guardian
+  sistema
 }
 
 enum Origen {
@@ -278,6 +286,9 @@ model Profile {
   boardActionsProposed  BoardAction[]             @relation("BoardActionProposer")
   forumsCreated         Forum[]                   @relation("ForumCreator")
   moderationsDone       ModerationAction[]        @relation("Moderator")
+  chatMensajes          ChatMessage[]             @relation("ChatAutor")
+  chatLecturas          ChatLectura[]             @relation("ChatLector")
+  chatAvisos            ChatAviso[]               @relation("ChatAvisador")
   textosEnRevision      TextoEnRevision[]
   inquietudes           Inquietud[]
   inquietudApoyos       InquietudApoyo[]
@@ -367,6 +378,8 @@ model Group {
   comisionPapeletas    ComisionPapeleta[]
 
   memberships    GroupMembership[]
+  chatMensajes   ChatMessage[]
+  chatLecturas   ChatLectura[]
   proposals      Proposal[]
   elections      Election[]
   sortitionDraws SortitionDraw[]
@@ -832,6 +845,57 @@ model ModerationAction {
   @@index([status])
   @@index([status, venceAt])
   @@map("moderation_actions")
+}
+
+/**
+ * ChatMessage — mensaje de la sala de chat de una comunidad (la sala es la comunidad).
+ * Solo texto. `body` queda en null cuando su autor lo elimina.
+ */
+model ChatMessage {
+  id              String      @id @default(uuid()) @db.Uuid
+  groupId         String      @db.Uuid
+  group           Group       @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  /// Null en los mensajes de Guardián y del sistema, o si el perfil ya no existe.
+  authorProfileId String?     @db.Uuid
+  author          Profile?    @relation("ChatAutor", fields: [authorProfileId], references: [id], onDelete: SetNull)
+  kind            ChatTipo    @default(miembro)
+  body            String?     @db.VarChar(1000)
+  /// Solo en mensajes de Guardián: [{ texto, ruta }] ya resueltos por el servidor.
+  enlaces         Json?
+  hidden          Boolean     @default(false)
+  deletedAt       DateTime?   @db.Timestamptz
+  /// La pregunta a la que responde Guardián o el aviso del sistema.
+  replyToId       String?     @db.Uuid
+  createdAt       DateTime    @default(now()) @db.Timestamptz
+  avisos          ChatAviso[]
+
+  @@index([groupId, createdAt])
+  @@index([createdAt])
+  @@map("chat_messages")
+}
+
+/// Hasta cuándo leyó cada persona la sala de cada comunidad (para «mensajes nuevos»).
+model ChatLectura {
+  groupId    String   @db.Uuid
+  group      Group    @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  profileId  String   @db.Uuid
+  profile    Profile  @relation("ChatLector", fields: [profileId], references: [id], onDelete: Cascade)
+  lastReadAt DateTime @db.Timestamptz
+
+  @@id([groupId, profileId])
+  @@map("chat_lecturas")
+}
+
+/// Un miembro avisa a la coordinación de un mensaje. No lo oculta.
+model ChatAviso {
+  messageId String      @db.Uuid
+  message   ChatMessage @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  profileId String      @db.Uuid
+  profile   Profile     @relation("ChatAvisador", fields: [profileId], references: [id], onDelete: Cascade)
+  createdAt DateTime    @default(now()) @db.Timestamptz
+
+  @@id([messageId, profileId])
+  @@map("chat_avisos")
 }
 
 /**

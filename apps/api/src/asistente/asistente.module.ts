@@ -59,6 +59,6 @@ import { AcuerdosService } from './acuerdos.service';
     AcuerdosService,
     AsistenteScheduler,
   ],
-  exports: [AsistenteService, ModeracionPreviaService, GuardiaService, Publicadores, ContextoPersonaService, SugerenciasService],
+  exports: [AsistenteService, ModeracionPreviaService, GuardiaService, Publicadores, ContextoPersonaService, SugerenciasService, PanelService],
 })
 export class AsistenteModule {}

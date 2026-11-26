@@ -22,6 +22,8 @@ const TIPO_DE: Record<ModerationTarget, TipoTexto> = {
   candidatura: 'candidatura',
   revocacion: 'revocacion',
   observacion: 'observacion',
+  // El chat no pasa por la cola de revisión; la entrada existe porque el tipo lo exige.
+  mensaje: 'comentario',
 };
 
 /** Una ficha solo se modera mientras su elección está abierta (después ya está contada). */

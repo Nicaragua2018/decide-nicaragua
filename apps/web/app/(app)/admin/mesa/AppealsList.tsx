@@ -12,6 +12,7 @@ const TIPO: Record<ModerationAppeal['target'], string> = {
   frase: 'Frase',
   solucion: 'Solución',
   informe: 'Informe',
+  mensaje: 'Mensaje de chat',
 };
 
 /** Etiqueta de la causa más el detalle (si lo hay); sin causa, el motivo de las moderaciones viejas. */
