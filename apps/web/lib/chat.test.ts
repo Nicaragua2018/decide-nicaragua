@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { ChatMensajeVista } from '@decide/shared';
-import { fusionar, reemplazarRecientes } from './chat';
+import { fusionar, reemplazarRecientes, sinLaSalaAbierta, textoSinLeer, totalSinLeer } from './chat';
 
 const m = (id: string, seg: number, over: Partial<ChatMensajeVista> = {}): ChatMensajeVista => ({
   id,
@@ -46,5 +46,26 @@ describe('reemplazarRecientes', () => {
   });
   it('una sala que quedó vacía se vacía', () => {
     expect(reemplazarRecientes([m('a', 1)], [])).toEqual([]);
+  });
+});
+
+describe('mensajes sin leer', () => {
+  const salas = [
+    { groupId: 'a', sinLeer: 3 },
+    { groupId: 'b', sinLeer: 2 },
+  ];
+  it('suma todas las salas', () => {
+    expect(totalSinLeer(salas)).toBe(5);
+    expect(totalSinLeer([])).toBe(0);
+  });
+  it('dice el número en singular y en plural', () => {
+    expect(textoSinLeer(1)).toBe('1 mensaje sin leer');
+    expect(textoSinLeer(4)).toBe('4 mensajes sin leer');
+  });
+  it('la sala abierta en el chat no cuenta; en otra pestaña o en otra página sí', () => {
+    expect(totalSinLeer(sinLaSalaAbierta(salas, '/groups/a', ''))).toBe(2);
+    expect(totalSinLeer(sinLaSalaAbierta(salas, '/groups/a', '?tab=chat'))).toBe(2);
+    expect(totalSinLeer(sinLaSalaAbierta(salas, '/groups/a', '?tab=proposals'))).toBe(5);
+    expect(totalSinLeer(sinLaSalaAbierta(salas, '/dashboard', ''))).toBe(5);
   });
 });

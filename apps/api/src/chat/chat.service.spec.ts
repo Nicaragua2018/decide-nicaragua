@@ -318,25 +318,29 @@ describe('ChatService', () => {
   });
 
   describe('novedades', () => {
-    it('marca nuevos solo donde hay un mensaje ajeno posterior a la última lectura', async () => {
-      t.prisma.groupMembership.findMany.mockResolvedValue([{ groupId: 'a' }, { groupId: 'b' }, { groupId: 'c' }, { groupId: 'd' }]);
-      t.prisma.chatMessage.groupBy.mockResolvedValue([
-        { groupId: 'a', _max: { createdAt: new Date('2026-11-25T12:00:00Z') } },
-        { groupId: 'b', _max: { createdAt: new Date('2026-11-25T08:00:00Z') } },
-        { groupId: 'c', _max: { createdAt: new Date('2026-11-25T08:00:00Z') } },
+    it('cuenta en cada comunidad los mensajes ajenos y visibles posteriores a la última lectura', async () => {
+      t.prisma.groupMembership.findMany.mockResolvedValue([
+        { groupId: 'a', group: { name: 'Exilio y diáspora' } },
+        { groupId: 'b', group: { name: 'Managua' } },
       ]);
-      t.prisma.chatLectura.findMany.mockResolvedValue([
-        { groupId: 'a', lastReadAt: new Date('2026-11-25T10:00:00Z') },
-        { groupId: 'b', lastReadAt: new Date('2026-11-25T10:00:00Z') },
-      ]);
+      const leido = new Date('2026-11-25T10:00:00Z');
+      t.prisma.chatLectura.findMany.mockResolvedValue([{ groupId: 'a', lastReadAt: leido }]);
+      t.prisma.chatMessage.count.mockImplementation(({ where }: { where: { groupId: string } }) =>
+        Promise.resolve(where.groupId === 'a' ? 3 : 0),
+      );
       expect(await t.service.novedades(YO)).toEqual([
-        { groupId: 'a', nuevos: true },
-        { groupId: 'b', nuevos: false },
-        { groupId: 'c', nuevos: true },
-        { groupId: 'd', nuevos: false },
+        { groupId: 'a', nombre: 'Exilio y diáspora', sinLeer: 3 },
+        { groupId: 'b', nombre: 'Managua', sinLeer: 0 },
       ]);
       const where = (t.prisma.groupMembership.findMany.mock.calls[0] as [{ where: unknown }])[0].where;
       expect(where).toEqual({ profileId: 'p-yo', group: { type: { not: 'trabajo' } } });
+      const cuentas = t.prisma.chatMessage.count.mock.calls.map((c) => (c as [{ where: unknown }])[0].where);
+      const ajenos = [{ authorProfileId: null }, { authorProfileId: { not: 'p-yo' } }];
+      // Con lectura previa: solo lo posterior. Sin lectura: toda la sala. Nunca lo eliminado ni lo oculto.
+      expect(cuentas).toEqual([
+        { groupId: 'a', deletedAt: null, hidden: false, OR: ajenos, createdAt: { gt: leido } },
+        { groupId: 'b', deletedAt: null, hidden: false, OR: ajenos },
+      ]);
     });
     it('una cuenta sin verificar no recibe novedades', async () => {
       t.prisma.profile.findUnique.mockResolvedValue({ user: { status: 'suspended' } });

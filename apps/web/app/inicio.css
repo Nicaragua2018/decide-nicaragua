@@ -127,5 +127,5 @@
 /* Aviso de mensajes nuevos en el chat de una comunidad. */
 .fila-mapa-nuevo {
   font-size: 0.72rem; font-weight: 600; white-space: nowrap; padding: 0.1rem 0.5rem;
-  border-radius: var(--radius-pill); background: var(--accent-light); border: 1px solid var(--accent); color: var(--text-soft);
+  border-radius: var(--radius-pill); background: var(--danger); border: 1px solid var(--danger); color: #fff;
 }

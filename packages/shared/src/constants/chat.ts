@@ -33,7 +33,8 @@ export type ChatPagina = {
   esperandoGuardian: boolean;
 };
 
-export type ChatNovedades = { groupId: string; nuevos: boolean }[];
+/** Por cada comunidad con sala de la persona: cuántos mensajes ajenos tiene sin leer. */
+export type ChatNovedades = { groupId: string; nombre: string; sinLeer: number }[];
 
 /** Un mensaje del que avisó algún miembro, como lo ve la mesa: sin nombres. */
 export type ChatAvisoMesa = { id: string; texto: string; comunidad: string; groupId: string; avisos: number; createdAt: string };
