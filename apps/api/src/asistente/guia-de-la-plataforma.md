@@ -92,7 +92,7 @@ Las personas que escriben pueden ver sus textos en revisión en su página [g8].
 
 ## El chat de cada comunidad
 
-Cada comunidad (el territorio de origen, el lugar de acogida y el nivel general) tiene una sala de chat. Se entra desde la portada [g1], tocando la comunidad en el mapa: el chat es su primera pestaña. Solo la leen y escriben los miembros verificados de esa comunidad; nadie más, tampoco la mesa ni los observadores por su cargo.
+Cada comunidad (el territorio de origen, el lugar de acogida y el nivel general) tiene una sala de chat. Se entra desde la portada [g1], tocando la comunidad en el mapa: el chat es su primera pestaña. También desde el botón «Chat» de la barra de arriba, en cualquier página: muestra en rojo cuántos mensajes hay sin leer y lleva a cada sala. Solo la leen y escriben los miembros verificados de esa comunidad; nadie más, tampoco la mesa ni los observadores por su cargo.
 
 - Es para conversar: avisar, preguntar y compartir información. Lo que haya que decidir va por inquietudes [g2], debates y votaciones [g3].
 - Solo admite texto y enlaces, hasta 1000 caracteres por mensaje. No hay mensajes privados, fotos, notas de voz ni archivos.

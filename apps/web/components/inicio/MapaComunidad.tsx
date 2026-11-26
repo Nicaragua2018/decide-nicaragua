@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { serverFetch } from '@/lib/api';
 import { agruparGrupos } from '@/lib/inicio';
+import { textoSinLeer } from '@/lib/chat';
 import { Sacuanjoche } from '@/components/marca/Sacuanjoche';
 import type { ChatNovedades, GroupDetail, GroupSummary } from '@decide/shared';
 
@@ -13,24 +14,24 @@ async function miembrosDe(id: string): Promise<number | null> {
   }
 }
 
-/** En qué comunidades hay mensajes nuevos en el chat. Si falla, no se muestra ningún aviso. */
-async function chatsConNovedad(): Promise<Set<string>> {
+/** Cuántos mensajes sin leer hay en el chat de cada comunidad. Si falla, no se muestra ningún aviso. */
+async function chatsSinLeer(): Promise<Map<string, number>> {
   try {
     const res = await serverFetch('/api/chat/novedades');
-    if (!res.ok) return new Set();
-    return new Set(((await res.json()) as ChatNovedades).filter((x) => x.nuevos).map((x) => x.groupId));
+    if (!res.ok) return new Map();
+    return new Map(((await res.json()) as ChatNovedades).map((x) => [x.groupId, x.sinLeer]));
   } catch {
-    return new Set();
+    return new Map();
   }
 }
 
-function Fila({ g, n, nuevo }: { g: GroupSummary; n: number | null; nuevo: boolean }) {
+function Fila({ g, n, nuevo }: { g: GroupSummary; n: number | null; nuevo: number }) {
   return (
     <li>
       <Link href={`/groups/${g.id}`} className="fila-mapa">
         <Sacuanjoche variante={n !== null && n > 0 ? 'icono' : 'contorno'} tamano={22} />
         <span className="fila-mapa-nombre">{g.name}</span>
-        {nuevo && <span className="fila-mapa-nuevo">Mensajes nuevos</span>}
+        {nuevo > 0 && <span className="fila-mapa-nuevo">{textoSinLeer(nuevo)}</span>}
         {n !== null && <span className="fila-mapa-n">{n === 1 ? '1 miembro' : `${n} miembros`}</span>}
       </Link>
     </li>
@@ -41,7 +42,7 @@ function Fila({ g, n, nuevo }: { g: GroupSummary; n: number | null; nuevo: boole
 export default async function MapaComunidad({ groups }: { groups: GroupSummary[] | null }) {
   const { origen, acogida, otras } = agruparGrupos(groups ?? []);
   const territoriales = [...origen, ...acogida];
-  const [conteos, nuevos] = await Promise.all([Promise.all(territoriales.map((g) => miembrosDe(g.id))), chatsConNovedad()]);
+  const [conteos, nuevos] = await Promise.all([Promise.all(territoriales.map((g) => miembrosDe(g.id))), chatsSinLeer()]);
   const n = new Map(territoriales.map((g, i) => [g.id, conteos[i] ?? null]));
 
   const columna = (titulo: string, lista: GroupSummary[]) => (
@@ -49,7 +50,7 @@ export default async function MapaComunidad({ groups }: { groups: GroupSummary[]
       <h3 className="mapa-subtitulo">{titulo}</h3>
       <ul className="mapa-lista">
         {lista.map((g) => (
-          <Fila key={g.id} g={g} n={n.get(g.id) ?? null} nuevo={nuevos.has(g.id)} />
+          <Fila key={g.id} g={g} n={n.get(g.id) ?? null} nuevo={nuevos.get(g.id) ?? 0} />
         ))}
       </ul>
     </div>
@@ -78,7 +79,7 @@ export default async function MapaComunidad({ groups }: { groups: GroupSummary[]
           <h3 className="mapa-subtitulo">Mis comunidades</h3>
           <ul className="mapa-lista">
             {otras.map((g) => (
-              <Fila key={g.id} g={g} n={null} nuevo={nuevos.has(g.id)} />
+              <Fila key={g.id} g={g} n={null} nuevo={nuevos.get(g.id) ?? 0} />
             ))}
           </ul>
         </div>

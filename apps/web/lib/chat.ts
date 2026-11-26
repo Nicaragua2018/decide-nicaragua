@@ -36,3 +36,22 @@ export function horaDe(iso: string, ahora: Date = new Date()): string {
   const mismoDia = d.toDateString() === ahora.toDateString();
   return mismoDia ? hora : `${d.toLocaleDateString('es-NI', { day: 'numeric', month: 'short' })}, ${hora}`;
 }
+
+/** Suma de los mensajes sin leer de todas las salas. */
+export function totalSinLeer(salas: { sinLeer: number }[]): number {
+  return salas.reduce((n, s) => n + s.sinLeer, 0);
+}
+
+export function textoSinLeer(n: number): string {
+  return n === 1 ? '1 mensaje sin leer' : `${n} mensajes sin leer`;
+}
+
+/**
+ * La sala que la persona tiene abierta ahora mismo se da por leída: el servidor la marca al
+ * consultarla, pero el contador puede llegar unos segundos antes.
+ */
+export function sinLaSalaAbierta<T extends { groupId: string; sinLeer: number }>(salas: T[], pathname: string, search: string): T[] {
+  const tab = new URLSearchParams(search).get('tab');
+  if (tab !== null && tab !== 'chat') return salas;
+  return salas.map((s) => (pathname === `/groups/${s.groupId}` ? { ...s, sinLeer: 0 } : s));
+}

@@ -3,7 +3,7 @@
 import { cookies } from 'next/headers';
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
-import { COMPROMISOS_MAX, MODERACION_CAUSAS, type CasoSuspension, type ChatMensajeVista, type ChatPagina, type RevisionTexto, type TipoTexto } from '@decide/shared';
+import { COMPROMISOS_MAX, MODERACION_CAUSAS, type CasoSuspension, type ChatMensajeVista, type ChatNovedades, type ChatPagina, type RevisionTexto, type TipoTexto } from '@decide/shared';
 
 const API_URL = process.env.API_URL ?? 'http://localhost:4000';
 
@@ -1115,6 +1115,16 @@ export async function leerChat(
     return (await res.json()) as ChatPagina;
   } catch {
     return { error: 'No se pudo cargar el chat. Intenta de nuevo.' };
+  }
+}
+
+/** Mensajes sin leer por comunidad, para el aviso de la barra. Si falla, no hay aviso. */
+export async function novedadesChat(): Promise<ChatNovedades> {
+  try {
+    const res = await actionFetch('/api/chat/novedades');
+    return res.ok ? ((await res.json()) as ChatNovedades) : [];
+  } catch {
+    return [];
   }
 }
 

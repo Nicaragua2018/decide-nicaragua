@@ -245,28 +245,35 @@ export class ChatService {
     }));
   }
 
-  /** En cuáles de sus comunidades hay mensajes de otras personas posteriores a su última lectura. */
+  /**
+   * Sus comunidades con sala y, en cada una, cuántos mensajes de otras personas (visibles) son
+   * posteriores a su última lectura. Son pocas comunidades por persona: una cuenta por cada una.
+   */
   async novedades(q: Quien): Promise<ChatNovedades> {
     if (!(await this.verificado(q.profileId))) return [];
     const membresias = await this.prisma.groupMembership.findMany({
       where: { profileId: q.profileId, group: { type: { not: 'trabajo' } } },
-      select: { groupId: true },
+      select: { groupId: true, group: { select: { name: true } } },
     });
-    const ids = membresias.map((m) => m.groupId);
-    if (ids.length === 0) return [];
-    const [ultimos, lecturas] = await Promise.all([
-      this.prisma.chatMessage.groupBy({
-        by: ['groupId'],
-        where: { groupId: { in: ids }, OR: [{ authorProfileId: null }, { authorProfileId: { not: q.profileId } }] },
-        _max: { createdAt: true },
+    if (membresias.length === 0) return [];
+    const lecturas = await this.prisma.chatLectura.findMany({
+      where: { profileId: q.profileId, groupId: { in: membresias.map((m) => m.groupId) } },
+    });
+    return Promise.all(
+      membresias.map(async (m) => {
+        const leido = lecturas.find((l) => l.groupId === m.groupId)?.lastReadAt ?? null;
+        const sinLeer = await this.prisma.chatMessage.count({
+          where: {
+            groupId: m.groupId,
+            deletedAt: null,
+            hidden: false,
+            OR: [{ authorProfileId: null }, { authorProfileId: { not: q.profileId } }],
+            ...(leido ? { createdAt: { gt: leido } } : {}),
+          },
+        });
+        return { groupId: m.groupId, nombre: m.group.name, sinLeer };
       }),
-      this.prisma.chatLectura.findMany({ where: { profileId: q.profileId, groupId: { in: ids } } }),
-    ]);
-    return ids.map((groupId) => {
-      const ultimo = ultimos.find((u) => u.groupId === groupId)?._max.createdAt ?? null;
-      const leido = lecturas.find((l) => l.groupId === groupId)?.lastReadAt ?? null;
-      return { groupId, nuevos: ultimo !== null && (leido === null || ultimo > leido) };
-    });
+    );
   }
 
   /**
